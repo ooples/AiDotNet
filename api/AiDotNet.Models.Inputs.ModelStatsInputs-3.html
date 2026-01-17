@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ModelStatsInputs&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ModelStatsInputs&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a container for inputs needed to calculate various statistics and metrics for a model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Inputs_ModelStatsInputs_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Inputs.ModelStatsInputs%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3">
+
+
+
+  <h1 id="AiDotNet_Models_Inputs_ModelStatsInputs_3" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3" class="text-break">
+Class ModelStatsInputs&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Inputs.html">Inputs</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a container for inputs needed to calculate various statistics and metrics for a model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ModelStatsInputs&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data the model accepts.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data the model produces.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ModelStatsInputs&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class holds the data and parameters necessary for evaluating model performance and calculating
+statistics. It includes actual and predicted values, feature information, the model itself, and
+optional functions for fitting and prediction.
+</p>
+<p><b>For Beginners:</b> This class collects all the data needed to evaluate how well a model performs.
+<p>Think of it like gathering all the ingredients before baking:</p>
+<ul>
+<li>Actual values (what really happened)</li>
+<li>Predicted values (what the model thought would happen)</li>
+<li>Feature data (the information used to make predictions)</li>
+<li>The model itself and its parameters</li>
+</ul>
+<p>This organized collection makes it easier to calculate accuracy metrics, perform
+diagnostic tests, and visualize model performance without having to pass many
+separate parameters around.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3__ctor_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3__ctor" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.#ctor">
+  ModelStatsInputs()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Models.Inputs.ModelStatsInputs-3.html">ModelStatsInputs&lt;T, TInput, TOutput&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelStatsInputs()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a new empty container for model statistics inputs.
+<p>It initializes all the properties with appropriate empty values based on the types
+of inputs and outputs your model uses.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Actual_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Actual*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Actual" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Actual">
+  Actual
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the actual observed values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Actual { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Actual_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This contains the true values that were observed in reality. These are compared with
+the model's predictions to evaluate performance and calculate error metrics.
+</p>
+<p><b>For Beginners:</b> These are the real values that actually occurred.
+<p>For example:</p>
+<ul>
+<li>In sales prediction: The actual sales figures that occurred</li>
+<li>In temperature forecasting: The temperatures that were actually recorded</li>
+<li>In classification: The true categories that items belong to</li>
+</ul>
+<p>These values serve as the &quot;ground truth&quot; against which we measure how accurate
+the model's predictions were.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Coefficients_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Coefficients*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Coefficients" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Coefficients">
+  Coefficients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the coefficient values for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Coefficients { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Coefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This vector contains the coefficients or parameters learned by the model during training.
+These coefficients determine how the features are used to generate predictions.
+</p>
+<p><b>For Beginners:</b> These are the weights your model assigned to each feature.
+<p>For example, in a house price model:</p>
+<ul>
+<li>A coefficient of 100 for house size means each additional square foot adds $100 to the predicted price</li>
+<li>A coefficient of -5000 for age means each additional year reduces the predicted price by $5000</li>
+</ul>
+<p>These values tell you how important each feature is to the model and in what direction
+(positive or negative) they influence the prediction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureCount_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureCount" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of features or predictor variables in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates how many features or predictor variables are used in the model.
+It's important for correctly interpreting the coefficient vector and for certain statistical tests.
+</p>
+<p><b>For Beginners:</b> This is the number of input variables your model uses to make predictions.
+<p>For example:</p>
+<ul>
+<li>A house price model might use 5 features (size, location, age, bedrooms, bathrooms)</li>
+<li>A weather model might use 10 features (temperature, pressure, humidity, etc.)</li>
+</ul>
+<p>Knowing the feature count helps interpret model statistics and is needed for
+certain calculations like degrees of freedom in statistical tests.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureNames_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureNames*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureNames" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureNames">
+  FeatureNames
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the names of the features used in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; FeatureNames { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureNames_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This list contains the names of the features or predictor variables used in the model.
+Having descriptive names makes it easier to interpret coefficients and other statistics.
+</p>
+<p><b>For Beginners:</b> These are the labels for each input variable your model uses.
+<p>For example, in a house price model, feature names might be:</p>
+<ul>
+<li>&quot;SquareFootage&quot;</li>
+<li>&quot;Neighborhood&quot;</li>
+<li>&quot;YearBuilt&quot;</li>
+<li>&quot;Bedrooms&quot;</li>
+<li>&quot;Bathrooms&quot;</li>
+</ul>
+<p>Having names instead of just &quot;Feature1&quot;, &quot;Feature2&quot;, etc. makes it much easier
+to understand what the model is actually using to make predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureValues_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureValues*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureValues" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FeatureValues">
+  FeatureValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the values for each feature organized by feature name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, TOutput&gt; FeatureValues { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FeatureValues_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This dictionary maps feature names to their values across all observations.
+The exact structure of the values depends on the model type and data representation.
+This format can be more convenient than a single input structure for certain operations and visualizations.
+</p>
+<p><b>For Beginners:</b> This stores all values for each feature separately.
+<p>Instead of having one big table, this breaks out each feature into its own collection:</p>
+<ul>
+<li>&quot;SquareFootage&quot;: [1500, 2200, 1800, ...]</li>
+<li>&quot;Bedrooms&quot;: [3, 4, 2, ...]</li>
+</ul>
+<p>This format makes it easier to:</p>
+<ul>
+<li>Calculate statistics for specific features</li>
+<li>Create plots showing individual feature distributions</li>
+<li>Perform feature-specific transformations</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FitFunction_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FitFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FitFunction" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.FitFunction">
+  FitFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a function that fits a model to data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;TInput, TOutput&gt;? FitFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_FitFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This optional function takes input data and target values and returns predicted values.
+It's used for certain statistical calculations that require refitting the model.
+</p>
+<p><b>For Beginners:</b> This is a function that can train a model on data.
+<p>Think of it as the recipe for how your model learns from data:</p>
+<ul>
+<li>It takes in features (inputs) and actual values</li>
+<li>It figures out the best way to predict the actual values from the features</li>
+<li>It returns predictions based on what it learned</li>
+</ul>
+<p>This is used for advanced techniques like cross-validation or bootstrapping
+where we need to retrain the model multiple times.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Model_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Model*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Model" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the predictive model used to generate the statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Model_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property holds a reference to the actual model object that generated the predictions.
+Having the model available allows for calculating additional statistics or making new predictions.
+</p>
+<p><b>For Beginners:</b> This is the actual model object that made the predictions.
+<p>Having the model itself (not just its predictions) allows us to:</p>
+<ul>
+<li>Make new predictions with different data</li>
+<li>Extract information about how the model works</li>
+<li>Calculate advanced statistics specific to this type of model</li>
+</ul>
+<p>It's like having the full recipe book, not just the meal that was cooked.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Predicted_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Predicted*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Predicted" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.Predicted">
+  Predicted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the values predicted by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Predicted { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_Predicted_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This contains the values predicted by the model. These are compared with
+the actual values to evaluate the model's performance and accuracy.
+</p>
+<p><b>For Beginners:</b> These are the values that your model predicted would occur.
+<p>For example:</p>
+<ul>
+<li>In sales prediction: The sales figures the model predicted</li>
+<li>In temperature forecasting: The temperatures the model forecasted</li>
+<li>In classification: The categories the model assigned to items</li>
+</ul>
+<p>By comparing these predictions to what actually happened, we can measure
+how accurate the model is.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Inputs_ModelStatsInputs_3_XMatrix_" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.XMatrix*"></a>
+
+  <h3 id="AiDotNet_Models_Inputs_ModelStatsInputs_3_XMatrix" data-uid="AiDotNet.Models.Inputs.ModelStatsInputs`3.XMatrix">
+  XMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the input data used for predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput XMatrix { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Inputs_ModelStatsInputs_3_XMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This contains the feature values used as inputs to the model. The exact structure depends
+on the model type, but typically each row or element represents an observation with its features.
+</p>
+<p><b>For Beginners:</b> This is the input data your model used to make predictions.
+<p>For example, in a house price prediction model, this might be a table where:</p>
+<ul>
+<li>Each row is a different house</li>
+<li>Each column is a feature (size, location, age, bedrooms, bathrooms)</li>
+</ul>
+<p>This data is essential for many advanced statistical calculations,
+such as confidence intervals and influence measures.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Inputs/ModelStatsInputs.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

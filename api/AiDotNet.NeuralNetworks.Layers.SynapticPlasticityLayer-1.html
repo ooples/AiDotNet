@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SynapticPlasticityLayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SynapticPlasticityLayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a synaptic plasticity layer that models biological learning mechanisms through spike-timing-dependent plasticity.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1" class="text-break">
+Class SynapticPlasticityLayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Layers.html">Layers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a synaptic plasticity layer that models biological learning mechanisms through spike-timing-dependent plasticity.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SynapticPlasticityLayer&lt;T&gt; : LayerBase&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SynapticPlasticityLayer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuExecution">LayerBase&lt;T&gt;.SupportsGpuExecution</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuTraining">LayerBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LayerBase&lt;T&gt;.BackwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">LayerBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterCount">LayerBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A synaptic plasticity layer implements biologically-inspired learning rules that modify connection strengths based on 
+the relative timing of pre- and post-synaptic neuron activations. This implements spike-timing-dependent plasticity (STDP),
+a form of Hebbian learning observed in biological neural systems. The layer maintains traces of neuronal activity and
+applies long-term potentiation (LTP) and long-term depression (LTD) based on the temporal relationship between spikes.
+</p>
+<p><b>For Beginners:</b> This layer mimics how brain cells (neurons) learn by strengthening or weakening their connections.
+<p>Think of it like forming memories:</p>
+<ul>
+<li>When two connected neurons activate in sequence (one fires, then the other), their connection gets stronger</li>
+<li>When they activate in the opposite order, their connection gets weaker</li>
+<li>Over time, pathways that represent useful patterns become stronger</li>
+</ul>
+<p>For example, imagine learning to associate a bell sound with food (like Pavlov's dog experiment):</p>
+<ul>
+<li>Initially, there's a weak connection between &quot;hear bell&quot; neurons and &quot;expect food&quot; neurons</li>
+<li>When the bell regularly comes before food, the connection strengthens</li>
+<li>Eventually, just the bell alone strongly activates the &quot;expect food&quot; response</li>
+</ul>
+<p>This mimics how real brains learn patterns and form associations between related events.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1__ctor_System_Int32_System_Double_System_Double_System_Double_System_Double_System_Double_System_Double_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.#ctor(System.Int32,System.Double,System.Double,System.Double,System.Double,System.Double,System.Double)">
+  SynapticPlasticityLayer(int, double, double, double, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer-1.html">SynapticPlasticityLayer&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SynapticPlasticityLayer(int size, double stdpLtpRate = 0.005, double stdpLtdRate = 0.0025, double homeostasisRate = 0.0001, double minWeight = 0, double maxWeight = 1, double traceDecay = 0.95)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of neurons in the layer.</p>
+</dd>
+    <dt><code>stdpLtpRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The rate of long-term potentiation (strengthening). Default is 0.005.</p>
+</dd>
+    <dt><code>stdpLtdRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The rate of long-term depression (weakening). Default is 0.0025.</p>
+</dd>
+    <dt><code>homeostasisRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The rate of homeostatic regulation. Default is 0.0001.</p>
+</dd>
+    <dt><code>minWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum allowed weight value. Default is 0.</p>
+</dd>
+    <dt><code>maxWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum allowed weight value. Default is 1.</p>
+</dd>
+    <dt><code>traceDecay</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The decay rate for activity traces. Default is 0.95.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1__ctor_System_Int32_System_Double_System_Double_System_Double_System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a synaptic plasticity layer with the specified number of neurons and plasticity parameters.
+The layer maintains a full connectivity matrix between all neurons, with weights initialized to small random values.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new synaptic plasticity layer.
+<p>The parameters you provide determine:</p>
+<ul>
+<li>size: How many neurons are in the layer</li>
+<li>stdpLtpRate: How quickly connections strengthen (higher = faster learning)</li>
+<li>stdpLtdRate: How quickly connections weaken (higher = faster forgetting)</li>
+<li>homeostasisRate: How strongly the system maintains balance (higher = more aggressive balancing)</li>
+<li>minWeight/maxWeight: The range of possible connection strengths</li>
+<li>traceDecay: How quickly the memory of recent activity fades</li>
+</ul>
+<p>These settings control the learning dynamics and how the layer will adapt to patterns over time.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsJitCompilation_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsJitCompilation" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L853"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always <code>true</code>. SynapticPlasticityLayer uses a differentiable forward pass.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+JIT compilation for SynapticPlasticity exports the forward pass as a simple
+matrix multiplication. The STDP learning dynamics are approximated through
+standard gradient-based optimization during training. The temporal spike
+timing information is not used in the JIT-compiled forward pass.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsTraining_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SupportsTraining*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsTraining" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SupportsTraining">
+  SupportsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> for this layer, as it implements synaptic plasticity rules for learning.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SupportsTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the synaptic plasticity layer can be trained. Since this layer implements
+biologically-inspired learning rules, it supports training, although the mechanism differs from the
+standard backpropagation approach.
+</p>
+<p><b>For Beginners:</b> This property tells you if the layer can learn from data.
+<p>A value of true means:</p>
+<ul>
+<li>The layer has internal values (synaptic weights) that can be adjusted during training</li>
+<li>It will improve its performance as it sees more data</li>
+<li>It participates in the learning process</li>
+</ul>
+<p>For this layer, the value is always true because its whole purpose is to implement
+biologically-inspired learning rules that modify connection strengths based on experience.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Backward_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Backward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L627"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass of the synaptic plasticity layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input (same as output gradient for this pass-through layer).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the backward pass of the synaptic plasticity layer. As a pass-through layer, it simply
+passes the gradient back without modification. The actual weight updates are handled in the UpdateParameters method.
+</p>
+<p><b>For Beginners:</b> This method passes the gradient unchanged back to the previous layer.
+<p>During the backward pass:</p>
+<ul>
+<li>The layer receives error gradients from the next layer</li>
+<li>It passes these gradients back without changing them</li>
+<li>No learning happens in this step for this particular layer</li>
+</ul>
+<p>This layer uses a different learning mechanism than backpropagation:</p>
+<ul>
+<li>Instead of using gradients directly, it uses spike timing relationships</li>
+<li>The actual learning happens in the UpdateParameters method</li>
+<li>This backward pass is only needed to maintain compatibility with the neural network framework</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Dispose_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Dispose_System_Boolean_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L496"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources used by this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if called from Dispose(), false if called from finalizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Dispose_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Override this method in derived classes to release layer-specific resources.
+Always call base.Dispose(disposing) after releasing your resources.
+</p>
+<p><b>For Beginners:</b> When creating a custom layer with resources:
+<pre><code class="lang-csharp">protected override void Dispose(bool disposing)
+{
+    if (disposing)
+    {
+        // Release your managed resources here
+        _myGpuHandle?.Dispose();
+        _myGpuHandle = null;
+    }
+    base.Dispose(disposing);
+}</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ExportComputationGraph_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L801"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the layer's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the layer's operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method constructs a computation graph representation of the layer's forward pass
+that can be JIT compiled for faster inference. All layers MUST implement this method
+to support JIT compilation.
+</p>
+<p><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the layer's operations
+into optimized native code for 5-10x faster inference.
+<p>To support JIT compilation, a layer must:</p>
+<ol>
+<li>Implement this method to export its computation graph</li>
+<li>Set SupportsJitCompilation to true</li>
+<li>Use ComputationNode and TensorOperations to build the graph</li>
+</ol>
+<p>All layers are required to implement this method, even if they set SupportsJitCompilation = false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Forward_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Forward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L590"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass of the synaptic plasticity layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor (same as input for this pass-through layer).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass of the synaptic plasticity layer. As a pass-through layer, it simply
+records the input and returns it unchanged. The actual learning occurs during the update step.
+</p>
+<p><b>For Beginners:</b> This method passes the input data through the layer unchanged.
+<p>During the forward pass:</p>
+<ul>
+<li>The layer receives input activations</li>
+<li>It stores these activations for later use in learning</li>
+<li>It returns the same activations without modification</li>
+</ul>
+<p>This layer doesn't change the data during the forward pass because:</p>
+<ul>
+<li>It functions as a &quot;pass-through&quot; layer</li>
+<li>The learning happens during the update step, not the forward pass</li>
+<li>This matches how biological plasticity works (neurons transmit signals unchanged,
+but their connections change strength afterward)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ForwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ForwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0}[])">
+  ForwardGpu(params IGpuTensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass of the layer on GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; ForwardGpu(params IGpuTensor&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The GPU-resident input tensor(s).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The GPU-resident output tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs the layer's forward computation entirely on GPU. The input and output
+tensors remain in GPU memory, avoiding expensive CPU-GPU transfers.
+</p>
+<p><b>For Beginners:</b> This is like Forward() but runs on the graphics card.
+<p>The key difference:</p>
+<ul>
+<li>Forward() uses CPU tensors that may be copied to/from GPU</li>
+<li>ForwardGpu() keeps everything on GPU the whole time</li>
+</ul>
+<p>Override this in derived classes that support GPU acceleration.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the layer does not support GPU execution.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L730"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the layer as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the weight matrix parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the weight matrix as a flattened vector. Although this layer primarily
+uses STDP learning rules, exposing parameters allows for saving/loading state.
+</p>
+<p><b>For Beginners:</b> This method returns the layer's weights for saving or inspection.
+<p>While the layer uses spike-timing-dependent plasticity rules for learning,
+it still has parameters (the weight matrix) that can be:</p>
+<ul>
+<li>Saved to disk</li>
+<li>Loaded from a previously trained model</li>
+<li>Inspected for analysis</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ResetState_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ResetState" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L780"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_ResetState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the internal state of the synaptic plasticity layer by clearing the last input and output
+vectors. This can be useful when processing new, unrelated sequences or when restarting training.
+</p>
+<p><b>For Beginners:</b> This method clears the layer's memory of recent activity.
+<p>When resetting the state:</p>
+<ul>
+<li>The layer forgets what inputs and outputs it recently saw</li>
+<li>This is useful when starting to process a new, unrelated example</li>
+<li>It prevents information from one sequence affecting another</li>
+</ul>
+<p>Note that this doesn't reset the learned weights, only the temporary state variables.
+Think of it like clearing short-term memory while keeping long-term memories intact.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L747"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the trainable parameters of the layer from a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all parameters to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the weight matrix from a flattened vector. This is useful for loading
+saved model weights or for implementing optimization algorithms.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_UpdateParameters__0_" data-uid="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of the layer using the calculated gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate to use for the parameter updates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SynapticPlasticityLayer_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to define how the layer's parameters
+are updated during training. The learning rate controls the size of the parameter updates.
+</p>
+<p><b>For Beginners:</b> This method updates the layer's internal values during training.
+<p>When updating parameters:</p>
+<ul>
+<li>The weights, biases, or other parameters are adjusted to reduce prediction errors</li>
+<li>The learning rate controls how big each update step is</li>
+<li>Smaller learning rates mean slower but more stable learning</li>
+<li>Larger learning rates mean faster but potentially unstable learning</li>
+</ul>
+<p>This is how the layer &quot;learns&quot; from data over time, gradually improving
+its ability to extract useful patterns from inputs.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SynapticPlasticityLayer.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

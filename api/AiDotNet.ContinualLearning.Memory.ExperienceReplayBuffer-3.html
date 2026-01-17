@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExperienceReplayBuffer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExperienceReplayBuffer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A memory buffer for storing examples from previous tasks for experience replay.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3" class="text-break">
+Class ExperienceReplayBuffer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Memory.html">Memory</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A memory buffer for storing examples from previous tasks for experience replay.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ExperienceReplayBuffer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ExperienceReplayBuffer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Experience replay stores a small number of examples from
+previous tasks and intermixes them with new task data during training. This helps
+prevent catastrophic forgetting by reminding the model of what it learned before.</p>
+<p><b>Why It Works:</b> When a neural network learns a new task, it adjusts its weights
+to minimize error on that task. Without replay, these adjustments can increase error on
+previous tasks. By mixing old examples with new training data, the network must maintain
+performance on both old and new tasks.</p>
+<p><b>Memory Management:</b> Since storing all examples is impractical, we use smart
+sampling strategies to select the most representative examples. Different strategies
+work better for different scenarios:
+<ul><li><b>Reservoir:</b> Fair representation, good for general use</li><li><b>ClassBalanced:</b> Equal class representation, best for imbalanced data</li><li><b>Herding:</b> Class-mean exemplars, from iCaRL paper</li></ul>
+
+<p><b>References:</b>
+<ul><li>Chaudhry et al. "Continual Learning with Tiny Episodic Memories" (2019)</li><li>Rebuffi et al. "iCaRL: Incremental Classifier and Representation Learning" (2017)</li><li>Rolnick et al. "Experience Replay for Continual Learning" (2019)</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3__ctor_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3__ctor_System_Int32_AiDotNet_ContinualLearning_Interfaces_MemorySamplingStrategy_AiDotNet_ContinualLearning_Memory_ReplaySamplingStrategy_System_Nullable_System_Int32__" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.#ctor(System.Int32,AiDotNet.ContinualLearning.Interfaces.MemorySamplingStrategy,AiDotNet.ContinualLearning.Memory.ReplaySamplingStrategy,System.Nullable{System.Int32})">
+  ExperienceReplayBuffer(int, MemorySamplingStrategy, ReplaySamplingStrategy, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new experience replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExperienceReplayBuffer(int maxSize, MemorySamplingStrategy addStrategy = MemorySamplingStrategy.Reservoir, ReplaySamplingStrategy replayStrategy = ReplaySamplingStrategy.TaskBalanced, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of examples to store.</p>
+</dd>
+    <dt><code>addStrategy</code> <a class="xref" href="AiDotNet.ContinualLearning.Interfaces.MemorySamplingStrategy.html">MemorySamplingStrategy</a></dt>
+    <dd><p>Strategy for selecting which examples to add.</p>
+</dd>
+    <dt><code>replayStrategy</code> <a class="xref" href="AiDotNet.ContinualLearning.Memory.ReplaySamplingStrategy.html">ReplaySamplingStrategy</a></dt>
+    <dd><p>Strategy for sampling during replay.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_AddStrategy_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.AddStrategy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_AddStrategy" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.AddStrategy">
+  AddStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sampling strategy used when adding examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemorySamplingStrategy AddStrategy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Interfaces.MemorySamplingStrategy.html">MemorySamplingStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_Count_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.Count*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_Count" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.Count">
+  Count
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current number of stored examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_EstimatedMemoryBytes_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.EstimatedMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_EstimatedMemoryBytes" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.EstimatedMemoryBytes">
+  EstimatedMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the estimated memory usage in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long EstimatedMemoryBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_IsFull_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.IsFull*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_IsFull" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.IsFull">
+  IsFull
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the buffer is at capacity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFull { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_MaxSize_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.MaxSize*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_MaxSize" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.MaxSize">
+  MaxSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum capacity of the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_ReplayStrategy_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.ReplayStrategy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_ReplayStrategy" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.ReplayStrategy">
+  ReplayStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sampling strategy used during replay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReplaySamplingStrategy ReplayStrategy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Memory.ReplaySamplingStrategy.html">ReplaySamplingStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TaskCount_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TaskCount*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TaskCount" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TaskCount">
+  TaskCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of distinct tasks represented in the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TaskCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TotalReplaySamples_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TotalReplaySamples*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TotalReplaySamples" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TotalReplaySamples">
+  TotalReplaySamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples returned via replay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalReplaySamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TotalSamplesProcessed_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TotalSamplesProcessed*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_TotalSamplesProcessed" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.TotalSamplesProcessed">
+  TotalSamplesProcessed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples processed (added) since creation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalSamplesProcessed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_AddTaskExamples_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.AddTaskExamples*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_AddTaskExamples_AiDotNet_Interfaces_IDataset__0__1__2__System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.AddTaskExamples(AiDotNet.Interfaces.IDataset{`0,`1,`2},System.Int32,System.Nullable{System.Int32})">
+  AddTaskExamples(IDataset&lt;T, TInput, TOutput&gt;, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds examples from a task to the buffer using the configured sampling strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddTaskExamples(IDataset&lt;T, TInput, TOutput&gt; taskData, int taskId, int? samplesPerTask = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The task data to sample from.</p>
+</dd>
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task identifier.</p>
+</dd>
+    <dt><code>samplesPerTask</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of samples to store from this task. If null, distributes evenly.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_Clear_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.Clear*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_Clear" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all stored examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetAll_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetAll*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetAll" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetAll">
+  GetAll()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all stored examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;DataPoint&lt;T, TInput, TOutput&gt;&gt; GetAll()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Memory.DataPoint-3.html">DataPoint</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetStatistics_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetStatistics*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetStatistics" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetStatistics">
+  GetStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BufferStatistics GetStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Memory.BufferStatistics.html">BufferStatistics</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetTaskCounts_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetTaskCounts*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetTaskCounts" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetTaskCounts">
+  GetTaskCounts()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the count of examples per task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyDictionary&lt;int, int&gt; GetTaskCounts()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetTaskExamples_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetTaskExamples*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_GetTaskExamples_System_Int32_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.GetTaskExamples(System.Int32)">
+  GetTaskExamples(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all examples for a specific task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;DataPoint&lt;T, TInput, TOutput&gt;&gt; GetTaskExamples(int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task identifier.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Memory.DataPoint-3.html">DataPoint</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Read-only list of examples for the task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_RemoveTask_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.RemoveTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_RemoveTask_System_Int32_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.RemoveTask(System.Int32)">
+  RemoveTask(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all examples from a specific task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RemoveTask(int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task to remove.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_SampleBatch_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.SampleBatch*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_SampleBatch_System_Int32_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.SampleBatch(System.Int32)">
+  SampleBatch(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples a batch of examples from the buffer using the configured replay strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;DataPoint&lt;T, TInput, TOutput&gt;&gt; SampleBatch(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of examples to sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Memory.DataPoint-3.html">DataPoint</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>A list of sampled data points.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_SampleFromTask_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.SampleFromTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_SampleFromTask_System_Int32_System_Int32_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.SampleFromTask(System.Int32,System.Int32)">
+  SampleFromTask(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples examples from a specific task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;DataPoint&lt;T, TInput, TOutput&gt;&gt; SampleFromTask(int taskId, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task to sample from.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of examples to sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Memory.DataPoint-3.html">DataPoint</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>List of data points from the specified task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_UpdatePriority_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.UpdatePriority*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Memory_ExperienceReplayBuffer_3_UpdatePriority_System_Int32_System_Double_" data-uid="AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer`3.UpdatePriority(System.Int32,System.Double)">
+  UpdatePriority(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the priority of a sample (for priority-based replay).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdatePriority(int index, double priority)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The buffer index of the sample.</p>
+</dd>
+    <dt><code>priority</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The new priority value (higher = more likely to be sampled).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Memory/ExperienceReplayBuffer.cs/#L71" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

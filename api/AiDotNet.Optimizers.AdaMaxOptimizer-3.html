@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AdaMaxOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AdaMaxOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents an AdaMax optimizer, an extension of Adam that uses the infinity norm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Optimizers_AdaMaxOptimizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Optimizers.AdaMaxOptimizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3">
+
+
+
+  <h1 id="AiDotNet_Optimizers_AdaMaxOptimizer_3" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3" class="text-break">
+Class AdaMaxOptimizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Optimizers.html">Optimizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents an AdaMax optimizer, an extension of Adam that uses the infinity norm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AdaMaxOptimizer&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;, IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html">OptimizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html">GradientBasedOptimizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">AdaMaxOptimizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_GradientOptions">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.GradientOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__previousGradient">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._previousGradient</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__lastComputedGradients">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._lastComputedGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_GradientCache">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_LossFunction">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_Regularization">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__mixedPrecisionContext">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._mixedPrecisionContext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__learningRateScheduler">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._learningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__schedulerStepMode">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._schedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__currentStep">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._currentStep</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__currentEpoch">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._currentEpoch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_IsMixedPrecisionEnabled">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.IsMixedPrecisionEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_LearningRateScheduler">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_SchedulerStepMode">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CreateBatcher_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__System_Int32_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CreateBatcher(OptimizationInputData&lt;T, TInput, TOutput&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CreateBatcher_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__System_Int32_AiDotNet_Interfaces_IDataSampler_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CreateBatcher(OptimizationInputData&lt;T, TInput, TOutput&gt;, int, IDataSampler)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_NotifyEpochStart_System_Int32_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.NotifyEpochStart(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_LastComputedGradients">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.LastComputedGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ReverseUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ReverseUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CreateRegularization_AiDotNet_Models_Options_GradientDescentOptimizerOptions__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CreateRegularization(GradientDescentOptimizerOptions&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CalculateGradient_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CalculateGradient(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ApplyGradientClipping_AiDotNet_Tensors_LinearAlgebra_Vector__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ApplyGradientClipping(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_AreGradientsExploding_System_Double_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.AreGradientsExploding(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_AreGradientsVanishing_System_Double_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.AreGradientsVanishing(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_GetGradientNorm">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.GetGradientNorm()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ComputeHessianEfficiently_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ComputeHessianEfficiently(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ComputeHessianFiniteDifferences_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ComputeHessianFiniteDifferences(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_LineSearch_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.LineSearch(IFullModel&lt;T, TInput, TOutput&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CalculateGradient_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_System_Int32___">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CalculateGradient(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateSolution(IFullModel&lt;T, TInput, TOutput&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_GenerateGradientCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.GenerateGradientCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_Reset">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_StepScheduler">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.StepScheduler()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_OnEpochEnd">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.OnEpochEnd()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_OnBatchEnd">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.OnBatchEnd()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_IsInWarmupPhase">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.IsInWarmupPhase()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_GetCurrentLearningRate">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.GetCurrentLearningRate()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CurrentStep">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CurrentStep</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CurrentEpoch">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.CurrentEpoch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_ApplyMomentum_AiDotNet_Tensors_LinearAlgebra_Vector__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.ApplyMomentum(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateParameters_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateParameters(List&lt;ILayer&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateParameters(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateParameters(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateParameters(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_SupportsGpuUpdate">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.SupportsGpuUpdate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__gpuState">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._gpuState</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3__gpuStateInitialized">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;._gpuStateInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_UpdateParametersGpu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.UpdateParametersGpu(IGpuBuffer, IGpuBuffer, int, IDirectGpuBackend)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_InitializeGpuState_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.InitializeGpuState(int, IDirectGpuBackend)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_DisposeGpuState">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;.DisposeGpuState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Engine">OptimizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_NumOps">OptimizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Random">OptimizerBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Options">OptimizerBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_PredictionOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelStatsOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelEvaluator">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitDetector">OptimizerBase&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitnessCalculator">OptimizerBase&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_FitnessList">OptimizerBase&lt;T, TInput, TOutput&gt;.FitnessList</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationHistoryList">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationHistoryList</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ModelCache">OptimizerBase&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CurrentLearningRate">OptimizerBase&lt;T, TInput, TOutput&gt;.CurrentLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CurrentMomentum">OptimizerBase&lt;T, TInput, TOutput&gt;.CurrentMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationsWithoutImprovement">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationsWithoutImprovement</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_IterationsWithImprovement">OptimizerBase&lt;T, TInput, TOutput&gt;.IterationsWithImprovement</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Model">OptimizerBase&lt;T, TInput, TOutput&gt;.Model</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GetCachedStepData_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.GetCachedStepData(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CacheStepData(string, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_AdjustModelParameters_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double_System_Double_">OptimizerBase&lt;T, TInput, TOutput&gt;.AdjustModelParameters(IFullModel&lt;T, TInput, TOutput&gt;, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_RandomlySelectFeatures_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">OptimizerBase&lt;T, TInput, TOutput&gt;.RandomlySelectFeatures(int, int?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_Int32__">OptimizerBase&lt;T, TInput, TOutput&gt;.ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_AdjustParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_System_Double_">OptimizerBase&lt;T, TInput, TOutput&gt;.AdjustParameters(Vector&lt;T&gt;, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_EvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.EvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_PrepareAndEvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.PrepareAndEvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateLoss_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateLoss(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CreateOptimizationResult_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.CreateOptimizationResult(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Int32_">OptimizerBase&lt;T, TInput, TOutput&gt;.ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CreateSolution__1_">OptimizerBase&lt;T, TInput, TOutput&gt;.CreateSolution(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateBestSolution_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateBestSolution(OptimizationStepData&lt;T, TInput, TOutput&gt;, ref OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeAdaptiveParameters">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeAdaptiveParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Reset">OptimizerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ResetAdaptiveParameters">OptimizerBase&lt;T, TInput, TOutput&gt;.ResetAdaptiveParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateIterationHistoryAndCheckEarlyStopping_System_Int32_AiDotNet_Models_OptimizationStepData__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateIterationHistoryAndCheckEarlyStopping(int, OptimizationStepData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_ShouldEarlyStop">OptimizerBase&lt;T, TInput, TOutput&gt;.ShouldEarlyStop()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Serialize">OptimizerBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Deserialize_System_Byte___">OptimizerBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_SerializeAdditionalData_System_IO_BinaryWriter_">OptimizerBase&lt;T, TInput, TOutput&gt;.SerializeAdditionalData(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_DeserializeAdditionalData_System_IO_BinaryReader_">OptimizerBase&lt;T, TInput, TOutput&gt;.DeserializeAdditionalData(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__">OptimizerBase&lt;T, TInput, TOutput&gt;.UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_Step">OptimizerBase&lt;T, TInput, TOutput&gt;.Step()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateUpdate(Dictionary&lt;string, Vector&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_GetOptions">OptimizerBase&lt;T, TInput, TOutput&gt;.GetOptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">OptimizerBase&lt;T, TInput, TOutput&gt;.CalculateUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeRandomSolution(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution__1_">OptimizerBase&lt;T, TInput, TOutput&gt;.InitializeRandomSolution(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_SaveModel_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Optimizers.OptimizerBase-3.html#AiDotNet_Optimizers_OptimizerBase_3_LoadModel_System_String_">OptimizerBase&lt;T, TInput, TOutput&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+AdaMax is an adaptive learning rate optimization algorithm that extends the Adam optimizer.
+It uses the infinity norm to update parameters, which can make it more robust in certain scenarios.
+</p>
+<p><b>For Beginners:</b> AdaMax is like a smart learning assistant that adjusts its learning speed
+for each piece of information it's trying to learn. It's particularly good at handling different
+scales of information without getting confused.
+<p>Key features:</p>
+<ul>
+<li>Adapts the learning rate for each parameter</li>
+<li>Uses the maximum (infinity norm) of past gradients, which can be more stable</li>
+<li>Good for problems where the gradients can be sparse or have different scales</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3__ctor_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_AdaMaxOptimizerOptions__0__1__2__AiDotNet_Tensors_Engines_IEngine_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.AdaMaxOptimizerOptions{`0,`1,`2},AiDotNet.Tensors.Engines.IEngine)">
+  AdaMaxOptimizer(IFullModel&lt;T, TInput, TOutput&gt;, AdaMaxOptimizerOptions&lt;T, TInput, TOutput&gt;?, IEngine?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the AdaMaxOptimizer class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AdaMaxOptimizer(IFullModel&lt;T, TInput, TOutput&gt; model, AdaMaxOptimizerOptions&lt;T, TInput, TOutput&gt;? options = null, IEngine? engine = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to optimize.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.AdaMaxOptimizerOptions-3.html">AdaMaxOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The options for configuring the AdaMax optimizer.</p>
+</dd>
+    <dt><code>engine</code> <a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_AdaMaxOptimizerOptions__0__1__2__AiDotNet_Tensors_Engines_IEngine__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor sets up the AdaMax optimizer with the specified options and components.
+If no options are provided, it uses default AdaMaxOptimizerOptions.
+</p>
+<p><b>For Beginners:</b> This is like setting up your smart learning assistant with specific instructions.
+<p>You can customize:</p>
+<ul>
+<li>How fast it learns (learning rate)</li>
+<li>How it remembers past information (beta parameters)</li>
+<li>How long it should try to learn (max iterations)</li>
+<li>And many other aspects of its learning process</li>
+</ul>
+<p>If you don't provide custom settings, it will use default settings that work well in many situations.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Deserialize_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Deserialize_System_Byte___" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restores the optimizer's state from a byte array created by the Serialize method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized optimizer state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs the optimizer's state, including its options and internal counters,
+from a binary format created by the Serialize method.
+</p>
+<p><b>For Beginners:</b> This method is like rebuilding your learning assistant's brain from a saved picture.
+<p>Imagine you have a robot helper that you previously &quot;photographed&quot; (serialized):</p>
+<ol>
+<li>You give it the &quot;photograph&quot; (byte array)</li>
+<li>It reads the photograph piece by piece:
+<ul>
+<li>First, it rebuilds its basic knowledge (base data)</li>
+<li>Then, it sets up its specific AdaMax settings (options)</li>
+<li>Finally, it remembers how long it has been learning (time step)</li>
+</ul>
+</li>
+<li>If anything goes wrong while reading the settings, it lets you know</li>
+</ol>
+<p>After this process, your robot helper is back to exactly the same state it was in when you took the &quot;photograph&quot;.
+This is useful for:</p>
+<ul>
+<li>Continuing a learning session that was paused</li>
+<li>Setting up multiple identical helpers</li>
+<li>Recovering from a backup if something goes wrong</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when deserialization of optimizer options fails.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_DisposeGpuState_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.DisposeGpuState*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_DisposeGpuState" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.DisposeGpuState">
+  DisposeGpuState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L660"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes GPU-allocated optimizer state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void DisposeGpuState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_DisposeGpuState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The base implementation disposes _gpuState if set.
+Derived classes with multiple state buffers should override.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GenerateGradientCacheKey_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.GenerateGradientCacheKey*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GenerateGradientCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.GenerateGradientCacheKey(AiDotNet.Interfaces.IFullModel{`0,`1,`2},`1,`2)">
+  GenerateGradientCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L613"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a unique key for caching gradients specific to the AdaMax optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string GenerateGradientCacheKey(IFullModel&lt;T, TInput, TOutput&gt; model, TInput X, TOutput y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current model being optimized.</p>
+</dd>
+    <dt><code>X</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data matrix.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that uniquely identifies the gradient for the given model, data, and optimizer state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GenerateGradientCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2___1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a unique identifier for caching gradients. It extends the base gradient cache key
+with AdaMax-specific parameters to ensure that cached gradients are only reused when all relevant
+conditions are identical.
+</p>
+<p><b>For Beginners:</b> This method creates a special label for storing and retrieving
+calculated gradients.
+<p>Imagine you're solving a math problem:</p>
+<ul>
+<li>The &quot;base key&quot; is like writing down the problem you're solving</li>
+<li>Adding &quot;AdaMax&quot; tells us we're using this specific method to solve it</li>
+<li>Including Beta1, Beta2, and t (time step) is like noting which specific tools and at what stage we're using them</li>
+</ul>
+<p>This helps us quickly find the right answer if we've solved a very similar problem before,
+saving time and effort.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GetOptions_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GetOptions" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L499"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current options of the AdaMax optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current AdaMaxOptimizerOptions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the current configuration options of the AdaMax optimizer.
+</p>
+<p><b>For Beginners:</b> This method lets you see the current settings of your learning assistant.
+<p>It's like checking the current settings on your study robot:</p>
+<ul>
+<li>You can see how fast it's set to work (learning rate)</li>
+<li>How much it remembers from past lessons (beta parameters)</li>
+<li>How long it's supposed to study for (max iterations)</li>
+</ul>
+<p>This is useful if you want to know exactly how your optimizer is currently configured.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeAdaptiveParameters_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.InitializeAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeAdaptiveParameters" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.InitializeAdaptiveParameters">
+  InitializeAdaptiveParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the adaptive parameters for the AdaMax optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void InitializeAdaptiveParameters()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeAdaptiveParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets up the initial state of the optimizer, including the learning rate and time step.
+</p>
+<p><b>For Beginners:</b> This is like resetting your learning assistant to its starting point.
+<p>It does two main things:</p>
+<ol>
+<li>Sets the initial learning speed (learning rate) based on the options you provided</li>
+<li>Resets the time step to 0, which is like starting a new learning session</li>
+</ol>
+<p>This method is called when you first create the optimizer and can be called again if you want to restart the learning process.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeGpuState_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.InitializeGpuState*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeGpuState_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.InitializeGpuState(System.Int32,AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend)">
+  InitializeGpuState(int, IDirectGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L624"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes optimizer state on the GPU for a given parameter count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parameters to initialize state for.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for memory allocation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_InitializeGpuState_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The base implementation does nothing. Derived classes that
+maintain optimizer state (like momentum or adaptive learning rates) override this.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Optimize_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Optimize(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the optimization process using the AdaMax algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OptimizationResult&lt;T, TInput, TOutput&gt; Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for optimization, including training data and targets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The result of the optimization process, including the best solution found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the core optimization loop of the AdaMax algorithm. It iteratively improves
+the solution by calculating gradients, updating parameters, and evaluating the current solution.
+</p>
+<p><b>For Beginners:</b> This method is like a smart learning process that tries to find the best answer.
+<p>Here's what it does:</p>
+<ol>
+<li>Starts with a random guess (solution)</li>
+<li>Repeatedly tries to improve the guess:
+<ul>
+<li>Calculates how to change the guess to make it better (gradient)</li>
+<li>Updates the guess based on this information</li>
+<li>Checks if the new guess is the best one so far</li>
+</ul>
+</li>
+<li>Stops when it has tried a certain number of times or when the improvement becomes very small</li>
+</ol>
+<p>It's like playing a game where you're trying to find a hidden treasure, and after each step,
+you get a hint about which direction to go next.</p>
+
+<p><b>DataLoader Integration:</b> This method uses the DataLoader API for efficient batch processing.
+It creates a batcher using <a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_CreateBatcher_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__System_Int32_">CreateBatcher(OptimizationInputData&lt;T, TInput, TOutput&gt;, int)</a>
+and notifies the sampler of epoch starts using
+<a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html#AiDotNet_Optimizers_GradientBasedOptimizerBase_3_NotifyEpochStart_System_Int32_">NotifyEpochStart(int)</a>.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_ReverseUpdate_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.ReverseUpdate*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_ReverseUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.ReverseUpdate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ReverseUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses an AdaMax gradient update to recover original parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; ReverseUpdate(Vector&lt;T&gt; updatedParameters, Vector&lt;T&gt; appliedGradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>updatedParameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Parameters after AdaMax update</p>
+</dd>
+    <dt><code>appliedGradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients that were applied</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Original parameters before the update</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_ReverseUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+AdaMax's reverse update requires the optimizer's internal state (_m, _u, _t) from the forward pass.
+This method must be called immediately after UpdateParameters while the state is fresh.
+It recalculates the bias-corrected learning rate and the infinity-norm-scaled update.
+</p>
+<p><b>For Beginners:</b> This calculates where parameters were before an AdaMax update.
+AdaMax uses the maximum gradient magnitude to scale updates, so we need to remember those
+maximum values (_u) and the momentum (_m) to reverse the step accurately.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Serialize_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Serialize" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L526"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of the optimizer into a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized state of the optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the current state of the optimizer, including its options and internal counters,
+into a compact binary format.
+</p>
+<p><b>For Beginners:</b> This method is like taking a snapshot of your learning assistant's brain.
+<p>Imagine you could:</p>
+<ul>
+<li>Take a picture of everything your study robot knows and how it's set up</li>
+<li>Turn that picture into a long string of numbers</li>
+<li>Save those numbers so you can perfectly recreate the robot's state later</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving your progress so you can continue later</li>
+<li>Sharing your optimizer's exact state with others</li>
+<li>Creating backups in case something goes wrong</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateAdaptiveParameters_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateAdaptiveParameters(AiDotNet.Models.OptimizationStepData{`0,`1,`2},AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the adaptive parameters of the optimizer based on the current and previous optimization steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt; currentStepData, OptimizationStepData&lt;T, TInput, TOutput&gt; previousStepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data from the current optimization step.</p>
+</dd>
+    <dt><code>previousStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data from the previous optimization step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adjusts the learning rate based on the performance of the current solution compared to the previous one.
+If adaptive learning rate is enabled, it increases or decreases the learning rate accordingly.
+</p>
+<p><b>For Beginners:</b> This method adjusts how big steps we take in our learning process.
+<p>It's like learning to ride a bike:</p>
+<ul>
+<li>If you're doing better (not falling as much), you might try to pedal a bit faster (increase learning rate)</li>
+<li>If you're struggling more, you might slow down a bit (decrease learning rate)</li>
+<li>There's a limit to how fast or slow you can go (min and max learning rates)</li>
+</ul>
+<p>This helps the optimizer to learn efficiently: not too slow, but also not so fast that it becomes unstable.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateOptions_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateOptions(AiDotNet.Models.Options.OptimizationAlgorithmOptions{`0,`1,`2})">
+  UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L469"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the optimizer options with new AdaMax-specific options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The new options to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method updates the optimizer's configuration with new options. It ensures that only valid
+AdaMax-specific options are applied.
+</p>
+<p><b>For Beginners:</b> This method is like updating the settings on your learning assistant.
+<p>Imagine you have a robot helper for studying:</p>
+<ul>
+<li>You can give it new instructions on how to help you (new options)</li>
+<li>But you need to make sure you're giving it the right kind of instructions (AdaMax-specific)</li>
+<li>If you try to give it instructions for a different type of helper, it will let you know there's a mistake</li>
+</ul>
+<p>This ensures that your optimizer always has the correct and up-to-date settings to work with.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the provided options are not of type AdaMaxOptimizerOptions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParameters_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateParameters(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates a vector of parameters using the AdaMax optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; UpdateParameters(Vector&lt;T&gt; parameters, Vector&lt;T&gt; gradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current parameter vector to be updated.</p>
+</dd>
+    <dt><code>gradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector corresponding to the parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The updated parameter vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+AdaMax is a variant of Adam based on the infinity norm, which can be more stable than Adam for
+some problems. It adapts the learning rate using the maximum absolute value of gradients.
+</p>
+<p><b>For Beginners:</b> AdaMax adjusts step sizes by tracking the largest gradient magnitude
+seen so far for each parameter. This makes it robust to large, occasional gradient spikes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParametersGpu_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateParametersGpu*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParametersGpu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateParametersGpu(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend)">
+  UpdateParametersGpu(IGpuBuffer, IGpuBuffer, int, IDirectGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L636"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates parameters on the GPU using optimizer-specific GPU kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>GPU buffer containing parameters to update (modified in-place).</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>GPU buffer containing gradients.</p>
+</dd>
+    <dt><code>parameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parameters.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for execution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateParametersGpu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The base implementation throws since there's no generic GPU kernel.
+Derived classes that support GPU updates override this method.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateSolution_" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Optimizers.AdaMaxOptimizer`3.UpdateSolution(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateSolution(IFullModel&lt;T, TInput, TOutput&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the current solution using the AdaMax update rule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, TInput, TOutput&gt; UpdateSolution(IFullModel&lt;T, TInput, TOutput&gt; currentSolution, Vector&lt;T&gt; gradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentSolution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current solution being optimized.</p>
+</dd>
+    <dt><code>gradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The calculated gradient for the current solution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new solution with updated parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_AdaMaxOptimizer_3_UpdateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method applies the AdaMax update rule to adjust the parameters of the current solution.
+It uses moment estimates and the infinity norm to adapt the learning rate for each parameter.
+</p>
+<p><b>For Beginners:</b> This method fine-tunes our current guess to make it better.
+<p>Imagine you're adjusting the volume and bass on a stereo:</p>
+<ul>
+<li>The current solution is like the current settings</li>
+<li>The gradient tells us how to adjust each knob</li>
+<li>We don't just follow the gradient directly; we use some clever math (AdaMax rules) to decide
+how much to turn each knob</li>
+<li>This clever math helps us avoid overreacting to any single piece of information</li>
+</ul>
+<p>The result is a new, slightly improved set of stereo settings (or in our case, a better solution).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/AdaMaxOptimizer.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

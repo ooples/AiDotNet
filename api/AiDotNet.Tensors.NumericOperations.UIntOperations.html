@@ -1,0 +1,3981 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class UIntOperations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class UIntOperations | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides mathematical operations for the  (UInt32) data type.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_NumericOperations_UIntOperations.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.NumericOperations.UIntOperations%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations">
+
+
+
+  <h1 id="AiDotNet_Tensors_NumericOperations_UIntOperations" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations" class="text-break">
+Class UIntOperations  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.NumericOperations.html">NumericOperations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides mathematical operations for the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a> (UInt32) data type.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class UIntOperations : INumericOperations&lt;uint&gt;, IVectorizedOperations&lt;uint&gt;</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">UIntOperations</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</div>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_NumericOperations_UIntOperations_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements the <a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations&lt;T&gt;</a> interface for the <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a> type,
+providing basic and advanced mathematical operations while handling the limitations of the unsigned integer data type.
+Since uint values are limited to the range 0 to 4,294,967,295, operations that would result in values
+outside this range will overflow and potentially produce unexpected results.
+</p>
+<p><b>For Beginners:</b> This class lets you perform math with unsigned integers (whole numbers between 0 and approximately 4.29 billion).
+<p>Think of it like a calculator that works specifically with positive whole numbers and zero. For example:</p>
+<ul>
+<li>You can add, subtract, multiply, and divide uint numbers</li>
+<li>You can compare values (is one number greater than another?)</li>
+<li>You can perform more advanced operations like square roots or exponents</li>
+</ul>
+<p>However, be careful! If your calculations produce a number larger than 4,294,967,295 or a negative number,
+the result will &quot;wrap around&quot; (overflow) and might give you an unexpected answer. This is like
+a car odometer that rolls over to 0 after reaching its maximum value.</p>
+<p>The uint type is useful when you need to work with positive integers that might be larger than the
+regular int type can handle.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_MaxValue_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_MaxValue" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L614"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum value that can be represented by a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The maximum value of a uint, which is 4,294,967,295.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the largest possible value that can be represented by the uint data type,
+which is 4,294,967,295. Attempting to store a value greater than this in a uint will result in overflow.
+</p>
+<p><b>For Beginners:</b> This property gives you the largest possible number that a uint can hold.
+<p>For uint values, the maximum value is 4,294,967,295.
+If you try to create a uint with a larger value (like 5,000,000,000), the number will wrap around
+and give you an incorrect result.</p>
+<p>This is useful when you need to:</p>
+<ul>
+<li>Check if a value is too large to be stored as a uint</li>
+<li>Initialize a variable to the largest possible value before comparing</li>
+<li>Set boundaries for valid input values</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_MinValue_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_MinValue" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L591"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum value that can be represented by a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The minimum value of a uint, which is 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the smallest possible value that can be represented by the uint data type,
+which is 0. Unlike signed types, uint cannot represent negative values.
+</p>
+<p><b>For Beginners:</b> This property gives you the smallest possible number that a uint can hold.
+<p>For uint values, the minimum value is always 0, because uint can only store positive whole numbers
+(and zero).</p>
+<p>This is useful when you need to:</p>
+<ul>
+<li>Check if a value is valid for a uint</li>
+<li>Initialize a variable to the smallest possible value</li>
+<li>Set boundaries for valid input values</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_One_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_One" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value one as a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value 1 as a uint.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the value one (1) as a uint. It is useful for operations that
+require a unit value, such as incrementing a counter or as an identity element in multiplication.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number one (1) as a uint.
+<p>This is useful in many situations:</p>
+<ul>
+<li>When incrementing a counter (adding 1)</li>
+<li>In mathematical formulas that need the number 1</li>
+<li>As a starting value for multiplication</li>
+</ul>
+<p>The &quot;U&quot; suffix indicates that this is an unsigned integer value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_PrecisionBits_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_PrecisionBits" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L698"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in uint (32 bits).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L726"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsCpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L729"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_SupportsGpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float, double, int, and long are typically supported on GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Zero_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Zero" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value zero as a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value 0 as a uint.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the value zero (0) as a uint. It is useful for operations that
+require a zero value, such as initializing variables or as a default value.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number zero (0) as a uint.
+<p>This is useful when you need a known zero value in your code, for example:</p>
+<ul>
+<li>When starting a counter</li>
+<li>When you need to initialize a value before calculating</li>
+<li>As a default or fallback value</li>
+</ul>
+<p>The &quot;U&quot; suffix indicates that this is an unsigned integer value.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Abs_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Abs(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Abs(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L839"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the absolute value of each element: destination[i] = |x[i]|.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Abs(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Abs_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Abs(System.UInt32)">
+  Abs(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the absolute value of a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Abs(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to calculate the absolute value for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The input value unchanged.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Abs_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For uint values, which are already non-negative, this method simply returns the input value unchanged.
+The absolute value function is traditionally used to get the non-negative version of a number, but
+since uint values are always non-negative, no conversion is needed.
+</p>
+<p><b>For Beginners:</b> This method gives you the positive version of a number.
+<p>The absolute value of a number is how far it is from zero, ignoring whether it's positive or negative.</p>
+<p>For uint values, which are always positive (or zero), this method simply returns the same number:</p>
+<ul>
+<li>Abs(5) returns 5</li>
+<li>Abs(0) returns 0</li>
+</ul>
+<p>This method exists mainly for consistency with other numeric types where absolute value is meaningful.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Add_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Add(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Add(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L736"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Add_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Add(System.UInt32,System.UInt32)">
+  Add(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two uint values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Add(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The sum of <code class="paramref">a</code> and <code class="paramref">b</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Add_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs addition on two uint values. If the result exceeds the maximum value of a uint
+(4,294,967,295), an overflow will occur, wrapping the result around to start from zero again.
+</p>
+<p><b>For Beginners:</b> This method adds two numbers together.
+<p>For example:</p>
+<ul>
+<li>Add(5, 3) returns 8</li>
+<li>Add(10, 20) returns 30</li>
+</ul>
+<p>Be careful with large numbers! If the result is too big for a uint, it will wrap around:</p>
+<ul>
+<li>Add(4,294,967,290, 10) would mathematically be 4,294,967,300, but since that's too large,
+it will return 4 (the result after &quot;wrapping around&quot; from zero again)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_AddScalar_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_AddScalar_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.AddScalar(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  AddScalar(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L836"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar to each element: destination[i] = x[i] + scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(ReadOnlySpan&lt;uint&gt; x, uint scalar, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scalar value to add.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Ceiling(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Ceiling(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L846"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the ceiling of each element: destination[i] = ceiling(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Ceiling(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Ceiling returns the smallest integer greater than or equal to each value.
+For example, ceiling(3.2) = 4, ceiling(-2.7) = -2.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Ceiling(System.UInt32)">
+  Ceiling(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L557"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integral value greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Ceiling(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The smallest integral value greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Ceiling_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) = 4 and Ceiling(-2.7) = -2.
+Note that for negative numbers, ceiling rounds toward zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Clip_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Clip*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Clip_System_ReadOnlySpan_System_UInt32__System_UInt32_System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Clip(System.ReadOnlySpan{System.UInt32},System.UInt32,System.UInt32,System.Span{System.UInt32})">
+  Clip(ReadOnlySpan&lt;uint&gt;, uint, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L841"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips (clamps) each element to a range: destination[i] = clamp(x[i], min, max).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clip(ReadOnlySpan&lt;uint&gt; x, uint min, uint max, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The minimum value.</p>
+</dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The maximum value.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Compare_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Compare_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Compare(System.UInt32,System.UInt32)">
+  Compare(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Compare(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Compare_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comparing two numbers to determine their ordering:</p>
+<ul>
+<li>If a is less than b, returns a negative number (-1)</li>
+<li>If a equals b, returns zero (0)</li>
+<li>If a is greater than b, returns a positive number (1)</li>
+</ul>
+<p>This is commonly used for sorting or determining relative positions of values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Copy_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Copy*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Copy_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Copy(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Copy(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L843"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies elements from source to destination.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Copy(ReadOnlySpan&lt;uint&gt; source, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Cos_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Cos(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Cos(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L853"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine of each element: destination[i] = cos(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Cos(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Cos_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Cosine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Cos_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Cos(System.UInt32)">
+  Cos(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L568"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cosine of the specified value (truncated to integer).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Cos(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_CosineSimilarity_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_CosineSimilarity_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.CosineSimilarity(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32})">
+  CosineSimilarity(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L826"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine similarity using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint CosineSimilarity(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Divide_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Divide(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Divide(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L754"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Divide(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Divide_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Divide(System.UInt32,System.UInt32)">
+  Divide(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides the first value by the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Divide(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The dividend (value to be divided).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The divisor (value to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The quotient of <code class="paramref">a</code> divided by <code class="paramref">b</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Divide_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs integer division of two uint values. Because uint is an integer type, 
+the result will be truncated (rounded down). Division by zero will throw a DivideByZeroException.
+</p>
+<p><b>For Beginners:</b> This method divides the first number by the second.
+<p>For example:</p>
+<ul>
+<li>Divide(10, 2) returns 5</li>
+<li>Divide(7, 2) returns 3 (not 3.5, since uint values are whole numbers only)</li>
+</ul>
+<p>Important notes:</p>
+<ul>
+<li>The result is always rounded down to the nearest whole number</li>
+<li>Dividing by zero will cause your program to crash with an error</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_DivideScalar_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.DivideScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_DivideScalar_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.DivideScalar(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  DivideScalar(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L835"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element by a scalar: destination[i] = x[i] / scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideScalar(ReadOnlySpan&lt;uint&gt; x, uint scalar, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Dot_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Dot_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Dot(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32})">
+  Dot(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L760"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes dot product using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Dot(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ELU_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ELU_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ELU(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  ELU(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L891"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise: x if x &gt; 0, alpha * (exp(x) - 1) otherwise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ELU(ReadOnlySpan&lt;uint&gt; x, uint alpha, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scale factor for negative values (typically 1.0).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_ELU_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ELU is similar to ReLU for positive inputs but produces smooth
+negative values for negative inputs. This helps push mean activations closer to zero,
+speeding up learning.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, comparisons, and conditional selection
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Equals_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Equals_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Equals(System.UInt32,System.UInt32)">
+  Equals(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L397"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if two uint values are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if <code class="paramref">a</code> is equal to <code class="paramref">b</code>; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Equals_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two uint values for equality. Two uint values are considered equal
+if they represent the same numeric value.
+</p>
+<p><b>For Beginners:</b> This method checks if two numbers are exactly the same.
+<p>For example:</p>
+<ul>
+<li>Equals(5, 5) returns true (because both numbers are 5)</li>
+<li>Equals(10, 15) returns false (because 10 and 15 are different numbers)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Exp_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Exp(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Exp(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L785"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Exp(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Exp produces misleading results for uint.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Exp_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Exp(System.UInt32)">
+  Exp(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L377"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates e raised to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Exp(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The power to raise e to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value of e raised to the power of <code class="paramref">value</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Exp_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the exponential function (e^value) for the input value, where e is Euler's number
+(approximately 2.71828). The calculation is performed using double-precision arithmetic, rounded to the
+nearest integer, and then clamped to the maximum uint value before casting to a uint. This prevents
+overflow for large input values, instead returning uint.MaxValue (4,294,967,295).
+</p>
+<p><b>For Beginners:</b> This method calculates "e" raised to a power.
+<p>&quot;e&quot; is a special mathematical constant (approximately 2.71828) used in many calculations, especially
+those involving growth or decay.</p>
+<p>For example:</p>
+<ul>
+<li>Exp(1) returns 3 (because e^1 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2.71828, rounded to 3 as a uint)</li>
+<li>Exp(2) returns 7 (because e^2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 7.38906, rounded to 7 as a uint)</li>
+</ul>
+<p>For larger input values, the result grows very quickly:</p>
+<ul>
+<li>Exp(10) returns 22,026 (because e^10 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 22,026.47)</li>
+<li>Exp(30) or higher will return 4,294,967,295 (the maximum uint value) because the true result would be too large</li>
+</ul>
+<p>This function is useful in calculations involving:</p>
+<ul>
+<li>Compound interest</li>
+<li>Population growth</li>
+<li>Radioactive decay</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Fill_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Fill_System_Span_System_UInt32__System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Fill(System.Span{System.UInt32},System.UInt32)">
+  Fill(Span&lt;uint&gt;, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L833"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the destination span with a constant value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(Span&lt;uint&gt; destination, uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span to fill.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to fill with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Floor(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Floor(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L845"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the floor of each element: destination[i] = floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Floor(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Floor returns the largest integer less than or equal to each value.
+For example, floor(3.7) = 3, floor(-2.3) = -3.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Floor(System.UInt32)">
+  Floor(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L556"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integral value less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Floor(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The largest integral value less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Floor_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) = 3 and Floor(-2.3) = -3.
+Note that for negative numbers, floor rounds away from zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Frac(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Frac(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L847"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the fractional part of each element: destination[i] = x[i] - floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Frac(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, frac(3.7) = 0.7, frac(-2.3) = 0.7 (not -0.3, since frac = x - floor(x)).
+This is useful in hash encoding and periodic functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Frac(System.UInt32)">
+  Frac(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L558"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value (value - floor(value)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Frac(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The fractional part of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Frac_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, Frac(3.7) = 0.7. Note that Frac(-2.3) = 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+This is useful in hash encoding and periodic functions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromDouble_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to a uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The double value converted to a uint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a double-precision floating-point value to a uint. The conversion truncates
+the fractional part of the double. Negative values will underflow to a large positive value, and values
+greater than 4,294,967,295 will overflow.
+</p>
+<p><b>For Beginners:</b> This method converts a decimal number to a whole uint number.
+<p>When converting:</p>
+<ul>
+<li>The decimal part is dropped (not rounded)</li>
+<li>If the number is negative, you'll get an unexpected large positive number</li>
+<li>If the number is too large for a uint, you'll get an unexpected smaller result</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>FromDouble(5.7) returns 5 (decimal part is simply dropped)</li>
+<li>FromDouble(3.2) returns 3</li>
+<li>FromDouble(5000000000.0) will return a value that doesn't make sense because 5 billion is too large for a uint</li>
+<li>FromDouble(-5.0) will not return -5 (since uint can't store negative numbers), but instead a large positive number</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromFloat_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L708"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float value to uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromFloatSpan(System.ReadOnlySpan{System.Single},System.Span{System.UInt32})">
+  FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L865"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from float (FP32) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The source span containing float values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 32-bit floating-point numbers back to
+another type (like double or int). This is commonly used when retrieving results from GPU
+processing and converting them back to the user's preferred type.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromHalf_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L718"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half value to uint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.FromHalfSpan(System.ReadOnlySpan{System.Half},System.Span{System.UInt32})">
+  FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L871"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from Half (FP16) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromHalfSpan(ReadOnlySpan&lt;Half&gt; source, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The source span containing Half values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 16-bit half-precision floating-point
+numbers to another type (like float or double). This is commonly used when retrieving results
+from GPU processing that used half precision.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_GELU_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_GELU_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GELU(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  GELU(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L882"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void GELU(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_GELU_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GELU is a smooth activation function that approximates
+multiplying the input by a probability based on its value. It's used in
+Transformers (BERT, GPT) and provides smooth gradients for optimization.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized tanh, exp, and arithmetic operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThan_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GreaterThan(System.UInt32,System.UInt32)">
+  GreaterThan(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the first value is greater than the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThan(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if <code class="paramref">a</code> is greater than <code class="paramref">b</code>; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThan_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two uint values and returns true if the first value is greater than the second.
+The comparison uses the standard greater than operator for uint values.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is bigger than the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThan(10, 5) returns true (because 10 is greater than 5)</li>
+<li>GreaterThan(3, 7) returns false (because 3 is not greater than 7)</li>
+<li>GreaterThan(4, 4) returns false (because 4 is equal to 4, not greater than it)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThanOrEquals_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.GreaterThanOrEquals(System.UInt32,System.UInt32)">
+  GreaterThanOrEquals(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L480"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the first value is greater than or equal to the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThanOrEquals(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if <code class="paramref">a</code> is greater than or equal to <code class="paramref">b</code>; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_GreaterThanOrEquals_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two uint values and returns true if the first value is greater than or equal to the second.
+The comparison uses the standard greater than or equal to operator for uint values.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is bigger than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThanOrEquals(10, 5) returns true (because 10 is greater than 5)</li>
+<li>GreaterThanOrEquals(7, 7) returns true (because 7 is equal to 7)</li>
+<li>GreaterThanOrEquals(3, 8) returns false (because 3 is less than 8)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsInfinity_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsInfinity_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.IsInfinity(System.UInt32)">
+  IsInfinity(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L656"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a uint value is infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsInfinity(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always <code>false</code> for uint values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsInfinity_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns false because the uint data type can only represent integers,
+and the concept of infinity only applies to floating-point types like float and double.
+</p>
+<p><b>For Beginners:</b> This method checks if a number is "infinity".
+<p>For uint values, the result is always false because a uint can only contain finite whole numbers.
+The concept of &quot;infinity&quot; applies only to floating-point types like float or double,
+which can represent special values like the result of divide-by-zero.</p>
+<p>This method exists mainly for consistency with other numeric types where IsInfinity is meaningful.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsNaN_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsNaN_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.IsNaN(System.UInt32)">
+  IsNaN(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L635"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a uint value is NaN (Not a Number).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsNaN(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always <code>false</code> for uint values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_IsNaN_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns false because the uint data type can only represent integers,
+and the concept of NaN (Not a Number) only applies to floating-point types like float and double.
+</p>
+<p><b>For Beginners:</b> This method checks if a number is "Not a Number" (NaN).
+<p>For uint values, the result is always false because a uint can only contain valid whole numbers.
+The concept of &quot;Not a Number&quot; applies only to floating-point types like float or double,
+which can represent special values like the result of divide-by-zero.</p>
+<p>This method exists mainly for consistency with other numeric types where IsNaN is meaningful.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_LeakyReLU_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_LeakyReLU_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LeakyReLU(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  LeakyReLU(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L874"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise: destination[i] = x[i] &gt; 0 ? x[i] : alpha * x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LeakyReLU(ReadOnlySpan&lt;uint&gt; x, uint alpha, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The negative slope coefficient (typically 0.01).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_LeakyReLU_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> LeakyReLU is a variant of ReLU that allows a small negative slope
+for negative inputs instead of zeroing them out. This helps prevent "dying neurons".
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using vectorized comparisons
+and conditional selection, providing 3-5x speedup over scalar loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThan_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LessThan(System.UInt32,System.UInt32)">
+  LessThan(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the first value is less than the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThan(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if <code class="paramref">a</code> is less than <code class="paramref">b</code>; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThan_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two uint values and returns true if the first value is less than the second.
+The comparison uses the standard less than operator for uint values.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than the second.
+<p>For example:</p>
+<ul>
+<li>LessThan(5, 10) returns true (because 5 is less than 10)</li>
+<li>LessThan(7, 3) returns false (because 7 is not less than 3)</li>
+<li>LessThan(4, 4) returns false (because 4 is equal to 4, not less than it)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThanOrEquals_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.LessThanOrEquals(System.UInt32,System.UInt32)">
+  LessThanOrEquals(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L501"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the first value is less than or equal to the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThanOrEquals(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if <code class="paramref">a</code> is less than or equal to <code class="paramref">b</code>; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_LessThanOrEquals_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two uint values and returns true if the first value is less than or equal to the second.
+The comparison uses the standard less than or equal to operator for uint values.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>LessThanOrEquals(5, 10) returns true (because 5 is less than 10)</li>
+<li>LessThanOrEquals(7, 7) returns true (because 7 is equal to 7)</li>
+<li>LessThanOrEquals(9, 4) returns false (because 9 is greater than 4)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Log(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L792"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Log produces misleading results for uint.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log(System.UInt32)">
+  Log(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L459"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm (base e) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Log(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to calculate the logarithm for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The natural logarithm of <code class="paramref">value</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the natural logarithm (ln) of the input value. The calculation is
+performed using double-precision arithmetic and then cast to a uint. The result is truncated
+to an integer, leading to loss of precision. If the input is 0, the result will be a mathematical error
+(negative infinity), which typically becomes 0 when cast to a uint.
+</p>
+<p><b>For Beginners:</b> This method calculates the natural logarithm of a number.
+<p>The natural logarithm (ln) is the reverse of the exponential function. It tells you what power
+you need to raise &quot;e&quot; to in order to get your input value.</p>
+<p>For example:</p>
+<ul>
+<li>Log(1) returns 0 (because e^0 = 1)</li>
+<li>Log(3) returns 1 (because e^1 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2.71828, and when cast to a uint, the decimal part is dropped)</li>
+<li>Log(10) returns 2 (because e^2.303 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10, and when cast to a uint, the decimal part is dropped)</li>
+</ul>
+<p>Important notes:</p>
+<ul>
+<li>The logarithm of zero is not defined mathematically, so Log(0) will return 0</li>
+<li>Logarithm results are usually decimals, but they'll be converted to whole numbers when stored as uints</li>
+<li>Even for very large inputs, the result is relatively small (e.g., Log(4294967295) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  22)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log2_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Log2_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Log2(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Log2(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L813"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log2(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Log2 produces misleading results for uint.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Max_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Max_System_ReadOnlySpan_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Max(System.ReadOnlySpan{System.UInt32})">
+  Max(ReadOnlySpan&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L772"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds maximum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Max(ReadOnlySpan&lt;uint&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Min_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Min_System_ReadOnlySpan_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Min(System.ReadOnlySpan{System.UInt32})">
+  Min(ReadOnlySpan&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L778"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds minimum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Min(ReadOnlySpan&lt;uint&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Mish_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Mish_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Mish(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Mish(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L885"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Mish(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Mish_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Mish is a smooth, self-regularized activation function that
+often outperforms ReLU in practice. It's unbounded above, bounded below, smooth,
+and non-monotonic.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, log, and tanh operations
+for 2-3x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Multiply_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Multiply(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Multiply(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L748"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Multiply(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Multiply_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Multiply(System.UInt32,System.UInt32)">
+  Multiply(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two uint values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Multiply(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The product of <code class="paramref">a</code> and <code class="paramref">b</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Multiply_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs multiplication of two uint values. The result of multiplying two uint values can
+easily exceed the range of a uint, causing overflow and potentially returning an unexpected value.
+</p>
+<p><b>For Beginners:</b> This method multiplies two numbers together.
+<p>For example:</p>
+<ul>
+<li>Multiply(4, 5) returns 20</li>
+<li>Multiply(10, 3) returns 30</li>
+</ul>
+<p>Multiplication can easily produce numbers that are too large for a uint:</p>
+<ul>
+<li>Multiply(1,000,000, 5,000) would be 5,000,000,000, which is outside the uint range,
+so the result will wrap around and give you an incorrect answer (705,032,704)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_MultiplyAdd_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_MultiplyAdd_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MultiplyAdd(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  MultiplyAdd(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L859"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyAdd(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, uint scalar, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The first source span (values to add to).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The second source span (values to multiply).</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scalar value to multiply y by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_MultiplyAdd_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This operation multiplies each element of y by a scalar value,
+then adds it to the corresponding element of x. It's commonly used in matrix multiplication
+and neural network operations.
+</p>
+<p>
+<b>Performance:</b> When FMA (Fused Multiply-Add) hardware is available, this operation
+can be performed in a single instruction, providing better performance and precision
+than separate multiply and add operations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_MultiplyScalar_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MultiplyScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_MultiplyScalar_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.MultiplyScalar(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  MultiplyScalar(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L834"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element by a scalar: destination[i] = x[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyScalar(ReadOnlySpan&lt;uint&gt; x, uint scalar, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Negate_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Negate(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Negate(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L840"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates each element: destination[i] = -x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Negate(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Negate_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Negate(System.UInt32)">
+  Negate(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to negate a uint value, but throws an exception as this operation is not supported.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Negate(uint a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>This method never returns a value; it always throws an exception.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Negate_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method attempts to negate a uint value, but since uint can only represent non-negative values,
+it's impossible to properly negate a positive uint value without changing the data type.
+Instead of returning an incorrect result, this method throws a NotSupportedException.
+</p>
+<p><b>For Beginners:</b> This method tries to find the negative version of a positive number but can't.
+<p>The problem is that unsigned integers (uint) can only store values from 0 to 4,294,967,295.
+They can't store negative numbers at all.</p>
+<p>For example:</p>
+<ul>
+<li>Negate(5) should return -5, but -5 cannot be stored in a uint</li>
+</ul>
+<p>Instead of giving you an incorrect answer or silently failing, this method raises an error
+to let you know that you're trying to do something that isn't possible with this type.</p>
+<p>If you need to work with negative numbers, consider using a signed integer type like int
+instead of uint.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown because unsigned integers cannot be negated.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Pow_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Pow*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Pow_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Pow(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  Pow(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L842"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of each element: destination[i] = x[i]^power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Pow(ReadOnlySpan&lt;uint&gt; x, uint power, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>power</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The power to raise each element to.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Power_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Power_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Power(System.UInt32,System.UInt32)">
+  Power(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L429"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raises a value to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Power(uint baseValue, uint exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The base value.</p>
+</dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The base value raised to the specified power.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Power_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the base value raised to the power of the exponent. The calculation is
+performed using double-precision arithmetic and then cast to a uint, which may cause
+overflow for large results. Negative exponents will result in fractional values that,
+when cast to uint, will become 0.
+</p>
+<p><b>For Beginners:</b> This method multiplies a number by itself a specified number of times.
+<p>For example:</p>
+<ul>
+<li>Power(2, 3) returns 8 (because 2ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â² = 2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2 = 8)</li>
+<li>Power(3, 2) returns 9 (because 3ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â² = 3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 = 9)</li>
+<li>Power(5, 0) returns 1 (any number raised to the power of 0 is 1)</li>
+</ul>
+<p>Be careful with larger values! The result can quickly exceed the uint range:</p>
+<ul>
+<li>Power(10, 9) would be 1,000,000,000, which is within the uint range</li>
+<li>Power(10, 10) would be 10,000,000,000, which is outside the uint range, so the result will be incorrect</li>
+</ul>
+<p>Fractional results are truncated to whole numbers:</p>
+<ul>
+<li>Power(2, 4294967295) would mathematically be a tiny fraction, but as a uint it returns 0</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ReLU_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ReLU_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ReLU(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  ReLU(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L894"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU (Rectified Linear Unit) element-wise: max(0, x).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReLU(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_ReLU_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ReLU is the most common activation function in deep learning.
+It outputs the input directly if positive, otherwise outputs zero.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized maximum operation for 5-10x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Round_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Round_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Round(System.UInt32)">
+  Round(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L554"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rounds a uint value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Round(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to round.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The rounded value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Round_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For uint values, which are already integers, this method simply returns the value unchanged.
+Rounding only applies to floating-point values that have fractional parts.
+</p>
+<p><b>For Beginners:</b> This method rounds a number to the nearest whole number.
+<p>Since a uint is already a whole number, this method simply returns the same number without any change.</p>
+<p>For example:</p>
+<ul>
+<li>Round(5) returns 5</li>
+<li>Round(10) returns 10</li>
+</ul>
+<p>This method exists mainly for consistency with other numeric types like float or double,
+where rounding would actually change the value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sigmoid_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sigmoid_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sigmoid(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Sigmoid(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L806"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sigmoid(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Sigmoid saturates for uint inputs.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_SignOrZero_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_SignOrZero_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SignOrZero(System.UInt32)">
+  SignOrZero(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L689"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of a uint value as 0 or 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint SignOrZero(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to determine the sign of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>0 if <code class="paramref">value</code> is zero;
+1 if <code class="paramref">value</code> is positive.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_SignOrZero_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns a value indicating the sign of the input value. Since uint can only
+represent non-negative values, the result will always be either 0 (for zero) or 1 (for positive values).
+This is different from signed numeric types where the result could also be -1 for negative values.
+</p>
+<p><b>For Beginners:</b> This method tells you if a number is positive or zero.
+<p>It returns:</p>
+<ul>
+<li>0 if the number is exactly zero</li>
+<li>1 if the number is positive (greater than zero)</li>
+</ul>
+<p>Since uint can only store values that are zero or positive, you'll never get a -1 result
+(which would represent a negative number in other numeric types).</p>
+<p>For example:</p>
+<ul>
+<li>SignOrZero(0) returns 0</li>
+<li>SignOrZero(42) returns 1</li>
+<li>SignOrZero(4294967295) returns 1</li>
+</ul>
+<p>The suffix &quot;U&quot; on the literals (1U) indicates that these are unsigned integer values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sin_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sin(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Sin(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L848"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sine of each element: destination[i] = sin(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sin(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sin_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Sine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sin_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sin(System.UInt32)">
+  Sin(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L563"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sine of the specified value (truncated to integer).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Sin(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_SoftMax_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SoftMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_SoftMax_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SoftMax(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  SoftMax(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L820"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SoftMax(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. SoftMax requires floating-point for normalized probabilities.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sqrt_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sqrt(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Sqrt(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L838"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the square root of each element: destination[i] = sqrt(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sqrt(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sqrt_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sqrt(System.UInt32)">
+  Sqrt(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a uint value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Sqrt(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The square root of <code class="paramref">value</code> as a uint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sqrt_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square root of the input value and converts the result to a uint.
+The calculation is performed using double-precision arithmetic and then cast to a uint, which means
+the result will be truncated to an integer value.
+</p>
+<p><b>For Beginners:</b> This method calculates the square root of a number.
+<p>The square root of a number is another number that, when multiplied by itself, gives the original number.</p>
+<p>For example:</p>
+<ul>
+<li>Sqrt(4) returns 2 (because 2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2 = 4)</li>
+<li>Sqrt(9) returns 3 (because 3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 = 9)</li>
+<li>Sqrt(10) returns 3 (because the true square root is approximately 3.16, but as a uint it's rounded down to 3)</li>
+</ul>
+<p>Unlike with signed numbers, you don't need to worry about negative inputs since uint values are always positive.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Square_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Square_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Square(System.UInt32)">
+  Square(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Squares a uint value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Square(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The square of <code class="paramref">value</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Square_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square of the input value (the value multiplied by itself).
+The result of squaring a uint value can easily exceed the range of a uint,
+causing overflow and potentially returning an unexpected value.
+</p>
+<p><b>For Beginners:</b> This method multiplies a number by itself.
+<p>For example:</p>
+<ul>
+<li>Square(4) returns 16 (because 4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 4 = 16)</li>
+<li>Square(10) returns 100 (because 10 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10 = 100)</li>
+</ul>
+<p>Be careful with larger numbers! Squaring even moderate values can easily exceed the uint range:</p>
+<ul>
+<li>Square(100,000) would be 10,000,000,000, which is outside the uint range, so the result will be incorrect</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Subtract_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Subtract(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Subtract(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L742"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Subtract(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Subtract_System_UInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Subtract(System.UInt32,System.UInt32)">
+  Subtract(uint, uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts the second value from the first.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Subtract(uint a, uint b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The value to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The difference between <code class="paramref">a</code> and <code class="paramref">b</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Subtract_System_UInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs subtraction of two uint values. If the result would be negative (when b &gt; a),
+an overflow will occur, wrapping the result around to a large positive number. This is because uint
+cannot represent negative values.
+</p>
+<p><b>For Beginners:</b> This method subtracts the second number from the first.
+<p>For example:</p>
+<ul>
+<li>Subtract(10, 3) returns 7</li>
+<li>Subtract(20, 5) returns 15</li>
+</ul>
+<p>Be careful when the second number is larger than the first! Since a uint can't be negative:</p>
+<ul>
+<li>Subtract(5, 10) will not return -5. Instead, it will return 4,294,967,291 (which is 4,294,967,296 - 5)</li>
+</ul>
+<p>This happens because the result wraps around from the end of the range to the beginning.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_SubtractScalar_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SubtractScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_SubtractScalar_System_ReadOnlySpan_System_UInt32__System_UInt32_System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.SubtractScalar(System.ReadOnlySpan{System.UInt32},System.UInt32,System.Span{System.UInt32})">
+  SubtractScalar(ReadOnlySpan&lt;uint&gt;, uint, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L837"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar from each element: destination[i] = x[i] - scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractScalar(ReadOnlySpan&lt;uint&gt; x, uint scalar, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The scalar value to subtract.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sum_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Sum_System_ReadOnlySpan_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Sum(System.ReadOnlySpan{System.UInt32})">
+  Sum(ReadOnlySpan&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L766"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public uint Sum(ReadOnlySpan&lt;uint&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Swish_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Swish_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Swish(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Swish(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L888"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Swish(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_Swish_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Swish (also called SiLU - Sigmoid Linear Unit) is a smooth,
+non-monotonic activation function that often outperforms ReLU. It allows negative
+values to pass through, helping with gradient flow.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized sigmoid and multiplication operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_Tanh_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_Tanh_System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.Tanh(System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  Tanh(ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L799"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for uint type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Tanh(ReadOnlySpan&lt;uint&gt; x, Span&lt;uint&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Tanh produces only 0 or 1 for uint.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToDouble_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToDouble_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToDouble(System.UInt32)">
+  ToDouble(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L723"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a uint value to double (FP64) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ToDouble(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToFloat_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToFloat_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToFloat(System.UInt32)">
+  ToFloat(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L703"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a uint value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float ToFloat(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToFloatSpan_System_ReadOnlySpan_System_UInt32__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToFloatSpan(System.ReadOnlySpan{System.UInt32},System.Span{System.Single})">
+  ToFloatSpan(ReadOnlySpan&lt;uint&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L862"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to float (FP32): destination[i] = (float)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToFloatSpan(ReadOnlySpan&lt;uint&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The destination span for float results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToFloatSpan_System_ReadOnlySpan_System_UInt32__System_Span_System_Single___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers from one type (like double or int)
+to 32-bit floating-point numbers. This is commonly used when preparing data for GPU processing,
+which typically operates on float32 for optimal performance.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToSingle
+on .NET 8+, providing significant speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToHalf_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToHalf_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToHalf(System.UInt32)">
+  ToHalf(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L713"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a uint value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Half ToHalf(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToHalfSpan_System_ReadOnlySpan_System_UInt32__System_Span_System_Half__" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToHalfSpan(System.ReadOnlySpan{System.UInt32},System.Span{System.Half})">
+  ToHalfSpan(ReadOnlySpan&lt;uint&gt;, Span&lt;Half&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L868"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to Half (FP16): destination[i] = (Half)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToHalfSpan(ReadOnlySpan&lt;uint&gt; source, Span&lt;Half&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The destination span for Half results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToHalfSpan_System_ReadOnlySpan_System_UInt32__System_Span_System_Half___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers to 16-bit half-precision
+floating-point numbers. Half precision uses less memory and can be faster on GPUs that
+support it, at the cost of reduced precision and range.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToHalf
+on .NET 8+, providing significant speedup over sequential conversion loops. Critical for
+mixed-precision GPU operations where FP16 loads with FP32 accumulation provides 2x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToInt32_System_UInt32_" data-uid="AiDotNet.Tensors.NumericOperations.UIntOperations.ToInt32(System.UInt32)">
+  ToInt32(uint)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L530"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a uint value to a 32-bit integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToInt32(uint value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd><p>The uint value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The uint value as a 32-bit integer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_UIntOperations_ToInt32_System_UInt32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a uint (32-bit unsigned) value to an int (32-bit signed) value. The conversion may fail
+if the uint value is greater than int.MaxValue (2,147,483,647), resulting in overflow. Values larger than
+int.MaxValue will be interpreted as negative values in the int type.
+</p>
+<p><b>For Beginners:</b> This method converts a uint number to a regular integer (int).
+<p>A uint can store numbers from 0 to 4,294,967,295.
+An int can store numbers from -2,147,483,648 to 2,147,483,647.</p>
+<p>This conversion is not always safe:</p>
+<ul>
+<li>If the uint value is less than or equal to 2,147,483,647, it converts correctly</li>
+<li>If the uint value is greater than 2,147,483,647, it will &quot;wrap around&quot; to a negative number</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>ToInt32(5) returns 5 as an int</li>
+<li>ToInt32(1000) returns 1000 as an int</li>
+<li>ToInt32(3,000,000,000) doesn't return 3,000,000,000 because that's too large for an int;
+instead, it returns a negative number (-1,294,967,296)</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/UIntOperations.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

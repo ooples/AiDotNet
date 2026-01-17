@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Scale&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Scale&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Scales an image by a random factor within a specified range.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_Image_Scale_1.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.Image.Scale%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.Image.Scale`1">
+
+
+
+  <h1 id="AiDotNet_Augmentation_Image_Scale_1" data-uid="AiDotNet.Augmentation.Image.Scale`1" class="text-break">
+Class Scale&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a>.<a class="xref" href="AiDotNet.Augmentation.Image.html">Image</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Scales an image by a random factor within a specified range.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Scale&lt;T&gt; : SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;, ISpatialAugmentation&lt;T, ImageTensor&lt;T&gt;&gt;, IAugmentation&lt;T, ImageTensor&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html">AugmentationBase</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html">SpatialAugmentationBase</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">Scale&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Augmentation.ISpatialAugmentation-2.html">ISpatialAugmentation</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Augmentation.IAugmentation-2.html">IAugmentation</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_SupportsBoundingBoxes">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.SupportsBoundingBoxes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_SupportsKeypoints">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.SupportsKeypoints</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_SupportsMasks">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.SupportsMasks</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_ApplyWithTargets_AiDotNet_Augmentation_Image_AugmentedSample__0__1__AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.ApplyWithTargets(AugmentedSample&lt;T, ImageTensor&lt;T&gt;&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_ApplyWithTransformParams__1_AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.ApplyWithTransformParams(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_TransformBoundingBox_AiDotNet_Augmentation_Image_BoundingBox__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.TransformBoundingBox(BoundingBox&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_TransformKeypoint_AiDotNet_Augmentation_Image_Keypoint__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.TransformKeypoint(Keypoint&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_TransformMask_AiDotNet_Augmentation_Image_SegmentationMask__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.TransformMask(SegmentationMask&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.SpatialAugmentationBase-2.html#AiDotNet_Augmentation_SpatialAugmentationBase_2_ApplyAugmentation__1_AiDotNet_Augmentation_AugmentationContext__0__">SpatialAugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.ApplyAugmentation(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_NumOps">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_OnAugmentationApplied">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.OnAugmentationApplied</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Name">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Probability">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Probability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsTrainingOnly">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.IsTrainingOnly</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsEnabled">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.IsEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Apply__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Apply(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_ApplyAugmentation__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.ApplyAugmentation(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_GetParameters">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_RaiseAugmentationApplied_AiDotNet_Augmentation_AugmentationContext__0__System_Boolean_">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.RaiseAugmentationApplied(AugmentationContext&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Augmentation_Image_Scale_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Scale randomly resizes the image by a factor sampled from the specified range.
+This simulates viewing objects from different distances, helping the model
+become robust to scale variations.
+</p>
+<p><b>For Beginners:</b> Think of this like zooming in or out on your camera.
+The same object photographed from closer or farther appears at different sizes.
+This augmentation teaches your model to recognize objects regardless of their size.
+</p>
+<p><b>When to use:</b>
+<ul><li>Object detection where objects appear at various sizes</li><li>Image classification with variable-sized subjects</li><li>When training data lacks size diversity</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1__ctor_" data-uid="AiDotNet.Augmentation.Image.Scale`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1__ctor_System_Double_System_Double_System_Double_AiDotNet_Augmentation_Image_InterpolationMode_AiDotNet_Augmentation_Image_BorderMode__0_" data-uid="AiDotNet.Augmentation.Image.Scale`1.#ctor(System.Double,System.Double,System.Double,AiDotNet.Augmentation.Image.InterpolationMode,AiDotNet.Augmentation.Image.BorderMode,`0)">
+  Scale(double, double, double, InterpolationMode, BorderMode, T?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new scale augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Scale(double minScale = 0.8, double maxScale = 1.2, double probability = 0.5, InterpolationMode interpolation = InterpolationMode.Bilinear, BorderMode borderMode = BorderMode.Reflect, T? borderValue = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>minScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum scale factor. Values less than 1.0 zoom out, greater than 1.0 zoom in.
+Industry standard default is 0.8 (80% of original size).</p>
+</dd>
+    <dt><code>maxScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum scale factor.
+Industry standard default is 1.2 (120% of original size).</p>
+</dd>
+    <dt><code>probability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of applying this augmentation (0.0 to 1.0).
+Industry standard default is 0.5.</p>
+</dd>
+    <dt><code>interpolation</code> <a class="xref" href="AiDotNet.Augmentation.Image.InterpolationMode.html">InterpolationMode</a></dt>
+    <dd><p>The interpolation mode for sampling pixels.
+Industry standard default is Bilinear for smooth results.</p>
+</dd>
+    <dt><code>borderMode</code> <a class="xref" href="AiDotNet.Augmentation.Image.BorderMode.html">BorderMode</a></dt>
+    <dd><p>How to fill pixels that fall outside the original image bounds.
+Industry standard default is Reflect.</p>
+</dd>
+    <dt><code>borderValue</code> <span class="xref">T</span></dt>
+    <dd><p>The constant value to use when borderMode is Constant.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_BorderMode_" data-uid="AiDotNet.Augmentation.Image.Scale`1.BorderMode*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_BorderMode" data-uid="AiDotNet.Augmentation.Image.Scale`1.BorderMode">
+  BorderMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the border mode when pixels fall outside the original image bounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BorderMode BorderMode { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.BorderMode.html">BorderMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_BorderValue_" data-uid="AiDotNet.Augmentation.Image.Scale`1.BorderValue*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_BorderValue" data-uid="AiDotNet.Augmentation.Image.Scale`1.BorderValue">
+  BorderValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the constant value used when BorderMode is Constant.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BorderValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_Interpolation_" data-uid="AiDotNet.Augmentation.Image.Scale`1.Interpolation*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_Interpolation" data-uid="AiDotNet.Augmentation.Image.Scale`1.Interpolation">
+  Interpolation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the interpolation mode for pixel sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InterpolationMode Interpolation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.InterpolationMode.html">InterpolationMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_MaxScale_" data-uid="AiDotNet.Augmentation.Image.Scale`1.MaxScale*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_MaxScale" data-uid="AiDotNet.Augmentation.Image.Scale`1.MaxScale">
+  MaxScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum scale factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxScale { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_MinScale_" data-uid="AiDotNet.Augmentation.Image.Scale`1.MinScale*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_MinScale" data-uid="AiDotNet.Augmentation.Image.Scale`1.MinScale">
+  MinScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum scale factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinScale { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_ApplyWithTransformParams_" data-uid="AiDotNet.Augmentation.Image.Scale`1.ApplyWithTransformParams*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_ApplyWithTransformParams_AiDotNet_Augmentation_Image_ImageTensor__0__AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Image.Scale`1.ApplyWithTransformParams(AiDotNet.Augmentation.Image.ImageTensor{`0},AiDotNet.Augmentation.AugmentationContext{`0})">
+  ApplyWithTransformParams(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the scale transformation and returns transform parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override (ImageTensor&lt;T&gt; data, IDictionary&lt;string, object&gt; parameters) ApplyWithTransformParams(ImageTensor&lt;T&gt; data, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.augmentation.image.imagetensor--0-,system.collections.generic.idictionary-system.string,system.object--.data">data</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.augmentation.image.imagetensor--0-,system.collections.generic.idictionary-system.string,system.object--.parameters">parameters</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_GetParameters_" data-uid="AiDotNet.Augmentation.Image.Scale`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_GetParameters" data-uid="AiDotNet.Augmentation.Image.Scale`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L364"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters of this augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDictionary&lt;string, object&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary of parameter names to values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_TransformBoundingBox_" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformBoundingBox*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_TransformBoundingBox_AiDotNet_Augmentation_Image_BoundingBox__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformBoundingBox(AiDotNet.Augmentation.Image.BoundingBox{`0},System.Collections.Generic.IDictionary{System.String,System.Object},AiDotNet.Augmentation.AugmentationContext{`0})">
+  TransformBoundingBox(BoundingBox&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms a bounding box after scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override BoundingBox&lt;T&gt; TransformBoundingBox(BoundingBox&lt;T&gt; box, IDictionary&lt;string, object&gt; transformParams, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>box</code> <a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>transformParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_TransformKeypoint_" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformKeypoint*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_TransformKeypoint_AiDotNet_Augmentation_Image_Keypoint__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformKeypoint(AiDotNet.Augmentation.Image.Keypoint{`0},System.Collections.Generic.IDictionary{System.String,System.Object},AiDotNet.Augmentation.AugmentationContext{`0})">
+  TransformKeypoint(Keypoint&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms a keypoint after scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Keypoint&lt;T&gt; TransformKeypoint(Keypoint&lt;T&gt; keypoint, IDictionary&lt;string, object&gt; transformParams, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keypoint</code> <a class="xref" href="AiDotNet.Augmentation.Image.Keypoint-1.html">Keypoint</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>transformParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.Keypoint-1.html">Keypoint</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Scale_1_TransformMask_" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformMask*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Scale_1_TransformMask_AiDotNet_Augmentation_Image_SegmentationMask__0__System_Collections_Generic_IDictionary_System_String_System_Object__AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Image.Scale`1.TransformMask(AiDotNet.Augmentation.Image.SegmentationMask{`0},System.Collections.Generic.IDictionary{System.String,System.Object},AiDotNet.Augmentation.AugmentationContext{`0})">
+  TransformMask(SegmentationMask&lt;T&gt;, IDictionary&lt;string, object&gt;, AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms a segmentation mask after scaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override SegmentationMask&lt;T&gt; TransformMask(SegmentationMask&lt;T&gt; mask, IDictionary&lt;string, object&gt; transformParams, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Augmentation.Image.SegmentationMask-1.html">SegmentationMask</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>transformParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.SegmentationMask-1.html">SegmentationMask</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Scale.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

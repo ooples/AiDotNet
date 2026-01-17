@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PruningMask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PruningMask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Binary mask for pruning neural network weights.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Pruning_PruningMask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Pruning.PruningMask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Pruning.PruningMask`1">
+
+
+
+  <h1 id="AiDotNet_Pruning_PruningMask_1" data-uid="AiDotNet.Pruning.PruningMask`1" class="text-break">
+Class PruningMask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Pruning.html">Pruning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Binary mask for pruning neural network weights.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PruningMask&lt;T&gt; : IPruningMask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Numeric type</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PruningMask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Pruning_PruningMask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+PruningMask represents a binary matrix where 1 indicates weights to keep and 0 indicates weights
+to prune (set to zero). It provides methods to apply the mask to weight matrices and tensors,
+compute sparsity levels, and combine multiple masks.
+</p>
+<p><b>For Beginners:</b> A pruning mask is like a stencil for your neural network weights.
+<p>Imagine you have a grid of numbers (your neural network weights):</p>
+<ul>
+<li>Some numbers are important and should stay</li>
+<li>Some numbers can be removed to make the model smaller</li>
+</ul>
+<p>The pruning mask marks which ones to keep (1) and which to remove (0).
+When you apply the mask, all the marked weights become zero, effectively removing
+those connections from your neural network.</p>
+<p>This helps create smaller, faster models that still work well!</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1__ctor_" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PruningMask(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a pruning mask from an existing matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PruningMask(Matrix&lt;T&gt; maskMatrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maskMatrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix containing the mask values (should be 0s and 1s)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a mask from an existing matrix of 0s and 1s.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1__ctor_" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1__ctor_System_Boolean_0__0___" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor(System.Boolean[0:,0:])">
+  PruningMask(bool[,])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a pruning mask from a 2D boolean array (for matrices).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PruningMask(bool[,] keepIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>[,]</dt>
+    <dd><p>2D boolean array where true means keep the weight.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1__ctor_System_Boolean_0__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a mask from a 2D grid of true/false values.
+True means keep the weight at that position, false means prune (remove) it.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1__ctor_" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1__ctor_System_Boolean___" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor(System.Boolean[])">
+  PruningMask(bool[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a pruning mask from a 1D boolean array (for vectors).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PruningMask(bool[] keepIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>[]</dt>
+    <dd><p>Boolean array where true means keep the weight.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1__ctor_System_Boolean____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a mask from a simple array of true/false values.
+True means keep the weight, false means prune (remove) it.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1__ctor_" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1__ctor_System_Int32_System_Int32_" data-uid="AiDotNet.Pruning.PruningMask`1.#ctor(System.Int32,System.Int32)">
+  PruningMask(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new pruning mask with all ones (no pruning).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PruningMask(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows in the mask</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns in the mask</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1__ctor_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a new mask with the specified size.
+Initially, all values are 1 (meaning keep all weights).
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_Pattern_" data-uid="AiDotNet.Pruning.PruningMask`1.Pattern*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_Pattern" data-uid="AiDotNet.Pruning.PruningMask`1.Pattern">
+  Pattern
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sparsity pattern type (unstructured for this implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparsityPattern Pattern { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.SparsityPattern.html">SparsityPattern</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_Shape_" data-uid="AiDotNet.Pruning.PruningMask`1.Shape*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_Shape" data-uid="AiDotNet.Pruning.PruningMask`1.Shape">
+  Shape
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape of the mask as [rows, columns].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] Shape { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_Apply_" data-uid="AiDotNet.Pruning.PruningMask`1.Apply*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Pruning.PruningMask`1.Apply(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Apply(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the mask to a weight matrix by element-wise multiplication.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Apply(Matrix&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix to prune</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weight matrix</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This multiplies each weight by the corresponding mask value.
+If the mask is 0, the weight becomes 0 (pruned).
+If the mask is 1, the weight stays the same (kept).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when weight matrix shape doesn't match mask shape</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_Apply_" data-uid="AiDotNet.Pruning.PruningMask`1.Apply*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Pruning.PruningMask`1.Apply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Apply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the mask to a weight tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Apply(Tensor&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Weight tensor to prune</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weight tensor</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is similar to applying to a matrix, but works with
+multi-dimensional arrays (tensors) used in convolutional neural networks.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown for unsupported tensor ranks</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_Apply_" data-uid="AiDotNet.Pruning.PruningMask`1.Apply*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Pruning.PruningMask`1.Apply(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Apply(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L269"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the mask to a weight vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Apply(Vector&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Weight vector to prune</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weight vector</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_Apply_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This multiplies each weight by the corresponding mask value.
+If the mask is 0, the weight becomes 0 (pruned).
+If the mask is 1, the weight stays the same (kept).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_CombineWith_" data-uid="AiDotNet.Pruning.PruningMask`1.CombineWith*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_CombineWith_AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.PruningMask`1.CombineWith(AiDotNet.Interfaces.IPruningMask{`0})">
+  CombineWith(IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L356"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Combines two masks using logical AND operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CombineWith(IPruningMask&lt;T&gt; otherMask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>otherMask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Another mask to combine with this one</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Combined mask where both masks must be 1 to keep the weight</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_CombineWith_AiDotNet_Interfaces_IPruningMask__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a new mask that only keeps weights if BOTH masks want to keep them.
+It's useful when you want to apply multiple pruning criteria together.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when masks have different shapes</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_GetKeptIndices_" data-uid="AiDotNet.Pruning.PruningMask`1.GetKeptIndices*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_GetKeptIndices" data-uid="AiDotNet.Pruning.PruningMask`1.GetKeptIndices">
+  GetKeptIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L409"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets indices of non-zero (kept) elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] GetKeptIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Array of indices where mask is non-zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_GetMaskData_" data-uid="AiDotNet.Pruning.PruningMask`1.GetMaskData*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_GetMaskData" data-uid="AiDotNet.Pruning.PruningMask`1.GetMaskData">
+  GetMaskData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the raw mask data as a flat array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] GetMaskData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Flattened mask values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_GetPrunedIndices_" data-uid="AiDotNet.Pruning.PruningMask`1.GetPrunedIndices*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_GetPrunedIndices" data-uid="AiDotNet.Pruning.PruningMask`1.GetPrunedIndices">
+  GetPrunedIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L431"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets indices of zero (pruned) elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] GetPrunedIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Array of indices where mask is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_GetSparsity_" data-uid="AiDotNet.Pruning.PruningMask`1.GetSparsity*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_GetSparsity" data-uid="AiDotNet.Pruning.PruningMask`1.GetSparsity">
+  GetSparsity()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sparsity level of the mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetSparsity()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Proportion of pruned weights (0 to 1)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_GetSparsity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sparsity tells you what percentage of weights have been removed.
+For example, 0.7 means 70% of the weights are pruned (removed).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_UpdateMask_" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_UpdateMask_System_Array_" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask(System.Array)">
+  UpdateMask(Array)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the mask from an Array (supports both 1D and 2D arrays).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateMask(Array keepIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.array">Array</a></dt>
+    <dd><p>Array of boolean indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_UpdateMask_" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_UpdateMask_System_Boolean_0__0___" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask(System.Boolean[0:,0:])">
+  UpdateMask(bool[,])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the mask with new keep/prune decisions for 2D masks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateMask(bool[,] keepIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>[,]</dt>
+    <dd><p>Boolean array indicating which weights to keep (true) or prune (false)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_UpdateMask_System_Boolean_0__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This updates which weights should be kept or removed.
+Pass true for weights to keep, false for weights to prune.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when keepIndices shape doesn't match mask shape</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_PruningMask_1_UpdateMask_" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_PruningMask_1_UpdateMask_System_Boolean___" data-uid="AiDotNet.Pruning.PruningMask`1.UpdateMask(System.Boolean[])">
+  UpdateMask(bool[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the mask with new keep/prune decisions for 1D masks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateMask(bool[] keepIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>[]</dt>
+    <dd><p>Boolean array indicating which weights to keep (true) or prune (false)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_PruningMask_1_UpdateMask_System_Boolean____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This updates which weights should be kept or removed.
+Pass true for weights to keep, false for weights to prune.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when keepIndices length doesn't match mask columns</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/PruningMask.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

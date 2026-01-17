@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CodeSynthesisArchitecture&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CodeSynthesisArchitecture&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the architecture configuration for code synthesis and understanding models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1.md&amp;value=---%0Auid%3A%20AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1">
+
+
+
+  <h1 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1" class="text-break">
+Class CodeSynthesisArchitecture&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ProgramSynthesis.html">ProgramSynthesis</a>.<a class="xref" href="AiDotNet.ProgramSynthesis.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the architecture configuration for code synthesis and understanding models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CodeSynthesisArchitecture&lt;T&gt; : NeuralNetworkArchitecture&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</div>
+      <div><span class="xref">CodeSynthesisArchitecture&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_Layers">NeuralNetworkArchitecture&lt;T&gt;.Layers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputType">NeuralNetworkArchitecture&lt;T&gt;.InputType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputSize">NeuralNetworkArchitecture&lt;T&gt;.InputSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_OutputSize">NeuralNetworkArchitecture&lt;T&gt;.OutputSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputHeight">NeuralNetworkArchitecture&lt;T&gt;.InputHeight</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputWidth">NeuralNetworkArchitecture&lt;T&gt;.InputWidth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputDepth">NeuralNetworkArchitecture&lt;T&gt;.InputDepth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_ImageEmbeddingDim">NeuralNetworkArchitecture&lt;T&gt;.ImageEmbeddingDim</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_TextEmbeddingDim">NeuralNetworkArchitecture&lt;T&gt;.TextEmbeddingDim</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_TaskType">NeuralNetworkArchitecture&lt;T&gt;.TaskType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_Complexity">NeuralNetworkArchitecture&lt;T&gt;.Complexity</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_UseAutodiff">NeuralNetworkArchitecture&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InputDimension">NeuralNetworkArchitecture&lt;T&gt;.InputDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_CalculatedInputSize">NeuralNetworkArchitecture&lt;T&gt;.CalculatedInputSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_ShouldReturnFullSequence">NeuralNetworkArchitecture&lt;T&gt;.ShouldReturnFullSequence</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_IsInitialized">NeuralNetworkArchitecture&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_GetHiddenLayerSizes">NeuralNetworkArchitecture&lt;T&gt;.GetHiddenLayerSizes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_GetInputShape">NeuralNetworkArchitecture&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_GetOutputShape">NeuralNetworkArchitecture&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_CalculateOutputSize">NeuralNetworkArchitecture&lt;T&gt;.CalculateOutputSize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_GetLayerSizes">NeuralNetworkArchitecture&lt;T&gt;.GetLayerSizes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html#AiDotNet_NeuralNetworks_NeuralNetworkArchitecture_1_InitializeFromCachedData">NeuralNetworkArchitecture&lt;T&gt;.InitializeFromCachedData()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CodeSynthesisArchitecture extends the neural network architecture with code-specific
+parameters such as programming language, maximum code length, vocabulary size, and
+synthesis strategy. It serves as a blueprint for building code models like CodeBERT,
+GraphCodeBERT, and CodeT5.
+</p>
+<p><b>For Beginners:</b> This is a blueprint for building AI models that understand code.
+<p>Just like TransformerArchitecture defines how to build a general transformer,
+CodeSynthesisArchitecture defines how to build models specifically for:</p>
+<ul>
+<li>Understanding code</li>
+<li>Generating code</li>
+<li>Translating between programming languages</li>
+<li>Finding bugs</li>
+<li>Completing code</li>
+</ul>
+<p>It includes all the settings needed to build these specialized code models,
+like which programming language to work with and how much code it can handle.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1__ctor_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1__ctor_AiDotNet_ProgramSynthesis_Enums_SynthesisType_AiDotNet_ProgramSynthesis_Enums_ProgramLanguage_AiDotNet_ProgramSynthesis_Enums_CodeTask_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Boolean_System_Boolean_AiDotNet_Enums_NetworkComplexity_System_Int32_System_Int32_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.#ctor(AiDotNet.ProgramSynthesis.Enums.SynthesisType,AiDotNet.ProgramSynthesis.Enums.ProgramLanguage,AiDotNet.ProgramSynthesis.Enums.CodeTask,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Double,System.Boolean,System.Boolean,AiDotNet.Enums.NetworkComplexity,System.Int32,System.Int32,System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}})">
+  CodeSynthesisArchitecture(SynthesisType, ProgramLanguage, CodeTask, int, int, int, int, int, int, int, int, double, bool, bool, NetworkComplexity, int, int, List&lt;ILayer&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture-1.html">CodeSynthesisArchitecture&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CodeSynthesisArchitecture(SynthesisType synthesisType, ProgramLanguage targetLanguage, CodeTask codeTaskType, int numEncoderLayers = 6, int numDecoderLayers = 0, int numHeads = 8, int modelDimension = 512, int feedForwardDimension = 2048, int maxSequenceLength = 512, int vocabularySize = 50000, int maxProgramLength = 100, double dropoutRate = 0.1, bool usePositionalEncoding = true, bool useDataFlow = false, NetworkComplexity complexity = NetworkComplexity.Medium, int inputSize = 0, int outputSize = 0, List&lt;ILayer&lt;T&gt;&gt;? layers = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>synthesisType</code> <a class="xref" href="AiDotNet.ProgramSynthesis.Enums.SynthesisType.html">SynthesisType</a></dt>
+    <dd><p>The type of synthesis approach.</p>
+</dd>
+    <dt><code>targetLanguage</code> <a class="xref" href="AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.html">ProgramLanguage</a></dt>
+    <dd><p>The target programming language.</p>
+</dd>
+    <dt><code>codeTaskType</code> <a class="xref" href="AiDotNet.ProgramSynthesis.Enums.CodeTask.html">CodeTask</a></dt>
+    <dd><p>The primary code task type.</p>
+</dd>
+    <dt><code>numEncoderLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of encoder layers.</p>
+</dd>
+    <dt><code>numDecoderLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of decoder layers.</p>
+</dd>
+    <dt><code>numHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of attention heads.</p>
+</dd>
+    <dt><code>modelDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of token embeddings.</p>
+</dd>
+    <dt><code>feedForwardDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of feed-forward layers.</p>
+</dd>
+    <dt><code>maxSequenceLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum input sequence length.</p>
+</dd>
+    <dt><code>vocabularySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of the code vocabulary.</p>
+</dd>
+    <dt><code>maxProgramLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum length of synthesized programs.</p>
+</dd>
+    <dt><code>dropoutRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Dropout rate for regularization.</p>
+</dd>
+    <dt><code>usePositionalEncoding</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use positional encoding.</p>
+</dd>
+    <dt><code>useDataFlow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to use data flow analysis.</p>
+</dd>
+    <dt><code>complexity</code> <a class="xref" href="AiDotNet.Enums.NetworkComplexity.html">NetworkComplexity</a></dt>
+    <dd><p>Overall network complexity.</p>
+</dd>
+    <dt><code>inputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Input size (calculated from vocabulary).</p>
+</dd>
+    <dt><code>outputSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output size (calculated from task).</p>
+</dd>
+    <dt><code>layers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional custom layers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1__ctor_AiDotNet_ProgramSynthesis_Enums_SynthesisType_AiDotNet_ProgramSynthesis_Enums_ProgramLanguage_AiDotNet_ProgramSynthesis_Enums_CodeTask_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Boolean_System_Boolean_AiDotNet_Enums_NetworkComplexity_System_Int32_System_Int32_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new code synthesis architecture with the specified parameters.
+This configuration will be used to build code understanding and generation models.
+</p>
+<p><b>For Beginners:</b> This constructor sets up all the parameters for a code model.
+<p>When creating a code model, you specify:</p>
+<ul>
+<li>What approach to use (neural, symbolic, etc.)</li>
+<li>Which language to work with</li>
+<li>What task to perform</li>
+<li>How big and powerful the model should be</li>
+</ul>
+<p>Many parameters have sensible defaults, so you only need to set the ones
+that matter for your specific use case.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_CodeTaskType_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.CodeTaskType*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_CodeTaskType" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.CodeTaskType">
+  CodeTaskType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the code task type this architecture is optimized for.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CodeTask CodeTaskType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Enums.CodeTask.html">CodeTask</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_CodeTaskType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies the primary task this model will perform, which affects the
+model structure and training approach.
+</p>
+<p><b>For Beginners:</b> This is the main job the model will do.
+<p>Code models can do many things:</p>
+<ul>
+<li>Complete code as you type</li>
+<li>Find bugs</li>
+<li>Translate between languages</li>
+<li>Generate documentation</li>
+</ul>
+<p>This setting optimizes the model for one specific task.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_DropoutRate_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.DropoutRate*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_DropoutRate" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.DropoutRate">
+  DropoutRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dropout rate for regularization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DropoutRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_DropoutRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The probability of dropping neurons during training to prevent overfitting.
+</p>
+<p><b>For Beginners:</b> This helps prevent the model from memorizing too much.
+<p>Dropout randomly disables some neurons during training, which:</p>
+<ul>
+<li>Prevents overfitting (memorizing training data)</li>
+<li>Makes the model more robust</li>
+<li>Improves generalization to new code</li>
+</ul>
+<p>Typical value: 0.1 (10% of neurons randomly disabled during training).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_FeedForwardDimension_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.FeedForwardDimension*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_FeedForwardDimension" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.FeedForwardDimension">
+  FeedForwardDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feed-forward network dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeedForwardDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_FeedForwardDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The size of the intermediate layer in the feed-forward networks within
+each transformer layer. Usually 2-4 times the model dimension.
+</p>
+<p><b>For Beginners:</b> This is the processing power in each layer.
+<p>After attention, each layer has a feed-forward network that processes
+the information. This dimension controls its size:</p>
+<ul>
+<li>Larger: More processing power</li>
+<li>Smaller: Faster but less capable</li>
+</ul>
+<p>Typical: 4 × ModelDimension (e.g., if ModelDim is 512, this would be 2048).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxProgramLength_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.MaxProgramLength*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxProgramLength" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.MaxProgramLength">
+  MaxProgramLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum allowed program length for synthesis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxProgramLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxProgramLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Limits the size of programs that can be synthesized, measured in
+abstract syntax tree nodes or lines of code.
+</p>
+<p><b>For Beginners:</b> This limits how long generated programs can be.
+<p>Prevents the AI from creating huge, unwieldy programs. Like a word limit
+on an essay - keeps the output manageable and focused.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxSequenceLength_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.MaxSequenceLength*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxSequenceLength" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.MaxSequenceLength">
+  MaxSequenceLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum sequence length (in tokens).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxSequenceLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_MaxSequenceLength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The maximum number of code tokens the model can process at once.
+Longer sequences capture more context but require more memory and computation.
+</p>
+<p><b>For Beginners:</b> This is the maximum length of code the model can handle.
+<p>Code is broken into tokens (like words). This limits how many tokens:</p>
+<ul>
+<li>512 tokens: ~200-400 lines of code</li>
+<li>1024 tokens: ~400-800 lines of code</li>
+<li>2048 tokens: ~800-1600 lines of code</li>
+</ul>
+<p>Longer files need to be split into chunks.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_ModelDimension_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.ModelDimension*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_ModelDimension" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.ModelDimension">
+  ModelDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model dimension (embedding size).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ModelDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_ModelDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The size of the vector used to represent each token in the code.
+Larger dimensions can capture more information but require more memory.
+</p>
+<p><b>For Beginners:</b> This is how much information each code piece holds.
+<p>Each word/token in code is represented by a vector of numbers.
+This dimension controls the size of that vector:</p>
+<ul>
+<li>Larger: Can capture more nuanced meaning</li>
+<li>Smaller: Faster but less detailed</li>
+</ul>
+<p>Typical values: 256-768 for code models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumDecoderLayers_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumDecoderLayers*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumDecoderLayers" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumDecoderLayers">
+  NumDecoderLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of decoder layers (for generation tasks).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumDecoderLayers { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumDecoderLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of transformer decoder layers used to generate code.
+Only relevant for encoder-decoder models like CodeT5.
+</p>
+<p><b>For Beginners:</b> This controls how the model generates code.
+<p>Decoder layers are used when the model needs to create new code:</p>
+<ul>
+<li>For code completion</li>
+<li>For code translation</li>
+<li>For code generation from descriptions</li>
+</ul>
+<p>Not all models need decoders - some only understand code (encoders only).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumEncoderLayers_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumEncoderLayers*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumEncoderLayers" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumEncoderLayers">
+  NumEncoderLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of encoder layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumEncoderLayers { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumEncoderLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of transformer encoder layers used to process and understand code.
+More layers allow for deeper understanding but require more computation.
+</p>
+<p><b>For Beginners:</b> This controls how deeply the model analyzes code.
+<p>More encoder layers mean:</p>
+<ul>
+<li>Better understanding of complex code patterns</li>
+<li>Can capture more subtle relationships</li>
+<li>Takes more time and memory to process</li>
+</ul>
+<p>Typical values: 6-12 layers for code models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumHeads_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumHeads*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumHeads" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.NumHeads">
+  NumHeads
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of attention heads.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumHeads { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_NumHeads_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of parallel attention mechanisms in each layer. More heads
+allow the model to focus on different aspects of code simultaneously.
+</p>
+<p><b>For Beginners:</b> This is how many different things the model looks at simultaneously.
+<p>Multiple attention heads let the model focus on:</p>
+<ul>
+<li>Variable definitions</li>
+<li>Function calls</li>
+<li>Control flow</li>
+<li>Data dependencies
+All at the same time!</li>
+</ul>
+<p>Typical values: 8-16 heads.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_SynthesisType_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.SynthesisType*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_SynthesisType" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.SynthesisType">
+  SynthesisType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of synthesis approach to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SynthesisType SynthesisType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Enums.SynthesisType.html">SynthesisType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_SynthesisType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies whether to use neural, symbolic, hybrid, or genetic programming
+approaches for code synthesis.
+</p>
+<p><b>For Beginners:</b> This chooses the strategy for generating code.
+<p>Different approaches work better for different problems:</p>
+<ul>
+<li>Neural: Good for learning from examples</li>
+<li>Symbolic: Good for following rules</li>
+<li>Hybrid: Combines both approaches</li>
+<li>GeneticProgramming: Good for optimization problems</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_TargetLanguage_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.TargetLanguage*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_TargetLanguage" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.TargetLanguage">
+  TargetLanguage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target programming language.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProgramLanguage TargetLanguage { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Enums.ProgramLanguage.html">ProgramLanguage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_TargetLanguage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies which programming language the model is designed to work with.
+</p>
+<p><b>For Beginners:</b> This is which programming language the model knows.
+<p>Like a translator specializing in French or Spanish, code models often
+specialize in specific languages like Python or Java.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UseDataFlow_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.UseDataFlow*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UseDataFlow" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.UseDataFlow">
+  UseDataFlow
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to use data flow information (for GraphCodeBERT-style models).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseDataFlow { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UseDataFlow_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+If true, the model will use graph-based representations that capture
+data flow between variables and functions, not just sequential structure.
+</p>
+<p><b>For Beginners:</b> This makes the model understand how data flows through code.
+<p>Beyond just reading code line by line, this tracks:</p>
+<ul>
+<li>Which variables depend on which others</li>
+<li>How data flows from one function to another</li>
+<li>The relationships between different parts of code</li>
+</ul>
+<p>Like understanding not just the words in a recipe, but how ingredients
+flow from one step to the next. Used in GraphCodeBERT models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UsePositionalEncoding_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.UsePositionalEncoding*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UsePositionalEncoding" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.UsePositionalEncoding">
+  UsePositionalEncoding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to use positional encoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UsePositionalEncoding { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_UsePositionalEncoding_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Determines if positional information should be added to token embeddings
+to help the model understand code order and structure.
+</p>
+<p><b>For Beginners:</b> This helps the model understand code order.
+<p>Without this, the model wouldn't know if &quot;a = b&quot; comes before or after &quot;b = 5&quot;.
+Positional encoding adds location information so the model understands:</p>
+<ul>
+<li>Which line comes first</li>
+<li>How far apart two statements are</li>
+<li>The sequential structure of code</li>
+</ul>
+<p>Usually set to true for code models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_VocabularySize_" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.VocabularySize*"></a>
+
+  <h3 id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_VocabularySize" data-uid="AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture`1.VocabularySize">
+  VocabularySize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vocabulary size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int VocabularySize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ProgramSynthesis_Models_CodeSynthesisArchitecture_1_VocabularySize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of unique tokens (keywords, operators, identifiers, etc.) in
+the model's vocabulary. Larger vocabularies can represent more code patterns.
+</p>
+<p><b>For Beginners:</b> This is the model's dictionary size for code.
+<p>How many different code tokens the model knows:</p>
+<ul>
+<li>Keywords: if, for, while, class, etc.</li>
+<li>Operators: +, -, ==, etc.</li>
+<li>Common identifiers and patterns</li>
+</ul>
+<p>Typical values: 30,000-50,000 tokens for code models.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ProgramSynthesis/Models/CodeSynthesisArchitecture.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

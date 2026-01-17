@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MemoryNetwork&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MemoryNetwork&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Memory Network, a neural network architecture designed with explicit memory components for improved reasoning and question answering capabilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_MemoryNetwork_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.MemoryNetwork%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_MemoryNetwork_1" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1" class="text-break">
+Class MemoryNetwork&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Memory Network, a neural network architecture designed with explicit memory components
+for improved reasoning and question answering capabilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MemoryNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;, INeuralNetworkModel&lt;T&gt;, INeuralNetwork&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;, IInterpretableModel&lt;T&gt;, IInputGradientComputable&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html">NeuralNetworkBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MemoryNetwork&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INeuralNetworkModel-1.html">INeuralNetworkModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInterpretableModel-1.html">IInterpretableModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInputGradientComputable-1.html">IInputGradientComputable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Layers">NeuralNetworkBase&lt;T&gt;.Layers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LayerCount">NeuralNetworkBase&lt;T&gt;.LayerCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Architecture">NeuralNetworkBase&lt;T&gt;.Architecture</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_NumOps">NeuralNetworkBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Engine">NeuralNetworkBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__layerInputs">NeuralNetworkBase&lt;T&gt;._layerInputs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__layerOutputs">NeuralNetworkBase&lt;T&gt;._layerOutputs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Random">NeuralNetworkBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LossFunction">NeuralNetworkBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LastLoss">NeuralNetworkBase&lt;T&gt;.LastLoss</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsTrainingMode">NeuralNetworkBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsTraining">NeuralNetworkBase&lt;T&gt;.SupportsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsGpuTraining">NeuralNetworkBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_CanTrainOnGpu">NeuralNetworkBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GpuEngine">NeuralNetworkBase&lt;T&gt;.GpuEngine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_MaxGradNorm">NeuralNetworkBase&lt;T&gt;.MaxGradNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__mixedPrecisionContext">NeuralNetworkBase&lt;T&gt;._mixedPrecisionContext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__memoryManager">NeuralNetworkBase&lt;T&gt;._memoryManager</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsMemoryManagementEnabled">NeuralNetworkBase&lt;T&gt;.IsMemoryManagementEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsGradientCheckpointingEnabled">NeuralNetworkBase&lt;T&gt;.IsGradientCheckpointingEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsMixedPrecisionEnabled">NeuralNetworkBase&lt;T&gt;.IsMixedPrecisionEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradients_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">NeuralNetworkBase&lt;T&gt;.ClipGradients(List&lt;Tensor&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ClipGradient(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradient_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.ClipGradient(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetParameters">NeuralNetworkBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Backpropagate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.Backpropagate(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateWithRecompute_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.BackpropagateWithRecompute(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.BackpropagateGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateGpuDeferred_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.BackpropagateGpuDeferred(IGpuTensor&lt;T&gt;, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpu__0__0__0_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpu(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpuDeferred_AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpuDeferred(IGpuOptimizerConfig, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TrainBatchGpuDeferred_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.TrainBatchGpuDeferred(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;, IGpuOptimizerConfig, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TrainBatchGpuDeferredAsync_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_System_Threading_CancellationToken_">NeuralNetworkBase&lt;T&gt;.TrainBatchGpuDeferredAsync(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;, IGpuOptimizerConfig, GpuExecutionOptions, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UploadWeightsToGpu">NeuralNetworkBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DownloadWeightsFromGpu">NeuralNetworkBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ZeroGradientsGpu">NeuralNetworkBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ExtractSingleExample_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.ExtractSingleExample(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithMemory_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithMemory(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithCheckpointing_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithCheckpointing(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_CanUseGpuResidentPath">NeuralNetworkBase&lt;T&gt;.CanUseGpuResidentPath()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TryForwardGpuOptimized_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___">NeuralNetworkBase&lt;T&gt;.TryForwardGpuOptimized(Tensor&lt;T&gt;, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardGpu_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardGpu(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardDeferred_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardDeferred(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardDeferredAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_">NeuralNetworkBase&lt;T&gt;.ForwardDeferredAsync(Tensor&lt;T&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BeginGpuExecution_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.BeginGpuExecution(GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithGpuContext_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithGpuContext(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithGpuContext_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithGpuContext(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGpuMemoryStats">NeuralNetworkBase&lt;T&gt;.GetGpuMemoryStats()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">NeuralNetworkBase&lt;T&gt;.ForwardWithFeatures(Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ParameterCount">NeuralNetworkBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetParameterCount">NeuralNetworkBase&lt;T&gt;.GetParameterCount()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_InvalidateParameterCountCache">NeuralNetworkBase&lt;T&gt;.InvalidateParameterCountCache()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLayerToCollection_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.AddLayerToCollection(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_RemoveLayerFromCollection_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.RemoveLayerFromCollection(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClearLayers">NeuralNetworkBase&lt;T&gt;.ClearLayers()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateCustomLayers_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___">NeuralNetworkBase&lt;T&gt;.ValidateCustomLayers(List&lt;ILayer&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateCustomLayersInternal_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___">NeuralNetworkBase&lt;T&gt;.ValidateCustomLayersInternal(List&lt;ILayer&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsValidInputLayer_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.IsValidInputLayer(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsValidOutputLayer_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.IsValidOutputLayer(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AreLayersCompatible_AiDotNet_Interfaces_ILayer__0__AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.AreLayersCompatible(ILayer&lt;T&gt;, ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetParameterGradients">NeuralNetworkBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnsureArchitectureInitialized">NeuralNetworkBase&lt;T&gt;.EnsureArchitectureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetTrainingMode_System_Boolean_">NeuralNetworkBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnableMemoryManagement_AiDotNet_Training_Memory_TrainingMemoryConfig_">NeuralNetworkBase&lt;T&gt;.EnableMemoryManagement(TrainingMemoryConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DisableMemoryManagement">NeuralNetworkBase&lt;T&gt;.DisableMemoryManagement()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetMemoryEstimate_System_Int32_System_Int32_">NeuralNetworkBase&lt;T&gt;.GetMemoryEstimate(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLastLoss">NeuralNetworkBase&lt;T&gt;.GetLastLoss()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ResetState">NeuralNetworkBase&lt;T&gt;.ResetState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackwardWithInputGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.BackwardWithInputGradient(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeInputGradient_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.ComputeInputGradient(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeInputGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ComputeInputGradient(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SaveModel_System_String_">NeuralNetworkBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LoadModel_System_String_">NeuralNetworkBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Serialize">NeuralNetworkBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Deserialize_System_Byte___">NeuralNetworkBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetActiveFeatureIndices">NeuralNetworkBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsFeatureUsed_System_Int32_">NeuralNetworkBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DeepCopy">NeuralNetworkBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Clone">NeuralNetworkBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NeuralNetworkBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__enabledMethods">NeuralNetworkBase&lt;T&gt;._enabledMethods</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__sensitiveFeatures">NeuralNetworkBase&lt;T&gt;._sensitiveFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__fairnessMetrics">NeuralNetworkBase&lt;T&gt;._fairnessMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__baseModel">NeuralNetworkBase&lt;T&gt;._baseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGlobalFeatureImportanceAsync">NeuralNetworkBase&lt;T&gt;.GetGlobalFeatureImportanceAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLocalFeatureImportanceAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetLocalFeatureImportanceAsync(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetShapValuesAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetShapValuesAsync(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLimeExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetLimeExplanationAsync(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetPartialDependenceAsync_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetPartialDependenceAsync(Vector&lt;int&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetCounterfactualAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetCounterfactualAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetModelSpecificInterpretabilityAsync">NeuralNetworkBase&lt;T&gt;.GetModelSpecificInterpretabilityAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GenerateTextExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GenerateTextExplanationAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetFeatureInteractionAsync_System_Int32_System_Int32_">NeuralNetworkBase&lt;T&gt;.GetFeatureInteractionAsync(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateFairnessAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.ValidateFairnessAsync(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetAnchorExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0_">NeuralNetworkBase&lt;T&gt;.GetAnchorExplanationAsync(Tensor&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetBaseModel__2_AiDotNet_Interfaces_IFullModel__0___0___1__">NeuralNetworkBase&lt;T&gt;.SetBaseModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnableMethod_AiDotNet_Interpretability_InterpretationMethod___">NeuralNetworkBase&lt;T&gt;.EnableMethod(params InterpretationMethod[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ConfigureFairness_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__AiDotNet_Interpretability_FairnessMetric___">NeuralNetworkBase&lt;T&gt;.ConfigureFairness(Vector&lt;int&gt;, params FairnessMetric[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetNamedLayerActivations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetNamedLayerActivations(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetArchitecture">NeuralNetworkBase&lt;T&gt;.GetArchitecture()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetFeatureImportance">NeuralNetworkBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLayer_AiDotNet_Enums_LayerType_System_Int32_AiDotNet_Enums_ActivationFunction_">NeuralNetworkBase&lt;T&gt;.AddLayer(LayerType, int, ActivationFunction)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddConvolutionalLayer_System_Int32_System_Int32_System_Int32_AiDotNet_Enums_ActivationFunction_">NeuralNetworkBase&lt;T&gt;.AddConvolutionalLayer(int, int, int, ActivationFunction)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLSTMLayer_System_Int32_System_Boolean_">NeuralNetworkBase&lt;T&gt;.AddLSTMLayer(int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddDropoutLayer_System_Double_">NeuralNetworkBase&lt;T&gt;.AddDropoutLayer(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddBatchNormalizationLayer_System_Int32_System_Double_System_Double_">NeuralNetworkBase&lt;T&gt;.AddBatchNormalizationLayer(int, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddPoolingLayer_System_Int32___AiDotNet_Enums_PoolingType_System_Int32_System_Nullable_System_Int32__">NeuralNetworkBase&lt;T&gt;.AddPoolingLayer(int[], PoolingType, int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGradients">NeuralNetworkBase&lt;T&gt;.GetGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetInputShape">NeuralNetworkBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLayerActivations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetLayerActivations(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DefaultLossFunction">NeuralNetworkBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">NeuralNetworkBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NeuralNetworkBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SaveState_System_IO_Stream_">NeuralNetworkBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LoadState_System_IO_Stream_">NeuralNetworkBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Dispose">NeuralNetworkBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Dispose_System_Boolean_">NeuralNetworkBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsJitCompilation">NeuralNetworkBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">NeuralNetworkBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ConvertLayerToGraph_AiDotNet_Interfaces_ILayer__0__AiDotNet_Autodiff_ComputationNode__0__">NeuralNetworkBase&lt;T&gt;.ConvertLayerToGraph(ILayer&lt;T&gt;, ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Memory Networks combine neural network components with a long-term memory matrix that can be read from
+and written to. This architecture allows the network to store information persistently and access it
+selectively when needed, making it particularly effective for tasks requiring reasoning over facts or
+answering questions based on provided context.
+</p>
+<p><b>For Beginners:</b> A Memory Network is a special type of neural network that has its own "memory storage" component.
+<p>Think of it like a person who has:</p>
+<ul>
+<li>A notebook (the memory) where they can write down important facts</li>
+<li>The ability to read specific information from their notebook when needed</li>
+<li>The ability to add new information to their notebook as they learn</li>
+</ul>
+<p>For example, if you provided a Memory Network with several facts about a topic:</p>
+<ul>
+<li>It would store these facts in its memory matrix</li>
+<li>When asked a question, it would search its memory for relevant information</li>
+<li>It would use this retrieved information to formulate an answer</li>
+</ul>
+<p>Memory Networks are particularly good at:</p>
+<ul>
+<li>Question answering based on a given context</li>
+<li>Reasoning tasks that require remembering multiple facts</li>
+<li>Dialog systems that need to maintain conversation history</li>
+<li>Tasks where information needs to be remembered and used later</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1__ctor_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,AiDotNet.Interfaces.ILossFunction{`0})">
+  MemoryNetwork(NeuralNetworkArchitecture&lt;T&gt;, int, int, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.MemoryNetwork-1.html">MemoryNetwork&lt;T&gt;</a> class with the specified architecture and memory parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryNetwork(NeuralNetworkArchitecture&lt;T&gt; architecture, int memorySize, int embeddingSize, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd><p>The neural network architecture defining the structure of the network.</p>
+</dd>
+    <dt><code>memorySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of memory slots in the memory matrix.</p>
+</dd>
+    <dt><code>embeddingSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimensionality of each memory embedding vector.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a Memory Network with the specified architecture and memory configuration.
+It initializes the memory matrix to the given dimensions and sets up the network layers based
+on the provided architecture or default configuration if no specific layers are provided.
+</p>
+<p><b>For Beginners:</b> This creates a new Memory Network with your chosen settings.
+<p>When creating a Memory Network, you specify three main things:</p>
+<ol>
+<li><p>Architecture: The basic structure of your network (input/output sizes, etc.)</p>
+</li>
+<li><p>Memory Size: How many separate facts the network can remember</p>
+<ul>
+<li>Like choosing how many pages your notebook has</li>
+<li>More memory slots = more storage capacity</li>
+</ul>
+</li>
+<li><p>Embedding Size: How detailed each stored fact can be</p>
+<ul>
+<li>Like deciding how much detail to write on each notebook page</li>
+<li>Larger embeddings = more detailed representations</li>
+</ul>
+</li>
+</ol>
+<p>Once created, the network initializes an empty memory matrix (like a blank notebook)
+and sets up the layers needed for processing inputs and interacting with memory.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_AnswerQuestion_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.AnswerQuestion*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_AnswerQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.AnswerQuestion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  AnswerQuestion(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L1026"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Queries the memory network with a question and returns the answer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; AnswerQuestion(Tensor&lt;T&gt; question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>question</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The question tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The answer tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_AnswerQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is a wrapper around the Predict method that is semantically meaningful
+for question answering tasks, which are a common use case for Memory Networks.
+</p>
+<p><b>For Beginners:</b> This asks the Memory Network a question and gets an answer.
+<p>When asking a question:</p>
+<ul>
+<li>The question is processed through the network</li>
+<li>The network accesses relevant information from its memory</li>
+<li>It combines the question with retrieved memory to generate an answer</li>
+</ul>
+<p>This is the most common way to use a Memory Network once it's trained,
+especially for question answering and reasoning tasks.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_CreateNewInstance_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_CreateNewInstance" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L1055"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Memory Network with the same architecture and configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new Memory Network instance with the same architecture and configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the Memory Network with the same architecture and memory configuration
+as the current instance. It's used in scenarios where a fresh copy of the model is needed
+while maintaining the same configuration.
+</p>
+<p><b>For Beginners:</b> This method creates a brand new copy of the Memory Network with the same setup.
+<p>Think of it like creating a clone of the network:</p>
+<ul>
+<li>The new network has the same architecture (structure)</li>
+<li>It has the same memory size and embedding size</li>
+<li>But it's a completely separate instance with its own memory matrix</li>
+<li>The memory starts fresh (empty) rather than copying the current memory contents</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Train multiple versions of the same memory network architecture</li>
+<li>Start with a clean memory but the same network structure</li>
+<li>Compare how different training approaches affect learning with the same configuration</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_DeserializeNetworkSpecificData_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.DeserializeNetworkSpecificData*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_DeserializeNetworkSpecificData_System_IO_BinaryReader_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.DeserializeNetworkSpecificData(System.IO.BinaryReader)">
+  DeserializeNetworkSpecificData(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L906"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes memory network-specific data from a binary reader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeNetworkSpecificData(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_DeserializeNetworkSpecificData_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method loads the state of a previously saved Memory Network from a binary stream. It restores
+memory network-specific parameters like the memory matrix contents, allowing the model to
+continue from exactly where it left off.
+</p>
+<p><b>For Beginners:</b> This loads a complete Memory Network from a saved file.
+<p>When loading the Memory Network:</p>
+<ul>
+<li>Memory matrix contents are restored (all the stored facts)</li>
+<li>Configuration parameters are restored</li>
+<li>Neural network parameters are restored</li>
+</ul>
+<p>This lets you:</p>
+<ul>
+<li>Continue working with a model exactly where you left off</li>
+<li>Use a model that someone else has trained</li>
+<li>Deploy pre-trained models in applications</li>
+<li>Restore the memory of facts the network had previously learned</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_GetModelMetadata_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_GetModelMetadata" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L799"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the memory network model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the memory network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns comprehensive metadata about the Memory Network, including its architecture,
+memory configuration, and other relevant parameters. This information is useful for model
+management, tracking experiments, and reporting.
+</p>
+<p><b>For Beginners:</b> This provides detailed information about your Memory Network.
+<p>The metadata includes:</p>
+<ul>
+<li>What this model is and what it does</li>
+<li>Details about the network architecture</li>
+<li>Information about the memory configuration</li>
+<li>Statistics about the current memory state</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Documentation</li>
+<li>Comparing different memory network configurations</li>
+<li>Debugging and analysis</li>
+<li>Tracking memory usage and performance</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_InitializeLayers_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.InitializeLayers*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_InitializeLayers" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.InitializeLayers">
+  InitializeLayers()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the layers of the Memory Network based on the provided architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void InitializeLayers()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_InitializeLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets up the layers of the Memory Network. If the architecture provides specific layers,
+those are used directly. Otherwise, default layers appropriate for a Memory Network are created,
+including input encoding, memory reading, memory writing, and output layers configured with
+the specified memory parameters.
+</p>
+<p><b>For Beginners:</b> This method sets up the building blocks of your Memory Network.
+<p>When initializing the network:</p>
+<ul>
+<li>If you provided specific layers in the architecture, those are used</li>
+<li>If not, the network creates standard Memory Network layers automatically</li>
+</ul>
+<p>The standard Memory Network layers typically include:</p>
+<ol>
+<li>Input Encoding Layer: Converts raw input into a format suitable for memory operations</li>
+<li>Memory Read Layer: Allows the network to retrieve relevant information from memory</li>
+<li>Memory Write Layer: Allows the network to update memory with new information</li>
+<li>Output Layer: Produces the final answer based on the input and retrieved memory</li>
+</ol>
+<p>This process is like assembling all the components before the network starts processing data.
+Each layer has a specific role in how the network interacts with its memory.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Predict_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.Predict*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.Predict(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Predict(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes input through the memory network to generate predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor after processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass of the Memory Network. It encodes the input,
+uses it to calculate attention over memory slots, retrieves relevant information from memory,
+and combines it with the input to generate the final output.
+</p>
+<p><b>For Beginners:</b> This method processes an input through the Memory Network to get an answer.
+<p>The prediction process works like this:</p>
+<ol>
+<li>Input Encoding: Convert the input (like a question) into an internal representation</li>
+<li>Memory Attention: Determine which parts of memory are most relevant to this input</li>
+<li>Memory Reading: Retrieve information from the most relevant memory slots</li>
+<li>Response Generation: Combine the input with the retrieved memory to generate an answer</li>
+</ol>
+<p>This is similar to how you might answer a question:</p>
+<ul>
+<li>First understand the question</li>
+<li>Then recall relevant information from your memory</li>
+<li>Finally formulate an answer based on both the question and what you remembered</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_SerializeNetworkSpecificData_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.SerializeNetworkSpecificData*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_SerializeNetworkSpecificData_System_IO_BinaryWriter_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.SerializeNetworkSpecificData(System.IO.BinaryWriter)">
+  SerializeNetworkSpecificData(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L859"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes memory network-specific data to a binary writer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeNetworkSpecificData(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_SerializeNetworkSpecificData_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the state of the Memory Network to a binary stream. It serializes memory network-specific
+parameters like the memory matrix contents, allowing the complete state to be restored later.
+</p>
+<p><b>For Beginners:</b> This saves the complete state of your Memory Network to a file.
+<p>When saving the Memory Network:</p>
+<ul>
+<li>Memory matrix contents are saved (all the stored facts and information)</li>
+<li>Configuration parameters are saved</li>
+<li>Neural network parameters are saved</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Save your progress and continue training later</li>
+<li>Share trained models with others</li>
+<li>Deploy models in applications</li>
+<li>Preserve the memory of facts the network has learned</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_StoreFact_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.StoreFact*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_StoreFact_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.StoreFact(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  StoreFact(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L962"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores a new fact in memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void StoreFact(Tensor&lt;T&gt; fact)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fact</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The fact to store, as a tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_StoreFact_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adds a new fact to the memory of the network. It encodes the fact using the input
+encoding layers, finds the least recently used memory slot, and stores the encoded fact there.
+This allows for explicit memory updates beyond what happens during normal training.
+</p>
+<p><b>For Beginners:</b> This directly adds a new fact to the network's memory.
+<p>When adding a fact:</p>
+<ul>
+<li>The fact is first encoded into an embedding (internal representation)</li>
+<li>The system finds an appropriate memory slot to store it</li>
+<li>The encoded fact is written to that memory slot</li>
+</ul>
+<p>This provides a way to directly add knowledge to the memory network
+without having to train it on examples, which can be useful for
+quickly updating the network's knowledge base.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Train_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.Train*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.Train(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L554"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the memory network on input-output pairs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor for training.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The expected output tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method trains the Memory Network using backpropagation. It performs a forward pass through
+the network, calculates the loss between predictions and expected outputs, computes gradients,
+and updates the network parameters.
+</p>
+<p><b>For Beginners:</b> This method teaches the Memory Network to give correct answers.
+<p>The training process works like this:</p>
+<ol>
+<li>Make a prediction using the current network parameters</li>
+<li>Compare the prediction to the expected output</li>
+<li>Calculate the error (how wrong the prediction was)</li>
+<li>Update the network parameters to reduce this error</li>
+<li>Optionally update memory with new information</li>
+</ol>
+<p>Over time, this process helps the network:</p>
+<ul>
+<li>Learn how to encode inputs effectively</li>
+<li>Learn which memory slots to pay attention to for different inputs</li>
+<li>Learn how to combine memory and input to produce correct outputs</li>
+<li>Build up a useful memory of facts and information</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_MemoryNetwork_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_MemoryNetwork_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.MemoryNetwork`1.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of all layers in the network using the provided parameter vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing updated parameters for all layers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_MemoryNetwork_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method distributes the provided parameter values to each layer in the network. It extracts
+the appropriate segment of the parameter vector for each layer based on the layer's parameter count.
+This allows for updating the learned weights and biases in the network's layers after training.
+</p>
+<p><b>For Beginners:</b> This method updates all the learnable values in the network's layers.
+<p>During training, a Memory Network learns many values (called parameters) that determine
+how it processes information. These include:</p>
+<ul>
+<li>How to encode inputs</li>
+<li>How to determine which memory slots to access</li>
+<li>How to update memory with new information</li>
+<li>How to produce outputs based on memory and input</li>
+</ul>
+<p>This method:</p>
+<ol>
+<li>Takes a long list of all these parameters</li>
+<li>Figures out which parameters belong to which layers</li>
+<li>Updates each layer with its corresponding parameters</li>
+</ol>
+<p>Note that this updates the network's processing mechanisms but not the content of the memory itself.
+The memory content is updated during normal operation through the memory write layers.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/MemoryNetwork.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

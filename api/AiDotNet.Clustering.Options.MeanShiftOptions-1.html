@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MeanShiftOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MeanShiftOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Mean Shift clustering.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_Options_MeanShiftOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.Options.MeanShiftOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_Options_MeanShiftOptions_1" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1" class="text-break">
+Class MeanShiftOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Mean Shift clustering.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MeanShiftOptions&lt;T&gt; : ClusteringOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html">ClusteringOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">MeanShiftOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations">ClusteringOptions&lt;T&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance">ClusteringOptions&lt;T&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState">ClusteringOptions&lt;T&gt;.RandomState</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations">ClusteringOptions&lt;T&gt;.NumInitializations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Verbose">ClusteringOptions&lt;T&gt;.Verbose</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Mean Shift is a non-parametric clustering algorithm that doesn't require
+specifying the number of clusters. It finds clusters by iteratively shifting
+points toward the mode (densest area) of the local density.
+</p>
+<p><b>For Beginners:</b> Mean Shift finds the "peaks" in your data.
+<p>Imagine your data as a landscape with hills:</p>
+<ul>
+<li>Each point starts at its location</li>
+<li>Points &quot;roll uphill&quot; toward the nearest peak</li>
+<li>Points that end up at the same peak form a cluster</li>
+</ul>
+<p>Key features:</p>
+<ul>
+<li>Automatically determines number of clusters</li>
+<li>Works well for finding dense regions</li>
+<li>Good for image segmentation</li>
+</ul>
+<p>Main parameter: bandwidth (how wide the &quot;hills&quot; are)</p>
+<ul>
+<li>Small bandwidth: Many small clusters</li>
+<li>Large bandwidth: Few large clusters</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_Algorithm_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.Algorithm*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_Algorithm" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.Algorithm">
+  Algorithm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the neighbor finding algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeighborAlgorithm Algorithm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Options.NeighborAlgorithm.html">NeighborAlgorithm</a></dt>
+    <dd><p>Algorithm type. Default is Auto.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_Bandwidth_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.Bandwidth*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_Bandwidth" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.Bandwidth">
+  Bandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? Bandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Kernel bandwidth, or null for automatic estimation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_MeanShiftOptions_1_Bandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Bandwidth controls how far each point "looks"
+for neighbors. Larger values mean smoother density and fewer clusters.
+If null, bandwidth is estimated automatically from data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_BandwidthQuantile_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.BandwidthQuantile*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_BandwidthQuantile" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.BandwidthQuantile">
+  BandwidthQuantile
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the quantile for automatic bandwidth estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BandwidthQuantile { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Quantile (0 to 1). Default is 0.3.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_BinSeeding_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.BinSeeding*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_BinSeeding" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.BinSeeding">
+  BinSeeding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to bin the seeds to speed up computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool BinSeeding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use binning. Default is true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_ClusterAll_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.ClusterAll*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_ClusterAll" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.ClusterAll">
+  ClusterAll
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to cluster all points or just the seeds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ClusterAll { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to cluster all points. Default is true.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_ClusterMergeThreshold_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.ClusterMergeThreshold*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_ClusterMergeThreshold" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.ClusterMergeThreshold">
+  ClusterMergeThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum distance between cluster centers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? ClusterMergeThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Minimum distance to merge centers. Default is computed from bandwidth.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_DistanceMetric_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.DistanceMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_DistanceMetric" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.DistanceMetric">
+  DistanceMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distance metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistanceMetric&lt;T&gt;? DistanceMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Interfaces.IDistanceMetric-1.html">IDistanceMetric</a>&lt;T&gt;</dt>
+    <dd><p>Distance metric, or null for Euclidean.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_LeafSize_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.LeafSize*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_LeafSize" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.LeafSize">
+  LeafSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the leaf size for tree algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LeafSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Leaf size. Default is 30.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_MinBinFrequency_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.MinBinFrequency*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_MinBinFrequency" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.MinBinFrequency">
+  MinBinFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum number of points to consider a cluster.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinBinFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum cluster size. Default is 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_MeanShiftOptions_1_NumJobs_" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.NumJobs*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_MeanShiftOptions_1_NumJobs" data-uid="AiDotNet.Clustering.Options.MeanShiftOptions`1.NumJobs">
+  NumJobs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of parallel jobs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumJobs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of jobs. Default is 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/MeanShiftOptions.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

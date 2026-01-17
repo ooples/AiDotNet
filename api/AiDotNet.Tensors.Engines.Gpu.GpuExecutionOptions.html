@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GpuExecutionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GpuExecutionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for GPU execution behavior. Can be configured via code or environment variables.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions" class="text-break">
+Class GpuExecutionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L7"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.html">Gpu</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for GPU execution behavior.
+Can be configured via code or environment variables.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class GpuExecutionOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GpuExecutionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions__ctor_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions__ctor" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.#ctor">
+  GpuExecutionOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuExecutionOptions()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_CacheCompiledGraphs_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.CacheCompiledGraphs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_CacheCompiledGraphs" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.CacheCompiledGraphs">
+  CacheCompiledGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to cache compiled graphs.
+Avoids recompilation for repeated execution patterns.
+Default: true. Environment variable: AIDOTNET_GPU_CACHE_GRAPHS</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CacheCompiledGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableAutoFusion_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableAutoFusion*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableAutoFusion" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableAutoFusion">
+  EnableAutoFusion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable automatic kernel fusion.
+Fused kernels reduce launch overhead for common patterns (GEMM+Bias+ReLU).
+Default: true. Environment variable: AIDOTNET_GPU_ENABLE_FUSION</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAutoFusion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableComputeTransferOverlap_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableComputeTransferOverlap*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableComputeTransferOverlap" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableComputeTransferOverlap">
+  EnableComputeTransferOverlap
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable compute/transfer overlap.
+Uses separate streams for compute and data transfer.
+Default: true. Environment variable: AIDOTNET_GPU_ENABLE_OVERLAP</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableComputeTransferOverlap { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableGpuResidency_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableGpuResidency*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableGpuResidency" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableGpuResidency">
+  EnableGpuResidency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to keep tensors GPU-resident between operations.
+Reduces upload/download overhead for chained operations.
+Default: true. Environment variable: AIDOTNET_GPU_RESIDENT</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableGpuResidency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableGraphCompilation_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableGraphCompilation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableGraphCompilation" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableGraphCompilation">
+  EnableGraphCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable execution graph compilation.
+Graphs enable operation fusion and scheduling optimization.
+Default: true. Environment variable: AIDOTNET_GPU_ENABLE_GRAPH</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableGraphCompilation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnablePrefetch_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnablePrefetch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnablePrefetch" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnablePrefetch">
+  EnablePrefetch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable tensor prefetching.
+Prefetch uploads data before it's needed.
+Default: true. Environment variable: AIDOTNET_GPU_ENABLE_PREFETCH</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnablePrefetch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableProfiling_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableProfiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_EnableProfiling" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.EnableProfiling">
+  EnableProfiling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable profiling/timing.
+Adds overhead but provides detailed performance data.
+Default: false. Environment variable: AIDOTNET_GPU_PROFILING</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableProfiling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ExecutionMode_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ExecutionMode*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ExecutionMode" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ExecutionMode">
+  ExecutionMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the execution mode.
+Default: Auto (selects best mode based on capabilities).
+Environment variable: AIDOTNET_GPU_EXECUTION_MODE</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuExecutionMode ExecutionMode { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionMode.html">GpuExecutionMode</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ForceCpu_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ForceCpu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ForceCpu" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ForceCpu">
+  ForceCpu
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to force CPU execution regardless of size.
+Useful for debugging. Default: false. Environment variable: AIDOTNET_GPU_FORCE_CPU</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ForceCpu { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ForceGpu_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ForceGpu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_ForceGpu" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.ForceGpu">
+  ForceGpu
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to force GPU execution regardless of size.
+Useful for benchmarking. Default: false. Environment variable: AIDOTNET_GPU_FORCE_GPU</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ForceGpu { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_GraphBatchSize_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.GraphBatchSize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_GraphBatchSize" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.GraphBatchSize">
+  GraphBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for graph execution.
+Larger batches allow more optimization but use more memory.
+Default: 32. Environment variable: AIDOTNET_GPU_BATCH_SIZE</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GraphBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MaxComputeStreams_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MaxComputeStreams*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MaxComputeStreams" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MaxComputeStreams">
+  MaxComputeStreams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of compute streams to use.
+More streams enable more parallelism but use more resources.
+Default: 3. Environment variable: AIDOTNET_GPU_STREAMS</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxComputeStreams { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MaxMemoryUsage_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MaxMemoryUsage*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MaxMemoryUsage" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MaxMemoryUsage">
+  MaxMemoryUsage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum fraction of GPU memory to use (0.0 to 1.0).
+Exceeding this triggers memory pressure handling.
+Default: 0.8 (80%). Environment variable: AIDOTNET_GPU_MAX_MEMORY</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxMemoryUsage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MinGpuElements_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MinGpuElements*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_MinGpuElements" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.MinGpuElements">
+  MinGpuElements
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum number of elements for GPU to be used.
+Operations with fewer elements will use CPU for lower overhead.
+Default: 4096. Environment variable: AIDOTNET_GPU_MIN_ELEMENTS</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinGpuElements { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_TransferStreams_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.TransferStreams*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_TransferStreams" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.TransferStreams">
+  TransferStreams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of transfer streams to use.
+Separate streams for H2D and D2H transfers.
+Default: 2. Environment variable: AIDOTNET_GPU_TRANSFER_STREAMS</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TransferStreams { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_Clone_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.Clone*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_Clone" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a copy of these options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuExecutionOptions Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+    <dd><p>A new options instance with the same values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_FromEnvironment_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.FromEnvironment*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_FromEnvironment" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.FromEnvironment">
+  FromEnvironment()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates options initialized from environment variables.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static GpuExecutionOptions FromEnvironment()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+    <dd><p>Options configured from environment variables.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_Validate_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.Validate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_Validate" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the options and throws if invalid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Validate()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuExecutionOptions.cs/#L7" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

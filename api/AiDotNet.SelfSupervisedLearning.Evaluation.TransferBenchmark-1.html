@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TransferBenchmark&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TransferBenchmark&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Transfer learning benchmark for evaluating SSL representations on downstream tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1.md&amp;value=---%0Auid%3A%20AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1">
+
+
+
+  <h1 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1" class="text-break">
+Class TransferBenchmark&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.html">SelfSupervisedLearning</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.html">Evaluation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Transfer learning benchmark for evaluating SSL representations on downstream tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TransferBenchmark&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TransferBenchmark&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Transfer learning benchmarks test how well pretrained
+representations transfer to new tasks. We take an encoder pretrained on one dataset
+(e.g., ImageNet) and evaluate it on different tasks (e.g., object detection, segmentation).</p>
+<p><b>Common transfer benchmarks:</b></p>
+<ul><li><b>Classification:</b> CIFAR-10/100, Food-101, Flowers-102</li><li><b>Detection:</b> PASCAL VOC, COCO</li><li><b>Segmentation:</b> Cityscapes, ADE20K</li><li><b>Fine-grained:</b> iNaturalist, Cars, Aircraft</li></ul>
+<p><b>Evaluation protocols:</b></p>
+<ul><li><b>Linear probing:</b> Freeze encoder, train linear head</li><li><b>Fine-tuning:</b> Update all parameters with lower learning rate</li><li><b>Few-shot:</b> Train with limited labeled data (1%, 10%)</li></ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1__ctor_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1__ctor_AiDotNet_Interfaces_INeuralNetwork__0__System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.#ctor(AiDotNet.Interfaces.INeuralNetwork{`0},System.Int32)">
+  TransferBenchmark(INeuralNetwork&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the TransferBenchmark class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TransferBenchmark(INeuralNetwork&lt;T&gt; encoder, int encoderOutputDim)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>encoder</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The pretrained encoder.</p>
+</dd>
+    <dt><code>encoderOutputDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output dimension of the encoder.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_FewShotEvaluation_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.FewShotEvaluation*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_FewShotEvaluation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___System_Int32_System_Double___" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.FewShotEvaluation(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],System.Int32,System.Double[])">
+  FewShotEvaluation(Tensor&lt;T&gt;, int[], Tensor&lt;T&gt;, int[], int, double[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs few-shot evaluation with limited labeled data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;double, BenchmarkResult&lt;T&gt;&gt; FewShotEvaluation(Tensor&lt;T&gt; trainData, int[] trainLabels, Tensor&lt;T&gt; testData, int[] testLabels, int numClasses, double[] percentages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Full training data.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Full training labels.</p>
+</dd>
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Test data.</p>
+</dd>
+    <dt><code>testLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Test labels.</p>
+</dd>
+    <dt><code>numClasses</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of classes.</p>
+</dd>
+    <dt><code>percentages</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Percentages of training data to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.BenchmarkResult-1.html">BenchmarkResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Results for each percentage.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_KNNEvaluation_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.KNNEvaluation*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_KNNEvaluation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.KNNEvaluation(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],System.Int32)">
+  KNNEvaluation(Tensor&lt;T&gt;, int[], Tensor&lt;T&gt;, int[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs k-NN evaluation on a downstream dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BenchmarkResult&lt;T&gt; KNNEvaluation(Tensor&lt;T&gt; trainData, int[] trainLabels, Tensor&lt;T&gt; testData, int[] testLabels, int k = 20)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>trainLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>testLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.BenchmarkResult-1.html">BenchmarkResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_LinearProbing_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.LinearProbing*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_LinearProbing_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___System_Int32_System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.LinearProbing(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],System.Int32,System.Int32)">
+  LinearProbing(Tensor&lt;T&gt;, int[], Tensor&lt;T&gt;, int[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs linear probing evaluation on a downstream dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BenchmarkResult&lt;T&gt; LinearProbing(Tensor&lt;T&gt; trainData, int[] trainLabels, Tensor&lt;T&gt; testData, int[] testLabels, int numClasses, int epochs = 90)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Training data.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Training labels.</p>
+</dd>
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Test data.</p>
+</dd>
+    <dt><code>testLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Test labels.</p>
+</dd>
+    <dt><code>numClasses</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of classes in the dataset.</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training epochs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.BenchmarkResult-1.html">BenchmarkResult</a>&lt;T&gt;</dt>
+    <dd><p>Benchmark result with accuracy metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_RunFullSuite_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.RunFullSuite*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_TransferBenchmark_1_RunFullSuite_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___System_Int32_System_String_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.TransferBenchmark`1.RunFullSuite(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[],System.Int32,System.String)">
+  RunFullSuite(Tensor&lt;T&gt;, int[], Tensor&lt;T&gt;, int[], int, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs a full benchmark suite.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BenchmarkSuite&lt;T&gt; RunFullSuite(Tensor&lt;T&gt; trainData, int[] trainLabels, Tensor&lt;T&gt; testData, int[] testLabels, int numClasses, string datasetName = &quot;Unknown&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>trainLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>testLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>numClasses</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.BenchmarkSuite-1.html">BenchmarkSuite</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/TransferBenchmark.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

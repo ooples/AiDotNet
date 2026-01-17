@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PrimaryCapsuleLayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PrimaryCapsuleLayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a primary capsule layer for capsule networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1" class="text-break">
+Class PrimaryCapsuleLayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Layers.html">Layers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a primary capsule layer for capsule networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PrimaryCapsuleLayer&lt;T&gt; : LayerBase&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">PrimaryCapsuleLayer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuTraining">LayerBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LayerBase&lt;T&gt;.BackwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">LayerBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterCount">LayerBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose_System_Boolean_">LayerBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The PrimaryCapsuleLayer is the first layer in a capsule network that transforms traditional scalar feature maps
+into capsule vectors. It performs a convolution operation followed by reshaping the output into capsules.
+Each capsule represents a group of neurons that encodes both the presence and properties of a particular entity.
+This layer serves as a bridge between standard convolutional layers and higher-level capsule layers.
+</p>
+<p><b>For Beginners:</b> This layer is the first step in creating a capsule network.
+<p>In traditional neural networks, each neuron outputs a single number indicating the presence of a feature.
+In capsule networks, neurons are grouped into &quot;capsules&quot; where each capsule outputs a vector:</p>
+<ul>
+<li>The length of the vector represents the presence of an entity</li>
+<li>The orientation of the vector represents properties of that entity</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Standard neurons: &quot;I see a nose with 90% confidence&quot;</li>
+<li>Capsule neurons: &quot;I see a nose with 90% confidence, and it's pointing 30° to the left,
+it's 2cm long, it has a slightly curved shape...&quot;</li>
+</ul>
+<p>The primary capsule layer converts traditional feature maps (from convolutional layers)
+into these vector-based capsules that can capture more detailed information about the entities detected.</p>
+<p>This approach helps the network understand spatial relationships and maintain information
+about pose, orientation, and other properties that are typically lost in traditional networks.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Interfaces.IActivationFunction{`0})">
+  PrimaryCapsuleLayer(int, int, int, int, int, IActivationFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer-1.html">PrimaryCapsuleLayer&lt;T&gt;</a> class with the specified parameters
+and a scalar activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IActivationFunction&lt;T&gt;? scalarActivation = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of input channels.</p>
+</dd>
+    <dt><code>capsuleChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of capsule channels.</p>
+</dd>
+    <dt><code>capsuleDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimension of each capsule.</p>
+</dd>
+    <dt><code>kernelSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the convolutional kernel.</p>
+</dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The stride of the convolution operation.</p>
+</dd>
+    <dt><code>scalarActivation</code> <a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The activation function to apply after processing. Defaults to Squash if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a PrimaryCapsuleLayer with the specified parameters. It initializes the convolution
+weights and biases and sets up the layer to transform input feature maps into primary capsules.
+</p>
+<p><b>For Beginners:</b> This constructor sets up the layer with the necessary parameters.
+<p>When creating a PrimaryCapsuleLayer, you need to specify:</p>
+<ul>
+<li>inputChannels: How many channels your input has (e.g., 3 for RGB images, or more if from a conv layer)</li>
+<li>capsuleChannels: How many different types of capsules to create</li>
+<li>capsuleDimension: How many values in each capsule's output vector</li>
+<li>kernelSize: The size of the area examined by the convolution (e.g., 3 for a 3×3 kernel)</li>
+<li>stride: How far to move the kernel each step</li>
+<li>scalarActivation: The function applied to each scalar value (defaults to Squash)</li>
+</ul>
+<p>For example, if you set capsuleChannels=8 and capsuleDimension=16, you'll have 8 different
+types of capsules, each outputting a 16-dimensional vector.</p>
+<p>The default Squash activation function is specifically designed for capsule networks.
+It ensures that the length of each capsule's output vector is between 0 and 1,
+which is ideal for representing the probability of an entity being present.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IVectorActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Interfaces.IVectorActivationFunction{`0})">
+  PrimaryCapsuleLayer(int, int, int, int, int, IVectorActivationFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer-1.html">PrimaryCapsuleLayer&lt;T&gt;</a> class with the specified parameters
+and a vector activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PrimaryCapsuleLayer(int inputChannels, int capsuleChannels, int capsuleDimension, int kernelSize, int stride, IVectorActivationFunction&lt;T&gt;? vectorActivation = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of input channels.</p>
+</dd>
+    <dt><code>capsuleChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of capsule channels.</p>
+</dd>
+    <dt><code>capsuleDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimension of each capsule.</p>
+</dd>
+    <dt><code>kernelSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the convolutional kernel.</p>
+</dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The stride of the convolution operation.</p>
+</dd>
+    <dt><code>vectorActivation</code> <a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The vector activation function to apply after processing. Defaults to Squash if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IVectorActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a PrimaryCapsuleLayer with the specified parameters and a vector activation function.
+A vector activation function operates on entire capsule vectors rather than individual elements.
+</p>
+<p><b>For Beginners:</b> This constructor is similar to the other one, but uses a vector-based activation function.
+<p>A vector activation function:</p>
+<ul>
+<li>Operates on entire capsule vectors at once, rather than one value at a time</li>
+<li>Can better preserve the relationship between values in a capsule</li>
+<li>The default Squash function ensures vector lengths are between 0 and 1</li>
+</ul>
+<p>The Squash function is specifically designed for capsule networks. It scales vectors
+non-linearly so that small vectors shrink to nearly zero length, while large vectors
+shrink to have a length slightly below 1, preserving their direction.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsGpuExecution_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsGpuExecution*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsGpuExecution" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsGpuExecution">
+  SupportsGpuExecution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer has a GPU execution implementation for inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsGpuExecution { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsGpuExecution_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Override this to return true when the layer implements <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____">ForwardGpu(params IGpuTensor&lt;T&gt;[])</a>.
+The actual <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">CanExecuteOnGpu</a> property combines this with engine availability.
+</p>
+<p><b>For Beginners:</b> This flag indicates if the layer has GPU code for the forward pass.
+Set this to true in derived classes that implement ForwardGpu.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsJitCompilation_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsJitCompilation" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L1028"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the layer can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the layer has implemented ExportComputationGraph()
+and can benefit from JIT compilation. All layers MUST implement this property.
+</p>
+<p><b>For Beginners:</b> JIT compilation can make inference 5-10x faster by converting
+the layer's operations into optimized native code.
+<p>Layers should return false if they:</p>
+<ul>
+<li>Have not yet implemented a working ExportComputationGraph()</li>
+<li>Use dynamic operations that change based on input data</li>
+<li>Are too simple to benefit from JIT compilation</li>
+</ul>
+<p>When false, the layer will use the standard Forward() method instead.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsTraining_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsTraining*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsTraining" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SupportsTraining">
+  SupportsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always <code>true</code> because the PrimaryCapsuleLayer has trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SupportsTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates that PrimaryCapsuleLayer can be trained through backpropagation. The layer
+has trainable parameters (convolution weights and biases) that are updated during training to optimize
+the capsule transformation process.
+</p>
+<p><b>For Beginners:</b> This property tells you that this layer can learn from data.
+<p>A value of true means:</p>
+<ul>
+<li>The layer has internal values (weights and biases) that change during training</li>
+<li>It will improve its performance as it sees more data</li>
+<li>It learns to extract better capsule representations from the input</li>
+</ul>
+<p>During training, the layer learns to transform input features into capsule vectors
+that best represent the entities in the data.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Backward_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.Backward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L655"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass of the primary capsule layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the backward pass of the primary capsule layer, which is used during training to propagate
+error gradients back through the network. It computes the gradients of the convolution weights and biases,
+as well as the gradient with respect to the input tensor. The computed weight and bias gradients are stored
+for later use in the parameter update step.
+</p>
+<p><b>For Beginners:</b> This method calculates how all parameters should change to reduce errors.
+<p>During the backward pass:</p>
+<ul>
+<li>The layer receives gradients indicating how the output capsules should change</li>
+<li>It calculates how each weight, bias, and input value should change</li>
+<li>These gradients are used later to update the parameters during training</li>
+</ul>
+<p>This process involves:</p>
+<ol>
+<li>Applying the derivative of the activation function</li>
+<li>For each location in the output:
+<ul>
+<li>Extracting the corresponding input patch</li>
+<li>Computing the gradients for weights and biases</li>
+<li>Computing the gradients for the input</li>
+</ul>
+</li>
+<li>Aggregating all the gradients</li>
+</ol>
+<p>This allows the layer to learn how to better transform input features into
+meaningful capsule representations.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when backward is called before forward.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ExportComputationGraph_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L981"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the layer's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the layer's operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method constructs a computation graph representation of the layer's forward pass
+that can be JIT compiled for faster inference. All layers MUST implement this method
+to support JIT compilation.
+</p>
+<p><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the layer's operations
+into optimized native code for 5-10x faster inference.
+<p>To support JIT compilation, a layer must:</p>
+<ol>
+<li>Implement this method to export its computation graph</li>
+<li>Set SupportsJitCompilation to true</li>
+<li>Use ComputationNode and TensorOperations to build the graph</li>
+</ol>
+<p>All layers are required to implement this method, even if they set SupportsJitCompilation = false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Forward_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.Forward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass of the primary capsule layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor containing capsule vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass of the primary capsule layer. It performs a convolution
+operation on the input tensor, reshapes the result into capsule vectors, and applies the activation
+function to produce the final output. The input and output tensors are cached for use during the
+backward pass.
+</p>
+<p><b>For Beginners:</b> This method transforms the input features into capsule vectors.
+<p>During the forward pass:</p>
+<ol>
+<li>The method applies a convolution operation to the input
+(similar to a standard convolutional layer)</li>
+<li>It reshapes the result into groups of vectors (the capsules)</li>
+<li>It applies the activation function (typically Squash) to each capsule vector</li>
+</ol>
+<p>The output is a set of capsule vectors where:</p>
+<ul>
+<li>Each capsule vector's length represents the probability of detecting an entity</li>
+<li>The orientation of the vector represents properties of the detected entity</li>
+</ul>
+<p>This is the key difference from traditional neural networks - instead of just
+detecting if something is present, the capsules also capture information about
+the properties of what they detect.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ForwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ForwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0}[])">
+  ForwardGpu(params IGpuTensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L492"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs GPU-accelerated forward pass through the primary capsule layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; ForwardGpu(params IGpuTensor&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>GPU-resident input tensors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>GPU-resident output tensor after capsule transformation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass using GPU-resident operations where possible.
+The convolution and reshape operations are kept on GPU for efficiency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L893"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters from the primary capsule layer as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method retrieves all trainable parameters from the layer as a single vector. It concatenates
+the convolution weights and biases into a single vector. This is useful for optimization algorithms
+that operate on all parameters at once, or for saving and loading model weights.
+</p>
+<p><b>For Beginners:</b> This method collects all the learnable values in the layer.
+<p>The parameters:</p>
+<ul>
+<li>Are the numbers that the neural network learns during training</li>
+<li>Include all the weights and biases from this layer</li>
+<li>Are combined into a single long list (vector)</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving the model to disk</li>
+<li>Loading parameters from a previously trained model</li>
+<li>Advanced optimization techniques that need access to all parameters</li>
+</ul>
+<p>The method carefully arranges all parameters in a specific order
+so they can be correctly restored later.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ResetState_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ResetState" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L970"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the primary capsule layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_ResetState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the internal state of the primary capsule layer, including the cached inputs, outputs,
+and gradients. This is useful when starting to process a new sequence or batch of data, or when
+implementing stateful networks.
+</p>
+<p><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+<p>When resetting the state:</p>
+<ul>
+<li>Stored inputs and outputs from previous processing are cleared</li>
+<li>All calculated gradients are cleared</li>
+<li>The layer forgets any information from previous data batches</li>
+</ul>
+<p>This is important for:</p>
+<ul>
+<li>Processing a new, unrelated batch of data</li>
+<li>Ensuring clean state before a new training epoch</li>
+<li>Preventing information from one batch affecting another</li>
+</ul>
+<p>Resetting state helps ensure that each forward and backward pass is independent,
+which is important for correct behavior in many neural network architectures.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L929"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the trainable parameters for the primary capsule layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all parameters to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets all trainable parameters of the layer from a single vector. It extracts the appropriate
+portions of the input vector for each parameter (convolution weights and biases). This is useful for
+loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+</p>
+<p><b>For Beginners:</b> This method updates all the learnable values in the layer.
+<p>When setting parameters:</p>
+<ul>
+<li>The input must be a vector with the correct length</li>
+<li>The method extracts portions for each weight matrix and bias vector</li>
+<li>It places each value in its correct position</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Loading a previously saved model</li>
+<li>Transferring parameters from another model</li>
+<li>Testing different parameter values</li>
+</ul>
+<p>An error is thrown if the input vector doesn't have the expected number of parameters,
+ensuring that all matrices and vectors maintain their correct dimensions.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_UpdateParameters__0_" data-uid="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L854"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of the primary capsule layer using the calculated gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate to use for the parameter updates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_PrimaryCapsuleLayer_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method updates the convolution weights and biases of the layer based on the gradients calculated
+during the backward pass. The learning rate controls the size of the parameter updates.
+</p>
+<p><b>For Beginners:</b> This method updates all the layer's weights and biases during training.
+<p>After the backward pass calculates how parameters should change, this method:</p>
+<ul>
+<li>Takes each weight and bias</li>
+<li>Subtracts the corresponding gradient scaled by the learning rate</li>
+<li>This moves the parameters in the direction that reduces errors</li>
+</ul>
+<p>The learning rate controls how big each update step is:</p>
+<ul>
+<li>Smaller learning rates mean slower but more stable learning</li>
+<li>Larger learning rates mean faster but potentially unstable learning</li>
+</ul>
+<p>This is how the layer gradually improves its ability to transform inputs
+into meaningful capsule representations over many training iterations.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when UpdateParameters is called before Backward.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/PrimaryCapsuleLayer.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IImageBindModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IImageBindModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for ImageBind models that bind multiple modalities (6+) into a shared embedding space.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IImageBindModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IImageBindModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IImageBindModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IImageBindModel_1" data-uid="AiDotNet.Interfaces.IImageBindModel`1" class="text-break">
+Interface IImageBindModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for ImageBind models that bind multiple modalities (6+) into a shared embedding space.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IImageBindModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IImageBindModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ImageBind learns a joint embedding space across six modalities: images, text, audio, depth,
+thermal, and IMU data. It uses images as a binding modality - since web data contains
+many (image, text) pairs, (image, audio) pairs from videos, etc., the model can learn
+cross-modal relationships even without direct pairs between all modalities.
+</p>
+<p><b>For Beginners:</b> ImageBind connects ALL types of data together!
+<p>The breakthrough insight:</p>
+<ul>
+<li>Images are paired with many things: text captions, video audio, depth sensors, etc.</li>
+<li>By learning all these (image, X) pairs, images become a &quot;bridge&quot;</li>
+<li>Now audio and text can be compared, even without audio-text training data!</li>
+</ul>
+<p>Six modalities in one model:</p>
+<ol>
+<li>Images: Regular RGB photos</li>
+<li>Text: Natural language descriptions</li>
+<li>Audio: Sound waveforms (speech, music, effects)</li>
+<li>Video: Moving images (sequences of frames)</li>
+<li>Thermal: Heat maps from infrared cameras</li>
+<li>Depth: 3D distance information</li>
+<li>IMU: Motion sensor data (accelerometer, gyroscope)</li>
+</ol>
+<p>Why this matters:</p>
+<ul>
+<li>Search audio by describing sounds in text</li>
+<li>Find images that match a piece of music</li>
+<li>Match thermal images to regular photos</li>
+<li>Universal multimodal understanding!</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_EmbeddingDimension_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_EmbeddingDimension" data-uid="AiDotNet.Interfaces.IImageBindModel`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of the shared embedding space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_SupportedModalities_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.SupportedModalities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_SupportedModalities" data-uid="AiDotNet.Interfaces.IImageBindModel`1.SupportedModalities">
+  SupportedModalities
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of supported modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;ModalityType&gt; SupportedModalities { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_ComputeAlignment_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeAlignment*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_ComputeAlignment_AiDotNet_Interfaces_ModalityType_System_Object_AiDotNet_Interfaces_ModalityType_System_Object_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeAlignment(AiDotNet.Interfaces.ModalityType,System.Object,AiDotNet.Interfaces.ModalityType,System.Object)">
+  ComputeAlignment(ModalityType, object, ModalityType, object)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the alignment between two modalities given paired data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(T AlignmentScore, Dictionary&lt;string, object&gt; Details) ComputeAlignment(ModalityType modality1, object data1, ModalityType modality2, object data2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modality1</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>First modality type.</p>
+</dd>
+    <dt><code>data1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>Data from first modality.</p>
+</dd>
+    <dt><code>modality2</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>Second modality type.</p>
+</dd>
+    <dt><code>data2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>Data from second modality.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.dictionary-system.string,system.object--.alignmentscore">AlignmentScore</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.dictionary-system.string,system.object--.details">Details</a>)</dt>
+    <dd><p>Alignment score and optional alignment details.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_ComputeCrossModalSimilarity_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeCrossModalSimilarity*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_ComputeCrossModalSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeCrossModalSimilarity(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeCrossModalSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes similarity between embeddings from any two modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeCrossModalSimilarity(Vector&lt;T&gt; embedding1, Vector&lt;T&gt; embedding2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embedding1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>First embedding vector.</p>
+</dd>
+    <dt><code>embedding2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Second embedding vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Cosine similarity score in range [-1, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_ComputeEmergentAudioTextSimilarity_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeEmergentAudioTextSimilarity*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_ComputeEmergentAudioTextSimilarity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ComputeEmergentAudioTextSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ComputeEmergentAudioTextSimilarity(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes emergent cross-modal relationships without explicit pairing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeEmergentAudioTextSimilarity(Tensor&lt;T&gt; audio, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Similarity score between audio and text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_ComputeEmergentAudioTextSimilarity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The magic of ImageBind!
+<p>Even though ImageBind was never trained on (audio, text) pairs directly,
+it can still compare them through the shared embedding space!</p>
+<p>This works because:</p>
+<ul>
+<li>Audio is aligned to images (from video)</li>
+<li>Text is aligned to images (from captions)</li>
+<li>Therefore, audio and text become implicitly aligned!</li>
+</ul>
+<p>&quot;emergent&quot; means this capability appeared without explicit training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_CrossModalRetrieval_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.CrossModalRetrieval*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_CrossModalRetrieval_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.CrossModalRetrieval(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32)">
+  CrossModalRetrieval(Vector&lt;T&gt;, IEnumerable&lt;Vector&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs cross-modal retrieval from one modality to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(int Index, T Score)&gt; CrossModalRetrieval(Vector&lt;T&gt; queryEmbedding, IEnumerable&lt;Vector&lt;T&gt;&gt; targetEmbeddings, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryEmbedding</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Query embedding from source modality.</p>
+</dd>
+    <dt><code>targetEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Database of embeddings from target modality.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices and scores of most similar items.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_CrossModalRetrieval_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Search across different types of data!
+<p>Examples:</p>
+<ul>
+<li>Audio → Images: &quot;Find images that match this sound&quot;</li>
+<li>Text → Audio: &quot;Find sounds matching 'thunderstorm'&quot;</li>
+<li>Thermal → RGB: &quot;Find color photos of this heat signature&quot;</li>
+<li>IMU → Video: &quot;Find videos of people doing this motion&quot;</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_FindBestMatch_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.FindBestMatch*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_FindBestMatch_AiDotNet_Interfaces_ModalityType_System_Object_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Interfaces_ModalityType_System_Object___" data-uid="AiDotNet.Interfaces.IImageBindModel`1.FindBestMatch(AiDotNet.Interfaces.ModalityType,System.Object,System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Interfaces.ModalityType,System.Object}})">
+  FindBestMatch(ModalityType, object, IEnumerable&lt;(ModalityType Modality, object Data)&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best matching modality representation for a query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(ModalityType Modality, object Data, T Score) FindBestMatch(ModalityType queryModality, object queryData, IEnumerable&lt;(ModalityType Modality, object Data)&gt; candidates)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryModality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>Type of the query data.</p>
+</dd>
+    <dt><code>queryData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The query data.</p>
+</dd>
+    <dt><code>candidates</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.object-.modality">Modality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.object-.data">Data</a>)&gt;</dt>
+    <dd><p>Dictionary of (modality, data) candidates.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.object,-0-.modality">Modality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.object,-0-.data">Data</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.modalitytype,system.object,-0-.score">Score</a>)</dt>
+    <dd><p>Best matching candidate with its similarity score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_FuseModalities_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.FuseModalities*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_FuseModalities_System_Collections_Generic_Dictionary_AiDotNet_Interfaces_ModalityType_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_String_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.FuseModalities(System.Collections.Generic.Dictionary{AiDotNet.Interfaces.ModalityType,AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.String)">
+  FuseModalities(Dictionary&lt;ModalityType, Vector&lt;T&gt;&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L278"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs multimodal fusion by combining embeddings from multiple modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; FuseModalities(Dictionary&lt;ModalityType, Vector&lt;T&gt;&gt; modalityEmbeddings, string fusionMethod = &quot;mean&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modalityEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Dictionary of (modality, embedding) pairs.</p>
+</dd>
+    <dt><code>fusionMethod</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Method for combining: &quot;mean&quot;, &quot;concat&quot;, &quot;attention&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Fused embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GenerateDescriptions_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GenerateDescriptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GenerateDescriptions_AiDotNet_Interfaces_ModalityType_System_Object_System_Collections_Generic_IEnumerable_System_String__System_Int32_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GenerateDescriptions(AiDotNet.Interfaces.ModalityType,System.Object,System.Collections.Generic.IEnumerable{System.String},System.Int32)">
+  GenerateDescriptions(ModalityType, object, IEnumerable&lt;string&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates text description for non-text modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Description, T Score)&gt; GenerateDescriptions(ModalityType modality, object data, IEnumerable&lt;string&gt; candidateDescriptions, int topK = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>The input modality type.</p>
+</dd>
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The data to describe.</p>
+</dd>
+    <dt><code>candidateDescriptions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Pool of possible descriptions.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of best descriptions to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.caption">Caption</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Best matching descriptions with scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetAudioEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetAudioEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetAudioEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetAudioEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GetAudioEmbedding(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts audio into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetAudioEmbedding(Tensor&lt;T&gt; audioWaveform, int sampleRate = 16000)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audioWaveform</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor [samples] or [channels, samples].</p>
+</dd>
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate in Hz.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_GetAudioEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Convert sound into the same vector space as images and text!
+<p>This allows:</p>
+<ul>
+<li>Find images that match a sound (bird chirping → bird photos)</li>
+<li>Search audio with text (&quot;dog barking&quot; → actual barking sounds)</li>
+<li>Compare different sounds for similarity</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetDepthEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetDepthEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetDepthEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetDepthEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetDepthEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts depth map into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetDepthEmbedding(Tensor&lt;T&gt; depthMap)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>depthMap</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Depth map tensor [height, width] with distance values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_GetDepthEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Depth maps represent 3D structure. ImageBind can find RGB images
+with similar spatial structure or match to text descriptions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetEmbedding_AiDotNet_Interfaces_ModalityType_System_Object_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetEmbedding(AiDotNet.Interfaces.ModalityType,System.Object)">
+  GetEmbedding(ModalityType, object)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets embedding for any supported modality using a generic interface.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetEmbedding(ModalityType modality, object data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>The type of modality.</p>
+</dd>
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The data to embed (type depends on modality).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetIMUEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetIMUEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetIMUEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetIMUEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetIMUEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts IMU sensor data into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetIMUEmbedding(Tensor&lt;T&gt; imuData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imuData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>IMU readings [timesteps, 6] for accelerometer and gyroscope (x,y,z each).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_GetIMUEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> IMU is the motion sensor in your phone!
+<p>IMU captures movement patterns:</p>
+<ul>
+<li>Walking, running, jumping</li>
+<li>Phone gestures</li>
+<li>Device orientation</li>
+</ul>
+<p>ImageBind can match these motions to videos or text descriptions!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetImageEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetImageEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetImageEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetImageEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetImageEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an image into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetImageEmbedding(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Preprocessed image tensor [channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetTextEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetTextEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetTextEmbedding_System_String_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetTextEmbedding(System.String)">
+  GetTextEmbedding(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts text into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetTextEmbedding(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text string to embed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetThermalEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetThermalEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetThermalEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetThermalEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetThermalEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts thermal image into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetThermalEmbedding(Tensor&lt;T&gt; thermalImage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>thermalImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Thermal/infrared image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_GetThermalEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Thermal images capture heat signatures. ImageBind can match thermal images
+to their RGB counterparts or find related audio/text.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_GetVideoEmbedding_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetVideoEmbedding*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_GetVideoEmbedding_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Interfaces.IImageBindModel`1.GetVideoEmbedding(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  GetVideoEmbedding(IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts video into a shared embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetVideoEmbedding(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Video frames as sequence of image tensors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IImageBindModel_1_ZeroShotClassify_" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ZeroShotClassify*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IImageBindModel_1_ZeroShotClassify_AiDotNet_Interfaces_ModalityType_System_Object_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IImageBindModel`1.ZeroShotClassify(AiDotNet.Interfaces.ModalityType,System.Object,System.Collections.Generic.IEnumerable{System.String})">
+  ZeroShotClassify(ModalityType, object, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs zero-shot classification across modalities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Dictionary&lt;string, T&gt; ZeroShotClassify(ModalityType modality, object data, IEnumerable&lt;string&gt; classLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modality</code> <a class="xref" href="AiDotNet.Interfaces.ModalityType.html">ModalityType</a></dt>
+    <dd><p>The modality of the input data.</p>
+</dd>
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The data to classify.</p>
+</dd>
+    <dt><code>classLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Text labels for classification.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping labels to probability scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IImageBindModel_1_ZeroShotClassify_AiDotNet_Interfaces_ModalityType_System_Object_System_Collections_Generic_IEnumerable_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Works for any supported modality - classify audio by text labels,
+classify thermal images, classify motion patterns, etc.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IImageBindModel.cs/#L60" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

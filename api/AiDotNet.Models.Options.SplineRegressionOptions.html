@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SplineRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SplineRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for spline regression models, which fit piecewise polynomial functions to data for flexible nonlinear modeling.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SplineRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SplineRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SplineRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SplineRegressionOptions" data-uid="AiDotNet.Models.Options.SplineRegressionOptions" class="text-break">
+Class SplineRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SplineRegressionOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for spline regression models, which fit piecewise polynomial functions
+to data for flexible nonlinear modeling.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SplineRegressionOptions : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">SplineRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SplineRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Spline regression is a flexible nonlinear regression technique that fits piecewise polynomial functions 
+(splines) to data. Unlike simple polynomial regression, which uses a single polynomial for the entire 
+data range, spline regression divides the data into segments and fits separate polynomials to each segment, 
+with constraints ensuring smoothness at the connection points (knots). This approach provides greater 
+flexibility in modeling complex nonlinear relationships while avoiding the oscillatory behavior often 
+seen with high-degree polynomials. This class provides configuration options for spline regression, 
+including the number of knots (which determines the number of segments), the degree of the polynomial 
+functions, and the matrix decomposition method used for solving the regression equations.
+</p>
+<p><b>For Beginners:</b> Spline regression helps model complex relationships in your data using connected smooth curves.
+<p>When simple linear regression isn't flexible enough:</p>
+<ul>
+<li>Linear regression forces a straight line through your data</li>
+<li>Polynomial regression uses a single curved line, but can behave poorly</li>
+<li>Spline regression uses multiple connected curves for more flexibility</li>
+</ul>
+<p>Think of spline regression like drawing with multiple connected curve segments:</p>
+<ul>
+<li>Each segment is a polynomial curve (like a parabola)</li>
+<li>The segments connect smoothly at points called &quot;knots&quot;</li>
+<li>This creates a flexible curve that can adapt to different patterns in different regions</li>
+</ul>
+<p>Benefits of spline regression:</p>
+<ul>
+<li>More flexible than simple lines or polynomials</li>
+<li>Avoids the wild oscillations that can happen with high-degree polynomials</li>
+<li>Can capture complex relationships while still being relatively simple to interpret</li>
+</ul>
+<p>This class lets you configure exactly how the spline regression model will be constructed.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SplineRegressionOptions_DecompositionType_" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SplineRegressionOptions_DecompositionType" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SplineRegressionOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used to solve the regression equations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>A value from the MatrixDecompositionType enumeration, defaulting to MatrixDecompositionType.Cholesky.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SplineRegressionOptions_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the matrix decomposition method used to solve the system of linear equations that 
+arises when fitting the spline regression model. Different decomposition methods have different characteristics 
+in terms of numerical stability, computational efficiency, and applicability to specific types of matrices. 
+The Cholesky decomposition (the default) is efficient and numerically stable for the positive definite matrices 
+that typically arise in regression problems. Other options might include QR decomposition (more stable for 
+ill-conditioned matrices but less efficient), SVD (Singular Value Decomposition, most stable but least efficient), 
+or LU decomposition (efficient but less stable). The choice of decomposition method can affect the accuracy and 
+efficiency of the regression, particularly for large datasets or ill-conditioned problems.
+</p>
+<p><b>For Beginners:</b> This setting selects the mathematical method used to solve the regression equations.
+<p>Fitting a spline regression involves solving a system of equations:</p>
+<ul>
+<li>Different mathematical methods (decompositions) can solve these equations</li>
+<li>Each method has trade-offs in terms of speed, accuracy, and numerical stability</li>
+</ul>
+<p>The default Cholesky decomposition:</p>
+<ul>
+<li>Is very efficient for regression problems</li>
+<li>Works well when the data is well-behaved</li>
+<li>Is the standard choice for most regression applications</li>
+</ul>
+<p>Other common decomposition types include:</p>
+<ul>
+<li>QR: More stable for problematic data, but slower</li>
+<li>SVD: Most stable for difficult cases, but significantly slower</li>
+<li>LU: Fast but less stable for regression problems</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Keep the default (Cholesky) for most applications</li>
+<li>Consider QR or SVD if you encounter numerical stability issues
+(like errors about singular or ill-conditioned matrices)</li>
+</ul>
+<p>This is an advanced setting that most users won't need to change unless they
+encounter specific numerical problems with the default method.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SplineRegressionOptions_Degree_" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.Degree*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SplineRegressionOptions_Degree" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.Degree">
+  Degree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SplineRegressionOptions.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degree of the polynomial functions used in each segment of the spline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Degree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 3 (cubic splines).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SplineRegressionOptions_Degree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the degree of the polynomial functions used in each segment of the spline. The degree 
+determines the maximum power of the independent variable in the polynomial. A degree of 1 creates linear 
+segments, a degree of 2 creates quadratic segments, and a degree of 3 (the default) creates cubic segments. 
+Higher-degree polynomials can capture more complex patterns within each segment but increase the risk of 
+overfitting and numerical instability. Cubic splines (degree 3) are the most commonly used in practice 
+because they provide a good balance between flexibility and stability, and they ensure continuity of the 
+first and second derivatives at the knots, resulting in visually smooth curves. For most applications, 
+cubic splines are sufficient, and increasing the number of knots is generally preferred over increasing 
+the polynomial degree when more flexibility is needed.
+</p>
+<p><b>For Beginners:</b> This setting controls how curved each segment of the spline can be.
+<p>The degree determines:</p>
+<ul>
+<li>The complexity of each individual segment between knots</li>
+<li>How many times the curve can change direction within a segment</li>
+</ul>
+<p>The default value of 3 means:</p>
+<ul>
+<li>Cubic splines (3rd-degree polynomials) are used</li>
+<li>Each segment can have up to two changes in direction (like an S-curve)</li>
+<li>The connections between segments will be smooth, with matching slopes and curvatures</li>
+</ul>
+<p>Common degree values:</p>
+<ul>
+<li>1: Linear splines (straight line segments, only smooth at knots)</li>
+<li>2: Quadratic splines (parabolic segments, smooth with matching slopes at knots)</li>
+<li>3: Cubic splines (the most common, smooth with matching slopes and curvatures)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease to 1 or 2 for simpler, more interpretable models</li>
+<li>Keep at 3 (default) for most applications</li>
+<li>Rarely increase above 3, as adding more knots is usually better than increasing degree</li>
+</ul>
+<p>For example, cubic splines (degree=3) are commonly used in computer graphics for
+smooth curve drawing and in data analysis for flexible trend fitting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SplineRegressionOptions_NumberOfKnots_" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.NumberOfKnots*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SplineRegressionOptions_NumberOfKnots" data-uid="AiDotNet.Models.Options.SplineRegressionOptions.NumberOfKnots">
+  NumberOfKnots
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SplineRegressionOptions.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of knots (internal breakpoints) in the spline function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumberOfKnots { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 3.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SplineRegressionOptions_NumberOfKnots_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of knots or breakpoints used in the spline function. Knots are the points 
+where the different polynomial segments connect. The total number of segments in the spline will be one more 
+than the number of knots. More knots allow the spline to capture more complex patterns in the data but increase 
+the risk of overfitting and the computational complexity. The default value of 3 provides a moderate level of 
+flexibility suitable for many applications. For simpler relationships, fewer knots might be appropriate, while 
+for more complex relationships, more knots might be needed. The optimal number of knots can be determined 
+through cross-validation or by comparing model fit statistics like AIC (Akaike Information Criterion) or 
+BIC (Bayesian Information Criterion).
+</p>
+<p><b>For Beginners:</b> This setting controls how many segments the spline curve will have.
+<p>The number of knots determines:</p>
+<ul>
+<li>How many places the curve can change its behavior</li>
+<li>How flexible the overall fit will be</li>
+</ul>
+<p>The default value of 3 means:</p>
+<ul>
+<li>The data range will be divided into 4 segments (number of knots + 1)</li>
+<li>Each segment will have its own polynomial curve</li>
+<li>The curves will connect smoothly at the knot points</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>More knots (e.g., 5 or 10): More flexible curve that can capture complex patterns</li>
+<li>Fewer knots (e.g., 1 or 2): Simpler curve that's less likely to overfit</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when your data shows complex patterns that change multiple times</li>
+<li>Decrease it when you want a simpler model or have limited data</li>
+</ul>
+<p>For example, if modeling temperature throughout a day, 3 knots might allow the curve
+to capture morning warming, midday plateau, and evening cooling patterns.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SplineRegressionOptions.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

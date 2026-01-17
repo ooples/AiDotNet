@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StepwiseRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StepwiseRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements stepwise regression, which automatically selects the most relevant features for the model. This approach builds a model by adding or removing features based on their statistical significance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_StepwiseRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.StepwiseRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.StepwiseRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_StepwiseRegression_1" data-uid="AiDotNet.Regression.StepwiseRegression`1" class="text-break">
+Class StepwiseRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements stepwise regression, which automatically selects the most relevant features for the model.
+This approach builds a model by adding or removing features based on their statistical significance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StepwiseRegression&lt;T&gt; : RegressionBase&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.RegressionBase-1.html">RegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">StepwiseRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_NumOps">RegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Engine">RegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Options">RegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Regularization">RegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Coefficients">RegressionBase&lt;T&gt;.Coefficients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Intercept">RegressionBase&lt;T&gt;.Intercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_HasIntercept">RegressionBase&lt;T&gt;.HasIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_FeatureNames">RegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_ExpectedParameterCount">RegressionBase&lt;T&gt;.ExpectedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_GetModelMetadata">RegressionBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_CalculateFeatureImportances">RegressionBase&lt;T&gt;.CalculateFeatureImportances()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SolveSystem_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">RegressionBase&lt;T&gt;.SolveSystem(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_GetParameters">RegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">RegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_GetActiveFeatureIndices">RegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_IsFeatureUsed_System_Int32_">RegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">RegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">RegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SetCoefficientsAndIntercept_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">RegressionBase&lt;T&gt;.SetCoefficientsAndIntercept(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_GetFeatureImportance">RegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_DeepCopy">RegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_Clone">RegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_ParameterCount">RegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_DefaultLossFunction">RegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">RegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">RegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SaveModel_System_String_">RegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_LoadModel_System_String_">RegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SaveState_System_IO_Stream_">RegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_LoadState_System_IO_Stream_">RegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_SupportsJitCompilation">RegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.RegressionBase-1.html#AiDotNet_Regression_RegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">RegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_StepwiseRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Stepwise regression helps solve the feature selection problem by iteratively building a model, either by:
+- Forward selection: Starting with no features and adding the most significant ones
+- Backward elimination: Starting with all features and removing the least significant ones
+<p>At each step, the algorithm evaluates the impact of adding or removing features based on a fitness metric
+such as adjusted R-squared, AIC, BIC, or other statistical criteria.</p>
+
+<p><b>For Beginners:</b> Stepwise regression is like a smart shopping assistant that helps you 
+pick only the most useful ingredients for a recipe.
+<p>Think of it like this:</p>
+<ul>
+<li>You have many potential ingredients (features) that might affect the outcome</li>
+<li>Instead of using all ingredients, which could make the recipe complicated or less tasty</li>
+<li>Stepwise regression tests each ingredient to see how much it improves the recipe</li>
+<li>It keeps only the ingredients that make a significant difference to the final result</li>
+</ul>
+<p>For example, when predicting house prices, you might have data on square footage,
+number of bedrooms, location, age, etc. Stepwise regression would determine which of these
+features are most important for accurate predictions and discard the rest.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1__ctor_" data-uid="AiDotNet.Regression.StepwiseRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1__ctor_AiDotNet_Models_Options_StepwiseRegressionOptions__0__AiDotNet_Models_PredictionStatsOptions_AiDotNet_Interfaces_IFitnessCalculator__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IModelEvaluator__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.StepwiseRegression`1.#ctor(AiDotNet.Models.Options.StepwiseRegressionOptions{`0},AiDotNet.Models.PredictionStatsOptions,AiDotNet.Interfaces.IFitnessCalculator{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Interfaces.IModelEvaluator{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  StepwiseRegression(StepwiseRegressionOptions&lt;T&gt;?, PredictionStatsOptions?, IFitnessCalculator&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?, IModelEvaluator&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new stepwise regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StepwiseRegression(StepwiseRegressionOptions&lt;T&gt;? options = null, PredictionStatsOptions? predictionOptions = null, IFitnessCalculator&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? fitnessCalculator = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null, IModelEvaluator&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? modelEvaluator = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.StepwiseRegressionOptions-1.html">StepwiseRegressionOptions</a>&lt;T&gt;</dt>
+    <dd><p>Optional configuration settings for the stepwise regression model. These settings control aspects like:</p>
+<ul>
+<li>The stepwise method (forward selection or backward elimination)</li>
+<li>The maximum and minimum number of features to include</li>
+<li>The minimum improvement required to add or remove a feature
+If not provided, default options will be used.</li>
+</ul>
+</dd>
+    <dt><code>predictionOptions</code> <a class="xref" href="AiDotNet.Models.PredictionStatsOptions.html">PredictionStatsOptions</a></dt>
+    <dd><p>Optional settings for prediction statistics calculation.</p>
+</dd>
+    <dt><code>fitnessCalculator</code> <a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional calculator for evaluating model fitness during feature selection.
+If not provided, adjusted R-squared will be used as the fitness metric.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization method to prevent overfitting.
+If not provided, no regularization will be applied.</p>
+</dd>
+    <dt><code>modelEvaluator</code> <a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional evaluator for assessing model performance.
+If not provided, the default model evaluator will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1__ctor_AiDotNet_Models_Options_StepwiseRegressionOptions__0__AiDotNet_Models_PredictionStatsOptions_AiDotNet_Interfaces_IFitnessCalculator__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Interfaces_IModelEvaluator__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new stepwise regression model with the specified configuration options,
+fitness calculator, regularization method, and model evaluator. If these components are not provided,
+default implementations are used.
+</p>
+<p><b>For Beginners:</b> This method sets up your feature selection process.
+<p>Think of it like preparing for a cooking competition:</p>
+<ul>
+<li>You decide your strategy (forward or backward selection)</li>
+<li>You set limits on how many ingredients to use</li>
+<li>You choose how you'll judge which ingredients to keep</li>
+<li>You set up safety measures to prevent over-complicating the recipe</li>
+</ul>
+<p>After setting up with these options, the model will be ready to train
+and discover which features are most important for your predictions.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_CreateNewInstance_" data-uid="AiDotNet.Regression.StepwiseRegression`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_CreateNewInstance" data-uid="AiDotNet.Regression.StepwiseRegression`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L589"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Stepwise Regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the Stepwise Regression model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deep copy of the current Stepwise Regression model, including its coefficients,
+intercept, configuration options, selected features, fitness calculator, and model evaluator. 
+The new instance is completely independent of the original, allowing modifications without 
+affecting the original model.
+</p>
+<p><b>For Beginners:</b> This method creates an exact copy of the current regression model.
+<p>The copy includes:</p>
+<ul>
+<li>The same coefficients (the importance values for each feature)</li>
+<li>The same intercept (the starting point value)</li>
+<li>The same list of selected features (the ingredients that were chosen as important)</li>
+<li>The same configuration settings (like whether to use forward or backward selection)</li>
+<li>The same fitness calculator (the judge that evaluates model quality)</li>
+<li>The same model evaluator (the measurement tools that assess performance)</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Create a backup before further training or modification</li>
+<li>Create variations of the same model for different purposes</li>
+<li>Share the model while keeping your original intact</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the creation fails or required components are null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_Deserialize_" data-uid="AiDotNet.Regression.StepwiseRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.StepwiseRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the stepwise regression model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs the model from a byte array created by the Serialize method. It restores 
+the model's coefficients, selected features, and configuration options, allowing a previously saved model 
+to be loaded and used for predictions.
+</p>
+<p><b>For Beginners:</b> This method loads a saved model from computer memory.
+<p>Think of it like opening a saved document:</p>
+<ul>
+<li>It takes the byte array created by the Serialize method</li>
+<li>It rebuilds all the settings, coefficients, and the list of selected features</li>
+<li>The model is then ready to use for making predictions</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Use a previously trained model without having to train it again</li>
+<li>Load models that others have shared with you</li>
+<li>Use the same model across different applications</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_GetModelType_" data-uid="AiDotNet.Regression.StepwiseRegression`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_GetModelType" data-uid="AiDotNet.Regression.StepwiseRegression`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L460"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the type identifier for this regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd><p>The model type identifier for stepwise regression.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_GetModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the enum value that identifies this model as a stepwise regression model. This is used 
+for model identification in serialization/deserialization and for logging purposes.
+</p>
+<p><b>For Beginners:</b> This method simply tells the system what kind of model this is.
+<p>It's like a name tag for the model that says &quot;I am a stepwise regression model.&quot;
+This is useful when:</p>
+<ul>
+<li>Saving the model to a file</li>
+<li>Loading a model from a file</li>
+<li>Logging information about the model</li>
+</ul>
+<p>You generally won't need to call this method directly in your code.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_Predict_" data-uid="AiDotNet.Regression.StepwiseRegression`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.StepwiseRegression`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes predictions using only the selected features from the input matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input feature matrix to make predictions on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method filters the input matrix to only include the selected features
+before making predictions. This is necessary because stepwise regression
+selects a subset of features during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_Serialize_" data-uid="AiDotNet.Regression.StepwiseRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_Serialize" data-uid="AiDotNet.Regression.StepwiseRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the stepwise regression model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the model, including its coefficients, selected features, and configuration options, into a 
+byte array. This enables the model to be saved to a file, stored in a database, or transmitted over a network.
+</p>
+<p><b>For Beginners:</b> This method saves the model to computer memory so you can use it later.
+<p>Think of it like taking a snapshot of the model:</p>
+<ul>
+<li>It captures all the important values, settings, and the list of selected features</li>
+<li>It converts them into a format that can be easily stored</li>
+<li>The resulting byte array can be saved to a file or database</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Train the model once and use it many times</li>
+<li>Share the model with others</li>
+<li>Use the model in a different application</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_StepwiseRegression_1_Train_" data-uid="AiDotNet.Regression.StepwiseRegression`1.Train*"></a>
+
+  <h3 id="AiDotNet_Regression_StepwiseRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.StepwiseRegression`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the stepwise regression model using the provided input features and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input feature matrix, where rows represent observations and columns represent features.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector, containing the actual output values that the model should learn to predict.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_StepwiseRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the stepwise regression algorithm for feature selection. It:
+1. Validates the input data
+2. Performs either forward selection or backward elimination based on the specified method
+3. Trains a final multiple regression model using only the selected features
+<p>The result is a model that uses a subset of the original features, potentially improving
+both interpretability and predictive performance.</p>
+
+<p><b>For Beginners:</b> This method discovers which features are most important and builds your model.
+<p>The training process works like this:</p>
+<ol>
+<li><p>If using forward selection:</p>
+<ul>
+<li>Start with an empty recipe (no features)</li>
+<li>Try adding each available ingredient, one at a time</li>
+<li>Keep the ingredient that improves your recipe the most</li>
+<li>Repeat until adding more ingredients doesn't help much</li>
+</ul>
+</li>
+<li><p>If using backward elimination:</p>
+<ul>
+<li>Start with all ingredients in your recipe (all features)</li>
+<li>Try removing each ingredient, one at a time</li>
+<li>Remove the ingredient that hurts your recipe the least</li>
+<li>Repeat until removing more ingredients would harm the recipe too much</li>
+</ul>
+</li>
+<li><p>Finally, create a model using only the best ingredients (selected features)</p>
+</li>
+</ol>
+<p>This process helps you create a simpler, more efficient model that focuses only on
+the most important factors affecting your predictions.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when an unsupported stepwise method is specified in the options.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/StepwiseRegression.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

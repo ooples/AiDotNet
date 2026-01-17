@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICertifiedDefense&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICertifiedDefense&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for certified defense mechanisms that provide provable robustness guarantees.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ICertifiedDefense_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ICertifiedDefense%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ICertifiedDefense`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ICertifiedDefense_3" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3" class="text-break">
+Interface ICertifiedDefense&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for certified defense mechanisms that provide provable robustness guarantees.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICertifiedDefense&lt;T, TInput, TOutput&gt; : IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for the model (e.g., Vector&lt;T&gt;, string).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for the model (e.g., Vector&lt;T&gt;, int).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ICertifiedDefense_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Certified defenses provide mathematical guarantees that a model's predictions won't change
+within a specified perturbation radius, unlike heuristic defenses.</p>
+<p><b>For Beginners:</b> Think of certified defenses as &quot;guaranteed protection&quot; for your model.
+While regular defenses make models harder to fool, certified defenses can mathematically prove
+that no attack within certain limits can trick the model.</p>
+<p>Common certified defense methods include:</p>
+<ul>
+<li>Randomized Smoothing: Uses random noise to create certified predictions</li>
+<li>Interval Bound Propagation: Tracks ranges of possible values through the network</li>
+<li>CROWN: Computes certified bounds for neural network outputs</li>
+</ul>
+<p>Why certified defenses matter:</p>
+<ul>
+<li>They provide provable security guarantees</li>
+<li>They're essential for safety-critical applications</li>
+<li>They help meet regulatory requirements</li>
+<li>They give confidence bounds for predictions</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyBatch_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.CertifyBatch*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyBatch__1___AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.CertifyBatch(`1[],AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  CertifyBatch(TInput[], IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes certified predictions for a batch of inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CertifiedPrediction&lt;T&gt;[] CertifyBatch(TInput[] inputs, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> TInput[]</dt>
+    <dd><p>The batch of inputs to certify.</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to certify.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.CertifiedPrediction-1.html">CertifiedPrediction</a>&lt;T&gt;[]</dt>
+    <dd><p>Batch of certified prediction results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyBatch__1___AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the same as CertifyPrediction, but processes
+multiple inputs at once for efficiency.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyPrediction_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.CertifyPrediction*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyPrediction__1_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.CertifyPrediction(`1,AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  CertifyPrediction(TInput, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a certified prediction with robustness guarantees.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CertifiedPrediction&lt;T&gt; CertifyPrediction(TInput input, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input to make a certified prediction for.</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to certify.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.CertifiedPrediction-1.html">CertifiedPrediction</a>&lt;T&gt;</dt>
+    <dd><p>Certified prediction result with robustness radius.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICertifiedDefense_3_CertifyPrediction__1_AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a prediction that is guaranteed to be correct for all inputs
+within a specified perturbation radius.</p>
+<p><b>For Beginners:</b> This is like making a prediction with a &quot;warranty&quot;.
+The method tells you: &quot;I predict this class, and I guarantee that even if someone
+changes the input slightly (within specified limits), my prediction won't change.&quot;</p>
+<p>The process typically involves:</p>
+<ol>
+<li>Analyzing the input and model</li>
+<li>Computing bounds on what the model could output</li>
+<li>If all possible outputs within the bounds agree, the prediction is certified</li>
+<li>Returning both the prediction and the guaranteed radius of correctness</li>
+</ol>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_ComputeCertifiedRadius_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.ComputeCertifiedRadius*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_ComputeCertifiedRadius__1_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.ComputeCertifiedRadius(`1,AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ComputeCertifiedRadius(TInput, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the maximum perturbation radius that can be certified for an input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeCertifiedRadius(TInput input, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input to analyze.</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model being certified.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The maximum certified robustness radius.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICertifiedDefense_3_ComputeCertifiedRadius__1_AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how much an input can be changed while
+still guaranteeing the model's prediction stays the same. It's like measuring
+the &quot;safety zone&quot; around your input.</p>
+<p>For example, if the radius is 0.1, you can change pixel values by up to 0.1
+and the model is guaranteed to give the same answer.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_EvaluateCertifiedAccuracy_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.EvaluateCertifiedAccuracy*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_EvaluateCertifiedAccuracy__1____2___AiDotNet_Interfaces_IFullModel__0__1__2___0_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.EvaluateCertifiedAccuracy(`1[],`2[],AiDotNet.Interfaces.IFullModel{`0,`1,`2},`0)">
+  EvaluateCertifiedAccuracy(TInput[], TOutput[], IFullModel&lt;T, TInput, TOutput&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates certified accuracy on a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CertifiedAccuracyMetrics&lt;T&gt; EvaluateCertifiedAccuracy(TInput[] testData, TOutput[] labels, IFullModel&lt;T, TInput, TOutput&gt; model, T radius)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>testData</code> TInput[]</dt>
+    <dd><p>The test data to evaluate on.</p>
+</dd>
+    <dt><code>labels</code> TOutput[]</dt>
+    <dd><p>The true labels.</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to evaluate.</p>
+</dd>
+    <dt><code>radius</code> <span class="xref">T</span></dt>
+    <dd><p>The perturbation radius to certify.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.CertifiedAccuracyMetrics-1.html">CertifiedAccuracyMetrics</a>&lt;T&gt;</dt>
+    <dd><p>Certified accuracy metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICertifiedDefense_3_EvaluateCertifiedAccuracy__1____2___AiDotNet_Interfaces_IFullModel__0__1__2___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures what percentage of predictions can be
+certified as robust. Higher certified accuracy means more predictions have
+guaranteed robustness.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_GetOptions_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_GetOptions" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration options for the certified defense.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CertifiedDefenseOptions&lt;T&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.CertifiedDefenseOptions-1.html">CertifiedDefenseOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for the certified defense.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ICertifiedDefense_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These are the settings that control how certification works,
+like the number of samples to use or the tightness of bounds.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ICertifiedDefense_3_Reset_" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.Reset*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ICertifiedDefense_3_Reset" data-uid="AiDotNet.Interfaces.ICertifiedDefense`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the certified defense state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ICertifiedDefense.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

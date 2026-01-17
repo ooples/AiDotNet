@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ComplexMatrixDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ComplexMatrixDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A wrapper class that adapts a real-valued matrix decomposition to work with complex numbers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1" class="text-break">
+Class ComplexMatrixDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A wrapper class that adapts a real-valued matrix decomposition to work with complex numbers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ComplexMatrixDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;, IMatrixDecomposition&lt;Complex&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for the real and imaginary parts (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">ComplexMatrixDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.ValidateMatrix(Matrix&lt;Complex&lt;T&gt;&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.FrobeniusNorm(Matrix&lt;Complex&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;Complex&lt;T&gt;&gt;.ApproximatelyEqual(Complex&lt;T&gt;, Complex&lt;T&gt;, Complex&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class allows you to use existing matrix decomposition algorithms with complex numbers
+by wrapping a real-valued decomposition. Note that this implementation only works with
+matrices that have real values (the imaginary parts are all zero).
+</p>
+<p>
+<b>For Beginners:</b> This is a wrapper that lets you apply regular matrix decomposition methods
+to complex numbers. Complex numbers have both real and imaginary parts (like 3 + 4i), but this
+implementation currently works best when the imaginary parts are zero.
+</p>
+<p>
+Real-world applications:
+- Transitioning between real and complex number computations
+- Testing complex-valued algorithms with real-valued data
+- Quantum mechanics simulations with real-valued initial conditions
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1__ctor_AiDotNet_Interfaces_IMatrixDecomposition__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.#ctor(AiDotNet.Interfaces.IMatrixDecomposition{`0})">
+  ComplexMatrixDecomposition(IMatrixDecomposition&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new complex matrix decomposition by wrapping a real-valued decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComplexMatrixDecomposition(IMatrixDecomposition&lt;T&gt; baseDecomposition)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseDecomposition</code> <a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>The real-valued matrix decomposition to wrap.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposition is handled by the wrapped base decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the inverse of the original matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;Complex&lt;T&gt;&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The inverse of the original matrix as a complex matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The inverse of a matrix A is another matrix A^-1 such that A * A^-1 = I,
+where I is the identity matrix. This method uses the base decomposition
+to calculate the inverse and then converts it to complex form.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.ComplexMatrixDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  Solve(Vector&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a linear system of equations Ax = b, where A is the decomposed matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;Complex&lt;T&gt;&gt; Solve(Vector&lt;Complex&lt;T&gt;&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The right-hand side vector of the equation Ax = b.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The solution vector x that satisfies Ax = b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_ComplexMatrixDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method extracts the real parts of the input vector b, solves the system
+using the base decomposition, and then converts the solution back to complex form.</p>
+<p>Note: This implementation only works correctly when the input vector b has zero
+imaginary parts. For fully complex systems, a different implementation would be needed.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/ComplexMatrixDecomposition.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

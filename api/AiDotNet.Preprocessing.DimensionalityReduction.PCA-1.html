@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PCA&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PCA&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Principal Component Analysis for dimensionality reduction.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Preprocessing_DimensionalityReduction_PCA_1.md&amp;value=---%0Auid%3A%20AiDotNet.Preprocessing.DimensionalityReduction.PCA%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1">
+
+
+
+  <h1 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1" class="text-break">
+Class PCA&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Preprocessing.html">Preprocessing</a>.<a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.html">DimensionalityReduction</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Principal Component Analysis for dimensionality reduction.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PCA&lt;T&gt; : TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;, IDataTransformer&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html">TransformerBase</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">PCA&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_NumOps">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Engine">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_IsFitted">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.IsFitted</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_ColumnIndices">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.ColumnIndices</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_SupportsInverseTransform">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.SupportsInverseTransform</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Fit__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Fit(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_Transform__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.Transform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_FitTransform__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.FitTransform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_InverseTransform__2_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.InverseTransform(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_GetFeatureNamesOut_System_String___">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.GetFeatureNamesOut(string[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_FitCore__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.FitCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_TransformCore__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.TransformCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_InverseTransformCore__2_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.InverseTransformCore(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_ValidateInputData__1_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.ValidateInputData(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_EnsureFitted">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.EnsureFitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Preprocessing.TransformerBase-3.html#AiDotNet_Preprocessing_TransformerBase_3_GetColumnsToProcess_System_Int32_">TransformerBase&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt;.GetColumnsToProcess(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+PCA finds the directions of maximum variance in the data and projects the data
+onto these principal components. This reduces dimensionality while preserving
+as much variance as possible.
+</p>
+<p>
+PCA is useful for:
+- Reducing the number of features while retaining most information
+- Removing multicollinearity between features
+- Visualizing high-dimensional data
+- Noise reduction
+</p>
+<p><b>For Beginners:</b> PCA transforms your features into new features called
+"principal components" that are:
+- Uncorrelated with each other
+- Ordered by importance (how much variance they explain)
+- Linear combinations of your original features
+<p>Example: 100 features might be reduced to 10 principal components that capture
+95% of the information in your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1__ctor_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1__ctor_System_Nullable_System_Int32__System_Nullable_System_Double__System_Boolean_System_Int32___" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.#ctor(System.Nullable{System.Int32},System.Nullable{System.Double},System.Boolean,System.Int32[])">
+  PCA(int?, double?, bool, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of <a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.PCA-1.html">PCA&lt;T&gt;</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PCA(int? nComponents = null, double? varianceRatio = null, bool whiten = false, int[]? columnIndices = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nComponents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of components to keep. If null, keeps all.</p>
+</dd>
+    <dt><code>varianceRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Keep enough components to explain this variance ratio (0-1). Overrides nComponents if set.</p>
+</dd>
+    <dt><code>whiten</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, scale components to unit variance. Defaults to false.</p>
+</dd>
+    <dt><code>columnIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The column indices to use, or null for all columns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Components_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Components*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Components" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Components">
+  Components
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the principal components (each row is a component).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[,]? Components { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[,]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_ExplainedVariance_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.ExplainedVariance*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_ExplainedVariance" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.ExplainedVariance">
+  ExplainedVariance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the explained variance for each component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[]? ExplainedVariance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_ExplainedVarianceRatio_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.ExplainedVarianceRatio*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_ExplainedVarianceRatio" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.ExplainedVarianceRatio">
+  ExplainedVarianceRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the explained variance ratio for each component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[]? ExplainedVarianceRatio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Mean_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Mean*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Mean" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Mean">
+  Mean
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the mean of each feature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[]? Mean { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_NComponents_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.NComponents*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_NComponents" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.NComponents">
+  NComponents
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of components to keep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? NComponents { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_NComponentsOut_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.NComponentsOut*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_NComponentsOut" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.NComponentsOut">
+  NComponentsOut
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of components after fitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NComponentsOut { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_SingularValues_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.SingularValues*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_SingularValues" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.SingularValues">
+  SingularValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the singular values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[]? SingularValues { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_SupportsInverseTransform_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.SupportsInverseTransform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_SupportsInverseTransform" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.SupportsInverseTransform">
+  SupportsInverseTransform
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this transformer supports inverse transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsInverseTransform { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_VarianceRatio_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.VarianceRatio*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_VarianceRatio" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.VarianceRatio">
+  VarianceRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target variance ratio to retain.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? VarianceRatio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Whiten_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Whiten*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_Whiten" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.Whiten">
+  Whiten
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether whitening is applied.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Whiten { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_FitCore_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.FitCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_FitCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.FitCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FitCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fits PCA by computing principal components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void FitCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The training data matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_GetFeatureNamesOut_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.GetFeatureNamesOut*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_GetFeatureNamesOut_System_String___" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.GetFeatureNamesOut(System.String[])">
+  GetFeatureNamesOut(string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L413"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output feature names after transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputFeatureNames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_InverseTransformCore_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.InverseTransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_InverseTransformCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.InverseTransformCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  InverseTransformCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L378"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms data back to original space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Matrix&lt;T&gt; InverseTransformCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Data in original feature space.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_TransformCore_" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.TransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_DimensionalityReduction_PCA_1_TransformCore_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Preprocessing.DimensionalityReduction.PCA`1.TransformCore(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  TransformCore(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms the data by projecting onto principal components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Matrix&lt;T&gt; TransformCore(Matrix&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The data to transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/DimensionalityReduction/PCA.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

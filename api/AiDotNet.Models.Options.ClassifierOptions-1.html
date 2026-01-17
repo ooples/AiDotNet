@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClassifierOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClassifierOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for classification models, which are machine learning methods used to predict categorical outcomes (discrete classes) rather than continuous values.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ClassifierOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ClassifierOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ClassifierOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ClassifierOptions_1" data-uid="AiDotNet.Models.Options.ClassifierOptions`1" class="text-break">
+Class ClassifierOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for classification models, which are machine learning methods used to
+predict categorical outcomes (discrete classes) rather than continuous values.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ClassifierOptions&lt;T&gt; : ModelOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the classifier model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><span class="xref">ClassifierOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Classification.DiscriminantAnalysis.DiscriminantAnalysisOptions-1.html">DiscriminantAnalysisOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Classification.Meta.MetaClassifierOptions-1.html">MetaClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.AdaBoostClassifierOptions-1.html">AdaBoostClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DecisionTreeClassifierOptions-1.html">DecisionTreeClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ExtraTreesClassifierOptions-1.html">ExtraTreesClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBoostingClassifierOptions-1.html">GradientBoostingClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.KNeighborsOptions-1.html">KNeighborsOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LinearClassifierOptions-1.html">LinearClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NaiveBayesOptions-1.html">NaiveBayesOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RandomForestClassifierOptions-1.html">RandomForestClassifierOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SVMOptions-1.html">SVMOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ClassifierOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Classification is a supervised learning technique where the goal is to predict which category
+or categories a sample belongs to. This class provides base configuration options for all
+classification models, with specific classifiers potentially extending these options.
+</p>
+<p><b>For Beginners:</b> Classification is about predicting categories, not numbers.
+<p>Think of examples like:</p>
+<ul>
+<li>Is this email spam or not? (Binary classification)</li>
+<li>What type of animal is in this picture? (Multi-class classification)</li>
+<li>What topics does this article cover? (Multi-label classification)</li>
+<li>How satisfied is this customer? (Ordinal classification)</li>
+</ul>
+<p>This class lets you configure how the classification model is set up and trained.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ClassifierOptions_1_ClassWeights_" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.ClassWeights*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ClassifierOptions_1_ClassWeights" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.ClassWeights">
+  ClassWeights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom class weights for each class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[]? ClassWeights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>An array of weights corresponding to each class, or null to use default weights.
+When UseClassWeights is true and this is null, weights are computed automatically.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ClassifierOptions_1_ClassWeights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Custom class weights allow fine-grained control over the importance of each class.
+This can be useful when the cost of misclassification varies by class in ways
+that are not captured by simple frequency-based weighting.
+</p>
+<p><b>For Beginners:</b> Sometimes you want specific control over how much each class "counts."
+<p>Example: In a medical diagnosis scenario with 3 conditions:</p>
+<ul>
+<li>Class 0: Common cold (low severity)</li>
+<li>Class 1: Flu (moderate severity)</li>
+<li>Class 2: Serious illness (high severity)</li>
+</ul>
+<p>You might set ClassWeights = [1.0, 2.0, 10.0] to make the model
+try extra hard not to miss the serious illness.</p>
+<p>The weights don't need to sum to 1 or match any particular formula -
+they just indicate relative importance. A weight of 10.0 means that class
+is considered 10x as important as a class with weight 1.0.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ClassifierOptions_1_DecisionThreshold_" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.DecisionThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ClassifierOptions_1_DecisionThreshold" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.DecisionThreshold">
+  DecisionThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DecisionThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_ClassifierOptions_1_TaskType_" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.TaskType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ClassifierOptions_1_TaskType" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.TaskType">
+  TaskType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of classification task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClassificationTaskType TaskType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ClassificationTaskType.html">ClassificationTaskType</a></dt>
+    <dd><p>The classification task type. Default is Binary, which assumes a two-class problem.
+The task type will be automatically inferred from training data if not explicitly set.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ClassifierOptions_1_TaskType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The task type determines how the model interprets targets and outputs predictions.
+While this can be set explicitly, most classifiers will automatically detect the
+appropriate task type based on the training data.
+</p>
+<p><b>For Beginners:</b> This tells the model what kind of classification problem you're solving.
+<ul>
+<li>Binary: Two classes (yes/no, spam/not-spam)</li>
+<li>MultiClass: Multiple exclusive classes (pick exactly one)</li>
+<li>MultiLabel: Multiple non-exclusive labels (pick all that apply)</li>
+<li>Ordinal: Ordered classes (poor/fair/good/excellent)</li>
+</ul>
+<p>Usually, you don't need to set this manually - the model will figure it out
+from your training data. But you can set it explicitly if needed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ClassifierOptions_1_UseClassWeights_" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.UseClassWeights*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ClassifierOptions_1_UseClassWeights" data-uid="AiDotNet.Models.Options.ClassifierOptions`1.UseClassWeights">
+  UseClassWeights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use class weights to handle imbalanced datasets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseClassWeights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to automatically compute class weights inversely proportional to class frequencies.
+False (default) to treat all classes equally.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ClassifierOptions_1_UseClassWeights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Class weights help address class imbalance by giving more importance to
+minority classes during training. When enabled, the weight for each class
+is typically computed as n_samples / (n_classes * n_samples_per_class).
+</p>
+<p><b>For Beginners:</b> Real-world data is often imbalanced - one category appears much
+more often than others.
+<p>Example: In fraud detection, 99% of transactions are legitimate, 1% are fraudulent.
+Without class weights, the model might just predict &quot;legitimate&quot; for everything
+and still get 99% accuracy - but it would miss all the fraud!</p>
+<p>With UseClassWeights = true:</p>
+<ul>
+<li>Rare classes get higher weight (fraud becomes &quot;worth&quot; more)</li>
+<li>Common classes get lower weight (legitimate becomes &quot;worth&quot; less)</li>
+<li>The model is incentivized to correctly classify both types</li>
+</ul>
+<p>Enable this when your classes have very different frequencies.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ClassifierOptions.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

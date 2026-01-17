@@ -1,0 +1,2541 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PredictionModelResultOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PredictionModelResultOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the configuration options for creating a PredictionModelResult.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_PredictionModelResultOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.PredictionModelResultOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_PredictionModelResultOptions_3" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3" class="text-break">
+Class PredictionModelResultOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the configuration options for creating a PredictionModelResult.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PredictionModelResultOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output predictions (e.g., Vector&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PredictionModelResultOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class consolidates all the configuration parameters needed to construct a PredictionModelResult
+into a single, organized object. Instead of passing 20+ parameters to constructors, this options
+class groups related settings together for better readability and maintainability.
+</p>
+<p>
+The options are organized into logical categories:
+<ul><li>Core Model: The trained model and its optimization/normalization data</li><li>Ethical AI: Bias detection and fairness evaluation components</li><li>RAG: Retrieval-Augmented Generation components for document retrieval</li><li>Graph RAG: Knowledge graph components for enhanced retrieval</li><li>Prompt Engineering: Templates, chains, optimizers, and analysis tools</li><li>Fine-tuning: LoRA and meta-learning configurations</li><li>Agent &amp; Reasoning: AI agent and advanced reasoning configurations</li><li>Deployment: Export, caching, versioning, and telemetry settings</li><li>Inference: JIT compilation and optimization configurations</li><li>Tokenization: Text tokenizer and configuration</li></ul>
+
+<p><b>For Beginners:</b> This class is like a settings container for creating a trained model.
+<p>Instead of writing code like this (hard to read):</p>
+<pre><code class="lang-csharp">var result = new PredictionModelResult(opt, norm, bias, fair, ret, rerank, gen, ...20 more);</code></pre>
+<p>You can write this (easy to read):</p>
+<pre><code class="lang-csharp">var options = new PredictionModelResultOptions&lt;double, Matrix, Vector&gt;
+{
+    OptimizationResult = opt,
+    NormalizationInfo = norm,
+    BiasDetector = bias,
+    PromptTemplate = myTemplate,
+    // ... only set what you need
+};
+var result = new PredictionModelResult(options);</code></pre>
+<p>Benefits:</p>
+<ul>
+<li>You only set the options you need (everything else has sensible defaults)</li>
+<li>Named properties make it clear what each setting does</li>
+<li>Easy to see all available settings via IntelliSense</li>
+<li>Adding new options doesn't break existing code</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AgentConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AgentConfig">
+  AgentConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L500"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the agent configuration for AI assistance during inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentConfiguration&lt;T&gt;? AgentConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentConfiguration-1.html">AgentConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains API keys, model settings, and other configuration needed to use
+AI agents for assistance during model building or inference.
+</p>
+<p><b>For Beginners:</b> This stores settings for using AI assistants (like GPT-4)
+to help with model decisions. The API key is stored here securely.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentRecommendation_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AgentRecommendation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentRecommendation" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AgentRecommendation">
+  AgentRecommendation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L514"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the agent's recommendations from model building.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AgentRecommendation&lt;T, TInput, TOutput&gt;? AgentRecommendation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.AgentRecommendation-3.html">AgentRecommendation</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AgentRecommendation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains recommendations made by AI agents during model selection and tuning,
+including suggested model types, hyperparameters, and reasoning.
+</p>
+<p><b>For Beginners:</b> If an AI helped choose your model type and settings,
+this stores what it recommended and why.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AugmentationConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AugmentationConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AugmentationConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AugmentationConfig">
+  AugmentationConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L609"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the unified augmentation configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AugmentationConfig? AugmentationConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.AugmentationConfig.html">AugmentationConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AugmentationConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This configuration covers both training-time augmentation and Test-Time
+Augmentation (TTA) for improved inference accuracy. It includes:
+- Core settings (enabled, probability, seed)
+- TTA settings (enabled by default, aggregation method)
+- Modality-specific settings (image, tabular, audio, text, video)
+</p>
+<p><b>For Beginners:</b> Augmentation creates variations of your data:
+- During training: Helps the model learn to recognize objects regardless of orientation, lighting, etc.
+- During inference (TTA): Makes predictions on multiple variations and combines them for better accuracy.
+<p>Example use cases:</p>
+<ul>
+<li>Image classification: Train on flipped, rotated versions; predict on multiple views</li>
+<li>Tabular data: Add noise, apply MixUp for regularization</li>
+<li>Audio: Apply time stretch, pitch shift for robustness</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AutoMLSummary_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AutoMLSummary*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AutoMLSummary" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.AutoMLSummary">
+  AutoMLSummary
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional AutoML run summary for this trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AutoMLRunSummary? AutoMLSummary { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.AutoMLRunSummary.html">AutoMLRunSummary</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_AutoMLSummary_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is intended for facade outputs and should not contain hyperparameter values, weights, or other
+sensitive implementation details. If AutoML was not used, this can be null.
+</p>
+<p><b>For Beginners:</b> If you used AutoML, this stores a short history of the AutoML search
+(how many trials ran and what the scores looked like), without exposing internal tuning details.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BenchmarkReport_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.BenchmarkReport*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BenchmarkReport" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.BenchmarkReport">
+  BenchmarkReport
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L987"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the most recent benchmark report produced during model build/evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BenchmarkReport? BenchmarkReport { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Benchmarking.Models.BenchmarkReport.html">BenchmarkReport</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BenchmarkReport_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is populated when the user enables benchmarking through the facade (for example,
+<code>PredictionModelBuilder.ConfigureBenchmarking(...)</code>) and a benchmark report is generated.
+</p>
+<p><b>For Beginners:</b> This is the "report card" produced when you run benchmark suites
+like GSM8K or MMLU. It contains summary metrics and timing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BiasDetector_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.BiasDetector*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BiasDetector" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.BiasDetector">
+  BiasDetector
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bias detector for identifying potential biases in model predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IBiasDetector&lt;T&gt;? BiasDetector { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IBiasDetector-1.html">IBiasDetector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_BiasDetector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set, enables bias detection capabilities on the resulting model.
+Use this to check if your model treats different demographic groups fairly.
+</p>
+<p><b>For Beginners:</b> This helps you check if your model is unfair to certain groups.
+For example, it can detect if a loan approval model treats men and women differently.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointManager_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CheckpointManager*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointManager" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CheckpointManager">
+  CheckpointManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L919"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the checkpoint manager for model persistence operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICheckpointManager&lt;T, TInput, TOutput&gt;? CheckpointManager { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ICheckpointManager-3.html">ICheckpointManager</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointManager_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Provides access to checkpoint operations including saving updated models,
+listing available checkpoints, and managing checkpoint lifecycle.
+</p>
+<p><b>For Beginners:</b> This manages saved copies of your model. You can use it to:
+- Save the model after making changes (like fine-tuning)
+- List all saved checkpoints
+- Load different versions of your model
+- Clean up old checkpoints to save disk space
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointPath_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CheckpointPath*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointPath" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CheckpointPath">
+  CheckpointPath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L809"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the checkpoint path where the model was saved during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? CheckpointPath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CheckpointPath_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When checkpoint management is configured, this contains the path to the
+best or latest checkpoint, enabling training resumption or model loading.
+</p>
+<p><b>For Beginners:</b> This is where your model was saved during training.
+If training is interrupted, you can resume from this checkpoint.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CrossValidationResult_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CrossValidationResult*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CrossValidationResult" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.CrossValidationResult">
+  CrossValidationResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L482"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results from cross-validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CrossValidationResult&lt;T, TInput, TOutput&gt;? CrossValidationResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.CrossValidationResult-3.html">CrossValidationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_CrossValidationResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains fold-by-fold performance metrics and aggregated statistics from
+cross-validation, helping assess model consistency and generalization.
+</p>
+<p><b>For Beginners:</b> Cross-validation tests your model multiple times on different
+parts of the data. This stores all those test results so you can see how consistently
+your model performs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DataVersionHash_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.DataVersionHash*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DataVersionHash" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.DataVersionHash">
+  DataVersionHash
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L823"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the data version hash for the training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? DataVersionHash { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DataVersionHash_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When data version control is configured, this contains a hash that uniquely
+identifies the training data used, enabling reproducibility.
+</p>
+<p><b>For Beginners:</b> This is a fingerprint of your training data.
+It ensures you can always know exactly what data was used to train this model.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DeploymentConfiguration_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.DeploymentConfiguration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DeploymentConfiguration" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.DeploymentConfiguration">
+  DeploymentConfiguration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L550"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the deployment configuration for model export and production use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeploymentConfiguration? DeploymentConfiguration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Deployment.Configuration.DeploymentConfiguration.html">DeploymentConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_DeploymentConfiguration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Aggregates all deployment-related settings including quantization, caching,
+versioning, A/B testing, telemetry, and export configurations.
+</p>
+<p><b>For Beginners:</b> This contains all the settings for using your model in production:
+- Quantization: Make the model smaller/faster
+- Caching: Remember previous predictions
+- Versioning: Track different model versions
+- A/B Testing: Compare model versions
+- Telemetry: Monitor performance
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentId_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentId*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentId" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentId">
+  ExperimentId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L767"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the experiment ID that this run belongs to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ExperimentId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentId_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The experiment ID groups related training runs together for organization
+and comparison purposes.
+</p>
+<p><b>For Beginners:</b> This groups training runs together.
+For example, all runs testing different learning rates might belong to the same experiment.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRun_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentRun*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRun" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentRun">
+  ExperimentRun
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L885"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the experiment run associated with this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IExperimentRun&lt;T&gt;? ExperimentRun { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IExperimentRun-1.html">IExperimentRun</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRun_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When experiment tracking was used during training, this provides direct access
+to the run object for logging additional metrics, artifacts, or notes post-training.
+</p>
+<p><b>For Beginners:</b> This is the training session record. You can use it to:
+- Log additional metrics after training completes
+- Add notes about model performance in production
+- Record artifacts like deployment logs
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRunId_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentRunId*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRunId" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentRunId">
+  ExperimentRunId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L753"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the experiment run ID from experiment tracking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ExperimentRunId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentRunId_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When experiment tracking is configured, this contains the unique identifier
+for the training run, enabling reproducibility and comparison with other runs.
+</p>
+<p><b>For Beginners:</b> This is a unique ID for your training session.
+You can use it to find and compare this training run with others later.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentTracker_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentTracker*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentTracker" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ExperimentTracker">
+  ExperimentTracker
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L902"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the experiment tracker used during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IExperimentTracker&lt;T&gt;? ExperimentTracker { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IExperimentTracker-1.html">IExperimentTracker</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ExperimentTracker_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Provides access to the experiment tracking system for retrieving other runs,
+creating comparison reports, or starting new related experiments.
+</p>
+<p><b>For Beginners:</b> This gives you access to the experiment tracking system.
+You can use it to:
+- Compare this model with other training runs
+- Find the best-performing model from an experiment
+- Start new training runs based on this one
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FairnessEvaluator_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.FairnessEvaluator*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FairnessEvaluator" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.FairnessEvaluator">
+  FairnessEvaluator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fairness evaluator for computing fairness metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFairnessEvaluator&lt;T&gt;? FairnessEvaluator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFairnessEvaluator-1.html">IFairnessEvaluator</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FairnessEvaluator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set, enables fairness evaluation capabilities including demographic parity,
+equalized odds, and other fairness metrics.
+</p>
+<p><b>For Beginners:</b> This calculates specific numbers that tell you how fair your model is.
+Higher fairness scores mean your model treats different groups more equally.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FewShotExampleSelector_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.FewShotExampleSelector*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FewShotExampleSelector" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.FewShotExampleSelector">
+  FewShotExampleSelector
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the few-shot example selector for choosing examples to include in prompts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFewShotExampleSelector&lt;T&gt;? FewShotExampleSelector { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFewShotExampleSelector-1.html">IFewShotExampleSelector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_FewShotExampleSelector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A few-shot example selector chooses the most relevant examples to include in prompts
+based on the current query. Strategies include random, fixed, semantic similarity,
+diversity-based, and clustering-based selection.
+</p>
+<p><b>For Beginners:</b> When you want to show the AI examples of what you want,
+this picks the best examples to show based on your current question.
+<p>For example, if you're translating a technical document, it picks technical examples
+rather than casual conversation examples.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_GraphStore_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.GraphStore*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_GraphStore" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.GraphStore">
+  GraphStore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the graph store backend for persistent graph storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGraphStore&lt;T&gt;? GraphStore { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGraphStore-1.html">IGraphStore</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_GraphStore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Provides the underlying storage mechanism for the knowledge graph,
+supporting persistence, transactions, and efficient graph traversal.
+</p>
+<p><b>For Beginners:</b> This is the database that stores your knowledge graph.
+It keeps the graph saved even when your program restarts.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HybridGraphRetriever_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HybridGraphRetriever*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HybridGraphRetriever" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HybridGraphRetriever">
+  HybridGraphRetriever
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hybrid retriever combining vector search with graph traversal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HybridGraphRetriever&lt;T&gt;? HybridGraphRetriever { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.HybridGraphRetriever-1.html">HybridGraphRetriever</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HybridGraphRetriever_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Combines traditional vector similarity search with knowledge graph traversal,
+providing richer context by following entity relationships.
+</p>
+<p><b>For Beginners:</b> This combines regular search with following connections in
+the knowledge graph. It finds documents that are similar AND documents about related topics.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterOptimizationResult_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HyperparameterOptimizationResult*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterOptimizationResult" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HyperparameterOptimizationResult">
+  HyperparameterOptimizationResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L973"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hyperparameter optimization result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HyperparameterOptimizationResult&lt;T&gt;? HyperparameterOptimizationResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.HyperparameterOptimizationResult-1.html">HyperparameterOptimizationResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterOptimizationResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When hyperparameter optimization was used, this contains the complete results
+including all tried configurations and their scores.
+</p>
+<p><b>For Beginners:</b> If an optimizer searched for the best settings,
+this contains all the configurations it tried and how well each performed.
+You can use it to:
+- See which hyperparameters were most important
+- Find patterns in what made training successful
+- Continue optimization from where it left off
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterTrialId_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HyperparameterTrialId*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterTrialId" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.HyperparameterTrialId">
+  HyperparameterTrialId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L837"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hyperparameter optimization trial ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? HyperparameterTrialId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_HyperparameterTrialId_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When hyperparameter optimization is used, this identifies which trial
+produced this model, linking back to the optimization history.
+</p>
+<p><b>For Beginners:</b> If an optimizer searched for the best settings,
+this tells you which attempt (trial) produced this model.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Hyperparameters_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Hyperparameters*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Hyperparameters" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Hyperparameters">
+  Hyperparameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L851"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hyperparameters used for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt;? Hyperparameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Hyperparameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A dictionary of hyperparameter names to values that were used during training,
+enabling reproducibility and comparison between runs.
+</p>
+<p><b>For Beginners:</b> These are the settings (like learning rate, batch size)
+that were used to train your model. Saving them lets you reproduce the training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_InferenceOptimizationConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.InferenceOptimizationConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_InferenceOptimizationConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.InferenceOptimizationConfig">
+  InferenceOptimizationConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L582"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the inference optimization configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InferenceOptimizationConfig? InferenceOptimizationConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.InferenceOptimizationConfig.html">InferenceOptimizationConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_InferenceOptimizationConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains settings for runtime inference optimizations including batch processing,
+memory management, and computational optimizations.
+</p>
+<p><b>For Beginners:</b> This controls how predictions are made at runtime.
+You can tune settings like batch size and memory usage for your specific hardware.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_JitCompiledFunction_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.JitCompiledFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_JitCompiledFunction" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.JitCompiledFunction">
+  JitCompiledFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L568"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the JIT-compiled prediction function for accelerated inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt;? JitCompiledFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_JitCompiledFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When JIT compilation is enabled and the model supports it, this contains
+a pre-compiled, optimized version of the prediction function for faster inference.
+</p>
+<p><b>For Beginners:</b> This is a speed-optimized version of your model's prediction code.
+When available, it can make predictions 5-10x faster than the normal code path.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_KnowledgeGraph_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.KnowledgeGraph*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_KnowledgeGraph" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.KnowledgeGraph">
+  KnowledgeGraph
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the knowledge graph for entity-relationship-based retrieval.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KnowledgeGraph&lt;T&gt;? KnowledgeGraph { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_KnowledgeGraph_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The knowledge graph stores entities (people, places, concepts) and their relationships,
+enabling retrieval that follows semantic connections beyond simple text similarity.
+</p>
+<p><b>For Beginners:</b> This is like a web of connected facts. When you ask a question,
+it can follow connections like "Einstein worked at Princeton" to find related information.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_LoRAConfiguration_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.LoRAConfiguration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_LoRAConfiguration" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.LoRAConfiguration">
+  LoRAConfiguration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L435"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the LoRA configuration for parameter-efficient fine-tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILoRAConfiguration&lt;T&gt;? LoRAConfiguration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILoRAConfiguration-1.html">ILoRAConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_LoRAConfiguration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+LoRA (Low-Rank Adaptation) enables efficient fine-tuning by adding small adapter
+layers instead of modifying all model parameters. This makes adaptation faster
+and requires less memory.
+</p>
+<p><b>For Beginners:</b> This allows you to customize the model for your specific use
+without retraining the whole thing. It's much faster and cheaper than full fine-tuning.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MemoryConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MemoryConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MemoryConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MemoryConfig">
+  MemoryConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the memory management configuration for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingMemoryConfig? MemoryConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MemoryConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Memory management includes gradient checkpointing, activation pooling,
+and model sharding to enable training of larger models.
+</p>
+<p><b>For Beginners:</b> This configuration helps you train larger models
+by optimizing how memory is used during training. It can reduce memory usage
+by 40-50% at the cost of ~30% extra compute time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaLearner_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MetaLearner*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaLearner" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MetaLearner">
+  MetaLearner
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta-learner for few-shot adaptation capabilities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearner&lt;T, TInput, TOutput&gt;? MetaLearner { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearner-3.html">IMetaLearner</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaLearner_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+If the model was trained using meta-learning (MAML, Reptile, SEAL), this contains
+the meta-learner that can quickly adapt the model to new tasks with just a few examples.
+</p>
+<p><b>For Beginners:</b> This is for models trained to "learn how to learn."
+With just 5-10 examples, it can adapt the model to a completely new task.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaTrainingResult_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MetaTrainingResult*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaTrainingResult" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.MetaTrainingResult">
+  MetaTrainingResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L463"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results from meta-learning training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaTrainingResult&lt;T&gt;? MetaTrainingResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.MetaTrainingResult-1.html">MetaTrainingResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_MetaTrainingResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains performance history and statistics from the meta-training process,
+including loss curves, accuracy across different tasks, and convergence information.
+</p>
+<p><b>For Beginners:</b> This shows how well the meta-learning training went.
+It includes charts of how the model improved during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Model_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Model*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Model" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the trained model used for making predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Model_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the actual model that will perform predictions. If not set explicitly,
+it will be derived from OptimizationResult.BestSolution during construction.
+</p>
+<p><b>For Beginners:</b> This is the "brain" of your prediction system.
+Usually you don't need to set this directly - it comes from the optimization result.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelRegistry_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ModelRegistry*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelRegistry" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ModelRegistry">
+  ModelRegistry
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L937"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model registry for version and lifecycle management.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IModelRegistry&lt;T, TInput, TOutput&gt;? ModelRegistry { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelRegistry-3.html">IModelRegistry</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelRegistry_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Provides access to the model registry for transitioning model stages,
+registering new versions, and managing model lifecycle.
+</p>
+<p><b>For Beginners:</b> This is like a version control system for your models.
+You can use it to:
+- Promote this model from "Staging" to "Production"
+- Register fine-tuned versions as new model versions
+- Archive old models that are no longer needed
+- Compare performance across model versions
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelVersion_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ModelVersion*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelVersion" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ModelVersion">
+  ModelVersion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L781"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model version from the model registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? ModelVersion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ModelVersion_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When model registry is configured, this contains the version number
+assigned to this model, enabling version tracking and rollback.
+</p>
+<p><b>For Beginners:</b> This is the version number of your model.
+Like software versions (v1.0, v2.0), this helps track model improvements over time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_NormalizationInfo_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.NormalizationInfo*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_NormalizationInfo" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.NormalizationInfo">
+  NormalizationInfo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the normalization information for preprocessing and postprocessing data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NormalizationInfo&lt;T, TInput, TOutput&gt;? NormalizationInfo { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.NormalizationInfo-3.html">NormalizationInfo</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_NormalizationInfo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Stores the normalization parameters used during training so that new input data
+can be normalized the same way, and predictions can be denormalized to original scale.
+</p>
+<p><b>For Beginners:</b> This remembers how your training data was scaled.
+When you make predictions on new data, it applies the same scaling so the model
+understands the input correctly.
+</p>
+<p><b>Note:</b> This is the legacy normalization system. For new code, prefer using
+<a class="xref" href="AiDotNet.Models.Options.PredictionModelResultOptions-3.html#AiDotNet_Models_Options_PredictionModelResultOptions_3_PreprocessingInfo">PreprocessingInfo</a> which provides a more flexible pipeline-based approach.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_OptimizationResult_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.OptimizationResult*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_OptimizationResult" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.OptimizationResult">
+  OptimizationResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results of the optimization process that created the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt;? OptimizationResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_OptimizationResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains detailed information about how the model was trained, including performance
+metrics on training, validation, and test datasets, as well as the training history.
+</p>
+<p><b>For Beginners:</b> This stores information about how well your model was trained.
+It includes scores like R-squared, RMSE, and tells you if the model might be overfitting.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PreprocessingInfo_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PreprocessingInfo*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PreprocessingInfo" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PreprocessingInfo">
+  PreprocessingInfo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the preprocessing pipeline information for data transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PreprocessingInfo&lt;T, TInput, TOutput&gt;? PreprocessingInfo { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Preprocessing.PreprocessingInfo-3.html">PreprocessingInfo</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PreprocessingInfo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Stores the fitted preprocessing pipeline used during training so that new input data
+can be transformed the same way. This replaces the legacy <a class="xref" href="AiDotNet.Models.Options.PredictionModelResultOptions-3.html#AiDotNet_Models_Options_PredictionModelResultOptions_3_NormalizationInfo">NormalizationInfo</a>
+with a more flexible, composable pipeline approach supporting scalers, encoders, imputers,
+and feature generators.
+</p>
+<p><b>For Beginners:</b> This remembers all the data transformations applied during training:
+- Scaling (StandardScaler, MinMaxScaler, etc.)
+- Encoding (OneHotEncoder, LabelEncoder, etc.)
+- Missing value handling (SimpleImputer, KNNImputer, etc.)
+- Feature generation (PolynomialFeatures, SplineTransformer, etc.)
+<p>When you make predictions on new data, it applies the same transformations so the model
+understands the input correctly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProfilingReport_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProfilingReport*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProfilingReport" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProfilingReport">
+  ProfilingReport
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L720"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the profiling report from training and inference operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProfileReport? ProfilingReport { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diagnostics.ProfileReport.html">ProfileReport</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProfilingReport_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains comprehensive profiling data collected during model training including
+operation timing, memory allocations, and performance statistics with percentiles.
+</p>
+<p><b>For Beginners:</b> This shows you how long different parts of training took.
+It includes:
+- How long each operation took (e.g., forward pass, backward pass)
+- Memory usage during training
+- Performance percentiles (P50, P95, P99) for statistical analysis
+- Identification of performance bottlenecks
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisModel_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisModel" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisModel">
+  ProgramSynthesisModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L677"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Program Synthesis model used for code tasks (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;? ProgramSynthesisModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Program Synthesis is independent of the main prediction model. This allows a single <code>PredictionModelResult</code>
+to expose code-task capabilities even when the primary model uses non-tensor data types (for example,
+<code>Vector&lt;T&gt;</code> or <code>Matrix&lt;T&gt;</code>).
+</p>
+<p><b>For Beginners:</b> This is the specialized model used for code-related tasks such as code generation or repair.
+You typically configure this via <code>PredictionModelBuilder.ConfigureProgramSynthesis(...)</code>.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClient_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisServingClient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClient" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisServingClient">
+  ProgramSynthesisServingClient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L693"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Program Synthesis Serving client (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IProgramSynthesisServingClient? ProgramSynthesisServingClient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Serving.IProgramSynthesisServingClient.html">IProgramSynthesisServingClient</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When provided, Program Synthesis inference (code tasks, sandboxed execution, evaluation) can be routed through
+<code>AiDotNet.Serving</code> by default to isolate untrusted code and keep proprietary logic on the server side.
+</p>
+<p><b>For Beginners:</b> This lets your app call a secure server to run code tasks safely.
+<p>Instead of running code on your machine (which can be unsafe), you can point AiDotNet to a Serving instance that
+runs everything in a sandbox.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClientOptions_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisServingClientOptions*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClientOptions" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ProgramSynthesisServingClientOptions">
+  ProgramSynthesisServingClientOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L698"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the options used to create a default <a class="xref" href="AiDotNet.Models.Options.PredictionModelResultOptions-3.html#AiDotNet_Models_Options_PredictionModelResultOptions_3_ProgramSynthesisServingClient">ProgramSynthesisServingClient</a> when no explicit client is provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ProgramSynthesis.Serving.ProgramSynthesisServingClientOptions.html">ProgramSynthesisServingClientOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptAnalyzer_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptAnalyzer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptAnalyzer" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptAnalyzer">
+  PromptAnalyzer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L402"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt analyzer for computing prompt metrics and validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPromptAnalyzer? PromptAnalyzer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptAnalyzer.html">IPromptAnalyzer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptAnalyzer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The prompt analyzer computes metrics like token count, estimated cost, complexity score,
+and validates prompts for potential issues before sending them to an LLM.
+</p>
+<p><b>For Beginners:</b> This checks your prompts before you use them.
+It tells you how many tokens they use (affecting cost), how complex they are,
+and warns you about potential problems.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptChain_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptChain*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptChain" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptChain">
+  PromptChain
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L354"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt chain for composing multiple operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IChain&lt;string, string&gt;? PromptChain { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IChain-2.html">IChain</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptChain_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A chain orchestrates multiple language model calls, tools, and transformations
+into a cohesive workflow. Chains can be sequential, conditional, or parallel.
+</p>
+<p><b>For Beginners:</b> This connects multiple AI steps together like a recipe.
+<p>Example workflow:</p>
+<ol>
+<li>Classify the customer email (is it a complaint, question, or praise?)</li>
+<li>Route to the appropriate response template</li>
+<li>Generate a personalized response</li>
+</ol>
+<p>The chain handles all these steps automatically.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptCompressor_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptCompressor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptCompressor" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptCompressor">
+  PromptCompressor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L416"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt compressor for reducing token counts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPromptCompressor? PromptCompressor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptCompressor.html">IPromptCompressor</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptCompressor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The prompt compressor reduces the token count of prompts while preserving their
+semantic meaning. This can significantly reduce API costs for long prompts.
+</p>
+<p><b>For Beginners:</b> This makes your prompts shorter without losing meaning.
+Shorter prompts cost less money when using paid AI services like GPT-4 or Claude.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptOptimizer_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptOptimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptOptimizer" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptOptimizer">
+  PromptOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L369"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt optimizer for automatically improving prompts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPromptOptimizer&lt;T&gt;? PromptOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptOptimizer-1.html">IPromptOptimizer</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptOptimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A prompt optimizer automatically refines prompts to achieve better performance
+on a specific task. Strategies include discrete search, gradient-based methods,
+evolutionary algorithms, and Bayesian optimization.
+</p>
+<p><b>For Beginners:</b> This automatically improves your prompts by trying variations
+and keeping the ones that work best. It's like A/B testing for prompts.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptTemplate_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptTemplate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptTemplate" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.PromptTemplate">
+  PromptTemplate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prompt template for formatting model inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPromptTemplate? PromptTemplate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_PromptTemplate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A prompt template provides a reusable structure for creating prompts with variable
+placeholders that can be filled in at runtime.
+</p>
+<p><b>For Beginners:</b> This is like a fill-in-the-blank form for creating prompts.
+<p>Example:</p>
+<pre><code class="lang-csharp">var template = new SimplePromptTemplate("Translate {text} from {source} to {target}");
+var prompt = template.Format(new Dictionary&lt;string, string&gt;
+{
+    ["text"] = "Hello",
+    ["source"] = "English",
+    ["target"] = "Spanish"
+});
+// Result: "Translate Hello from English to Spanish"</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_QueryProcessors_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.QueryProcessors*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_QueryProcessors" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.QueryProcessors">
+  QueryProcessors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the query processors for preprocessing search queries.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;IQueryProcessor&gt;? QueryProcessors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IQueryProcessor.html">IQueryProcessor</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_QueryProcessors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Query processors can expand, rewrite, or enhance queries before they are
+sent to the retriever, improving search quality.
+</p>
+<p><b>For Beginners:</b> These improve your search queries before searching.
+For example, they might add synonyms or fix spelling mistakes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagGenerator_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagGenerator*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagGenerator" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagGenerator">
+  RagGenerator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the generator for creating answers from retrieved context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGenerator&lt;T&gt;? RagGenerator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagGenerator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The generator takes the retrieved documents and the original query to produce
+a natural language response that incorporates the retrieved information.
+</p>
+<p><b>For Beginners:</b> This takes the documents found by the retriever and
+uses them to write a helpful answer to your question.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagReranker_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagReranker*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagReranker" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagReranker">
+  RagReranker
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reranker for improving document relevance ordering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReranker&lt;T&gt;? RagReranker { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IReranker-1.html">IReranker</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagReranker_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+After initial retrieval, the reranker reorders documents by more carefully
+evaluating their relevance to the query, typically improving result quality.
+</p>
+<p><b>For Beginners:</b> After finding documents, this component sorts them again
+to put the most relevant ones first. It's like a second opinion on what's most useful.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagRetriever_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagRetriever*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagRetriever" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RagRetriever">
+  RagRetriever
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the retriever for finding relevant documents during inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRetriever&lt;T&gt;? RagRetriever { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IRetriever-1.html">IRetriever</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RagRetriever_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The retriever searches for documents or passages that are relevant to the input query.
+It typically uses vector similarity search to find the most similar content.
+</p>
+<p><b>For Beginners:</b> This is like a smart search engine that finds relevant information
+from your document collection to help the model answer questions better.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ReasoningConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ReasoningConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ReasoningConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.ReasoningConfig">
+  ReasoningConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L528"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reasoning configuration for advanced reasoning capabilities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReasoningConfig? ReasoningConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Reasoning.Models.ReasoningConfig.html">ReasoningConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_ReasoningConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Configures advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts,
+and Self-Consistency for complex problem-solving.
+</p>
+<p><b>For Beginners:</b> This enables the model to "think step by step" when solving
+complex problems, similar to how humans work through difficult questions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RegisteredModelName_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RegisteredModelName*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RegisteredModelName" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.RegisteredModelName">
+  RegisteredModelName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L795"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the registered model name in the model registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? RegisteredModelName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_RegisteredModelName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The name under which this model is registered in the model registry,
+used for retrieval and deployment.
+</p>
+<p><b>For Beginners:</b> This is the name of your model in the registry.
+You can use this name to load the model later or deploy it to production.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_SafetyFilterConfiguration_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.SafetyFilterConfiguration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_SafetyFilterConfiguration" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.SafetyFilterConfiguration">
+  SafetyFilterConfiguration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L624"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the safety filter configuration used to validate inputs and filter outputs during inference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SafetyFilterConfiguration&lt;T&gt;? SafetyFilterConfiguration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.SafetyFilterConfiguration-1.html">SafetyFilterConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_SafetyFilterConfiguration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When null, safety filtering defaults to enabled with standard options.
+Set <a class="xref" href="AiDotNet.Models.Options.SafetyFilterConfiguration-1.html#AiDotNet_Models_Options_SafetyFilterConfiguration_1_Enabled">Enabled</a> to false to opt out.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TokenizationConfig_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TokenizationConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TokenizationConfig" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TokenizationConfig">
+  TokenizationConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L658"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the tokenization configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TokenizationConfig? TokenizationConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Configuration.TokenizationConfig.html">TokenizationConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TokenizationConfig_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains settings for the tokenizer including vocabulary size, special tokens,
+padding behavior, and truncation settings.
+</p>
+<p><b>For Beginners:</b> This controls how text is converted to tokens:
+- Maximum length (how much text to process)
+- Padding (how to handle short texts)
+- Special tokens (like [START] and [END] markers)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Tokenizer_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Tokenizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Tokenizer" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.Tokenizer">
+  Tokenizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L642"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the tokenizer for text encoding and decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ITokenizer? Tokenizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Interfaces.ITokenizer.html">ITokenizer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_Tokenizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The tokenizer converts text into tokens (numerical IDs) that the model can process,
+and converts model outputs back into readable text.
+</p>
+<p><b>For Beginners:</b> This converts text into numbers that the model understands,
+and converts the model's number outputs back into text you can read.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMetricsHistory_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TrainingMetricsHistory*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMetricsHistory" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TrainingMetricsHistory">
+  TrainingMetricsHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L865"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the training metrics history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, List&lt;double&gt;&gt;? TrainingMetricsHistory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMetricsHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Contains the history of metrics (loss, accuracy, etc.) recorded during training,
+enabling visualization and analysis of training progress.
+</p>
+<p><b>For Beginners:</b> This is a log of how your model improved during training.
+You can use it to create charts showing loss going down over time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMonitor_" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TrainingMonitor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMonitor" data-uid="AiDotNet.Models.Options.PredictionModelResultOptions`3.TrainingMonitor">
+  TrainingMonitor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L955"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the training monitor for accessing training diagnostics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ITrainingMonitor&lt;T&gt;? TrainingMonitor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ITrainingMonitor-1.html">ITrainingMonitor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_PredictionModelResultOptions_3_TrainingMonitor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Provides access to training diagnostics including learning curves,
+gradient statistics, and training progress information.
+</p>
+<p><b>For Beginners:</b> This gives you insights into how training went.
+You can use it to:
+- View learning curves (loss over time)
+- Check for signs of overfitting
+- Analyze gradient flow during training
+- Export training charts and reports
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/PredictionModelResultOptions.cs/#L83" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

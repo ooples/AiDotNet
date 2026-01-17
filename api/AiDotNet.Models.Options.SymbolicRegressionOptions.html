@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SymbolicRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SymbolicRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Symbolic Regression, an evolutionary approach to finding mathematical expressions that best fit a dataset.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SymbolicRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SymbolicRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SymbolicRegressionOptions" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions" class="text-break">
+Class SymbolicRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Symbolic Regression, an evolutionary approach to finding
+mathematical expressions that best fit a dataset.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SymbolicRegressionOptions : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">SymbolicRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SymbolicRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Symbolic Regression is a type of regression analysis that searches for mathematical expressions that best 
+fit a given dataset, both in terms of accuracy and simplicity. Unlike traditional regression techniques 
+that fit parameters to a predefined model structure, symbolic regression simultaneously evolves both the 
+structure of the model and its parameters. It uses genetic programming, an evolutionary algorithm inspired 
+by biological evolution, to evolve a population of mathematical expressions through operations like 
+selection, crossover, and mutation. This approach can discover complex, non-linear relationships in data 
+without requiring prior assumptions about the form of the model. This class inherits from 
+NonLinearRegressionOptions and adds parameters specific to the evolutionary algorithm used in symbolic 
+regression, such as population size, number of generations, and genetic operator rates.
+</p>
+<p><b>For Beginners:</b> Symbolic Regression finds mathematical formulas that explain your data.
+<p>When performing regression (predicting values):</p>
+<ul>
+<li>Traditional methods fit parameters to a predefined equation</li>
+<li>You must specify the form of the equation in advance</li>
+<li>This requires knowing what relationship to look for</li>
+</ul>
+<p>Symbolic Regression solves this by:</p>
+<ul>
+<li>Automatically discovering both the structure and parameters of equations</li>
+<li>Starting with a population of random simple formulas</li>
+<li>Evolving them through &quot;survival of the fittest&quot;</li>
+<li>Combining good formulas to create better ones (crossover)</li>
+<li>Randomly changing formulas occasionally (mutation)</li>
+<li>Continuing until it finds a formula that fits the data well</li>
+</ul>
+<p>This approach offers several benefits:</p>
+<ul>
+<li>Can discover unexpected relationships in your data</li>
+<li>Produces human-readable mathematical formulas</li>
+<li>Doesn't require prior knowledge of the underlying relationship</li>
+<li>Often finds simpler models than other techniques</li>
+</ul>
+<p>This class lets you configure how the evolutionary algorithm searches for formulas.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SymbolicRegressionOptions_CrossoverRate_" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.CrossoverRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SymbolicRegressionOptions_CrossoverRate" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.CrossoverRate">
+  CrossoverRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability of crossover in the genetic algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CrossoverRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.8.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SymbolicRegressionOptions_CrossoverRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the probability of applying crossover between two parent individuals during 
+reproduction. Crossover combines parts of two parent expressions to create new offspring, allowing the 
+algorithm to combine good features from different solutions. A higher crossover rate increases the mixing 
+of genetic material and potentially accelerates convergence to good solutions, while a lower rate preserves 
+more of the original expressions. The default value of 0.8 (80%) provides a high crossover rate suitable 
+for many applications, emphasizing the recombination of existing solutions. The optimal value depends on 
+the complexity of the problem and the desired balance between combining existing solutions and preserving 
+them intact.
+</p>
+<p><b>For Beginners:</b> This setting controls how often the algorithm combines parts of two good formulas to create new ones.
+<p>The crossover rate:</p>
+<ul>
+<li>Determines the probability of combining parts of two parent formulas</li>
+<li>Allows good components from different formulas to be combined</li>
+<li>Is the main mechanism for improvement in genetic algorithms</li>
+</ul>
+<p>The default value of 0.8 means:</p>
+<ul>
+<li>There's an 80% chance that two selected formulas will be combined</li>
+<li>This creates offspring that inherit traits from both parents</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.9): More mixing of formula components, faster convergence</li>
+<li>Lower values (e.g., 0.5): More preservation of existing formulas, slower evolution</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it to more aggressively combine promising formula components</li>
+<li>Decrease it when good formulas are being disrupted too frequently</li>
+<li>Often adjusted in conjunction with MutationRate</li>
+</ul>
+<p>For example, if you have a diverse population but evolution is progressing slowly,
+you might increase this to 0.9 to more frequently combine promising formula components.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SymbolicRegressionOptions_FitnessThreshold_" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.FitnessThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SymbolicRegressionOptions_FitnessThreshold" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.FitnessThreshold">
+  FitnessThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fitness threshold for early stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FitnessThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SymbolicRegressionOptions_FitnessThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum fitness value (typically an error measure like mean squared error) 
+that, when reached by any individual in the population, will cause the algorithm to terminate early. 
+It provides a stopping criterion based on solution quality rather than just the number of generations. 
+A smaller threshold requires a better fit to the data before stopping, potentially leading to more accurate 
+but more complex expressions and longer computation time. A larger threshold allows earlier stopping with 
+less accurate but potentially simpler expressions. The default value of 0.001 provides a moderately strict 
+threshold suitable for many applications, requiring a good fit while preventing excessive computation for 
+diminishing returns. The appropriate value depends on the specific problem, the scale of the target variable, 
+and the desired trade-off between accuracy and computation time.
+</p>
+<p><b>For Beginners:</b> This setting determines how good a formula must be before the algorithm stops searching.
+<p>The fitness threshold:</p>
+<ul>
+<li>Sets a target quality level for the formulas</li>
+<li>When a formula reaches this level of fitness, the algorithm can stop early</li>
+<li>Prevents unnecessary computation once a good solution is found</li>
+</ul>
+<p>The default value of 0.001 means:</p>
+<ul>
+<li>The algorithm stops when it finds a formula with an error measure below 0.001</li>
+<li>This is quite strict and requires a very good fit to the data</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Smaller values (e.g., 0.0001): More strict, requires better fit, longer runtime</li>
+<li>Larger values (e.g., 0.01): Less strict, accepts solutions with more error, faster results</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you need very accurate formulas and are willing to wait longer</li>
+<li>Increase it when approximate solutions are acceptable or when data is noisy</li>
+<li>Scale it according to the range and units of your target variable</li>
+</ul>
+<p>For example, if your data contains measurement noise of about 1%, setting this to
+0.01 might be reasonable since formulas can't be expected to fit the noise.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SymbolicRegressionOptions_MaxGenerations_" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.MaxGenerations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SymbolicRegressionOptions_MaxGenerations" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.MaxGenerations">
+  MaxGenerations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of generations for the genetic algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxGenerations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SymbolicRegressionOptions_MaxGenerations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of evolutionary generations the algorithm will run before 
+terminating if no other stopping criterion (such as reaching the fitness threshold) is met. Each generation 
+involves evaluating the fitness of all individuals in the population, selecting individuals for reproduction, 
+and creating a new population through crossover and mutation. More generations allow for more evolution and 
+potentially better solutions but require more computation time. The default value of 1000 provides a 
+reasonable upper limit for many applications, allowing sufficient evolution while preventing excessive 
+computation. The optimal value depends on the complexity of the problem, the population size, and how 
+quickly the population converges to a solution.
+</p>
+<p><b>For Beginners:</b> This setting limits how many rounds of evolution the algorithm will perform.
+<p>The maximum generations:</p>
+<ul>
+<li>Sets an upper limit on how long the evolutionary process will run</li>
+<li>Prevents the algorithm from running indefinitely</li>
+<li>Serves as a stopping criterion if a good solution isn't found earlier</li>
+</ul>
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will evolve the population for at most 1000 generations</li>
+<li>It may stop earlier if it finds a solution that meets the fitness threshold</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values (e.g., 5000): More opportunity to find better solutions, but longer runtime</li>
+<li>Smaller values (e.g., 100): Faster results, but may not find optimal solutions for complex problems</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex problems that need more evolution to find good solutions</li>
+<li>Decrease it when you need faster results or for simpler problems</li>
+<li>Monitor the fitness improvement over generations to determine if more generations would help</li>
+</ul>
+<p>For example, if you notice the best solution is still improving significantly at
+generation 1000, you might increase this to 2000 or more to allow further improvement.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SymbolicRegressionOptions_MutationRate_" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.MutationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SymbolicRegressionOptions_MutationRate" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.MutationRate">
+  MutationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability of mutation in the genetic algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MutationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SymbolicRegressionOptions_MutationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the probability of applying mutation to an individual in the population during 
+reproduction. Mutation introduces random changes to mathematical expressions, such as changing operators, 
+constants, or variables, or adding or removing terms. It helps maintain genetic diversity and explore new 
+regions of the solution space. A higher mutation rate increases exploration but might disrupt good solutions, 
+while a lower rate preserves good solutions but might lead to premature convergence. The default value of 
+0.1 (10%) provides a moderate mutation rate suitable for many applications, balancing exploration and 
+exploitation. The optimal value depends on the complexity of the problem and the desired balance between 
+exploring new solutions and refining existing ones.
+</p>
+<p><b>For Beginners:</b> This setting controls how often random changes are introduced to formulas.
+<p>The mutation rate:</p>
+<ul>
+<li>Determines the probability of making random changes to formulas</li>
+<li>Helps the algorithm explore new possibilities and avoid getting stuck</li>
+<li>Introduces innovation into the population</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>Each formula has a 10% chance of being mutated in each generation</li>
+<li>Mutations might include changing an operation (+ to ×), adding a term, etc.</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.3): More exploration, more diversity, but may disrupt good solutions</li>
+<li>Lower values (e.g., 0.01): More stability, better refinement of good solutions, but may get stuck</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the algorithm seems to be converging too quickly to suboptimal solutions</li>
+<li>Decrease it when good solutions are being found but need refinement</li>
+<li>Often paired with CrossoverRate adjustments to balance exploration and exploitation</li>
+</ul>
+<p>For example, if your algorithm keeps finding the same suboptimal formula,
+you might increase this to 0.2 to encourage more exploration of different formulas.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SymbolicRegressionOptions_PopulationSize_" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.PopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SymbolicRegressionOptions_PopulationSize" data-uid="AiDotNet.Models.Options.SymbolicRegressionOptions.PopulationSize">
+  PopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the size of the population in the genetic algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SymbolicRegressionOptions_PopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of mathematical expressions (individuals) maintained in the population 
+during the evolutionary process. A larger population provides more genetic diversity and a broader search 
+of the solution space, potentially finding better solutions but requiring more computational resources. 
+A smaller population requires less computation per generation but might converge prematurely to suboptimal 
+solutions due to limited genetic diversity. The default value of 100 provides a moderate population size 
+suitable for many applications, balancing diversity and computational efficiency. The optimal value depends 
+on the complexity of the problem, the available computational resources, and the desired trade-off between 
+exploration and exploitation in the search process.
+</p>
+<p><b>For Beginners:</b> This setting controls how many different formulas the algorithm evaluates in parallel.
+<p>The population size:</p>
+<ul>
+<li>Determines how many different mathematical expressions are considered at once</li>
+<li>Affects both the quality of solutions and computational requirements</li>
+</ul>
+<p>The default value of 100 means:</p>
+<ul>
+<li>The algorithm maintains 100 different formulas in each generation</li>
+<li>This provides a good balance between diversity and efficiency for many problems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values (e.g., 500): More diverse exploration, better chance of finding optimal solutions, but slower</li>
+<li>Smaller values (e.g., 20): Faster computation, but may get stuck in suboptimal solutions</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex problems where finding the right formula structure is difficult</li>
+<li>Decrease it when computational resources are limited or for simpler problems</li>
+<li>Scale it with the complexity of your data and the expected complexity of the relationship</li>
+</ul>
+<p>For example, if searching for a formula to describe a complex physical system with
+many variables, you might increase this to 500 to explore more possible formulas.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SymbolicRegressionOptions.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

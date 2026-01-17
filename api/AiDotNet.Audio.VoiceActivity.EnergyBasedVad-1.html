@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class EnergyBasedVad&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class EnergyBasedVad&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Simple energy-based voice activity detector (algorithmic, no neural network).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.VoiceActivity.EnergyBasedVad%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1">
+
+
+
+  <h1 id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1" class="text-break">
+Class EnergyBasedVad&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/VoiceActivity/EnergyBasedVad.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.VoiceActivity.html">VoiceActivity</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Simple energy-based voice activity detector (algorithmic, no neural network).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class EnergyBasedVad&lt;T&gt; : VoiceActivityDetectorBase&lt;T&gt;, IVoiceActivityDetector&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html">VoiceActivityDetectorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">EnergyBasedVad&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVoiceActivityDetector-1.html">IVoiceActivityDetector</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_NumOps">VoiceActivityDetectorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_SampleRate">VoiceActivityDetectorBase&lt;T&gt;.SampleRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_FrameSize">VoiceActivityDetectorBase&lt;T&gt;.FrameSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_Threshold">VoiceActivityDetectorBase&lt;T&gt;.Threshold</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_MinSpeechDurationMs">VoiceActivityDetectorBase&lt;T&gt;.MinSpeechDurationMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_MinSilenceDurationMs">VoiceActivityDetectorBase&lt;T&gt;.MinSilenceDurationMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1__speechFrameCount">VoiceActivityDetectorBase&lt;T&gt;._speechFrameCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1__silenceFrameCount">VoiceActivityDetectorBase&lt;T&gt;._silenceFrameCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1__inSpeech">VoiceActivityDetectorBase&lt;T&gt;._inSpeech</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_DetectSpeech_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VoiceActivityDetectorBase&lt;T&gt;.DetectSpeech(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_GetSpeechProbability_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VoiceActivityDetectorBase&lt;T&gt;.GetSpeechProbability(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_DetectSpeechSegments_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VoiceActivityDetectorBase&lt;T&gt;.DetectSpeechSegments(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_GetFrameProbabilities_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VoiceActivityDetectorBase&lt;T&gt;.GetFrameProbabilities(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.VoiceActivity.VoiceActivityDetectorBase-1.html#AiDotNet_Audio_VoiceActivity_VoiceActivityDetectorBase_1_ProcessChunk_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VoiceActivityDetectorBase&lt;T&gt;.ProcessChunk(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This is a basic VAD that detects speech based on signal energy (loudness).
+It combines multiple features for more robust detection:
+- Short-time energy
+- Zero-crossing rate
+- Spectral flatness
+</p>
+<p><b>For Beginners:</b> This is the simplest type of VAD:
+<p>Basic idea: Speech is louder than silence!</p>
+<ul>
+<li>Compute the &quot;energy&quot; (sum of squared samples) for each frame</li>
+<li>If energy exceeds a threshold, it's probably speech</li>
+</ul>
+<p>Enhanced features used here:</p>
+<ol>
+<li>Energy: How loud is the signal?</li>
+<li>Zero-crossings: How often does the signal cross zero?
+<ul>
+<li>Speech: Medium zero-crossings (voiced sounds)</li>
+<li>Noise: High zero-crossings (random noise)</li>
+</ul>
+</li>
+<li>Spectral flatness: Is it tonal or noisy?
+<ul>
+<li>Speech: Low flatness (has harmonic structure)</li>
+<li>Noise: High flatness (random spectrum)</li>
+</ul>
+</li>
+</ol>
+<p>Pros:</p>
+<ul>
+<li>Very fast (no neural network)</li>
+<li>Low latency</li>
+<li>Works well in quiet environments</li>
+</ul>
+<p>Cons:</p>
+<ul>
+<li>Struggles with background noise</li>
+<li>May trigger on loud non-speech sounds</li>
+<li>Requires threshold tuning for different environments</li>
+</ul>
+<p>For better noise robustness, use neural network-based VAD like SileroVad.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1__ctor_" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1__ctor_System_Int32_System_Int32_System_Double_System_Double_System_Double_System_Double_System_Boolean_System_Int32_System_Int32_" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.#ctor(System.Int32,System.Int32,System.Double,System.Double,System.Double,System.Double,System.Boolean,System.Int32,System.Int32)">
+  EnergyBasedVad(int, int, double, double, double, double, bool, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/VoiceActivity/EnergyBasedVad.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an energy-based VAD with default parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public EnergyBasedVad(int sampleRate = 16000, int frameSize = 480, double threshold = 0.5, double energyWeight = 0.5, double zcrWeight = 0.25, double flatnessWeight = 0.25, bool adaptiveThreshold = true, int minSpeechDurationMs = 250, int minSilenceDurationMs = 300)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate (default: 16000).</p>
+</dd>
+    <dt><code>frameSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frame size in samples (default: 480 = 30ms at 16kHz).</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Detection threshold 0-1 (default: 0.5).</p>
+</dd>
+    <dt><code>energyWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for energy feature (default: 0.5).</p>
+</dd>
+    <dt><code>zcrWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for zero-crossing rate (default: 0.25).</p>
+</dd>
+    <dt><code>flatnessWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for spectral flatness (default: 0.25).</p>
+</dd>
+    <dt><code>adaptiveThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Enable adaptive threshold (default: true).</p>
+</dd>
+    <dt><code>minSpeechDurationMs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum speech duration (default: 250ms).</p>
+</dd>
+    <dt><code>minSilenceDurationMs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum silence duration (default: 300ms).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1_ComputeFrameProbability_" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.ComputeFrameProbability*"></a>
+
+  <h3 id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1_ComputeFrameProbability__0___" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.ComputeFrameProbability(`0[])">
+  ComputeFrameProbability(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/VoiceActivity/EnergyBasedVad.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes speech probability for a single frame.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T ComputeFrameProbability(T[] frame)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frame</code> T[]</dt>
+    <dd><p>Audio frame data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Speech probability (0-1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1_ResetState_" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_Audio_VoiceActivity_EnergyBasedVad_1_ResetState" data-uid="AiDotNet.Audio.VoiceActivity.EnergyBasedVad`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/VoiceActivity/EnergyBasedVad.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the VAD state including adaptive thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/VoiceActivity/EnergyBasedVad.cs/#L45" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

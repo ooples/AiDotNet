@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KnowledgeGraph&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KnowledgeGraph&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Knowledge graph for storing and querying entity relationships using a pluggable storage backend.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1" class="text-break">
+Class KnowledgeGraph&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.html">Graph</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Knowledge graph for storing and querying entity relationships using a pluggable storage backend.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KnowledgeGraph&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for vector operations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">KnowledgeGraph&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A knowledge graph stores entities (nodes) and their relationships (edges) to enable structured information retrieval.
+This implementation delegates storage operations to an <a class="xref" href="AiDotNet.Interfaces.IGraphStore-1.html">IGraphStore&lt;T&gt;</a> implementation,
+allowing you to swap between in-memory, file-based, or database-backed storage.
+</p>
+<p><b>For Beginners:</b> A knowledge graph is like a map of how information connects together.
+<p>Imagine Wikipedia as a graph:</p>
+<ul>
+<li>Each article is a node (Albert Einstein, Physics, Germany, etc.)</li>
+<li>Links between articles are edges (Einstein STUDIED Physics, Einstein BORN_IN Germany)</li>
+<li>You can traverse the graph to find related information</li>
+</ul>
+<p>This class lets you:</p>
+<ol>
+<li>Add entities and relationships</li>
+<li>Find connections between entities</li>
+<li>Traverse the graph to discover related information</li>
+<li>Query based on entity types or relationships</li>
+</ol>
+<p>For example, to answer &quot;Who worked at Princeton?&quot;:</p>
+<ol>
+<li>Find all edges with type &quot;WORKED_AT&quot;</li>
+<li>Filter for target = &quot;Princeton University&quot;</li>
+<li>Return the source entities (people who worked there)</li>
+</ol>
+<p>Storage backends you can use:</p>
+<ul>
+<li>MemoryGraphStore: Fast, in-memory (default)</li>
+<li>FileGraphStore: Persistent, disk-based</li>
+<li>Neo4jGraphStore: Professional graph database (future)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1__ctor" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.#ctor">
+  KnowledgeGraph()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph&lt;T&gt;</a> class with default in-memory storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KnowledgeGraph()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1__ctor_AiDotNet_Interfaces_IGraphStore__0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.#ctor(AiDotNet.Interfaces.IGraphStore{`0})">
+  KnowledgeGraph(IGraphStore&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph-1.html">KnowledgeGraph&lt;T&gt;</a> class with a custom graph store.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KnowledgeGraph(IGraphStore&lt;T&gt; store)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>store</code> <a class="xref" href="AiDotNet.Interfaces.IGraphStore-1.html">IGraphStore</a>&lt;T&gt;</dt>
+    <dd><p>The graph store implementation to use for storage.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_EdgeCount_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.EdgeCount*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_EdgeCount" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.EdgeCount">
+  EdgeCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of edges in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EdgeCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_NodeCount_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.NodeCount*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_NodeCount" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.NodeCount">
+  NodeCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NodeCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_AddEdge_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.AddEdge*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_AddEdge_AiDotNet_RetrievalAugmentedGeneration_Graph_GraphEdge__0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.AddEdge(AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge{`0})">
+  AddEdge(GraphEdge&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an edge to the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddEdge(GraphEdge&lt;T&gt; edge)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>edge</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge-1.html">GraphEdge</a>&lt;T&gt;</dt>
+    <dd><p>The edge to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when source or target nodes don't exist.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_AddNode_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.AddNode*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_AddNode_AiDotNet_RetrievalAugmentedGeneration_Graph_GraphNode__0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.AddNode(AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode{`0})">
+  AddNode(GraphNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a node to the graph or updates it if it already exists.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddNode(GraphNode&lt;T&gt; node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;</dt>
+    <dd><p>The node to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_BreadthFirstTraversal_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.BreadthFirstTraversal*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_BreadthFirstTraversal_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.BreadthFirstTraversal(System.String,System.Int32)">
+  BreadthFirstTraversal(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs breadth-first search traversal starting from a node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphNode&lt;T&gt;&gt; BreadthFirstTraversal(string startNodeId, int maxDepth = 2147483647)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startNodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting node ID.</p>
+</dd>
+    <dt><code>maxDepth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum traversal depth (default: unlimited).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of nodes in BFS order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_Clear_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.Clear*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_Clear" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all nodes and edges from the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_FindRelatedNodes_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.FindRelatedNodes*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_FindRelatedNodes_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.FindRelatedNodes(System.String,System.Int32)">
+  FindRelatedNodes(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds nodes related to a query by entity name or property matching.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphNode&lt;T&gt;&gt; FindRelatedNodes(string query, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The search query.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of matching nodes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_FindShortestPath_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.FindShortestPath*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_FindShortestPath_System_String_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.FindShortestPath(System.String,System.String)">
+  FindShortestPath(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the shortest path between two nodes using BFS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; FindShortestPath(string startNodeId, string endNodeId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startNodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting node ID.</p>
+</dd>
+    <dt><code>endNodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target node ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of node IDs representing the path, or empty if no path exists.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetAllEdges_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetAllEdges*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetAllEdges" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetAllEdges">
+  GetAllEdges()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all edges in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphEdge&lt;T&gt;&gt; GetAllEdges()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge-1.html">GraphEdge</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of all edges.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetAllNodes_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetAllNodes*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetAllNodes" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetAllNodes">
+  GetAllNodes()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphNode&lt;T&gt;&gt; GetAllNodes()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of all nodes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetIncomingEdges_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetIncomingEdges*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetIncomingEdges_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetIncomingEdges(System.String)">
+  GetIncomingEdges(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all incoming edges to a node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphEdge&lt;T&gt;&gt; GetIncomingEdges(string nodeId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target node ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge-1.html">GraphEdge</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of incoming edges.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNeighbors_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNeighbors*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNeighbors_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNeighbors(System.String)">
+  GetNeighbors(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all neighbors of a node (nodes connected by outgoing edges).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphNode&lt;T&gt;&gt; GetNeighbors(string nodeId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The node ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of neighbor nodes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNode_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNode*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNode_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNode(System.String)">
+  GetNode(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a node by its ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GraphNode&lt;T&gt;? GetNode(string nodeId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The node ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;</dt>
+    <dd><p>The node, or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNodesByLabel_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNodesByLabel*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetNodesByLabel_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetNodesByLabel(System.String)">
+  GetNodesByLabel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all nodes with a specific label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphNode&lt;T&gt;&gt; GetNodesByLabel(string label)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>label</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The node label to filter by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphNode-1.html">GraphNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of nodes with the specified label.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetOutgoingEdges_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetOutgoingEdges*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_KnowledgeGraph_1_GetOutgoingEdges_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.KnowledgeGraph`1.GetOutgoingEdges(System.String)">
+  GetOutgoingEdges(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all outgoing edges from a node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;GraphEdge&lt;T&gt;&gt; GetOutgoingEdges(string nodeId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nodeId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The source node ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.GraphEdge-1.html">GraphEdge</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of outgoing edges.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/KnowledgeGraph.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DefaultModelCache&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DefaultModelCache&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a default implementation of model caching for optimization step data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Caching_DefaultModelCache_3.md&amp;value=---%0Auid%3A%20AiDotNet.Caching.DefaultModelCache%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Caching.DefaultModelCache`3">
+
+
+
+  <h1 id="AiDotNet_Caching_DefaultModelCache_3" data-uid="AiDotNet.Caching.DefaultModelCache`3" class="text-break">
+Class DefaultModelCache&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Caching.html">Caching</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a default implementation of model caching for optimization step data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DefaultModelCache&lt;T, TInput, TOutput&gt; : IModelCache&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DefaultModelCache&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelCache-3.html">IModelCache</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Caching_DefaultModelCache_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A model cache is like a storage box that keeps track of the progress made during 
+machine learning model training.
+<p>When training a machine learning model, the system makes many small adjustments (optimization steps)
+to improve the model's accuracy. Each step produces important information about the model's current state.</p>
+<p>This cache stores that information for each step, allowing the training process to:</p>
+<ul>
+<li>Resume training from where it left off if interrupted</li>
+<li>Avoid repeating calculations that were already done</li>
+<li>Keep track of how the model is improving over time</li>
+</ul>
+<p>Think of it like saving your progress in a video game, so you don't have to start from the beginning
+if you need to take a break.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Caching_DefaultModelCache_3_CacheStepData_" data-uid="AiDotNet.Caching.DefaultModelCache`3.CacheStepData*"></a>
+
+  <h3 id="AiDotNet_Caching_DefaultModelCache_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Caching.DefaultModelCache`3.CacheStepData(System.String,AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  CacheStepData(string, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores optimization step data in the cache with the specified key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CacheStepData(string key, OptimizationStepData&lt;T, TInput, TOutput&gt; stepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The unique identifier for the optimization step data.</p>
+</dd>
+    <dt><code>stepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimization step data to cache.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Caching_DefaultModelCache_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method saves information about a training step so it can be used later.
+<p>During model training, each step produces valuable information about how the model is changing
+and improving. This method stores that information with a unique label (the key) so you can
+retrieve it later.</p>
+<p>If data with the same key already exists in the cache, it will be replaced with the new data.
+This is useful for updating the cache with the latest information as training progresses.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Caching_DefaultModelCache_3_ClearCache_" data-uid="AiDotNet.Caching.DefaultModelCache`3.ClearCache*"></a>
+
+  <h3 id="AiDotNet_Caching_DefaultModelCache_3_ClearCache" data-uid="AiDotNet.Caching.DefaultModelCache`3.ClearCache">
+  ClearCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all cached optimization step data from the cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Caching_DefaultModelCache_3_ClearCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Use this method when you want to start fresh, such as when beginning a new training session
+with different parameters or a different dataset.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Caching_DefaultModelCache_3_GenerateCacheKey_" data-uid="AiDotNet.Caching.DefaultModelCache`3.GenerateCacheKey*"></a>
+
+  <h3 id="AiDotNet_Caching_DefaultModelCache_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Caching.DefaultModelCache`3.GenerateCacheKey(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a deterministic cache key based on the solution model and input data using SHA-256 hashing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model solution to generate a key for.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data to include in the key generation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A deterministic hex-encoded SHA-256 hash string for caching.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Caching_DefaultModelCache_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method creates a deterministic identifier based on the model and its inputs.
+</p>
+<p>
+Think of it like creating a fingerprint for a specific combination of model parameters and input data
+that stays the same forever, even if you restart the program. The same combination will always produce
+the same key, which allows the system to:
+- Save results with this key
+- Look up previously saved results using this key
+- Avoid recalculating results that have already been computed
+- Keep caches valid across application restarts
+</p>
+<p>
+The key is generated using SHA-256 cryptographic hashing for determinism:
+1. Model parameters are serialized in a stable format with culture-invariant number formatting
+2. Input data structure (shapes/dimensions) is described in a stable string format
+3. SHA-256 hash is computed over the UTF-8 bytes of the serialized data
+4. The hash is returned as a lowercase hexadecimal string
+</p>
+<p>
+This ensures that different combinations get different keys, while identical combinations always get
+the same key, even across process restarts.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Caching_DefaultModelCache_3_GetCachedStepData_" data-uid="AiDotNet.Caching.DefaultModelCache`3.GetCachedStepData*"></a>
+
+  <h3 id="AiDotNet_Caching_DefaultModelCache_3_GetCachedStepData_System_String_" data-uid="AiDotNet.Caching.DefaultModelCache`3.GetCachedStepData(System.String)">
+  GetCachedStepData(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves cached optimization step data using the specified key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationStepData&lt;T, TInput, TOutput&gt;? GetCachedStepData(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The unique identifier for the optimization step data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The cached optimization step data if found; otherwise, null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Caching_DefaultModelCache_3_GetCachedStepData_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method looks up previously saved information about a specific training step.
+<p>The &quot;key&quot; is like a label that identifies which piece of information you want to retrieve.
+For example, the key might represent a specific parameter in your model or a particular
+point in the training process.</p>
+<p>If the information exists in the cache, the method returns it. If not, it returns null
+indicating the data needs to be computed.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Caching/DefaultModelCache.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

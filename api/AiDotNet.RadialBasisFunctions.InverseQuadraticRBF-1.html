@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class InverseQuadraticRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class InverseQuadraticRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements an Inverse Quadratic Radial Basis Function (RBF) of the form 1/(1 + (er)&#178;).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.InverseQuadraticRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1" class="text-break">
+Class InverseQuadraticRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements an Inverse Quadratic Radial Basis Function (RBF) of the form 1/(1 + (er)²).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class InverseQuadraticRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">InverseQuadraticRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of a Radial Basis Function (RBF) that uses an inverse quadratic form
+of f(r) = 1/(1 + (er)²), where r is the radial distance and e (epsilon) is a shape parameter
+controlling the width of the function. The inverse quadratic RBF is infinitely differentiable and
+decreases more slowly than the Gaussian RBF but faster than the inverse multiquadric RBF as distance increases.
+It has properties that make it useful for scattered data interpolation and solving differential equations.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Inverse Quadratic RBF looks like a smooth bell-shaped curve that flattens out at larger distances.
+At the center point (r = 0), it has its maximum value of 1, and as you move away from the center,
+the function value gradually decreases toward zero, but never quite reaches it.</p>
+<p>This RBF has a parameter called epsilon (e) that controls the shape and width of the function:</p>
+<ul>
+<li>A larger epsilon value creates a narrower bell curve that drops off quickly with distance</li>
+<li>A smaller epsilon value creates a wider bell curve that extends further</li>
+</ul>
+<p>The inverse quadratic function is similar to the Gaussian RBF in shape but has &quot;longer tails,&quot;
+meaning it decreases more slowly at larger distances. This property can be useful when you want
+data points to have influence over a broader range.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1__ctor_System_Double_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.#ctor(System.Double)">
+  InverseQuadraticRBF(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF-1.html">InverseQuadraticRBF&lt;T&gt;</a> class with a specified shape parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InverseQuadraticRBF(double epsilon = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The shape parameter, defaults to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Inverse Quadratic Radial Basis Function with a specified shape parameter epsilon.
+Epsilon controls the shape and width of the function. Larger values of epsilon result in a narrower bell curve
+with a faster drop-off, while smaller values result in a broader bell curve with a more gradual drop-off.
+</p>
+<p><b>For Beginners:</b> This creates a new Inverse Quadratic RBF with a specific width setting.
+<p>The epsilon parameter controls the &quot;width&quot; of the bell curve:</p>
+<ul>
+<li>Larger epsilon values (like 5.0) make the bell curve very narrow, falling off quickly as you move away from the center</li>
+<li>Smaller epsilon values (like 0.1) make the bell curve very wide, decreasing slowly with distance</li>
+</ul>
+<p>Unlike some other RBFs, the Inverse Quadratic always has a value of exactly 1 at the center (r = 0),
+regardless of the epsilon value. The epsilon parameter only affects how quickly the function decreases
+as you move away from the center.</p>
+<p>If you're not sure what value to use, the default (epsilon = 1.0) is a good starting point
+that provides a moderate decrease with distance.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Inverse Quadratic Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed function value 1/(1 + (er)²).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Inverse Quadratic RBF for a given radius r. The formula used is
+1/(1 + (er)²), which decreases with distance. The function equals 1 at r = 0 and approaches 0
+as r approaches infinity.
+</p>
+<p><b>For Beginners:</b> This method computes the "height" or "value" of the Inverse Quadratic function
+at a specific distance (r) from the center.
+<p>The calculation involves:</p>
+<ol>
+<li>Multiplying the distance (r) by the epsilon parameter (er)</li>
+<li>Squaring this product ((er)²)</li>
+<li>Adding 1 to this squared value (1 + (er)²)</li>
+<li>Dividing 1 by this sum (1/(1 + (er)²))</li>
+</ol>
+<p>The result is a single number representing the function's value at the given distance.
+This value is always between 0 and 1:</p>
+<ul>
+<li>At the center (r = 0), the value is exactly 1</li>
+<li>As you move away from the center, the value gets smaller, approaching 0 but never quite reaching it</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Inverse Quadratic RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Inverse Quadratic RBF with respect to the radius r.
+The formula for the derivative is -2e²r/(1 + (er)²)², which is always negative for positive r and e,
+indicating that the function always decreases with distance.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance.
+For the Inverse Quadratic RBF, the derivative is:</p>
+<ul>
+<li>Zero at the center point (r = 0)</li>
+<li>Negative for any positive distance, meaning the function always decreases as you move away from the center</li>
+<li>At first, the magnitude of the derivative increases with distance (getting steeper)</li>
+<li>After a certain point, the magnitude starts decreasing (the slope becomes less steep)</li>
+</ul>
+<p>This derivative is useful in machine learning applications when optimizing parameters
+using gradient-based methods.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.InverseQuadraticRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Inverse Quadratic RBF with respect to the shape parameter epsilon.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to epsilon.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_InverseQuadraticRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Inverse Quadratic RBF with respect to the shape parameter epsilon.
+The formula for this derivative is -2er²/(1 + (er)²)². The sign of this derivative depends on e and r:
+it is negative for positive values, indicating that increasing epsilon decreases the function value
+at any non-zero radius.
+</p>
+<p><b>For Beginners:</b> This method calculates how the function's value would change
+if you were to adjust the shape parameter (epsilon).
+<p>This is particularly important in machine learning applications:</p>
+<ul>
+<li>When training a model with Inverse Quadratic RBFs, we often need to adjust epsilon to fit the data better</li>
+<li>This derivative tells us exactly how changing epsilon affects the output of the function</li>
+<li>With this information, learning algorithms can automatically find the optimal value of epsilon</li>
+</ul>
+<p>The derivative is zero at the center point (r = 0) and negative everywhere else, which means that
+increasing the epsilon parameter:</p>
+<ul>
+<li>Has no effect on the function value at the center</li>
+<li>Decreases the function value at all other points</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/InverseQuadraticRBF.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

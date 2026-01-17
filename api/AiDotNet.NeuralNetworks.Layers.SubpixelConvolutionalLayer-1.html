@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SubpixelConvolutionalLayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SubpixelConvolutionalLayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a subpixel convolutional layer that performs convolution followed by pixel shuffling for upsampling.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1" class="text-break">
+Class SubpixelConvolutionalLayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Layers.html">Layers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a subpixel convolutional layer that performs convolution followed by pixel shuffling for upsampling.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SubpixelConvolutionalLayer&lt;T&gt; : LayerBase&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SubpixelConvolutionalLayer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuTraining">LayerBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterCount">LayerBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose_System_Boolean_">LayerBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A subpixel convolutional layer combines convolution with a pixel shuffling operation to efficiently increase 
+spatial resolution of feature maps. It first applies convolution to produce an output with more channels, then 
+rearranges these channels into a higher resolution output with fewer channels. This approach is particularly 
+useful for super-resolution tasks and generative models where upsampling is required.
+</p>
+<p><b>For Beginners:</b> This layer helps make images larger and more detailed in neural networks.
+<p>Think of it like rearranging a small mosaic to create a larger picture:</p>
+<ul>
+<li>First, the layer creates many detailed patterns from the input (convolution step)</li>
+<li>Then, it rearranges these patterns to form a larger, higher-resolution output (pixel shuffling step)</li>
+</ul>
+<p>For example, if you're working with a low-resolution image that's 32×32 pixels, this layer can help
+transform it into a higher-resolution image of 64×64 or 128×128 pixels by intelligently filling in
+the details between the original pixels.</p>
+<p>This is often used in applications like:</p>
+<ul>
+<li>Making blurry images clearer (super-resolution)</li>
+<li>Generating detailed images from rough sketches</li>
+<li>Converting low-quality videos to higher quality</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Interfaces.IActivationFunction{`0})">
+  SubpixelConvolutionalLayer(int, int, int, int, int, int, IActivationFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer-1.html">SubpixelConvolutionalLayer&lt;T&gt;</a> class with scalar activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SubpixelConvolutionalLayer(int inputDepth, int outputDepth, int upscaleFactor, int kernelSize, int inputHeight, int inputWidth, IActivationFunction&lt;T&gt;? activation = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputDepth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of channels in the input tensor.</p>
+</dd>
+    <dt><code>outputDepth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of channels in the output tensor after upscaling.</p>
+</dd>
+    <dt><code>upscaleFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The factor by which to increase spatial dimensions.</p>
+</dd>
+    <dt><code>kernelSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the convolutional kernel.</p>
+</dd>
+    <dt><code>inputHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The height of the input tensor.</p>
+</dd>
+    <dt><code>inputWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The width of the input tensor.</p>
+</dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The activation function to apply after processing. Defaults to ReLU if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a subpixel convolutional layer with the specified dimensions and parameters.
+It initializes the convolutional kernels and biases with appropriate values for training.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new subpixel convolutional layer.
+<p>The parameters you provide determine:</p>
+<ul>
+<li>inputDepth: How many channels the input has (like RGB for images would be 3)</li>
+<li>outputDepth: How many channels the output will have after upscaling</li>
+<li>upscaleFactor: How much larger the output will be (2 means twice as wide and tall)</li>
+<li>kernelSize: How large an area the layer examines for each calculation (3 is common)</li>
+<li>inputHeight/inputWidth: The dimensions of the input data</li>
+<li>activation: What mathematical function to apply to the results (ReLU is default)</li>
+</ul>
+<p>These settings help the layer know exactly what kind of data it's working with and
+how to transform it into a higher-resolution output.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IVectorActivationFunction__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Interfaces.IVectorActivationFunction{`0})">
+  SubpixelConvolutionalLayer(int, int, int, int, int, int, IVectorActivationFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L472"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer-1.html">SubpixelConvolutionalLayer&lt;T&gt;</a> class with vector activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SubpixelConvolutionalLayer(int inputDepth, int outputDepth, int upscaleFactor, int kernelSize, int inputHeight, int inputWidth, IVectorActivationFunction&lt;T&gt;? vectorActivation = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputDepth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of channels in the input tensor.</p>
+</dd>
+    <dt><code>outputDepth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of channels in the output tensor after upscaling.</p>
+</dd>
+    <dt><code>upscaleFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The factor by which to increase spatial dimensions.</p>
+</dd>
+    <dt><code>kernelSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the convolutional kernel.</p>
+</dd>
+    <dt><code>inputHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The height of the input tensor.</p>
+</dd>
+    <dt><code>inputWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The width of the input tensor.</p>
+</dd>
+    <dt><code>vectorActivation</code> <a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The vector activation function to apply after processing. Defaults to ReLU if not specified.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IVectorActivationFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a subpixel convolutional layer with the specified dimensions and parameters.
+It uses a vector activation function, which operates on entire vectors rather than individual elements.
+</p>
+<p><b>For Beginners:</b> This constructor is similar to the previous one, but uses vector activations.
+<p>Vector activations:</p>
+<ul>
+<li>Process entire groups of numbers at once, rather than one at a time</li>
+<li>Can capture relationships between different elements</li>
+<li>Allow for more complex transformations</li>
+</ul>
+<p>This version is useful when you need more sophisticated processing that considers
+how different features relate to each other, rather than treating each feature independently.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsGpuExecution_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsGpuExecution*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsGpuExecution" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsGpuExecution">
+  SupportsGpuExecution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports GPU execution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsGpuExecution { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsJitCompilation_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsJitCompilation" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True, as all required operations (Conv2D, PixelShuffle) are available.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Subpixel convolutional layers support JIT compilation using Conv2D and PixelShuffle
+operations from TensorOperations. The layer requires both convolution and pixel shuffling
+operations which are available in the computation graph.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsTraining_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsTraining*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsTraining" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.SupportsTraining">
+  SupportsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> for this layer, as it contains trainable parameters (kernels and biases).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_SupportsTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the subpixel convolutional layer can be trained through backpropagation.
+Since this layer has trainable parameters (kernels and biases), it supports training.
+</p>
+<p><b>For Beginners:</b> This property tells you if the layer can learn from data.
+<p>A value of true means:</p>
+<ul>
+<li>The layer has internal values (kernels and biases) that can be adjusted during training</li>
+<li>It will improve its performance as it sees more data</li>
+<li>It participates in the learning process</li>
+</ul>
+<p>For this layer, the value is always true because it needs to learn which patterns
+are most important for upscaling the input effectively.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Backward_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.Backward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L865"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass of the subpixel convolutional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the backward pass of the subpixel convolutional layer, which is used during training to
+propagate error gradients back through the network. It calculates gradients for the input and for all trainable
+parameters (kernels and biases).
+</p>
+<p><b>For Beginners:</b> This method is used during training to calculate how the layer's input
+and parameters should change to reduce errors.
+<p>During the backward pass, we reverse the steps from the forward pass:</p>
+<ol>
+<li><p>First, calculate how the activation function affects the gradient</p>
+</li>
+<li><p>Reverse the pixel shuffling:</p>
+<ul>
+<li>Convert the gradient from high resolution back to the lower resolution with more channels</li>
+<li>This helps determine how each output channel contributed to the errors</li>
+</ul>
+</li>
+<li><p>Calculate three types of gradients:</p>
+<ul>
+<li>How the input should change (inputGradient)</li>
+<li>How the kernels should change (kernelGradients)</li>
+<li>How the biases should change (biasGradients)</li>
+</ul>
+</li>
+</ol>
+<p>These gradients tell the network how to adjust its parameters during the update step
+to improve its performance on the next forward pass.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when trying to perform a backward pass before a forward pass.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_BackwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.BackwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.BackwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0})">
+  BackwardGpu(IGpuTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L743"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the GPU-resident backward pass of the subpixel convolutional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; BackwardGpu(IGpuTensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The GPU tensor containing the gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ExportComputationGraph_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports this layer's computation as a differentiable computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to which input variable nodes should be added.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing this layer's operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds a computation graph representation of the subpixel convolution operation.
+Subpixel convolution combines convolution with pixel shuffling (depth-to-space rearrangement).
+</p>
+<p><b>For Beginners:</b> This creates an optimized version for faster inference.
+<p>For subpixel convolutional layers:</p>
+<ul>
+<li>Creates placeholders for input, convolution kernels, and biases</li>
+<li>Applies convolution operation</li>
+<li>Applies pixel shuffle (depth-to-space) rearrangement</li>
+<li>Applies activation function</li>
+<li>Returns a computation graph for efficient execution</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when inputNodes is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when weights/biases are not initialized or activation is not supported.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Forward_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.Forward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L567"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass of the subpixel convolutional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor after convolution, pixel shuffling, and activation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass of the subpixel convolutional layer. It first applies convolution
+to produce a tensor with more channels, then performs pixel shuffling to rearrange these channels into
+a higher resolution output with fewer channels. Finally, it applies the activation function.
+</p>
+<p><b>For Beginners:</b> This method processes the input data through the upscaling steps.
+<p>The process works in three main steps:</p>
+<ol>
+<li><p>Convolution:</p>
+<ul>
+<li>The input is processed using the learned pattern detectors (kernels)</li>
+<li>This creates a version with many more channels than the final output needs</li>
+<li>These extra channels contain the information needed to create a larger image</li>
+</ul>
+</li>
+<li><p>Pixel Shuffling:</p>
+<ul>
+<li>The many channels are rearranged into a larger spatial grid</li>
+<li>This effectively increases the resolution of the image</li>
+<li>The proper arrangements of pixels creates the higher resolution output</li>
+</ul>
+</li>
+<li><p>Activation:</p>
+<ul>
+<li>A mathematical function is applied to introduce non-linearity</li>
+<li>This helps the network learn more complex patterns</li>
+<li>The final output has higher resolution but fewer channels</li>
+</ul>
+</li>
+</ol>
+<p>For example, with upscaleFactor=2:</p>
+<ul>
+<li>A 32×32×64 input might become 32×32×256 after convolution</li>
+<li>Then become 64×64×64 after pixel shuffling (4 times more pixels, 1/4 the channels)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ForwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ForwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0}[])">
+  ForwardGpu(params IGpuTensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L651"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the GPU-resident forward pass of the subpixel convolutional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; ForwardGpu(params IGpuTensor&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The GPU input tensors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The GPU output tensor after convolution, pixel shuffle, and activation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>All computations stay on GPU: Conv2D → PixelShuffle (reshape+permute+reshape) → Activation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the layer as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method retrieves all trainable parameters (kernels and biases) of the layer and combines them into a
+single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
+saving and loading model weights.
+</p>
+<p><b>For Beginners:</b> This method collects all the learnable values from the layer.
+<p>The parameters:</p>
+<ul>
+<li>Are the numbers that the neural network learns during training</li>
+<li>Include all kernels and biases from the layer</li>
+<li>Are combined into a single long list (vector)</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving the model to disk</li>
+<li>Loading parameters from a previously trained model</li>
+<li>Advanced optimization techniques that need access to all parameters</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ResetState_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ResetState" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1406"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the layer and reinitializes weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_ResetState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the internal state of the layer, clearing cached values from forward and backward passes,
+resetting momentum, and reinitializing the weights and biases. This is useful when starting new training
+or when implementing networks that need to reset their state between sequences.
+</p>
+<p><b>For Beginners:</b> This method clears the layer's memory and starts fresh.
+<p>When resetting the state:</p>
+<ul>
+<li>Stored inputs and outputs are cleared</li>
+<li>Calculated gradients are cleared</li>
+<li>Momentum is reset to zero</li>
+<li>Weights and biases are reinitialized to new random values</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Starting a new training session</li>
+<li>Getting out of a &quot;stuck&quot; state where learning has plateaued</li>
+<li>Testing how the layer performs with different initializations</li>
+</ul>
+<p>Think of it like wiping a whiteboard clean and starting over with a fresh approach.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_UpdateParameters__0_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of the layer using calculated gradients and momentum.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate to control the size of parameter updates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method updates the convolutional kernels and biases based on the gradients calculated during the backward pass.
+It uses momentum to stabilize the updates and applies weight decay to the kernels to prevent overfitting.
+</p>
+<p><b>For Beginners:</b> This method adjusts the layer's pattern detectors to improve performance.
+<p>During parameter updates:</p>
+<ol>
+<li><p>Momentum is calculated:</p>
+<ul>
+<li>90% of the previous update direction (momentum)</li>
+<li>10% of the current gradient direction</li>
+<li>This helps maintain a steady learning direction</li>
+</ul>
+</li>
+<li><p>Weights are updated using:</p>
+<ul>
+<li>The momentum-adjusted gradient (for direction)</li>
+<li>The learning rate (for step size)</li>
+<li>Weight decay (to prevent overfitting by keeping weights small)</li>
+</ul>
+</li>
+<li><p>Biases are updated using:</p>
+<ul>
+<li>The momentum-adjusted gradient</li>
+<li>The learning rate</li>
+<li>No weight decay (biases typically don't cause overfitting)</li>
+</ul>
+</li>
+</ol>
+<p>Think of it like navigating a mountain: momentum helps you keep moving in a consistent
+direction despite small bumps, while weight decay prevents you from taking extreme paths.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when trying to update parameters before calculating gradients.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_UpdateParametersGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.UpdateParametersGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_SubpixelConvolutionalLayer_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_" data-uid="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer`1.UpdateParametersGpu(AiDotNet.Interfaces.IGpuOptimizerConfig)">
+  UpdateParametersGpu(IGpuOptimizerConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L1303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates parameters using GPU-based optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParametersGpu(IGpuOptimizerConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Interfaces.IGpuOptimizerConfig.html">IGpuOptimizerConfig</a></dt>
+    <dd><p>GPU optimizer configuration specifying the optimizer type and hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/SubpixelConvolutionalLayer.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

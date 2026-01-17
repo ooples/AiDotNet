@@ -1,0 +1,2049 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface INumericOperations&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface INumericOperations&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines mathematical operations for numeric types used in machine learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Interfaces_INumericOperations_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Interfaces.INumericOperations%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_Interfaces_INumericOperations_1" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1" class="text-break">
+Interface INumericOperations&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines mathematical operations for numeric types used in machine learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface INumericOperations&lt;T&gt; : IVectorizedOperations&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Add_System_ReadOnlySpan__0__System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Add(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Subtract_System_ReadOnlySpan__0__System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Subtract(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Multiply_System_ReadOnlySpan__0__System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Multiply(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Divide_System_ReadOnlySpan__0__System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Divide(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Dot_System_ReadOnlySpan__0__System_ReadOnlySpan__0__">IVectorizedOperations&lt;T&gt;.Dot(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Sum_System_ReadOnlySpan__0__">IVectorizedOperations&lt;T&gt;.Sum(ReadOnlySpan&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Max_System_ReadOnlySpan__0__">IVectorizedOperations&lt;T&gt;.Max(ReadOnlySpan&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Min_System_ReadOnlySpan__0__">IVectorizedOperations&lt;T&gt;.Min(ReadOnlySpan&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Exp_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Exp(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Log_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Log(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Tanh_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Tanh(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Sigmoid_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Sigmoid(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Log2_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Log2(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_SoftMax_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.SoftMax(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_CosineSimilarity_System_ReadOnlySpan__0__System_ReadOnlySpan__0__">IVectorizedOperations&lt;T&gt;.CosineSimilarity(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Fill_System_Span__0___0_">IVectorizedOperations&lt;T&gt;.Fill(Span&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_MultiplyScalar_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.MultiplyScalar(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_DivideScalar_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.DivideScalar(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_AddScalar_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.AddScalar(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_SubtractScalar_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.SubtractScalar(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Sqrt_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Sqrt(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Abs_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Abs(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Negate_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Negate(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Clip_System_ReadOnlySpan__0___0__0_System_Span__0__">IVectorizedOperations&lt;T&gt;.Clip(ReadOnlySpan&lt;T&gt;, T, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Pow_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.Pow(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Copy_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Copy(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Floor_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Floor(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Ceiling_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Ceiling(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Frac_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Frac(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Sin_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Sin(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Cos_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Cos(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_MultiplyAdd_System_ReadOnlySpan__0__System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.MultiplyAdd(ReadOnlySpan&lt;T&gt;, ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_ToFloatSpan_System_ReadOnlySpan__0__System_Span_System_Single__">IVectorizedOperations&lt;T&gt;.ToFloatSpan(ReadOnlySpan&lt;T&gt;, Span&lt;float&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span__0__">IVectorizedOperations&lt;T&gt;.FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_ToHalfSpan_System_ReadOnlySpan__0__System_Span_System_Half__">IVectorizedOperations&lt;T&gt;.ToHalfSpan(ReadOnlySpan&lt;T&gt;, Span&lt;Half&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span__0__">IVectorizedOperations&lt;T&gt;.FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_LeakyReLU_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.LeakyReLU(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_GELU_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.GELU(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Mish_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Mish(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_Swish_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.Swish(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_ELU_System_ReadOnlySpan__0___0_System_Span__0__">IVectorizedOperations&lt;T&gt;.ELU(ReadOnlySpan&lt;T&gt;, T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html#AiDotNet_Tensors_Interfaces_IVectorizedOperations_1_ReLU_System_ReadOnlySpan__0__System_Span__0__">IVectorizedOperations&lt;T&gt;.ReLU(ReadOnlySpan&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This interface provides a unified way to perform mathematical operations regardless of the
+underlying numeric type (float, double, decimal, etc.), allowing algorithms to work with
+different numeric types without changing their implementation.</p>
+<p><b>For Beginners:</b> This interface is like a translator that helps AI algorithms work with
+different types of numbers.</p>
+<p>Why is this needed?</p>
+<ul>
+<li>AI algorithms need to do math operations (add, multiply, etc.)</li>
+<li>Different applications might need different number types (float, double, decimal)</li>
+<li>This interface lets the same algorithm work with any number type</li>
+</ul>
+<p>Real-world analogy:
+Think of this interface like a universal calculator. Whether you're working with whole
+numbers, decimals, or fractions, the calculator knows how to perform operations like
+addition and multiplication for each type. Similarly, this interface knows how to perform
+math operations for different numeric types used in AI.</p>
+<p>When implementing AI algorithms:</p>
+<ul>
+<li>Instead of writing code that only works with one number type (like double)</li>
+<li>You can write code that works with this interface</li>
+<li>Then your algorithm can work with any number type that has an implementation of this interface</li>
+</ul>
+<p>This interface extends <a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations&lt;T&gt;</a> to provide both single-value
+operations and SIMD-optimized batch operations on arrays/spans.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MaxValue_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MaxValue" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum possible value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the largest number that can be represented in the current number type.
+For example, for a 32-bit integer, this would be 2,147,483,647.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MinValue_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MinValue" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum possible value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the smallest number that can be represented in the current number type.
+For example, for a 32-bit integer, this would be -2,147,483,648.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_One_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_One" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value of one for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides the value of one in the current number type.
+For example, 1 for integers, 1.0 for floating-point numbers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_PrecisionBits_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_PrecisionBits" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L415"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in this numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_PrecisionBits_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many bits are used to store the number's precision.</p>
+<ul>
+<li>float (FP32): 32 bits</li>
+<li>Half (FP16): 16 bits</li>
+<li>double (FP64): 64 bits
+This is useful for mixed-precision training where different precisions are used.</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L483"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsCpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L493"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SupportsGpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float, double, int, and long are typically supported on GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Zero_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Zero" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the zero value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides the value of zero in the current number type.
+For example, 0 for integers, 0.0 for floating-point numbers.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Abs_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Abs__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Abs(`0)">
+  Abs(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the absolute value of a number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Abs(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to calculate the absolute value of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The absolute value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Abs__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The absolute value is the distance of a number from zero,
+without considering its sign. For example, the absolute value of both 5 and -5 is 5.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Add_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Add__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Add(`0,`0)">
+  Add(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Add(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sum of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Ceiling_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Ceiling__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Ceiling(`0)">
+  Ceiling(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integral value greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Ceiling(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The smallest integral value greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Ceiling__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) = 4 and Ceiling(-2.7) = -2.
+Note that for negative numbers, ceiling rounds toward zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Compare_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Compare__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Compare(`0,`0)">
+  Compare(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Compare(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Compare__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comparing two numbers to determine their ordering:</p>
+<ul>
+<li>If a is less than b, returns a negative number (-1)</li>
+<li>If a equals b, returns zero (0)</li>
+<li>If a is greater than b, returns a positive number (1)</li>
+</ul>
+<p>This is commonly used for sorting or determining relative positions of values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Cos_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Cos__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Cos(`0)">
+  Cos(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Cos(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The cosine of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Cos__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Cosine is a trigonometric function used in wave calculations,
+positional encoding, and signal processing. Input should be in radians.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Divide_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Divide__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Divide(`0,`0)">
+  Divide(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides the first value by the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Divide(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The dividend (value being divided).</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The divisor (value to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The result of dividing a by b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Equals_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Equals__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Equals(`0,`0)">
+  Equals(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether two values are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool Equals(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the values are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Exp_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Exp__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Exp(`0)">
+  Exp(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the exponential function (e raised to the power of the value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Exp(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The exponent value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of e raised to the power of the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Exp__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates &quot;e&quot; (a special mathematical constant, approximately 2.71828)
+raised to the power of the given value. For example, Exp(2) is e^ ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  7.389.</p>
+<p>The exponential function is commonly used in machine learning for:</p>
+<ul>
+<li>Neural network activation functions</li>
+<li>Probability calculations</li>
+<li>Growth and decay models</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Floor_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Floor__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Floor(`0)">
+  Floor(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integral value less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Floor(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The largest integral value less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Floor__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) = 3 and Floor(-2.3) = -3.
+Note that for negative numbers, floor rounds away from zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Frac_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Frac__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Frac(`0)">
+  Frac(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value (value - floor(value)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Frac(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The fractional part of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Frac__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, Frac(3.7) = 0.7. Note that Frac(-2.3) = 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+This is useful in hash encoding and periodic functions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromDouble_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a standard decimal number (double) to whatever
+number type this interface is working with.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromFloat_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L437"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float (FP32) value to the current numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromFloat_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a standard 32-bit floating-point number to the current numeric type.
+Used in mixed-precision training to cast between different numeric types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromHalf_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L462"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half (FP16) value to the current numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The Half value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_FromHalf_System_Half__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a 16-bit half-precision floating-point number to the current numeric type.
+Used in mixed-precision training to cast between different numeric types.
+Note: Half type is only available in .NET 5.0 and later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_GreaterThan_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_GreaterThan__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.GreaterThan(`0,`0)">
+  GreaterThan(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is greater than the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool GreaterThan(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is greater than b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_GreaterThanOrEquals__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.GreaterThanOrEquals(`0,`0)">
+  GreaterThanOrEquals(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is greater than or equal to the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool GreaterThanOrEquals(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is greater than or equal to b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsInfinity_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsInfinity__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.IsInfinity(`0)">
+  IsInfinity(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified value is positive or negative infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsInfinity(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is positive or negative infinity; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsInfinity__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Infinity represents a value that is larger than any finite number.
+In computing, infinity can occur when:</p>
+<ul>
+<li>Dividing a number by zero</li>
+<li>A calculation results in a number too large to be represented</li>
+</ul>
+<p>There are two types of infinity:</p>
+<ul>
+<li>Positive infinity: A value greater than any other number</li>
+<li>Negative infinity: A value less than any other number</li>
+</ul>
+<p>In machine learning, checking for infinity is important because:</p>
+<ul>
+<li>Infinite values can cause algorithms to behave unexpectedly</li>
+<li>They often indicate numerical overflow or division by zero</li>
+<li>They can lead to incorrect predictions or model behavior</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsNaN_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsNaN__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.IsNaN(`0)">
+  IsNaN(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified value is Not a Number (NaN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsNaN(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is NaN; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_IsNaN__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> NaN (Not a Number) is a special value that represents an undefined or
+unrepresentable mathematical result. It occurs in situations like:</p>
+<ul>
+<li>Dividing zero by zero</li>
+<li>Taking the square root of a negative number</li>
+<li>Performing operations where the result cannot be expressed as a number</li>
+</ul>
+<p>In machine learning, checking for NaN values is important because:</p>
+<ul>
+<li>NaN values can cause algorithms to produce incorrect results</li>
+<li>They can silently propagate through calculations (any operation with NaN results in NaN)</li>
+<li>They often indicate a problem in your data or calculations that needs to be fixed</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_LessThan_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_LessThan__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.LessThan(`0,`0)">
+  LessThan(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is less than the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool LessThan(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is less than b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_LessThanOrEquals_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_LessThanOrEquals__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.LessThanOrEquals(`0,`0)">
+  LessThanOrEquals(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is less than or equal to the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool LessThanOrEquals(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is less than or equal to b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Log_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Log__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Log(`0)">
+  Log(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm (base e) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Log(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to calculate the natural logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The natural logarithm of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Log__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The natural logarithm is the inverse of the exponential function.
+It answers the question: &quot;To what power must e be raised to get this value?&quot;
+For example, Log(7.389) ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  2 because e^ ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  7.389.</p>
+<p>Natural logarithms are commonly used in machine learning for:</p>
+<ul>
+<li>Converting multiplicative relationships to additive ones</li>
+<li>Working with probabilities (log-likelihood)</li>
+<li>Measuring information (entropy)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Multiply_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Multiply__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Multiply(`0,`0)">
+  Multiply(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Multiply(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The product of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Negate_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Negate__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Negate(`0)">
+  Negate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates a value (changes its sign).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Negate(T a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The value to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The negated value (positive becomes negative, negative becomes positive).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Power_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Power__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Power(`0,`0)">
+  Power(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raises a value to the power of an exponent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Power(T baseValue, T exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <span class="xref">T</span></dt>
+    <dd><p>The base value.</p>
+</dd>
+    <dt><code>exponent</code> <span class="xref">T</span></dt>
+    <dd><p>The exponent value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The base value raised to the power of the exponent.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Power__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates the result of multiplying a number by itself a specific
+number of times. For example, Power(2, 3) means 2Ãƒâ€šÃ‚Â³ = 2 ÃƒÆ’Ã¢â‚¬â€ 2 ÃƒÆ’Ã¢â‚¬â€ 2 = 8.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Round_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Round__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Round(`0)">
+  Round(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rounds a value to the nearest integral value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Round(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to round.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The rounded value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Round__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a number with decimals to the nearest whole number.
+For example, Round(3.2) = 3 and Round(3.7) = 4.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SignOrZero_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SignOrZero__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.SignOrZero(`0)">
+  SignOrZero(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of the value (1 for positive, -1 for negative) or zero if the value is zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T SignOrZero(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to get the sign of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sign of the value (1 for positive, -1 for negative) or zero if the value is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_SignOrZero__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method tells you about the direction or sign of a number:</p>
+<ul>
+<li>For positive numbers, it returns 1 (or the equivalent in type T)</li>
+<li>For negative numbers, it returns -1 (or the equivalent in type T)</li>
+<li>For zero, it returns 0 (or the equivalent in type T)</li>
+</ul>
+<p>This is useful in machine learning when:</p>
+<ul>
+<li>You need to know only the direction of a value, not its magnitude</li>
+<li>Implementing algorithms that behave differently based on whether values are positive, negative, or zero</li>
+<li>Normalizing or standardizing data</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sin_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sin__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Sin(`0)">
+  Sin(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sine of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Sin(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sine of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sin__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sine is a trigonometric function used in wave calculations,
+positional encoding, and signal processing. Input should be in radians.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sqrt_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sqrt__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Sqrt(`0)">
+  Sqrt(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Sqrt(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The square root of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Sqrt__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The square root of a number is a value that, when multiplied by itself,
+gives the original number. For example, the square root of 9 is 3 because 3 ÃƒÆ’Ã¢â‚¬â€ 3 = 9.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Square_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Square__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Square(`0)">
+  Square(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Square(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The square of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Square__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The square of a number is the result of multiplying the number by itself.
+For example, the square of 4 is 16 because 4 ÃƒÆ’Ã¢â‚¬â€ 4 = 16.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Subtract_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_Subtract__0__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.Subtract(`0,`0)">
+  Subtract(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts the second value from the first value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Subtract(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The value to subtract from.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The value to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The result of subtracting b from a.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToDouble_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToDouble__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToDouble(`0)">
+  ToDouble(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L473"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to double (FP64) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double ToDouble(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value as a double.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToDouble__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a 64-bit double-precision floating-point number.
+Double precision provides maximum numerical accuracy but uses more memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToFloat_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToFloat__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToFloat(`0)">
+  ToFloat(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L426"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">float ToFloat(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value as a float.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToFloat__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a standard 32-bit floating-point number.
+Used in mixed-precision training to cast between different numeric types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToHalf_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToHalf__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToHalf(`0)">
+  ToHalf(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Half ToHalf(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The value as a Half.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToHalf__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a 16-bit half-precision floating-point number.
+Half precision uses less memory and can be faster on modern GPUs with Tensor Cores.
+Used in mixed-precision training to reduce memory usage and increase speed.
+Note: Half type is only available in .NET 5.0 and later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToInt32_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToInt32__0_" data-uid="AiDotNet.Tensors.Interfaces.INumericOperations`1.ToInt32(`0)">
+  ToInt32(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value of type T to a 32-bit integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ToInt32(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The value converted to a 32-bit integer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Interfaces_INumericOperations_1_ToInt32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current number type to a whole number (integer).
+If the original number has a decimal part, it will be truncated (removed).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Interfaces/INumericOperations.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

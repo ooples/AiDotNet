@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AudioProcessor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AudioProcessor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Complete audio processing pipeline for diffusion-based audio generation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Audio_AudioProcessor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Audio.AudioProcessor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Audio_AudioProcessor_1" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1" class="text-break">
+Class AudioProcessor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Audio.html">Audio</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Complete audio processing pipeline for diffusion-based audio generation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AudioProcessor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AudioProcessor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class combines STFT, Mel spectrogram, and Griffin-Lim into a unified
+pipeline for audio analysis and synthesis. It's designed for use with
+diffusion models like Riffusion that generate spectrograms.
+</p>
+<p>
+<b>For Beginners:</b> This is your one-stop shop for working with audio in
+diffusion models. It handles:
+<ul>
+<li>Converting audio waveforms to spectrograms (for training/conditioning)</li>
+<li>Converting spectrograms back to audio (for generation)</li>
+<li>Normalizing and denormalizing spectrograms</li>
+</ul>
+<p>Typical workflow for Riffusion-style generation:</p>
+<pre><code class="lang-csharp">var processor = new AudioProcessor&lt;float&gt;(sampleRate: 44100);
+
+// Encode reference audio to latent space (via spectrogram)
+var spectrogram = processor.AudioToSpectrogram(referenceAudio);
+var normalized = processor.NormalizeSpectrogram(spectrogram);
+
+// ... diffusion model generates new spectrogram ...
+
+// Decode generated spectrogram back to audio
+var denormalized = processor.DenormalizeSpectrogram(generatedSpec);
+var audio = processor.SpectrogramToAudio(denormalized);
+</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1__ctor_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Nullable_System_Double__System_Double_System_Double_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32,System.Double,System.Nullable{System.Double},System.Double,System.Double,System.Int32)">
+  AudioProcessor(int, int, int, int, double, double?, double, double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new audio processor with Riffusion-compatible defaults.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AudioProcessor(int sampleRate = 44100, int nFft = 2048, int hopLength = 512, int nMels = 512, double fMin = 0, double? fMax = null, double minDb = -100, double maxDb = 20, int griffinLimIterations = 60)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Audio sample rate in Hz (default: 44100).</p>
+</dd>
+    <dt><code>nFft</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>FFT size (default: 2048).</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Hop length (default: 512).</p>
+</dd>
+    <dt><code>nMels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of Mel bins (default: 512 for Riffusion).</p>
+</dd>
+    <dt><code>fMin</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum frequency (default: 0).</p>
+</dd>
+    <dt><code>fMax</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Maximum frequency (default: sampleRate/2).</p>
+</dd>
+    <dt><code>minDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum dB for normalization (default: -100).</p>
+</dd>
+    <dt><code>maxDb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum dB for normalization (default: 20).</p>
+</dd>
+    <dt><code>griffinLimIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Griffin-Lim iterations (default: 60).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_AudioProcessor_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Nullable_System_Double__System_Double_System_Double_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Default parameters are optimized for Riffusion-style
+generation at 44.1kHz sample rate. For speech processing, you might use:
+- sampleRate: 16000 or 22050
+- nMels: 80 (common for speech)
+- nFft: 1024 or 512
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GriffinLim_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GriffinLim*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GriffinLim" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GriffinLim">
+  GriffinLim
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Griffin-Lim processor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GriffinLim&lt;T&gt; GriffinLim { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.Audio.GriffinLim-1.html">GriffinLim</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_HopLength_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.HopLength*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_HopLength" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.HopLength">
+  HopLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the hop length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int HopLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_MelSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.MelSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_MelSpectrogram" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.MelSpectrogram">
+  MelSpectrogram
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Mel spectrogram processor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MelSpectrogram&lt;T&gt; MelSpectrogram { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.Audio.MelSpectrogram-1.html">MelSpectrogram</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NFft_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NFft*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NFft" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NFft">
+  NFft
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the FFT size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NFft { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NumMels_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NumMels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NumMels" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NumMels">
+  NumMels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of Mel bins.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_STFT_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.STFT*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_STFT" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.STFT">
+  STFT
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the STFT processor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ShortTimeFourierTransform&lt;T&gt; STFT { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform-1.html">ShortTimeFourierTransform</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_SampleRate_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_SampleRate" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sample rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToImageSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.AudioToImageSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToImageSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.AudioToImageSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  AudioToImageSpectrogram(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L466"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a spectrogram suitable for image-based diffusion models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; AudioToImageSpectrogram(Tensor&lt;T&gt; audio, int targetWidth = 512, int targetHeight = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor.</p>
+</dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target spectrogram width (time dimension).</p>
+</dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target spectrogram height (frequency dimension).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Resized spectrogram tensor [height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToImageSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Diffusion models often expect fixed-size inputs like
+512x512 or 1024x1024. This method creates a spectrogram and resizes it
+to match those dimensions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.AudioToSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.AudioToSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  AudioToSpectrogram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts audio waveform to a normalized Mel spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; AudioToSpectrogram(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized Mel spectrogram [numFrames, nMels] in range [0, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_AudioProcessor_1_AudioToSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This converts audio into a 2D image-like representation
+that can be processed by image-based diffusion models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DenormalizeSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DenormalizeSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DenormalizeSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DenormalizeSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DenormalizeSpectrogram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes a [0, 1] spectrogram back to dB.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; DenormalizeSpectrogram(Tensor&lt;T&gt; normalizedSpectrogram)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>normalizedSpectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized spectrogram.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Spectrogram in dB.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DurationToFrames_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DurationToFrames*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DurationToFrames_System_Double_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DurationToFrames(System.Double)">
+  DurationToFrames(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L342"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the number of frames for a given duration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DurationToFrames(double durationSeconds)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>durationSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Duration in seconds.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of spectrogram frames.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DurationToSamples_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DurationToSamples*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_DurationToSamples_System_Double_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.DurationToSamples(System.Double)">
+  DurationToSamples(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L353"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the number of samples for a given duration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DurationToSamples(double durationSeconds)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>durationSeconds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Duration in seconds.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of audio samples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_FramesToDuration_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.FramesToDuration*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_FramesToDuration_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.FramesToDuration(System.Int32)">
+  FramesToDuration(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the duration of audio from spectrogram dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FramesToDuration(int numFrames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of spectrogram frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Duration in seconds.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GetMelFrequencyAxis_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GetMelFrequencyAxis*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GetMelFrequencyAxis" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GetMelFrequencyAxis">
+  GetMelFrequencyAxis()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L377"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the frequency axis values for a Mel spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] GetMelFrequencyAxis()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Array of center frequencies in Hz for each Mel bin.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GetTimeAxis_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GetTimeAxis*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_GetTimeAxis_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.GetTimeAxis(System.Int32)">
+  GetTimeAxis(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the time axis values for a spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] GetTimeAxis(int numFrames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of spectrogram frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Array of time values in seconds for each frame.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NormalizeAudio_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NormalizeAudio*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NormalizeAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NormalizeAudio(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  NormalizeAudio(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes audio to a peak amplitude.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; NormalizeAudio(Tensor&lt;T&gt; audio, double targetPeak = 0.95)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor.</p>
+</dd>
+    <dt><code>targetPeak</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target peak amplitude (default: 0.95).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized audio tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NormalizeSpectrogram_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NormalizeSpectrogram*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_NormalizeSpectrogram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.NormalizeSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  NormalizeSpectrogram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes a dB spectrogram to [0, 1] range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; NormalizeSpectrogram(Tensor&lt;T&gt; dbSpectrogram)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dbSpectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Spectrogram in dB.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized spectrogram in [0, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_PadOrTruncate_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.PadOrTruncate*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_PadOrTruncate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.PadOrTruncate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  PadOrTruncate(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L388"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pads or truncates audio to a specific length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; PadOrTruncate(Tensor&lt;T&gt; audio, int targetLength)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor.</p>
+</dd>
+    <dt><code>targetLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target length in samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio tensor of specified length (padded with zeros).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_PadOrTruncate_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.PadOrTruncate*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_PadOrTruncate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__0_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.PadOrTruncate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,`0)">
+  PadOrTruncate(Tensor&lt;T&gt;, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L400"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pads or truncates audio to a specific length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; PadOrTruncate(Tensor&lt;T&gt; audio, int targetLength, T padValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input audio tensor.</p>
+</dd>
+    <dt><code>targetLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Target length in samples.</p>
+</dd>
+    <dt><code>padValue</code> <span class="xref">T</span></dt>
+    <dd><p>Value to use for padding.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio tensor of specified length.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_AudioProcessor_1_SpectrogramToAudio_" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.SpectrogramToAudio*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_AudioProcessor_1_SpectrogramToAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Audio.AudioProcessor`1.SpectrogramToAudio(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32})">
+  SpectrogramToAudio(Tensor&lt;T&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a normalized spectrogram back to audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; SpectrogramToAudio(Tensor&lt;T&gt; spectrogram, int? length = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>spectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Normalized spectrogram [numFrames, nMels] in range [0, 1].</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Expected output length (optional).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_AudioProcessor_1_SpectrogramToAudio_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This takes a spectrogram (e.g., generated by a diffusion model)
+and converts it back to an audio waveform that can be played.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/AudioProcessor.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

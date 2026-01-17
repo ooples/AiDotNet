@@ -1,0 +1,1087 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Multivector&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Multivector&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a multivector in a Clifford algebra.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Multivector_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Multivector%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1" class="text-break">
+Class Multivector&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a multivector in a Clifford algebra.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class Multivector&lt;T&gt; : IEquatable&lt;Multivector&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for coefficients.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">Multivector&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.iequatable-1">IEquatable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_AiDotNet_Tensors_LinearAlgebra_CliffordAlgebra_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor(AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra)">
+  Multivector(CliffordAlgebra)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector(CliffordAlgebra algebra)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algebra</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_AiDotNet_Tensors_LinearAlgebra_CliffordAlgebra_System_Collections_Generic_IReadOnlyDictionary_System_Int32__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor(AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra,System.Collections.Generic.IReadOnlyDictionary{System.Int32,`0})">
+  Multivector(CliffordAlgebra, IReadOnlyDictionary&lt;int, T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector(CliffordAlgebra algebra, IReadOnlyDictionary&lt;int, T&gt; coefficients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algebra</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+    <dt><code>coefficients</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1__ctor_AiDotNet_Tensors_LinearAlgebra_CliffordAlgebra_System_Collections_Generic_IReadOnlyList__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.#ctor(AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra,System.Collections.Generic.IReadOnlyList{`0})">
+  Multivector(CliffordAlgebra, IReadOnlyList&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector(CliffordAlgebra algebra, IReadOnlyList&lt;T&gt; coefficients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algebra</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+    <dt><code>coefficients</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Algebra_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Algebra*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Algebra" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Algebra">
+  Algebra
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CliffordAlgebra Algebra { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_BasisCount_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.BasisCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_BasisCount" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.BasisCount">
+  BasisCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BasisCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_IsScalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.IsScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_IsScalar" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.IsScalar">
+  IsScalar
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsScalar { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_IsZero_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.IsZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_IsZero" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.IsZero">
+  IsZero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsZero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Item_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Item*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Item_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Item(System.Int32)">
+  this[int]
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the coefficient for the specified blade index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T this[int blade] { get; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>blade</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Item_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Multivector is immutable. Use factory methods or constructors to create modified instances.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Magnitude_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Magnitude*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Magnitude" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Magnitude">
+  Magnitude
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Magnitude { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Scalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Scalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Scalar" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Scalar">
+  Scalar
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Scalar { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_CreateScalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.CreateScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_CreateScalar_AiDotNet_Tensors_LinearAlgebra_CliffordAlgebra__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.CreateScalar(AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra,`0)">
+  CreateScalar(CliffordAlgebra, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Multivector&lt;T&gt; CreateScalar(CliffordAlgebra algebra, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algebra</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Equals_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Equals(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Equals(Multivector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L269"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether the current object is equal to another object of the same type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(Multivector&lt;T&gt;? other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>An object to compare with this object.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if the current object is equal to the <code class="paramref">other</code> parameter; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Equals_System_Object_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Equals(System.Object)">
+  Equals(object?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified object is equal to the current object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool Equals(object? obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The object to compare with the current object.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">true</a> if the specified object  is equal to the current object; otherwise, <a href="https://learn.microsoft.com/dotnet/csharp/language-reference/builtin-types/bool">false</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_GeometricProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.GeometricProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_GeometricProduct_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.GeometricProduct(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  GeometricProduct(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; GeometricProduct(Multivector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_GetHashCode_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.GetHashCode*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_GetHashCode" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.GetHashCode">
+  GetHashCode()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serves as the default hash function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A hash code for the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_InnerProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.InnerProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_InnerProduct_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.InnerProduct(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  InnerProduct(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; InnerProduct(Multivector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Inverse_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Inverse*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Inverse" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Inverse">
+  Inverse()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Inverse()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Negate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Negate" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Negate">
+  Negate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Negate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_OuterProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.OuterProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.OuterProduct(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  OuterProduct(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; OuterProduct(Multivector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Reverse_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Reverse*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Reverse" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Reverse">
+  Reverse()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Reverse()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Scale_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Scale*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_Scale__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.Scale(`0)">
+  Scale(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Scale(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_ToString_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_ToString" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string that represents the current object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that represents the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  operator +(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Multivector&lt;T&gt; operator +(Multivector&lt;T&gt; left, Multivector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  operator /(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Multivector&lt;T&gt; operator /(Multivector&lt;T&gt; left, Multivector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  operator *(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Multivector&lt;T&gt; operator *(Multivector&lt;T&gt; left, Multivector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Multivector_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Multivector`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  operator -(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Multivector&lt;T&gt; operator -(Multivector&lt;T&gt; left, Multivector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Multivector.cs/#L12" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

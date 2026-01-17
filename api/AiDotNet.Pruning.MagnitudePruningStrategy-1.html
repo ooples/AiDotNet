@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MagnitudePruningStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MagnitudePruningStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Prunes weights with smallest absolute values.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Pruning_MagnitudePruningStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.Pruning.MagnitudePruningStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1">
+
+
+
+  <h1 id="AiDotNet_Pruning_MagnitudePruningStrategy_1" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1" class="text-break">
+Class MagnitudePruningStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Pruning.html">Pruning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Prunes weights with smallest absolute values.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MagnitudePruningStrategy&lt;T&gt; : IPruningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MagnitudePruningStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPruningStrategy-1.html">IPruningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Magnitude-based pruning is one of the simplest and most effective pruning strategies.
+It removes weights with the smallest absolute values, based on the intuition that
+weights with small magnitudes contribute less to the network's output.
+</p>
+<p><b>For Beginners:</b> This strategy removes the weakest connections in your neural network.
+<p>Think of it like trimming weak branches from a tree:</p>
+<ul>
+<li>Thick, strong branches (large weight values) carry lots of nutrients and stay</li>
+<li>Thin, weak branches (small weight values) don't contribute much and get trimmed</li>
+</ul>
+<p>In mathematical terms:</p>
+<ul>
+<li>Each weight gets an importance score equal to its absolute value |w|</li>
+<li>Weights with the smallest scores are pruned (set to zero)</li>
+<li>This is simple but surprisingly effective!</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>A weight of 0.001 has low importance and might be pruned</li>
+<li>A weight of 0.9 has high importance and will likely be kept</li>
+<li>A weight of -0.8 has high importance too (|-0.8| = 0.8)</li>
+</ul>
+<p>This technique can often remove 50-90% of weights with minimal accuracy loss!</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1__ctor_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1__ctor" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.#ctor">
+  MagnitudePruningStrategy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of MagnitudePruningStrategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MagnitudePruningStrategy()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_IsStructured_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.IsStructured*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_IsStructured" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.IsStructured">
+  IsStructured
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this is structured pruning (false for magnitude-based).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsStructured { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_Name_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.Name*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_Name" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this pruning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_RequiresGradients_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.RequiresGradients*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_RequiresGradients" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.RequiresGradients">
+  RequiresGradients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this strategy requires gradients (false for magnitude-based).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RequiresGradients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_SupportedPatterns_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.SupportedPatterns*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_SupportedPatterns" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.SupportedPatterns">
+  SupportedPatterns
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets supported sparsity patterns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;SparsityPattern&gt; SupportedPatterns { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.SparsityPattern.html">SparsityPattern</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Matrix&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the pruning mask to matrix weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Matrix&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_IPruningMask__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This actually removes the weights by setting them to zero.
+After this method, the weight matrix will have zeros wherever the mask was 0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Tensor&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L395"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the pruning mask to tensor weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Tensor&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Weight tensor to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Vector&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the pruning mask to vector weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Vector&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Weight vector to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeImportanceScores(Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores as absolute values of weights for matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; ComputeImportanceScores(Matrix&lt;T&gt; weights, Matrix&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for magnitude-based pruning)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how important each weight is.
+For magnitude pruning, importance is simply the absolute value of the weight.
+Larger absolute values mean more important weights.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeImportanceScores(Tensor&lt;T&gt;, Tensor&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores as absolute values of weights for tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ComputeImportanceScores(Tensor&lt;T&gt; weights, Tensor&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Weight tensor</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for magnitude-based pruning)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how important each weight is.
+For magnitude pruning, importance is simply the absolute value of the weight.
+Larger absolute values mean more important weights.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeImportanceScores(Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores as absolute values of weights for vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ComputeImportanceScores(Vector&lt;T&gt; weights, Vector&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Weight vector</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for magnitude-based pruning)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how important each weight is.
+For magnitude pruning, importance is simply the absolute value of the weight.
+Larger absolute values mean more important weights.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_Create2to4Mask_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.Create2to4Mask*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_Create2to4Mask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.Create2to4Mask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Create2to4Mask(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a 2:4 structured sparsity mask (NVIDIA Ampere compatible).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; Create2to4Mask(Tensor&lt;T&gt; importanceScores)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>2:4 structured mask (exactly 2 zeros per 4 elements).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Double)">
+  CreateMask(Matrix&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask for matrices by selecting the smallest magnitude weights to prune.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Matrix&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates the mask that decides which weights to remove.
+<p>If targetSparsity is 0.7:</p>
+<ul>
+<li>70% of the weights with the smallest importance scores will be pruned (set to 0)</li>
+<li>30% of the weights with the highest importance scores will be kept</li>
+</ul>
+<p>The method sorts all weights by importance and draws a line where the bottom 70% get pruned.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when targetSparsity is not between 0 and 1</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  CreateMask(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask for tensors by selecting the smallest magnitude weights to prune.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Tensor&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when targetSparsity is not between 0 and 1</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double)">
+  CreateMask(Vector&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask for vectors by selecting the smallest magnitude weights to prune.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Vector&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when targetSparsity is not between 0 and 1</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateNtoMMask_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateNtoMMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_CreateNtoMMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.CreateNtoMMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  CreateNtoMMask(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an N:M structured sparsity mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateNtoMMask(Tensor&lt;T&gt; importanceScores, int n, int m)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores.</p>
+</dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of zeros per group.</p>
+</dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Group size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>N:M structured mask.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ToSparseFormat_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ToSparseFormat*"></a>
+
+  <h3 id="AiDotNet_Pruning_MagnitudePruningStrategy_1_ToSparseFormat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_ModelCompression_SparseFormat_" data-uid="AiDotNet.Pruning.MagnitudePruningStrategy`1.ToSparseFormat(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.ModelCompression.SparseFormat)">
+  ToSparseFormat(Tensor&lt;T&gt;, SparseFormat)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L413"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts pruned weights to sparse format for efficient storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseCompressionResult&lt;T&gt; ToSparseFormat(Tensor&lt;T&gt; weights, SparseFormat format)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weights (containing zeros).</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.ModelCompression.SparseFormat.html">SparseFormat</a></dt>
+    <dd><p>Target sparse format.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelCompression.SparseCompressionResult-1.html">SparseCompressionResult</a>&lt;T&gt;</dt>
+    <dd><p>Sparse representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/MagnitudePruningStrategy.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

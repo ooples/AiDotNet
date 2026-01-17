@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ToolRegistry | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ToolRegistry | AiDotNet Documentation ">
+      
+      <meta name="description" content="Registry for managing and executing function tools.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Tools_ToolRegistry.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Tools.ToolRegistry%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Tools_ToolRegistry" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry" class="text-break">
+Class ToolRegistry  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Tools.html">Tools</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Registry for managing and executing function tools.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ToolRegistry</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ToolRegistry</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The ToolRegistry stores available tools and provides methods for tool discovery,
+execution, and schema generation. It acts as a central hub for tool management.
+</p>
+<p><b>For Beginners:</b> Think of this as a toolbox that holds all available tools.
+<p>Example:</p>
+<pre><code class="lang-csharp">var registry = new ToolRegistry();
+
+// Add tools
+registry.RegisterTool(new CalculatorTool());
+registry.RegisterTool(new WeatherTool());
+registry.RegisterTool(new SearchTool());
+
+// List available tools
+var tools = registry.GetAllTools(); // Returns all 3 tools
+
+// Execute a tool
+var args = JObject.Parse(&quot;{\&quot;city\&quot;: \&quot;Paris\&quot;}&quot;);
+var result = registry.ExecuteTool(&quot;get_weather&quot;, args);
+</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry__ctor_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry__ctor" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.#ctor">
+  ToolRegistry()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ToolRegistry class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ToolRegistry()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_Count_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.Count*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_Count" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.Count">
+  Count
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the count of registered tools.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_Clear_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.Clear*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_Clear" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all tools from the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_ExecuteTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.ExecuteTool*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_ExecuteTool_System_String_Newtonsoft_Json_Linq_JObject_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.ExecuteTool(System.String,Newtonsoft.Json.Linq.JObject)">
+  ExecuteTool(string, JObject)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a tool by name with the provided arguments.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ExecuteTool(string toolName, JObject arguments)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the tool to execute.</p>
+</dd>
+    <dt><code>arguments</code> <span class="xref">JObject</span></dt>
+    <dd><p>The arguments for the tool.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tool execution result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the tool is not found.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GenerateToolsDescription_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GenerateToolsDescription*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GenerateToolsDescription" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GenerateToolsDescription">
+  GenerateToolsDescription()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a formatted description of all tools suitable for including in prompts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateToolsDescription()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted string describing all available tools.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GetAllTools_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GetAllTools*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GetAllTools" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GetAllTools">
+  GetAllTools()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all registered tools.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;IFunctionTool&gt; GetAllTools()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFunctionTool.html">IFunctionTool</a>&gt;</dt>
+    <dd><p>A read-only collection of all tools.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GetTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GetTool*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_GetTool_System_String_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.GetTool(System.String)">
+  GetTool(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a tool by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFunctionTool? GetTool(string toolName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the tool.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFunctionTool.html">IFunctionTool</a></dt>
+    <dd><p>The tool if found; otherwise, null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_HasTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.HasTool*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_HasTool_System_String_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.HasTool(System.String)">
+  HasTool(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a tool with the given name is registered.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasTool(string toolName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The tool name to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the tool is registered; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_RegisterTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.RegisterTool*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_RegisterTool_AiDotNet_Interfaces_IFunctionTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.RegisterTool(AiDotNet.Interfaces.IFunctionTool)">
+  RegisterTool(IFunctionTool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers a tool in the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RegisterTool(IFunctionTool tool)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tool</code> <a class="xref" href="AiDotNet.Interfaces.IFunctionTool.html">IFunctionTool</a></dt>
+    <dd><p>The tool to register.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when tool is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when a tool with the same name already exists.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PromptEngineering_Tools_ToolRegistry_UnregisterTool_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.UnregisterTool*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Tools_ToolRegistry_UnregisterTool_System_String_" data-uid="AiDotNet.PromptEngineering.Tools.ToolRegistry.UnregisterTool(System.String)">
+  UnregisterTool(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Unregisters a tool from the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UnregisterTool(string toolName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>toolName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the tool to unregister.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the tool was removed; false if it wasn't found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Tools/ToolRegistry.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

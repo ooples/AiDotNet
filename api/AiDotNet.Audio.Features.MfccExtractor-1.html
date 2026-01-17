@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MfccExtractor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MfccExtractor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Extracts Mel-Frequency Cepstral Coefficients (MFCCs) from audio signals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_Features_MfccExtractor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.Features.MfccExtractor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.Features.MfccExtractor`1">
+
+
+
+  <h1 id="AiDotNet_Audio_Features_MfccExtractor_1" data-uid="AiDotNet.Audio.Features.MfccExtractor`1" class="text-break">
+Class MfccExtractor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.Features.html">Features</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Extracts Mel-Frequency Cepstral Coefficients (MFCCs) from audio signals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MfccExtractor&lt;T&gt; : AudioFeatureExtractorBase&lt;T&gt;, IAudioFeatureExtractor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html">AudioFeatureExtractorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MfccExtractor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAudioFeatureExtractor-1.html">IAudioFeatureExtractor</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_NumOps">AudioFeatureExtractorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_Options">AudioFeatureExtractorBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_SampleRate">AudioFeatureExtractorBase&lt;T&gt;.SampleRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_FftSize">AudioFeatureExtractorBase&lt;T&gt;.FftSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_HopLength">AudioFeatureExtractorBase&lt;T&gt;.HopLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_WindowLength">AudioFeatureExtractorBase&lt;T&gt;.WindowLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_Extract_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AudioFeatureExtractorBase&lt;T&gt;.Extract(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ExtractAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_">AudioFeatureExtractorBase&lt;T&gt;.ExtractAsync(Tensor&lt;T&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ComputeNumFrames_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.ComputeNumFrames(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateHannWindow_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.CreateHannWindow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateHammingWindow_System_Int32_">AudioFeatureExtractorBase&lt;T&gt;.CreateHammingWindow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_ExtractFrame__0___System_Int32__0___">AudioFeatureExtractorBase&lt;T&gt;.ExtractFrame(T[], int, T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_PadAudioCenter__0___">AudioFeatureExtractorBase&lt;T&gt;.PadAudioCenter(T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_HzToMel_System_Double_">AudioFeatureExtractorBase&lt;T&gt;.HzToMel(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_MelToHz_System_Double_">AudioFeatureExtractorBase&lt;T&gt;.MelToHz(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Audio.Features.AudioFeatureExtractorBase-1.html#AiDotNet_Audio_Features_AudioFeatureExtractorBase_1_CreateMelFilterbank_System_Int32_System_Int32_System_Int32_System_Double_System_Nullable_System_Double__">AudioFeatureExtractorBase&lt;T&gt;.CreateMelFilterbank(int, int, int, double, double?)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_Features_MfccExtractor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+MFCCs are a compact representation of the spectral envelope of an audio signal.
+They are widely used in speech recognition, speaker identification, and music analysis.
+</p>
+<p><b>For Beginners:</b> MFCCs capture the "shape" of the audio's frequency content,
+similar to how humans perceive sound. The process:
+<ol><li>Compute the Mel spectrogram (power spectrum on perceptual scale)</li><li>Take the log (matches human loudness perception)</li><li>Apply DCT (decorrelates and compresses the information)</li><li>Keep only the first N coefficients (typically 13-40)</li></ol>
+<p>Why MFCCs work well for speech:</p>
+<ul>
+<li>They capture formant frequencies (vocal tract resonances)</li>
+<li>They're robust to background noise</li>
+<li>They compress audio information efficiently</li>
+</ul>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var mfcc = new MfccExtractor&lt;float&gt;(new MfccOptions { NumCoefficients = 13 });
+var features = mfcc.Extract(audioTensor);
+// features.Shape = [numFrames, 13]</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_MfccExtractor_1__ctor_" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_MfccExtractor_1__ctor_AiDotNet_Audio_Features_MfccOptions_" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.#ctor(AiDotNet.Audio.Features.MfccOptions)">
+  MfccExtractor(MfccOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new MFCC extractor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MfccExtractor(MfccOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Audio.Features.MfccOptions.html">MfccOptions</a></dt>
+    <dd><p>MFCC extraction options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_MfccExtractor_1_FeatureDimension_" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.FeatureDimension*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_MfccExtractor_1_FeatureDimension" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.FeatureDimension">
+  FeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features produced per frame.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int FeatureDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_Features_MfccExtractor_1_Name_" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.Name*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_MfccExtractor_1_Name" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this feature extractor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_Features_MfccExtractor_1_Extract_" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.Extract*"></a>
+
+  <h3 id="AiDotNet_Audio_Features_MfccExtractor_1_Extract_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.Features.MfccExtractor`1.Extract(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Extract(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts features from an audio waveform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Extract(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The audio waveform as a 1D tensor [samples].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Features as a 2D tensor [frames, features].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/Features/MfccExtractor.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

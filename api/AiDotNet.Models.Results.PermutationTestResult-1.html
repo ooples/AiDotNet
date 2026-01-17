@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PermutationTestResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PermutationTestResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of a permutation test, which is a non-parametric statistical significance test that determines whether the observed difference between two groups is statistically significant.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_PermutationTestResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.PermutationTestResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.PermutationTestResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_PermutationTestResult_1" data-uid="AiDotNet.Models.Results.PermutationTestResult`1" class="text-break">
+Class PermutationTestResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of a permutation test, which is a non-parametric statistical significance test that determines
+whether the observed difference between two groups is statistically significant.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PermutationTestResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for statistical values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PermutationTestResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_PermutationTestResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The permutation test is a resampling method that creates a reference distribution by randomly reassigning observations 
+to groups and recalculating the test statistic many times. This class stores the results of such a test, including 
+the observed difference between groups, the p-value, the number of permutations performed, the count of extreme values, 
+and whether the result is statistically significant. Permutation tests are particularly useful when the assumptions of 
+parametric tests (like t-tests) are not met, or when dealing with small sample sizes. The class uses generic type 
+parameter T to support different numeric types for the statistical values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> This class stores the results of a permutation test, which helps determine if a difference between groups is real or could have happened by chance.
+<p>For example, you might use this test to answer questions like:</p>
+<ul>
+<li>Is the difference in treatment outcomes between two groups statistically significant?</li>
+<li>Could the observed difference in test scores between teaching methods have occurred by random chance?</li>
+<li>Is the relationship between two variables stronger than would be expected by chance?</li>
+</ul>
+<p>The test works by:</p>
+<ol>
+<li>Calculating the actual difference between your groups</li>
+<li>Randomly shuffling your data many times and recalculating the difference each time</li>
+<li>Seeing how often the random shuffles produce a difference as extreme as your actual difference</li>
+</ol>
+<p>This approach is particularly useful when:</p>
+<ul>
+<li>You have small sample sizes</li>
+<li>Your data doesn't follow a normal distribution</li>
+<li>You want to avoid making assumptions about the underlying distribution</li>
+</ul>
+<p>This class stores all the information about the test results, helping you interpret whether
+the observed difference is statistically significant.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1__ctor_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1__ctor__0__0_System_Int32_System_Int32__0_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.#ctor(`0,`0,System.Int32,System.Int32,`0)">
+  PermutationTestResult(T, T, int, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the PermutationTestResult class with the specified test statistics and parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PermutationTestResult(T observedDifference, T pValue, int permutations, int countExtremeValues, T significanceLevel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>observedDifference</code> <span class="xref">T</span></dt>
+    <dd><p>The observed difference between the two groups being compared.</p>
+</dd>
+    <dt><code>pValue</code> <span class="xref">T</span></dt>
+    <dd><p>The p-value associated with the permutation test.</p>
+</dd>
+    <dt><code>permutations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of permutations performed during the test.</p>
+</dd>
+    <dt><code>countExtremeValues</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The count of permutations that resulted in a difference as extreme as, or more extreme than, the observed difference.</p>
+</dd>
+    <dt><code>significanceLevel</code> <span class="xref">T</span></dt>
+    <dd><p>The significance level used for the test.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1__ctor__0__0_System_Int32_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new PermutationTestResult instance with the specified test statistics and parameters. It 
+initializes all properties of the class and calculates the IsSignificant property by comparing the p-value to the 
+significance level. The IsSignificant property is set to true if the p-value is less than the significance level, 
+indicating that the test result is statistically significant. This constructor provides a convenient way to create 
+a complete PermutationTestResult object in a single step after performing a permutation test.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with all the permutation test statistics and parameters.
+<p>When a new PermutationTestResult is created with this constructor:</p>
+<ul>
+<li>All the test statistics and parameters are set to the values you provide</li>
+<li>The IsSignificant property is automatically calculated by comparing the p-value to the significance level</li>
+</ul>
+<p>This constructor is useful because:</p>
+<ul>
+<li>It creates a complete result object in one step</li>
+<li>It automatically determines statistical significance</li>
+<li>It ensures all the related test information is kept together</li>
+</ul>
+<p>The IsSignificant calculation uses MathHelper to compare the p-value to the significance level,
+which works regardless of what numeric type T is (float, double, decimal, etc.).</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_CountExtremeValues_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.CountExtremeValues*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_CountExtremeValues" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.CountExtremeValues">
+  CountExtremeValues
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the count of permutations that resulted in a difference as extreme as, or more extreme than, the observed difference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CountExtremeValues { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the count of extreme values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_CountExtremeValues_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the number of permutations that resulted in a difference as extreme as, or more extreme than, 
+the observed difference. This count is used to calculate the p-value, which is equal to CountExtremeValues divided by 
+Permutations. Storing this count separately from the p-value provides additional information about the precision of 
+the p-value and can be useful for reporting and verification purposes.
+</p>
+<p><b>For Beginners:</b> This counts how many random reshufflings produced results as extreme as your actual data.
+<p>The count of extreme values:</p>
+<ul>
+<li>Tells you how many permutations resulted in a difference as large as or larger than yours</li>
+<li>Is used to calculate the p-value (p-value = CountExtremeValues / Permutations)</li>
+<li>Provides information about the precision of your p-value</li>
+</ul>
+<p>This value is useful because:</p>
+<ul>
+<li>It gives you the raw count behind the p-value calculation</li>
+<li>It helps you understand how rare your observed difference is</li>
+<li>It can be important for reporting and verification</li>
+</ul>
+<p>For example, if you ran 1,000 permutations and only 12 produced differences as
+extreme as yours, the count would be 12 and the p-value would be 0.012.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_IsSignificant_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.IsSignificant*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_IsSignificant" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.IsSignificant">
+  IsSignificant
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the permutation test result is statistically significant.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSignificant { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the result is statistically significant; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_IsSignificant_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the permutation test result is statistically significant at the specified significance 
+level. A result is considered significant if the p-value is less than or equal to the significance level. Statistical 
+significance suggests that the observed difference between the groups is unlikely to have occurred by chance alone, 
+leading to the rejection of the null hypothesis that there is no real difference between the groups. This property 
+provides a convenient boolean indicator of significance without requiring the user to compare the p-value to the 
+significance level.
+</p>
+<p><b>For Beginners:</b> This tells you whether your result is statistically significant or not.
+<p>The significance indicator:</p>
+<ul>
+<li>Provides a simple yes/no answer about statistical significance</li>
+<li>True means the difference between groups is statistically significant</li>
+<li>False means the difference could reasonably be due to random chance</li>
+</ul>
+<p>This is determined by:</p>
+<ul>
+<li>Comparing the p-value to the significance level</li>
+</ul>
+<p>This value makes it easy to interpret your results without having to manually
+check if the p-value is below the significance threshold. It's particularly
+useful when automating analysis or presenting results to non-statisticians.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_ObservedDifference_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.ObservedDifference*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_ObservedDifference" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.ObservedDifference">
+  ObservedDifference
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the observed difference between the two groups being compared.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ObservedDifference { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated difference between the groups.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_ObservedDifference_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the actual difference observed between the two groups in the original data. The specific 
+meaning of this difference depends on the test statistic used, which could be a difference in means, medians, 
+proportions, or any other measure of interest. This observed difference is compared to the distribution of differences 
+obtained through permutations to determine statistical significance. The larger the absolute value of the observed 
+difference relative to the permutation distribution, the more likely it is to be statistically significant.
+</p>
+<p><b>For Beginners:</b> This value is the actual difference you observed between your groups.
+<p>The observed difference:</p>
+<ul>
+<li>Is calculated from your original, unpermuted data</li>
+<li>Represents the effect size you're testing for significance</li>
+<li>Could be a difference in means, medians, proportions, or other statistics</li>
+</ul>
+<p>For example, if comparing test scores between two teaching methods, this might be
+the difference in average scores: Method A (85) - Method B (78) = 7 points.</p>
+<p>This value is important because:</p>
+<ul>
+<li>It tells you the magnitude of the effect you observed</li>
+<li>It's what you're testing to see if it could have occurred by chance</li>
+<li>It helps with practical interpretation of your results</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_PValue_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.PValue*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_PValue" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.PValue">
+  PValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the p-value associated with the permutation test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated p-value.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_PValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the p-value of the permutation test, which is the probability of observing a difference as 
+extreme as, or more extreme than, the one observed in the original data, assuming the null hypothesis is true. The 
+null hypothesis typically states that there is no real difference between the groups, and any observed difference is 
+due to random chance. The p-value is calculated as the proportion of permutations that resulted in a difference as 
+extreme as, or more extreme than, the observed difference. A small p-value (typically = 0.05) suggests that the 
+observed difference is unlikely to have occurred by chance alone, leading to the rejection of the null hypothesis.
+</p>
+<p><b>For Beginners:</b> This value tells you how likely your results could occur by random chance.
+<p>The p-value:</p>
+<ul>
+<li>Ranges from 0 to 1</li>
+<li>Smaller values indicate stronger evidence against the null hypothesis</li>
+<li>Is calculated as the proportion of permutations that produced a difference as extreme as yours</li>
+</ul>
+<p>Common interpretation:</p>
+<ul>
+<li>p = 0.05: Results are statistically significant (commonly used threshold)</li>
+<li>p = 0.01: Results are highly significant</li>
+<li>p &gt; 0.05: Results are not statistically significant</li>
+</ul>
+<p>For example, a p-value of 0.03 means that only 3% of random permutations produced
+a difference as extreme as what you observed, suggesting your result is unlikely
+to be due to random chance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_Permutations_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.Permutations*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_Permutations" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.Permutations">
+  Permutations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of permutations performed during the test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Permutations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the number of permutations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_Permutations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the total number of permutations (random reassignments of observations to groups) performed 
+during the test. A higher number of permutations generally provides a more accurate estimate of the p-value, but also 
+requires more computational resources. Typical values range from 1,000 to 10,000 permutations, though more may be 
+needed for very small p-values. The precision of the p-value is limited by the number of permutations; for example, 
+with 1,000 permutations, the smallest possible non-zero p-value is 0.001.
+</p>
+<p><b>For Beginners:</b> This tells you how many random reshufflings were performed during the test.
+<p>The permutations count:</p>
+<ul>
+<li>Indicates how many times the data was randomly reshuffled</li>
+<li>Higher values provide more precise p-values</li>
+<li>Typical values range from 1,000 to 10,000</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It affects the precision of your p-value</li>
+<li>The smallest possible p-value is 1/permutations</li>
+<li>More permutations require more computation time</li>
+</ul>
+<p>For example, with 1,000 permutations, the smallest possible p-value is 0.001,
+while with 10,000 permutations, you can detect p-values as small as 0.0001.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_PermutationTestResult_1_SignificanceLevel_" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.SignificanceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Results_PermutationTestResult_1_SignificanceLevel" data-uid="AiDotNet.Models.Results.PermutationTestResult`1.SignificanceLevel">
+  SignificanceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the significance level used for the test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SignificanceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The significance level, typically 0.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_PermutationTestResult_1_SignificanceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the significance level used for the permutation test, which is the threshold p-value below 
+which the result is considered statistically significant. Common values are 0.05 (5%), 0.01 (1%), and 0.001 (0.1%). 
+The significance level represents the probability of rejecting the null hypothesis when it is actually true (Type I 
+error). A lower significance level reduces the risk of Type I errors but increases the risk of Type II errors (failing 
+to reject a false null hypothesis).
+</p>
+<p><b>For Beginners:</b> This value is the threshold that determines when a result is considered statistically significant.
+<p>The significance level:</p>
+<ul>
+<li>Is typically set to 0.05 (5%) by convention</li>
+<li>Represents your tolerance for false positives</li>
+<li>Lower values (like 0.01) make the test more conservative</li>
+<li>Higher values (like 0.10) make the test more lenient</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It directly determines whether a result is considered &quot;significant&quot;</li>
+<li>It represents the risk you're willing to take of finding a difference when none exists</li>
+</ul>
+<p>For example, with a significance level of 0.05, you're accepting a 5% chance of
+incorrectly concluding there's a difference when there's actually none.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/PermutationTestResult.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

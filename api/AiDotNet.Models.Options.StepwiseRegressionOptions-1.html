@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StepwiseRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StepwiseRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Stepwise Regression, an automated feature selection approach that iteratively adds or removes predictors based on their statistical significance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_StepwiseRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.StepwiseRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1" class="text-break">
+Class StepwiseRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Stepwise Regression, an automated feature selection approach
+that iteratively adds or removes predictors based on their statistical significance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StepwiseRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the regression model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">StepwiseRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Stepwise Regression is an automated approach to building regression models by iteratively adding or removing 
+predictor variables based on their statistical significance. This technique helps identify the most important 
+features while excluding those that contribute little to the model's predictive power, resulting in more 
+parsimonious and potentially more interpretable models. There are several variants of stepwise regression, 
+including forward selection (starting with no predictors and adding them one by one), backward elimination 
+(starting with all predictors and removing them one by one), and bidirectional elimination (a combination of 
+both approaches). This class provides configuration options for controlling the stepwise regression process, 
+including the selection method, constraints on the number of features, and criteria for determining when to 
+stop adding or removing features.
+</p>
+<p><b>For Beginners:</b> Stepwise Regression helps automatically select the most important variables for your model.
+<p>When building a regression model:</p>
+<ul>
+<li>You often have many potential predictor variables</li>
+<li>Not all variables are equally useful</li>
+<li>Including too many variables can lead to overfitting</li>
+<li>Including too few might miss important relationships</li>
+</ul>
+<p>Stepwise regression solves this by:</p>
+<ul>
+<li>Systematically testing different combinations of variables</li>
+<li>Adding or removing variables one at a time</li>
+<li>Keeping only those that significantly improve the model</li>
+<li>Stopping when further changes don't help much</li>
+</ul>
+<p>This approach helps you:</p>
+<ul>
+<li>Identify which variables actually matter</li>
+<li>Create simpler, more interpretable models</li>
+<li>Avoid the computational cost of unnecessary variables</li>
+<li>Potentially improve prediction accuracy</li>
+</ul>
+<p>This class lets you configure exactly how the stepwise selection process works.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MaxFeatures_" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MaxFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MaxFeatures" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MaxFeatures">
+  MaxFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of features to include in the final model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to int.MaxValue (no limit).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MaxFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of predictor variables that can be included in the final regression 
+model. It serves as a constraint on the model complexity, preventing the stepwise procedure from adding too 
+many features even if they appear to be statistically significant. The default value of int.MaxValue effectively 
+means there is no upper limit on the number of features, allowing the stepwise procedure to include as many 
+features as meet the statistical criteria. Setting a lower value can help prevent overfitting, especially when 
+the number of observations is limited relative to the number of potential predictors. The appropriate value 
+depends on the specific application, the number of available observations, and the desired balance between 
+model complexity and predictive power.
+</p>
+<p><b>For Beginners:</b> This setting limits how many variables can be included in your final model.
+<p>The maximum features constraint:</p>
+<ul>
+<li>Sets an upper limit on model complexity</li>
+<li>Prevents the model from using too many variables</li>
+<li>Helps avoid overfitting (when a model learns noise instead of patterns)</li>
+</ul>
+<p>The default value of int.MaxValue means:</p>
+<ul>
+<li>No artificial limit is imposed</li>
+<li>The stepwise procedure will include as many variables as meet its statistical criteria</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Setting MaxFeatures=5: The model will use at most 5 variables, even if more seem useful</li>
+<li>Setting MaxFeatures=10: Allows up to 10 variables in the final model</li>
+<li>Default (int.MaxValue): No limit - uses as many variables as the statistical criteria suggest</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set a specific limit when you need a simpler, more interpretable model</li>
+<li>Set a limit when you have limited data compared to the number of potential predictors</li>
+<li>Leave at default when you want the statistical criteria to determine feature count</li>
+</ul>
+<p>For example, in a medical study with 100 patients and 50 potential predictors,
+you might set MaxFeatures=10 to ensure the model doesn't become too complex for the available data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_Method_" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.Method*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_Method" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.Method">
+  Method
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the stepwise selection method to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StepwiseMethod Method { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.StepwiseMethod.html">StepwiseMethod</a></dt>
+    <dd><p>A value from the StepwiseMethod enumeration, defaulting to StepwiseMethod.Forward.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_Method_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies which stepwise selection method to use for building the regression model. Different 
+methods have different approaches to feature selection, with trade-offs in terms of computational efficiency 
+and the quality of the resulting model. Forward selection (the default) starts with no predictors and adds 
+them one by one, selecting at each step the variable that provides the most significant improvement to the 
+model. Backward elimination starts with all predictors and removes them one by one, eliminating at each step 
+the variable that contributes least to the model. Bidirectional elimination (also known as stepwise selection) 
+combines both approaches, allowing variables to be added or removed at each step based on their significance. 
+The choice of method can affect both the computational efficiency of the selection process and the final set 
+of selected features.
+</p>
+<p><b>For Beginners:</b> This setting determines the strategy used to select variables for your model.
+<p>The Method property controls the approach to variable selection:</p>
+<ul>
+<li>Forward: Starts with no variables and adds them one by one</li>
+<li>Backward: Starts with all variables and removes them one by one</li>
+<li>Bidirectional: Can both add and remove variables at each step</li>
+</ul>
+<p>The default Forward method:</p>
+<ul>
+<li>Begins with an empty model</li>
+<li>Adds the most significant variable first</li>
+<li>Continues adding variables as long as they improve the model</li>
+<li>Stops when no remaining variable would significantly improve the model</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Forward: Building a team by adding the best available player at each step</li>
+<li>Backward: Starting with everyone and cutting the least valuable player at each step</li>
+<li>Bidirectional: Both adding and removing players to optimize the team</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Use Forward (default) when you have many variables and want to build a minimal model</li>
+<li>Use Backward when you suspect most variables are relevant</li>
+<li>Use Bidirectional for the most thorough (but computationally intensive) selection</li>
+</ul>
+<p>For example, with 100 potential predictors, Forward selection is usually more efficient,
+while with 10 predictors that are all potentially important, Backward might be better.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinFeatures_" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MinFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinFeatures" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MinFeatures">
+  MinFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum number of features to include in the final model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum number of predictor variables that must be included in the final regression 
+model. It ensures that the model retains a certain level of complexity, even if some features do not meet the 
+statistical significance criteria. The default value of 1 ensures that at least one predictor is included in 
+the model, preventing it from reducing to just an intercept term. This is particularly relevant for backward 
+elimination, where features are progressively removed. Setting a higher value can be useful when certain 
+predictors are known to be theoretically important or when a certain level of model complexity is desired for 
+other reasons. The appropriate value depends on the specific application and the prior knowledge about the 
+importance of the predictors.
+</p>
+<p><b>For Beginners:</b> This setting ensures your model includes at least a certain number of variables.
+<p>The minimum features constraint:</p>
+<ul>
+<li>Sets a lower limit on model complexity</li>
+<li>Ensures the model doesn't become too simplistic</li>
+<li>Is particularly important for backward selection methods</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model must include at least one predictor variable</li>
+<li>This prevents having a model with only an intercept term</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Setting MinFeatures=3: The model must use at least 3 variables</li>
+<li>Setting MinFeatures=0: Allows the possibility of a model with no predictors (intercept only)</li>
+<li>Default (1): Ensures at least one predictor is included</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you know certain variables must be included based on domain knowledge</li>
+<li>Set to 0 if you want to allow the possibility of an intercept-only model</li>
+<li>Set higher when using backward selection to prevent removing too many variables</li>
+</ul>
+<p>For example, if you're modeling house prices and know that square footage, location, and
+number of bedrooms are always relevant, you might set MinFeatures=3 to ensure these
+fundamental predictors remain in the model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinImprovement_" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MinImprovement*"></a>
+
+  <h3 id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinImprovement" data-uid="AiDotNet.Models.Options.StepwiseRegressionOptions`1.MinImprovement">
+  MinImprovement
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum improvement in the model's fit statistic required to add or remove a feature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinImprovement { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_StepwiseRegressionOptions_1_MinImprovement_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the minimum improvement in the model's fit statistic (such as R-squared, adjusted 
+R-squared, or information criteria like AIC or BIC) required to add or remove a feature during the stepwise 
+selection process. It serves as a stopping criterion, determining when the improvement from adding or removing 
+features becomes too small to justify further changes to the model. The default value of 0.001 requires that 
+each step improves the fit statistic by at least 0.1%, which is a moderate threshold suitable for many 
+applications. A smaller value would allow more features to be included, potentially capturing more subtle 
+relationships but increasing the risk of overfitting. A larger value would be more selective, including only 
+features that provide substantial improvements, resulting in a more parsimonious model. The appropriate value 
+depends on the specific application and the desired balance between model complexity and fit.
+</p>
+<p><b>For Beginners:</b> This setting determines how much a variable must improve the model to be included.
+<p>The minimum improvement threshold:</p>
+<ul>
+<li>Controls how selective the algorithm is about adding or removing variables</li>
+<li>Determines when to stop the stepwise process</li>
+<li>Helps balance model complexity against goodness of fit</li>
+</ul>
+<p>The default value of 0.001 means:</p>
+<ul>
+<li>Each variable must improve the model's fit statistic by at least 0.001 (0.1%)</li>
+<li>This is a moderate threshold that works well for many applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.01): More selective, only includes variables with substantial impact</li>
+<li>Lower values (e.g., 0.0001): Less selective, might include variables with subtle effects</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want a simpler model with only the strongest predictors</li>
+<li>Decrease it when you want to capture more subtle relationships</li>
+<li>Adjust based on the scale of your fit statistic (R-squared, AIC, BIC, etc.)</li>
+</ul>
+<p>For example, in a marketing model where you want only the strongest predictors of
+customer behavior, you might increase this to 0.01 to include only variables that
+improve the model by at least 1%.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/StepwiseRegressionOptions.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TBATSModelOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TBATSModelOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the TBATS (Trigonometric seasonality, Box-Cox transformation, ARMA errors, Trend, and Seasonal components) time series forecasting model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TBATSModelOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TBATSModelOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TBATSModelOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TBATSModelOptions_1" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1" class="text-break">
+Class TBATSModelOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the TBATS (Trigonometric seasonality, Box-Cox transformation, ARMA errors,
+Trend, and Seasonal components) time series forecasting model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TBATSModelOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">TBATSModelOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TBATSModelOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+TBATS is an advanced time series forecasting model designed to handle complex seasonal patterns, including 
+multiple seasonal periods. It combines several powerful techniques: Box-Cox transformation for stabilizing 
+variance, Fourier terms for handling multiple seasonal patterns, ARMA models for capturing short-term 
+dependencies, and trend components with optional damping. TBATS is particularly effective for time series 
+with multiple seasonal patterns of different lengths (e.g., daily, weekly, and yearly patterns) and can 
+automatically select the appropriate components based on the data. This class provides configuration options 
+for controlling the various components and optimization parameters of the TBATS model.
+</p>
+<p><b>For Beginners:</b> TBATS is a powerful forecasting model for time series with complex seasonal patterns.
+<p>When forecasting time series data:</p>
+<ul>
+<li>Simple models struggle with multiple seasonal patterns (e.g., daily, weekly, and yearly cycles)</li>
+<li>Traditional approaches may require separate modeling for each seasonal pattern</li>
+</ul>
+<p>TBATS solves this by:</p>
+<ul>
+<li>Handling multiple seasonal periods simultaneously</li>
+<li>Using Fourier series to efficiently represent seasonal patterns</li>
+<li>Transforming data to stabilize variance (Box-Cox transformation)</li>
+<li>Modeling short-term dependencies (ARMA components)</li>
+<li>Incorporating trend with optional damping</li>
+</ul>
+<p>This approach offers several benefits:</p>
+<ul>
+<li>Effectively captures complex seasonal patterns</li>
+<li>Handles irregular seasonality (e.g., varying month lengths)</li>
+<li>Produces accurate forecasts for data with multiple cycles</li>
+<li>Automatically selects appropriate components</li>
+</ul>
+<p>This class lets you configure how the TBATS model analyzes and forecasts your time series data.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_ARMAOrder_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.ARMAOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_ARMAOrder" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.ARMAOrder">
+  ARMAOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the ARMA (AutoRegressive Moving Average) component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ARMAOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_ARMAOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the order of the ARMA (AutoRegressive Moving Average) component in the TBATS model, 
+which captures short-term dependencies in the time series. The ARMA component combines an autoregressive 
+(AR) model, where the current value depends on previous values, and a moving average (MA) model, where 
+the current value depends on previous errors. A higher order allows the model to capture more complex 
+dependencies but increases the risk of overfitting and the computational cost. The default value of 1 
+provides a simple ARMA component suitable for many applications, capturing first-order dependencies. The 
+optimal value depends on the autocorrelation structure of the time series after removing seasonal and 
+trend components.
+</p>
+<p><b>For Beginners:</b> This setting controls how the model captures short-term patterns in your data.
+<p>The ARMA order:</p>
+<ul>
+<li>Determines how many past values and errors influence the current prediction</li>
+<li>Helps the model capture short-term dependencies and patterns</li>
+<li>Higher values can model more complex relationships but risk overfitting</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the immediate past values and errors</li>
+<li>This is sufficient for many time series with simple short-term patterns</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2 or 3): Can capture more complex short-term patterns</li>
+<li>Lower values (e.g., 0): Ignore short-term dependencies entirely</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when your data shows complex short-term dependencies</li>
+<li>Decrease it or set to 0 when your data doesn't show significant short-term patterns</li>
+<li>Consider using model selection criteria (AIC, BIC) to determine the optimal value</li>
+</ul>
+<p>For example, for financial time series with complex short-term dependencies,
+you might increase this to 2 or 3 to better capture those patterns.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_BoxCoxLambda_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.BoxCoxLambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_BoxCoxLambda" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.BoxCoxLambda">
+  BoxCoxLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Box-Cox transformation parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BoxCoxLambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer value, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_BoxCoxLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the parameter for the Box-Cox transformation, which is used to stabilize the 
+variance in the time series. The Box-Cox transformation is a power transformation defined as 
+(y^? - 1)/? for ? ? 0 and log(y) for ? = 0. A value of 1 means no transformation is applied. A value 
+of 0 corresponds to a logarithmic transformation, which is useful for data with multiplicative patterns. 
+Other common values include 0.5 (square root transformation) and -1 (reciprocal transformation). The 
+optimal value depends on the characteristics of the data, particularly the relationship between the 
+level and the variance of the series. In practice, the value is often estimated from the data rather 
+than specified manually.
+</p>
+<p><b>For Beginners:</b> This setting controls how the data is transformed before modeling.
+<p>The Box-Cox lambda parameter:</p>
+<ul>
+<li>Transforms your data to make it more suitable for forecasting</li>
+<li>Helps stabilize variance (make fluctuations more consistent across the series)</li>
+<li>Different values create different transformations</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>No transformation is applied to the data</li>
+<li>The model works with the original values</li>
+</ul>
+<p>Common values include:</p>
+<ul>
+<li>0: Log transformation (good for exponential growth or multiplicative patterns)</li>
+<li>0.5: Square root transformation (moderately right-skewed data)</li>
+<li>-1: Reciprocal transformation (severely right-skewed data)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set to 0 when your data shows multiplicative patterns (variance increases with level)</li>
+<li>Set to 0.5 for moderately skewed data</li>
+<li>Leave at 1 when your data already has stable variance</li>
+</ul>
+<p>For example, for retail sales data that grows exponentially over time,
+you might set this to 0 to apply a log transformation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of matrix decomposition used in the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>A value from the MatrixDecompositionType enumeration, defaulting to MatrixDecompositionType.Cholesky.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the type of matrix decomposition used in the optimization algorithm for estimating 
+the TBATS model parameters. Matrix decomposition is used to solve linear systems that arise during the 
+optimization process. Different decomposition methods have different numerical properties and computational 
+requirements. Cholesky decomposition (the default) is efficient and numerically stable for positive definite 
+matrices, which are common in many statistical models. Other options might include QR decomposition, which is 
+more stable for ill-conditioned matrices, or SVD (Singular Value Decomposition), which is the most stable but 
+also the most computationally expensive. The optimal choice depends on the numerical properties of the specific 
+problem and the desired trade-off between numerical stability and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical method used to solve equations during model fitting.
+<p>The matrix decomposition type:</p>
+<ul>
+<li>Affects how certain mathematical operations are performed during optimization</li>
+<li>Different methods have different trade-offs between speed and numerical stability</li>
+<li>Most users don't need to change this setting</li>
+</ul>
+<p>The default value of Cholesky means:</p>
+<ul>
+<li>The algorithm uses Cholesky decomposition for matrix operations</li>
+<li>This method is efficient and works well for most time series problems</li>
+</ul>
+<p>Common alternatives include:</p>
+<ul>
+<li>QR: More stable for difficult numerical problems, but slower</li>
+<li>SVD: Most numerically stable, but significantly slower</li>
+<li>LU: Another alternative with different numerical properties</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Change to QR or SVD if you encounter numerical stability issues</li>
+<li>Keep the default for most applications</li>
+<li>This is an advanced setting that rarely needs adjustment</li>
+</ul>
+<p>For example, if your model fitting process fails with numerical errors,
+you might try changing this to MatrixDecompositionType.SVD for better stability.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of iterations for the optimization algorithm used to estimate 
+the TBATS model parameters. The optimization process iteratively refines the parameter estimates until 
+convergence is reached or the maximum number of iterations is exceeded. A larger value allows for more 
+iterations and potentially better parameter estimates but increases the computation time. The default 
+value of 1000 provides a reasonable upper limit for many applications, allowing sufficient iterations 
+for convergence while preventing excessive computation. The optimal value depends on the complexity of 
+the data and the desired trade-off between accuracy and computation time.
+</p>
+<p><b>For Beginners:</b> This setting limits how long the model will spend trying to find the best parameters.
+<p>The maximum iterations:</p>
+<ul>
+<li>Sets an upper limit on the number of optimization steps</li>
+<li>Prevents the algorithm from running indefinitely</li>
+<li>Balances computation time with parameter quality</li>
+</ul>
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will perform at most 1000 iterations to find optimal parameters</li>
+<li>This is sufficient for many time series problems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2000): More opportunity to find better parameters, but longer runtime</li>
+<li>Lower values (e.g., 500): Faster results, but potentially suboptimal parameters</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex time series with multiple seasonal patterns</li>
+<li>Decrease it when computational resources are limited or for simpler time series</li>
+<li>If the algorithm frequently hits this limit, consider increasing it</li>
+</ul>
+<p>For example, for a complex time series with multiple strong seasonal patterns,
+you might increase this to 2000 to ensure the model has enough iterations to converge.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_SeasonalPeriods_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.SeasonalPeriods*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_SeasonalPeriods" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.SeasonalPeriods">
+  SeasonalPeriods
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal periods to model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] SeasonalPeriods { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array of positive integers, defaulting to [7, 30, 365].</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_SeasonalPeriods_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the lengths of the seasonal periods to be modeled. TBATS can handle multiple 
+seasonal patterns simultaneously, making it particularly suitable for time series with nested seasonality. 
+Each value in the array represents the length of a seasonal cycle in terms of the time unit of the data. 
+For example, with daily data, common values might include 7 (weekly seasonality), 30 or 30.44 (monthly 
+seasonality), and 365 or 365.25 (yearly seasonality). The default values of [7, 30, 365] are suitable 
+for daily data with weekly, monthly, and yearly patterns. For hourly data, additional values like 24 
+(daily seasonality) might be included. The optimal values depend on the known or expected seasonal 
+patterns in the data.
+</p>
+<p><b>For Beginners:</b> This setting specifies the seasonal cycles present in your data.
+<p>The seasonal periods:</p>
+<ul>
+<li>Define the lengths of repeating patterns in your data</li>
+<li>Allow the model to capture multiple seasonal cycles simultaneously</li>
+<li>Should match the known or expected patterns in your data</li>
+</ul>
+<p>The default value of [7, 30, 365] means:</p>
+<ul>
+<li>The model will look for weekly (7-day), monthly (30-day), and yearly (365-day) patterns</li>
+<li>This is appropriate for daily data with these common seasonal cycles</li>
+</ul>
+<p>Common seasonal periods for different data frequencies:</p>
+<ul>
+<li>Hourly data: [24, 168, 8766] (daily, weekly, yearly cycles)</li>
+<li>Daily data: [7, 30, 365] (weekly, monthly, yearly cycles)</li>
+<li>Weekly data: [52] (yearly cycle)</li>
+<li>Monthly data: [12] (yearly cycle)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set based on your knowledge of the data and its natural cycles</li>
+<li>Include all relevant seasonal periods for your specific domain</li>
+<li>Remove periods that aren't relevant to your data</li>
+</ul>
+<p>For example, for hourly electricity consumption data, you might use
+[24, 168] to capture daily and weekly patterns.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-6.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the convergence tolerance for the optimization algorithm used to estimate the 
+TBATS model parameters. The optimization process is considered to have converged when the relative change 
+in the objective function (typically the likelihood or the sum of squared errors) between iterations is 
+less than this tolerance. A smaller value requires more precise convergence, potentially leading to better 
+parameter estimates but requiring more iterations. The default value of 1e-6 (0.000001) provides a 
+relatively strict convergence criterion suitable for many applications, ensuring good parameter estimates 
+while allowing the algorithm to terminate in a reasonable number of iterations. The optimal value depends 
+on the desired precision of the parameter estimates and the computational resources available.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the optimization must be before stopping.
+<p>The tolerance:</p>
+<ul>
+<li>Defines when the optimization algorithm considers itself &quot;done&quot;</li>
+<li>Smaller values require more precise results before stopping</li>
+<li>Affects both accuracy and computation time</li>
+</ul>
+<p>The default value of 1e-6 (0.000001) means:</p>
+<ul>
+<li>The algorithm stops when improvements between iterations are very small</li>
+<li>This provides good precision for most applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Smaller values (e.g., 1e-8): More precise results, but may take longer</li>
+<li>Larger values (e.g., 1e-4): Faster results, but potentially less precise</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when you need very precise parameter estimates</li>
+<li>Increase it when faster computation is more important than precision</li>
+<li>For most applications, the default value works well</li>
+</ul>
+<p>For example, if you're developing a critical forecasting system where precision is paramount,
+you might decrease this to 1e-8 for more precise parameter estimates.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TBATSModelOptions_1_TrendDampingFactor_" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.TrendDampingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TBATSModelOptions_1_TrendDampingFactor" data-uid="AiDotNet.Models.Options.TBATSModelOptions`1.TrendDampingFactor">
+  TrendDampingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the damping factor for the trend component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrendDampingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer value, typically between 0 and 1, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TBATSModelOptions_1_TrendDampingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the damping factor for the trend component in the TBATS model. Trend damping 
+reduces the influence of the trend over time, which can lead to more conservative and often more realistic 
+long-term forecasts. A value of 1 means no damping is applied, and the trend continues at a constant rate. 
+A value between 0 and 1 applies damping, with smaller values causing the trend to flatten out more quickly. 
+The default value of 1 provides no damping, which is suitable for many applications where the trend is 
+expected to continue. The optimal value depends on the characteristics of the data and the forecast horizon, 
+with damping often being more important for longer-term forecasts.
+</p>
+<p><b>For Beginners:</b> This setting controls how the trend component behaves in long-term forecasts.
+<p>The trend damping factor:</p>
+<ul>
+<li>Determines whether and how quickly the trend flattens out over time</li>
+<li>Helps prevent unrealistic forecasts when projecting far into the future</li>
+<li>Values between 0 and 1 create damped trends that gradually flatten</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>No damping is applied</li>
+<li>The trend continues at the same rate indefinitely</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Value of 1: Trend continues unchanged (linear growth or decline)</li>
+<li>Values close to 1 (e.g., 0.98): Very slow damping, trend flattens very gradually</li>
+<li>Values further from 1 (e.g., 0.8): Faster damping, trend flattens more quickly</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Decrease it when making long-term forecasts to prevent unrealistic projections</li>
+<li>Keep at 1 for short-term forecasts or when you believe the trend will continue</li>
+<li>Values between 0.9 and 0.98 are common for moderate damping</li>
+</ul>
+<p>For example, when forecasting technology adoption that will eventually saturate,
+you might set this to 0.9 to gradually flatten the growth curve.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TBATSModelOptions.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

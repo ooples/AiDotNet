@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DDIMScheduler&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DDIMScheduler&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="DDIM (Denoising Diffusion Implicit Models) scheduler implementation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1" class="text-break">
+Class DDIMScheduler&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/DDIMScheduler.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.html">Schedulers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>DDIM (Denoising Diffusion Implicit Models) scheduler implementation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class DDIMScheduler&lt;T&gt; : NoiseSchedulerBase&lt;T&gt;, INoiseScheduler&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html">NoiseSchedulerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DDIMScheduler&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Config">NoiseSchedulerBase&lt;T&gt;.Config</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Timesteps">NoiseSchedulerBase&lt;T&gt;.Timesteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_TrainTimesteps">NoiseSchedulerBase&lt;T&gt;.TrainTimesteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_SetTimesteps_System_Int32_">NoiseSchedulerBase&lt;T&gt;.SetTimesteps(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetAlphaCumulativeProduct_System_Int32_">NoiseSchedulerBase&lt;T&gt;.GetAlphaCumulativeProduct(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AddNoise_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">NoiseSchedulerBase&lt;T&gt;.AddNoise(Vector&lt;T&gt;, Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetState">NoiseSchedulerBase&lt;T&gt;.GetState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_LoadState_System_Collections_Generic_Dictionary_System_String_System_Object__">NoiseSchedulerBase&lt;T&gt;.LoadState(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DDIM is a faster variant of DDPM that can achieve similar quality with far fewer
+denoising steps. While DDPM requires many steps (often 1000), DDIM can achieve
+similar quality with 50 or fewer steps by using a different mathematical formulation.
+</p>
+<p>
+<b>For Beginners:</b> DDIM is like a shortcut for removing noise from images.
+<p>Imagine you have a very blurry photo and need to make it clear:</p>
+<ul>
+<li>DDPM (original method): Take 1000 tiny steps to slowly reveal the image</li>
+<li>DDIM (this method): Take 50 larger steps to reveal the image faster</li>
+</ul>
+<p>The magic is the &quot;eta&quot; parameter:</p>
+<ul>
+<li>eta=0: Deterministic - same input always produces same output (faster, consistent)</li>
+<li>eta=1: Stochastic - adds randomness like DDPM (slower, more variety)</li>
+<li>eta between 0-1: Mix of both behaviors</li>
+</ul>
+<p>Key advantages of DDIM:</p>
+<ul>
+<li>Much faster generation (10-50x fewer steps needed)</li>
+<li>Deterministic option allows reproducible results</li>
+<li>Can interpolate smoothly between images (useful for animations)</li>
+</ul>
+
+<p>
+<b>Reference:</b> "Denoising Diffusion Implicit Models" by Song et al., 2020
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1__ctor_AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1.#ctor(AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig{`0})">
+  DDIMScheduler(SchedulerConfig&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/DDIMScheduler.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DDIM scheduler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DDIMScheduler(SchedulerConfig&lt;T&gt; config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html">SchedulerConfig</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for the scheduler including beta schedule parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1__ctor_AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Create a DDIM scheduler with custom settings, or use
+<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html#AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig_1_CreateDefault">CreateDefault()</a> for standard DDPM defaults.
+</p>
+<example>
+<pre><code class="lang-csharp">// Create with default settings
+var config = SchedulerConfig&lt;double&gt;.CreateDefault();
+var scheduler = new DDIMScheduler&lt;double&gt;(config);
+
+// Set up for 50 inference steps
+scheduler.SetTimesteps(50);</code></pre>
+</example>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when config is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1_Step_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1.Step*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler`1.Step(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Step(Vector&lt;T&gt;, int, Vector&lt;T&gt;, T, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/DDIMScheduler.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one DDIM denoising step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Step(Vector&lt;T&gt; modelOutput, int timestep, Vector&lt;T&gt; sample, T eta, Vector&lt;T&gt;? noise = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model's noise prediction (epsilon).</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current timestep in the diffusion process.</p>
+</dd>
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current noisy sample.</p>
+</dd>
+    <dt><code>eta</code> <span class="xref">T</span></dt>
+    <dd><p>Stochasticity parameter:</p>
+<ul>
+<li>0 = fully deterministic (pure DDIM)</li>
+<li>1 = fully stochastic (equivalent to DDPM)</li>
+<li>Values in between interpolate the behavior</li>
+</ul>
+</dd>
+    <dt><code>noise</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional noise for stochastic sampling. Required when eta &gt; 0 for true stochastic behavior.
+If null and eta &gt; 0, falls back to deterministic (zero noise).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The denoised sample for the previous timestep.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_DDIMScheduler_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The DDIM step formula (simplified):
+1. Predict original sample: x_0 = (x_t - sqrt(1-alpha_cumprod) * eps) / sqrt(alpha_cumprod)
+2. Compute "direction pointing to x_t": d = sqrt(1-alpha_prev - sigma^2) * eps
+3. Compute previous sample: x_{t-1} = sqrt(alpha_prev) * x_0 + d + sigma * noise
+</p>
+<p>
+<b>For Beginners:</b> This function takes your current noisy image and the model's
+guess of what noise is in it, then removes some of that noise to get a cleaner image.
+The eta parameter controls whether this removal is exact (eta=0) or has some randomness (eta&gt;0).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when modelOutput or sample is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when modelOutput and sample have different lengths.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when timestep is out of range.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/DDIMScheduler.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

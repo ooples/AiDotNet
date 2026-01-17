@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralGenerator&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralGenerator&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Neural network-based text generator for RAG systems using LSTM architecture.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1" class="text-break">
+Class NeuralGenerator&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Generators.html">Generators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Neural network-based text generator for RAG systems using LSTM architecture.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralGenerator&lt;T&gt; : IGenerator&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations and relevance scoring.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NeuralGenerator&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This generator uses an LSTM neural network for token-by-token text generation in
+retrieval-augmented generation tasks. It processes context through the trained LSTM
+and generates responses using temperature-based sampling from the network's probability
+distributions.
+</p>
+<p><b>For Beginners:</b> This generator uses a trained neural network to create answers.
+<p>Think of it like a smart writer:</p>
+<ul>
+<li>Takes your question and retrieved documents</li>
+<li>Converts text into numbers (tokens) the network understands</li>
+<li>Uses an LSTM neural network to predict next words</li>
+<li>Samples from probability distributions with temperature control</li>
+<li>Converts numbers back to readable text</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Tokenizes input text into numerical IDs</li>
+<li>Feeds tokens through LSTM network layer-by-layer</li>
+<li>Network outputs probability distribution over vocabulary</li>
+<li>Samples next token using temperature (higher = more creative)</li>
+<li>Repeats until generating enough tokens or reaching end token</li>
+<li>Detokenizes back to human-readable text</li>
+</ol>
+<p>Production considerations:</p>
+<ul>
+<li>Requires pre-trained LSTM network (not included)</li>
+<li>Actual LSTM forward pass for each token (computationally intensive)</li>
+<li>Temperature-based sampling for controlled randomness</li>
+<li>Configurable context and generation limits</li>
+<li>Proper error handling and edge cases</li>
+<li>Memory-efficient sequential processing</li>
+</ul>
+<p>Note: This generator requires a pre-trained LSTM network with vocabulary matching
+the configured vocabulary size. Without proper training, output will be meaningless.
+For production use, you must:</p>
+<ol>
+<li>Train the LSTM on your domain data, OR</li>
+<li>Use transfer learning from a pre-trained language model</li>
+</ol>
+<p>For production RAG systems, consider using LLM-based generators with pre-trained
+models instead of training your own LSTM.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1__ctor_AiDotNet_NeuralNetworks_LSTMNeuralNetwork__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Collections_Generic_IDictionary_System_String_System_Int32__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.#ctor(AiDotNet.NeuralNetworks.LSTMNeuralNetwork{`0},System.Int32,System.Int32,System.Int32,System.Int32,System.Double,System.Collections.Generic.IDictionary{System.String,System.Int32})">
+  NeuralGenerator(LSTMNeuralNetwork&lt;T&gt;, int, int, int, int, double, IDictionary&lt;string, int&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NeuralGenerator class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NeuralGenerator(LSTMNeuralNetwork&lt;T&gt; network, int vocabularySize = 50000, int embeddingDimension = 256, int maxContextTokens = 4096, int maxGenerationTokens = 1024, double temperature = 0.7, IDictionary&lt;string, int&gt;? prebuiltVocabulary = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.NeuralNetworks.LSTMNeuralNetwork-1.html">LSTMNeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The LSTM neural network for text generation.</p>
+</dd>
+    <dt><code>vocabularySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of the token vocabulary (default: 50000).</p>
+</dd>
+    <dt><code>embeddingDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Dimension of token embeddings (default: 256).</p>
+</dd>
+    <dt><code>maxContextTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum context tokens (default: 4096).</p>
+</dd>
+    <dt><code>maxGenerationTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum generation tokens (default: 1024).</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature for generation (default: 0.7). Higher = more creative.</p>
+</dd>
+    <dt><code>prebuiltVocabulary</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Optional pre-built vocabulary for frozen token mapping. If provided, vocabulary is frozen and unknown words map to [UNK].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1__ctor_AiDotNet_NeuralNetworks_LSTMNeuralNetwork__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Double_System_Collections_Generic_IDictionary_System_String_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The vocabulary is frozen after initialization when using a pre-built vocabulary. Unknown words encountered
+during tokenization are mapped to the [UNK] token to ensure compatibility with pre-trained networks.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_MaxContextTokens_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.MaxContextTokens*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_MaxContextTokens" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.MaxContextTokens">
+  MaxContextTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this generator can process in a single request.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxContextTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_MaxGenerationTokens_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.MaxGenerationTokens*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_MaxGenerationTokens" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.MaxGenerationTokens">
+  MaxGenerationTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this generator can generate in a response.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxGenerationTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_Generate_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.Generate*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_Generate_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.Generate(System.String)">
+  Generate(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response based on a prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Generate(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input prompt or question.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_GenerateGrounded_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.GenerateGrounded*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Generators_NeuralGenerator_1_GenerateGrounded_System_String_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___" data-uid="AiDotNet.RetrievalAugmentedGeneration.Generators.NeuralGenerator`1.GenerateGrounded(System.String,System.Collections.Generic.IEnumerable{AiDotNet.RetrievalAugmentedGeneration.Models.Document{`0}})">
+  GenerateGrounded(string, IEnumerable&lt;Document&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a grounded answer using provided context documents.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GroundedAnswer&lt;T&gt; GenerateGrounded(string query, IEnumerable&lt;Document&lt;T&gt;&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's original query or question.</p>
+</dd>
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The retrieved documents providing context for the answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.GroundedAnswer-1.html">GroundedAnswer</a>&lt;T&gt;</dt>
+    <dd><p>A grounded answer with the generated text, source documents, and extracted citations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Generators/NeuralGenerator.cs/#L58" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

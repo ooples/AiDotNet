@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RReLUActivation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RReLUActivation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Randomized Rectified Linear Unit (RReLU) activation function.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActivationFunctions_RReLUActivation_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActivationFunctions.RReLUActivation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1">
+
+
+
+  <h1 id="AiDotNet_ActivationFunctions_RReLUActivation_1" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1" class="text-break">
+Class RReLUActivation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActivationFunctions.html">ActivationFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Randomized Rectified Linear Unit (RReLU) activation function.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RReLUActivation&lt;T&gt; : ActivationFunctionBase&lt;T&gt;, IActivationFunction&lt;T&gt;, IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html">ActivationFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">RReLUActivation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_NumOps">ActivationFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Engine">ActivationFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ActivationFunctionBase&lt;T&gt;.Activate(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ActivationFunctionBase&lt;T&gt;.Derivative(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Activate(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Derivative(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_SupportsGpuTraining">ActivationFunctionBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.ForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.BackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActivationFunctions_RReLUActivation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+RReLU is a variation of the ReLU activation function that introduces randomness during training.
+For positive inputs, it behaves like standard ReLU (returning the input unchanged).
+For negative inputs, it multiplies the input by a random factor (alpha) between the specified lower and upper bounds.
+</p>
+<p>
+<b>For Beginners:</b> RReLU (Randomized Rectified Linear Unit) is like a "smart filter" for neural networks.
+When data is positive, it lets it pass through unchanged. When data is negative, instead of setting it to zero
+(like regular ReLU), it reduces the value by multiplying it by a small random number. This randomness helps
+prevent "dead neurons" (neurons that stop learning) and can improve the network's ability to learn.
+During training, this random factor changes; during testing/inference, a fixed average value is used.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1__ctor_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1__ctor_System_Double_System_Double_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.#ctor(System.Double,System.Double)">
+  RReLUActivation(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the RReLU activation function with specified bounds for the random alpha parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RReLUActivation(double lowerBound = 0.125, double upperBound = 0.3333333333333333)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lowerBound</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The lower bound for the random alpha parameter. Default is 1/8 (0.125).</p>
+</dd>
+    <dt><code>upperBound</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The upper bound for the random alpha parameter. Default is 1/3 (0.333...).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1__ctor_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor sets up the RReLU function with boundaries for how much negative values
+will be reduced. The default values (1/8 to 1/3) are commonly used in practice and mean that negative values
+will be multiplied by a random number between 0.125 and 0.333, making them smaller but not zero.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_SupportsJitCompilation_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_SupportsJitCompilation" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because TensorOperations.RReLU provides full forward and backward pass support.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+RReLU supports JIT compilation with the following behavior:
+- In inference mode (default for JIT): uses fixed alpha = (lower + upper) / 2
+- In training mode: samples alpha once per forward pass (not per-element)
+</p>
+<p>
+This is a reasonable compromise that enables JIT while preserving the randomization benefit during training.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_Activate__0_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.Activate(`0)">
+  Activate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the RReLU activation function to a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Activate(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to activate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The input value if it's greater than or equal to zero,
+otherwise the input multiplied by a random alpha value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1_Activate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method processes a single number through the RReLU function.
+If the number is positive or zero, it's returned unchanged.
+If the number is negative, it's multiplied by a small random value (during training)
+or by a fixed value (during testing/inference) to make it smaller but not zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_ApplyToGraph_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with RReLU activation applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps to TensorOperations&lt;T&gt;.RReLU(input) which handles both
+forward and backward passes for JIT compilation.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if input is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_Derivative__0_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.Derivative(`0)">
+  Derivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the RReLU function for a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Derivative(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to calculate the derivative for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>1 if the input is greater than or equal to zero, otherwise the current alpha value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1_Derivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
+For RReLU, the derivative is 1 for positive inputs (meaning the output changes at the same rate as the input),
+and the alpha value for negative inputs (meaning the output changes at a reduced rate when the input changes).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_SetTrainingMode_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SetTrainingMode*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_SetTrainingMode_System_Boolean_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SetTrainingMode(System.Boolean)">
+  SetTrainingMode(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the activation function to either training or inference mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetTrainingMode(bool isTraining)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isTraining</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to set to training mode, false to set to inference mode.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_RReLUActivation_1_SetTrainingMode_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In training mode, a new random alpha value is generated for each activation.
+In inference mode, alpha is fixed to the average of the lower and upper bounds.
+</p>
+<p>
+<b>For Beginners:</b> This method lets you switch between two modes:
+- Training mode: Uses random values for processing negative inputs, which helps with learning
+- Inference mode (testing/production): Uses a fixed value (the average of your bounds) for consistency
+<p>You should typically use training mode when training your neural network and inference mode
+when using the trained network to make predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_RReLUActivation_1_SupportsScalarOperations_" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SupportsScalarOperations*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_RReLUActivation_1_SupportsScalarOperations" data-uid="AiDotNet.ActivationFunctions.RReLUActivation`1.SupportsScalarOperations">
+  SupportsScalarOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this activation function supports scalar operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsScalarOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns true as RReLU supports scalar operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/RReLUActivation.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

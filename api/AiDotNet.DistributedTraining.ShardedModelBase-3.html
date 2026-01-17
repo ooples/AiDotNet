@@ -1,0 +1,2015 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ShardedModelBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ShardedModelBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides base implementation for distributed models with parameter sharding.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_ShardedModelBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.ShardedModelBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_ShardedModelBase_3" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3" class="text-break">
+Class ShardedModelBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides base implementation for distributed models with parameter sharding.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ShardedModelBase&lt;T, TInput, TOutput&gt; : IShardedModel&lt;T, TInput, TOutput&gt;, IFullModel&lt;T, TInput, TOutput&gt;, IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, TInput, TOutput&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IGradientComputable&lt;T, TInput, TOutput&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for operations</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ShardedModelBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.IShardedModel-3.html">IShardedModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.DDPModel-3.html">DDPModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.FSDPModel-3.html">FSDPModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.HybridShardedModel-3.html">HybridShardedModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.PipelineParallelModel-3.html">PipelineParallelModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.TensorParallelModel-3.html">TensorParallelModel&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ZeRO1Model-3.html">ZeRO1Model&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ZeRO2Model-3.html">ZeRO2Model&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_ShardedModelBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class implements common functionality for all sharded models,
+including parameter management, sharding logic, gradient synchronization, and
+integration with the model serialization system. Derived classes can customize
+the sharding strategy, communication pattern, or add optimization-specific features.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all distributed models build upon.
+<p>Think of this as a template for splitting a big model across multiple computers or GPUs.
+It handles common tasks like:</p>
+<ul>
+<li>Dividing model parameters into chunks (sharding)</li>
+<li>Collecting all chunks when needed (gathering)</li>
+<li>Sharing learning updates across all processes (gradient sync)</li>
+<li>Saving and loading distributed models</li>
+</ul>
+<p>Specific types of distributed models (like fully sharded or hybrid sharded) inherit
+from this and add their own strategies. This prevents code duplication and ensures
+all distributed models work consistently.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3__ctor_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.DistributedTraining.IShardingConfiguration{`0})">
+  ShardedModelBase(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ShardedModelBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ShardedModelBase(IFullModel&lt;T, TInput, TOutput&gt; wrappedModel, IShardingConfiguration&lt;T&gt; config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>wrappedModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to wrap with distributed capabilities</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for sharding and communication</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor wraps an existing model with distributed training capabilities.
+It initializes the communication backend if needed and sets up parameter sharding.
+</p>
+<p><b>For Beginners:</b> This constructor takes your regular model and makes it distributed.
+<p>You provide:</p>
+<ol>
+<li>The model you want to distribute</li>
+<li>Configuration that tells us how to distribute it</li>
+</ol>
+<p>The constructor automatically:</p>
+<ul>
+<li>Sets up communication if not already done</li>
+<li>Splits the model's parameters across processes</li>
+<li>Prepares everything for distributed training</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if model or config is null</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_CachedFullParameters" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.CachedFullParameters">
+  CachedFullParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Cached full parameters to avoid repeated gathering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt;? CachedFullParameters</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Config" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Config">
+  Config
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The sharding configuration containing communication backend and settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IShardingConfiguration&lt;T&gt; Config</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_LocalShard" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LocalShard">
+  LocalShard
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The local parameter shard owned by this process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; LocalShard</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_NumOps" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ShardSize" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ShardSize">
+  ShardSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Size of this process's parameter shard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int ShardSize</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ShardStartIndex" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ShardStartIndex">
+  ShardStartIndex
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Starting index of this process's shard in the full parameter vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int ShardStartIndex</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_DefaultLossFunction_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_DefaultLossFunction" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This loss function is used when calling <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)</a>
+without explicitly providing a loss function. It represents the model's primary training objective.
+</p>
+<p><b>For Beginners:</b>
+The loss function tells the model "what counts as a mistake". For example:
+- For regression (predicting numbers): Mean Squared Error measures how far predictions are from actual values
+- For classification (predicting categories): Cross Entropy measures how confident the model is in the right category
+<p>This property provides a sensible default so you don't have to specify the loss function every time,
+but you can still override it if needed for special cases.</p>
+
+<p><b>Distributed Training:</b>
+In distributed training, all workers use the same loss function to ensure consistent gradient computation.
+The default loss function is automatically used when workers compute local gradients.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if accessed before the model has been configured with a loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_LocalParameterShard_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LocalParameterShard*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_LocalParameterShard" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LocalParameterShard">
+  LocalParameterShard
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the portion of parameters owned by this process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; LocalParameterShard { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_LocalParameterShard_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is "your piece of the puzzle" - the parameters that this particular
+process is responsible for storing and updating.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_ParameterCount_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ParameterCount" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Rank_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Rank*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Rank" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Rank">
+  Rank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank of this process in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_Rank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Each process has a unique ID (rank). This tells you which process you are.
+Rank 0 is typically the "coordinator" process.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_ShardingConfiguration_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ShardingConfiguration*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ShardingConfiguration" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ShardingConfiguration">
+  ShardingConfiguration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration for this sharded model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IShardingConfiguration&lt;T&gt; ShardingConfiguration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SupportsJitCompilation_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SupportsJitCompilation" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model currently supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the wrapped model supports JIT compilation, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sharded models delegate JIT compilation support to their wrapped model.
+JIT compilation is performed on the full model representation, not on individual shards.
+</p>
+<p><b>For Beginners:</b> Distributed models can be JIT compiled if the underlying model supports it.
+<p>The sharding strategy (splitting parameters across processes) doesn't prevent JIT compilation.
+The JIT compiler works with the full computation graph, which is the same across all processes.
+Individual processes execute the same compiled code but operate on different parameter shards.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_WorldSize_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WorldSize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_WorldSize" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WorldSize">
+  WorldSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of processes in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WorldSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_WorldSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is how many processes are working together to train the model.
+For example, if you have 4 GPUs, WorldSize would be 4.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModel_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WrappedModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModel" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WrappedModel">
+  WrappedModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying wrapped model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; WrappedModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the original model that we're adding distributed training capabilities to.
+Think of it as the "core brain" that we're helping to work in a distributed way.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModelInternal_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WrappedModelInternal*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_WrappedModelInternal" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WrappedModelInternal">
+  WrappedModelInternal
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Protected access to wrapped model for derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IFullModel&lt;T, TInput, TOutput&gt; WrappedModelInternal { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_ApplyGradients_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates parameters using: θ = θ - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to move),
+this method actually moves the model in that direction.
+The learning rate controls how big of a step to take.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, this applies the synchronized (averaged) gradients after
+communication across workers. Each worker applies the same averaged gradients
+to keep parameters consistent.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Clone_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Clone*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Clone" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a shallow copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IFullModel&lt;T, TInput, TOutput&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_ComputeGradients_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ComputeGradients(`1,`2,AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L341"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters for the given data,
+WITHOUT updating the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; ComputeGradients(TInput input, TOutput target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>target</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target/expected output.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use for gradient computation. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a forward pass, computes the loss, and back-propagates to compute gradients,
+but does NOT update the model's parameters. The parameters remain unchanged after this call.
+</p>
+<p><b>Distributed Training:</b>
+In DDP/ZeRO-2, each worker calls this to compute local gradients on its data batch.
+These gradients are then synchronized (averaged) across workers before applying updates.
+This ensures all workers compute the same parameter updates despite having different data.
+</p>
+<p><b>For Meta-Learning:</b>
+After adapting a model on a support set, you can use this method to compute gradients
+on the query set. These gradients become the meta-gradients for updating the meta-parameters.
+</p>
+<p><b>For Beginners:</b>
+Think of this as "dry run" training:
+- The model sees what direction it should move (the gradients)
+- But it doesn't actually move (parameters stay the same)
+- You get to decide what to do with this information (average with others, inspect, modify, etc.)
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>If lossFunction is null and the model has no default loss function.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_DeepCopy_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_DeepCopy" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Deserialize_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_ExportComputationGraph_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the computation graph for JIT compilation by delegating to the wrapped model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the model's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sharded models delegate graph export to their wrapped model.
+The computation graph represents the full model's forward pass, independent of parameter sharding.
+</p>
+<p><b>For Beginners:</b> This creates a computation graph from the wrapped model.
+<p>Even though parameters are distributed (sharded) across multiple processes:</p>
+<ul>
+<li>The computation graph structure is the same for all processes</li>
+<li>Each process compiles the same graph into fast code</li>
+<li>The only difference is which parameter values each process uses</li>
+</ul>
+<p>This allows distributed models to benefit from JIT compilation while maintaining
+their distributed training capabilities.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when inputNodes is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the wrapped model does not support JIT compilation.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_GatherFullParameters_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GatherFullParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_GatherFullParameters" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GatherFullParameters">
+  GatherFullParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the full set of parameters by gathering from all processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; GatherFullParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The complete set of parameters gathered from all processes</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_GatherFullParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This operation involves communication across all processes.
+</p>
+<p><b>For Beginners:</b>
+This is like asking everyone to share their puzzle pieces so you can
+see the complete picture. It requires communication between all processes,
+so it's more expensive than just accessing LocalParameterShard.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetActiveFeatureIndices_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetActiveFeatureIndices" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of features that are actively used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetFeatureImportance_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetFeatureImportance" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetModelMetadata_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetModelMetadata" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves metadata and performance metrics about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>An object containing metadata and performance metrics about the trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides information about the model's structure, parameters, and performance metrics.</p>
+<p><b>For Beginners:</b> Model metadata is like a report card for your machine learning model.</p>
+<p>Just as a report card shows how well a student is performing in different subjects,
+model metadata shows how well your model is performing and provides details about its structure.</p>
+<p>This information typically includes:</p>
+<ul>
+<li>Accuracy measures: How well does the model's predictions match actual values?</li>
+<li>Error metrics: How far off are the model's predictions on average?</li>
+<li>Model parameters: What patterns did the model learn from the data?</li>
+<li>Training information: How long did training take? How many iterations were needed?</li>
+</ul>
+<p>For example, in a house price prediction model, metadata might include:</p>
+<ul>
+<li>Average prediction error (e.g., off by $15,000 on average)</li>
+<li>How strongly each feature (bedrooms, location) influences the prediction</li>
+<li>How well the model fits the training data</li>
+</ul>
+<p>This information helps you understand your model's strengths and weaknesses,
+and decide if it's ready to use or needs more training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetParameters_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_GetParameters" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L262"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_InitializeSharding_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.InitializeSharding*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_InitializeSharding" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.InitializeSharding">
+  InitializeSharding()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes parameter sharding by dividing parameters across processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void InitializeSharding()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_InitializeSharding_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates how to distribute parameters evenly across all processes,
+with remainder parameters distributed to the first few processes.
+Derived classes can override this to implement different sharding strategies.
+</p>
+<p><b>For Beginners:</b> This splits the model's parameters across all processes.
+<p>Think of it like dividing a deck of cards among players. If you have 10 parameters
+and 3 processes:</p>
+<ul>
+<li>Process 0 gets parameters 0-3 (4 parameters)</li>
+<li>Process 1 gets parameters 4-6 (3 parameters)</li>
+<li>Process 2 gets parameters 7-9 (3 parameters)</li>
+</ul>
+<p>We try to split evenly, but if there's a remainder, the first processes get
+one extra parameter each.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_InvalidateCache_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.InvalidateCache*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_InvalidateCache" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.InvalidateCache">
+  InvalidateCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Invalidates the cached full parameters, forcing a re-gather on next access.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void InvalidateCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_InvalidateCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method should be called whenever local parameters change to ensure
+the cache is refreshed on the next GatherFullParameters call.
+</p>
+<p><b>For Beginners:</b> When parameters change, we need to throw away
+the old cached full parameters.
+<p>It's like when you update a document - you need to discard the old
+saved copy so that next time you need it, you get the updated version.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_IsFeatureUsed_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific feature is used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_LoadModel_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_LoadModel_System_String_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_LoadState_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LoadState*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_LoadState_System_IO_Stream_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L436"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Predict_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Predict*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Predict__1_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Predict(`1)">
+  Predict(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uses the trained model to make predictions for new input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract TOutput Predict(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>A matrix where each row represents a new example to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A vector containing the predicted values for each input example.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_Predict__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>After training, this method applies the learned patterns to new data to predict outcomes.</p>
+<p><b>For Beginners:</b> Prediction is when the model uses what it learned to make educated guesses about new information.</p>
+<p>Continuing the fruit identification example:</p>
+<ul>
+<li>After learning from many examples, the child (model) can now identify new fruits they haven't seen before</li>
+<li>They look at the color, shape, and size to make their best guess</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>You give the model new data it hasn't seen during training</li>
+<li>The model applies the patterns it learned to make predictions</li>
+<li>The output is the model's best estimate based on its training</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>You provide features of a new house (square footage, bedrooms, location)</li>
+<li>The model predicts what price that house might sell for</li>
+</ul>
+<p>This method is used after training is complete, when you want to apply your model to real-world data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SaveModel_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SaveModel_System_String_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SaveState_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SaveState*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SaveState_System_IO_Stream_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Serialize_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Serialize" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SetActiveFeatureIndices_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L326"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SetParameters_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SetParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_SynchronizeGradients_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SynchronizeGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_SynchronizeGradients" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.SynchronizeGradients">
+  SynchronizeGradients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes gradients across all processes using AllReduce.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SynchronizeGradients()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_SynchronizeGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+After this operation, all processes have the same averaged gradients.
+</p>
+<p><b>For Beginners:</b>
+During training, each process calculates gradients based on its portion
+of the data. This method combines (averages) those gradients so that
+everyone is learning from everyone else's experiences. It's like a team
+meeting where everyone shares what they learned.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_Train_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_Train__1__2_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.Train(`1,`2)">
+  Train(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model using input features and their corresponding target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void Train(TInput input, TOutput expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+    <dt><code>expectedOutput</code> <span class="xref">TOutput</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_Train__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes training data and adjusts the model's internal parameters to learn patterns in the data.</p>
+<p><b>For Beginners:</b> Training is like teaching the model by showing it examples.</p>
+<p>Imagine teaching a child to identify fruits:</p>
+<ul>
+<li>You show them many examples of apples, oranges, and bananas (input features x)</li>
+<li>You tell them the correct name for each fruit (target values y)</li>
+<li>Over time, they learn to recognize the patterns that distinguish each fruit</li>
+</ul>
+<p>In machine learning:</p>
+<ul>
+<li>The x parameter contains features (characteristics) of your data</li>
+<li>The y parameter contains the correct answers you want the model to learn</li>
+<li>During training, the model adjusts its internal calculations to get better at predicting y from x</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>x would contain features like square footage, number of bedrooms, location</li>
+<li>y would contain the actual sale prices of those houses</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_UpdateLocalShardFromFull_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.UpdateLocalShardFromFull*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_UpdateLocalShardFromFull_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.UpdateLocalShardFromFull(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateLocalShardFromFull(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the local parameter shard from the full parameter vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void UpdateLocalShardFromFull(Vector&lt;T&gt; fullParameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fullParameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The full parameter vector</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedModelBase_3_UpdateLocalShardFromFull_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method extracts this process's shard from a full parameter vector.
+Used after training updates or when setting parameters.
+</p>
+<p><b>For Beginners:</b> After the full model is updated, we need to
+extract our piece of it.
+<p>It's like taking your slice of a pizza after it's been prepared - you get
+the portion that belongs to you from the whole.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedModelBase_3_WithParameters_" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WithParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedModelBase_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ShardedModelBase`3.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IFullModel&lt;T, TInput, TOutput&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedModelBase.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

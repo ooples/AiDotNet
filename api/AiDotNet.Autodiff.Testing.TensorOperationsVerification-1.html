@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorOperationsVerification&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorOperationsVerification&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Verifies that TensorOperations autodiff gradients match numerical gradients.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Autodiff_Testing_TensorOperationsVerification_1.md&amp;value=---%0Auid%3A%20AiDotNet.Autodiff.Testing.TensorOperationsVerification%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1">
+
+
+
+  <h1 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1" class="text-break">
+Class TensorOperationsVerification&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Autodiff.html">Autodiff</a>.<a class="xref" href="AiDotNet.Autodiff.Testing.html">Testing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Verifies that TensorOperations autodiff gradients match numerical gradients.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TensorOperationsVerification&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorOperationsVerification&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides comprehensive verification of TensorOperations gradient implementations
+by comparing autodiff results with numerically computed gradients using the central difference method.
+</p>
+<p><b>For Beginners:</b> This class tests that our automatic differentiation is correct.
+<p>The process:</p>
+<ol>
+<li>We have operations like ReLU, Sigmoid, Add, etc. in TensorOperations</li>
+<li>Each operation computes gradients using autodiff (our fast implementation)</li>
+<li>We also compute gradients numerically (slow but always correct)</li>
+<li>If they match, our autodiff is correct!</li>
+</ol>
+<p>This is essential for:</p>
+<ul>
+<li>Testing new operations before using them in training</li>
+<li>Debugging gradient issues in neural networks</li>
+<li>Ensuring mathematical correctness of backward passes</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var verifier = new TensorOperationsVerification&lt;float&gt;();
+var result = verifier.VerifyReLU();
+Console.WriteLine(result); // "PASSED" or "FAILED" with details</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1__ctor_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1__ctor" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.#ctor">
+  TensorOperationsVerification()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes with default configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorOperationsVerification()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1__ctor_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1__ctor_AiDotNet_Autodiff_Testing_TensorOperationsVerification__0__VerificationConfig_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.#ctor(AiDotNet.Autodiff.Testing.TensorOperationsVerification{`0}.VerificationConfig)">
+  TensorOperationsVerification(VerificationConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes with custom configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorOperationsVerification(TensorOperationsVerification&lt;T&gt;.VerificationConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.html">TensorOperationsVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.VerificationConfig.html">VerificationConfig</a></dt>
+    <dd><p>The verification configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyAdd_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyAdd*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyAdd_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyAdd(System.Int32[])">
+  VerifyAdd(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Add operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NumericalGradient&lt;T&gt;.ComparisonResult, NumericalGradient&lt;T&gt;.ComparisonResult) VerifyAdd(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensors (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad1result">grad1Result</a>, <a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad2result">grad2Result</a>)</dt>
+    <dd><p>Verification results for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyAllOperations_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyAllOperations*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyAllOperations" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyAllOperations">
+  VerifyAllOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L430"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs verification for all standard operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorOperationsVerification&lt;T&gt;.VerificationSummary VerifyAllOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.html">TensorOperationsVerification</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.TensorOperationsVerification-1.VerificationSummary.html">VerificationSummary</a></dt>
+    <dd><p>A summary result containing all operation results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyAllOperations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method verifies gradients for a comprehensive set of TensorOperations:
+- Activation functions: ReLU, Sigmoid, Tanh, LeakyReLU
+- Arithmetic: Add, Subtract, Multiply, Divide
+- Math functions: Exp, Log, Sqrt, Square, Negate
+</p>
+<p><b>For Beginners:</b> This runs all gradient tests at once.
+<p>Use this to verify the entire autodiff system is working correctly.
+Each operation is tested individually, and a summary report is generated.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyBinaryOperation_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyBinaryOperation*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyBinaryOperation_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyBinaryOperation(System.Func{AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  VerifyBinaryOperation(Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies a binary operation's gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NumericalGradient&lt;T&gt;.ComparisonResult grad1Result, NumericalGradient&lt;T&gt;.ComparisonResult grad2Result) VerifyBinaryOperation(Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt; operation, Tensor&lt;T&gt; input1, Tensor&lt;T&gt; input2, string operationName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The TensorOperations function to verify.</p>
+</dd>
+    <dt><code>input1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The first input tensor.</p>
+</dd>
+    <dt><code>input2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second input tensor.</p>
+</dd>
+    <dt><code>operationName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the operation for error messages.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad1result">grad1Result</a>, <a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad2result">grad2Result</a>)</dt>
+    <dd><p>A tuple of verification results for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyBinaryOperation_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Binary operations like Add, Multiply, MatMul have two inputs, so we verify
+gradients for both inputs separately.
+</p>
+<p><b>For Beginners:</b> This tests operations with two inputs like a + b or a * b.
+<p>For c = f(a, b), we need to verify both:</p>
+<ul>
+<li>dc/da: How does c change when a changes?</li>
+<li>dc/db: How does c change when b changes?</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyElementwiseDivide_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyElementwiseDivide*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyElementwiseDivide_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyElementwiseDivide(System.Int32[])">
+  VerifyElementwiseDivide(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L400"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies ElementwiseDivide operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NumericalGradient&lt;T&gt;.ComparisonResult, NumericalGradient&lt;T&gt;.ComparisonResult) VerifyElementwiseDivide(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensors (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad1result">grad1Result</a>, <a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad2result">grad2Result</a>)</dt>
+    <dd><p>Verification results for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyElementwiseMultiply_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyElementwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyElementwiseMultiply_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyElementwiseMultiply(System.Int32[])">
+  VerifyElementwiseMultiply(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L387"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies ElementwiseMultiply operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NumericalGradient&lt;T&gt;.ComparisonResult, NumericalGradient&lt;T&gt;.ComparisonResult) VerifyElementwiseMultiply(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensors (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad1result">grad1Result</a>, <a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad2result">grad2Result</a>)</dt>
+    <dd><p>Verification results for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyExp_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyExp*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyExp_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyExp(System.Int32[])">
+  VerifyExp(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Exp operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyExp(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyLeakyReLU_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyLeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyLeakyReLU_System_Int32___System_Double_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyLeakyReLU(System.Int32[],System.Double)">
+  VerifyLeakyReLU(int[]?, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies LeakyReLU operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyLeakyReLU(int[]? inputShape = null, double alpha = 0.01)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Negative slope coefficient.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyLog_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyLog*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyLog_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyLog(System.Int32[])">
+  VerifyLog(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Log operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyLog(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyNegate_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyNegate*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyNegate_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyNegate(System.Int32[])">
+  VerifyNegate(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Negate operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyNegate(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyReLU_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyReLU*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyReLU_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyReLU(System.Int32[])">
+  VerifyReLU(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies ReLU operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyReLU(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySigmoid_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySigmoid*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySigmoid_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySigmoid(System.Int32[])">
+  VerifySigmoid(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Sigmoid operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifySigmoid(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySqrt_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySqrt*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySqrt_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySqrt(System.Int32[])">
+  VerifySqrt(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Sqrt operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifySqrt(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySquare_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySquare*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySquare_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySquare(System.Int32[])">
+  VerifySquare(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Square operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifySquare(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySubtract_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySubtract*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifySubtract_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifySubtract(System.Int32[])">
+  VerifySubtract(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Subtract operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (NumericalGradient&lt;T&gt;.ComparisonResult, NumericalGradient&lt;T&gt;.ComparisonResult) VerifySubtract(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensors (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad1result">grad1Result</a>, <a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult,aidotnet.autodiff.testing.numericalgradient--0-.comparisonresult-.grad2result">grad2Result</a>)</dt>
+    <dd><p>Verification results for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyTanh_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyTanh*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyTanh_System_Int32___" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyTanh(System.Int32[])">
+  VerifyTanh(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies Tanh operation gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyTanh(int[]? inputShape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Shape of test tensor (default: [5]).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyUnaryOperation_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyUnaryOperation*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyUnaryOperation_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Autodiff.Testing.TensorOperationsVerification`1.VerifyUnaryOperation(System.Func{AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  VerifyUnaryOperation(Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies a unary operation's gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NumericalGradient&lt;T&gt;.ComparisonResult VerifyUnaryOperation(Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt; operation, Tensor&lt;T&gt; input, string operationName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The TensorOperations function to verify.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor.</p>
+</dd>
+    <dt><code>operationName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the operation for error messages.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Verification result with detailed error information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_TensorOperationsVerification_1_VerifyUnaryOperation_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a complete gradient verification cycle:
+1. Computes forward pass and autodiff gradients using GradientTape
+2. Computes numerical gradients using finite differences
+3. Compares the two and reports any discrepancies
+</p>
+<p><b>For Beginners:</b> This tests a single operation like ReLU or Sigmoid.
+<p>A unary operation takes one input and produces one output.
+We verify that dOutput/dInput is computed correctly by:</p>
+<ul>
+<li>Running autodiff (fast, our implementation)</li>
+<li>Running numerical differentiation (slow, ground truth)</li>
+<li>Checking they match</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/TensorOperationsVerification.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

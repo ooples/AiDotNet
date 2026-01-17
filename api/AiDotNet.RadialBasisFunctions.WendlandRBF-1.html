@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class WendlandRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class WendlandRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Wendland&#39;s compactly supported Radial Basis Functions with different smoothness orders.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_WendlandRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.WendlandRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1" class="text-break">
+Class WendlandRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Wendland's compactly supported Radial Basis Functions with different smoothness orders.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class WendlandRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">WendlandRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of Wendland's family of compactly supported Radial Basis Functions.
+These functions are defined by a smoothness parameter k and have the form:
+- For k = 0: f(r) = (1 - r)²  (for r = 1, 0 otherwise)
+- For k = 1: f(r) = (1 - r)4(1 + 4r)  (for r = 1, 0 otherwise)
+- For k = 2: f(r) = (1 - r)6(3 + 18r + 35r²)  (for r = 1, 0 otherwise)
+where r is the normalized radial distance (actual distance divided by the support radius).
+</p>
+<p>
+Wendland functions are popular in scientific computing because they combine compact support
+(they become exactly zero beyond a certain radius) with high order smoothness properties. The parameter k
+controls the smoothness of the function: higher k values yield more derivatives at r = 0 and r = 1,
+resulting in smoother interpolations. These functions are particularly useful for scattered data
+interpolation, meshless methods for solving PDEs, and computer graphics applications.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>Wendland RBFs are a family of functions that have two important properties:</p>
+<ol>
+<li>They have &quot;compact support&quot; - they become exactly zero beyond a certain distance (the support radius)</li>
+<li>They are very smooth - they transition gradually to zero at the boundary with no sudden changes</li>
+</ol>
+<p>Think of them like smooth hills or bumps that are exactly flat (zero) beyond a certain distance.
+You can choose from different types of Wendland functions based on how smooth you need them to be:</p>
+<ul>
+<li>k = 0: The basic version, reasonably smooth but with limited continuity</li>
+<li>k = 1: A smoother version, with more continuous derivatives</li>
+<li>k = 2: The smoothest version, with even more continuous derivatives</li>
+</ul>
+<p>The higher the k value, the smoother the function, but also the more computationally expensive.
+These functions are particularly useful in scientific computing because they combine efficiency
+(from the compact support) with high quality results (from the smoothness).</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_WendlandRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1__ctor_System_Int32_System_Double_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.#ctor(System.Int32,System.Double)">
+  WendlandRBF(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.WendlandRBF-1.html">WendlandRBF&lt;T&gt;</a> class with specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public WendlandRBF(int k = 2, double supportRadius = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The smoothness parameter, defaults to 2. Supported values are 0, 1, and 2.</p>
+</dd>
+    <dt><code>supportRadius</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The radius beyond which the function becomes zero, defaults to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_WendlandRBF_1__ctor_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Wendland Radial Basis Function with a specified smoothness parameter k
+and support radius. The parameter k controls the smoothness of the function, with higher values providing
+more continuous derivatives. The support radius determines the distance beyond which the function
+becomes exactly zero.
+</p>
+<p><b>For Beginners:</b> This creates a new Wendland RBF with specific smoothness and size settings.
+<p>The two parameters you can adjust are:</p>
+<ul>
+<li>k: Controls how smooth the function is. Higher values (0, 1, or 2) give progressively smoother functions
+with more continuous derivatives. The default k = 2 gives the smoothest function.</li>
+<li>supportRadius: Controls the &quot;reach&quot; or &quot;influence radius&quot; of the function. Any point beyond this
+distance will receive exactly zero influence. A larger value means the function affects a wider area.</li>
+</ul>
+<p>For example, with supportRadius = 2.0, the function will have non-zero values for all points closer than
+2.0 units to the center, and will be exactly zero for all points 2.0 or more units away.</p>
+<p>If you're not sure what values to use, the defaults (k = 2, supportRadius = 1.0) are good starting points
+that provide high smoothness with a moderate range of influence.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Wendland Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed function value based on the k parameter, or zero if r = supportRadius.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Wendland RBF for a given radius r. The formula used depends
+on the k parameter and only applies when r is less than the support radius. If r is greater than or
+equal to the support radius, the function returns 0. The formulas are:
+- For k = 0: (1 - r)²
+- For k = 1: (1 - r)4(1 + 4r)
+- For k = 2: (1 - r)6(3 + 18r + 35r²)
+where r is normalized by dividing by the support radius.
+</p>
+<p><b>For Beginners:</b> This method computes the function's value at a specific distance (r) from the center.
+<p>The calculation first checks if the distance is within the support radius:</p>
+<ul>
+<li>If the distance is greater than or equal to the support radius, it immediately returns 0</li>
+<li>Otherwise, it calculates a value based on the k parameter (smoothness level)</li>
+</ul>
+<p>The result is a single number representing the function's value at the given distance:</p>
+<ul>
+<li>At the center (r = 0), the value depends on k but is always positive</li>
+<li>As you move away from the center, the value decreases following a smooth curve</li>
+<li>At exactly r = supportRadius, the value becomes 0</li>
+<li>Beyond the support radius, the value remains 0</li>
+</ul>
+<p>This compact support property makes Wendland functions computationally efficient,
+as points beyond the support radius can be completely ignored in calculations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Wendland RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r, or zero if r = supportRadius or r = 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Wendland RBF with respect to the radius r.
+The formula for the derivative depends on the k parameter and only applies when r is greater than 0
+and less than the support radius. If r is greater than or equal to the support radius or equal to 0,
+the derivative is 0. The formulas for the derivatives are:
+- For k = 0: -2(1-r)
+- For k = 1: (1-r)³(-4-20r)
+- For k = 2: (1-r)5(-18-180r-210r²)
+where r is normalized by dividing by the support radius.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance:</p>
+<ul>
+<li>If the distance exceeds the support radius, the derivative is 0 (no change, since the function is constantly 0)</li>
+<li>If the distance is exactly 0, the derivative is also 0 (due to symmetry at the center)</li>
+<li>Otherwise, it calculates a formula that gives the slope at that distance</li>
+</ul>
+<p>For all Wendland functions:</p>
+<ul>
+<li>The derivative is negative within the support radius, meaning the function decreases as distance increases</li>
+<li>The derivative approaches 0 as you approach the boundary, allowing a smooth transition to the zero region</li>
+</ul>
+<p>This smooth behavior at the boundary is one of the key features that makes Wendland functions
+valuable for scientific computing applications.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.WendlandRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Wendland RBF with respect to the support radius parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to the support radius, or zero if r = supportRadius.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_WendlandRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Wendland RBF with respect to the support radius parameter.
+For a function f(r/s) where s is the support radius, the derivative with respect to s is
+-r/s² × f'(r/s), where f' is the derivative of f with respect to its argument. This derivative
+is useful for optimizing the support radius parameter in applications.
+</p>
+<p><b>For Beginners:</b> This method calculates how the function's value would change
+if you were to adjust the support radius parameter.
+<p>This is particularly important in machine learning applications:</p>
+<ul>
+<li>When training a model with Wendland RBFs, we often need to adjust the support radius to fit the data better</li>
+<li>This derivative tells us exactly how changing the support radius affects the output of the function</li>
+<li>With this information, learning algorithms can automatically find the optimal value for the support radius</li>
+</ul>
+<p>For Wendland functions:</p>
+<ul>
+<li>If the distance exceeds the support radius, the width derivative is 0</li>
+<li>Otherwise, the width derivative is calculated as a product involving the radius derivative</li>
+</ul>
+<p>As the support radius increases, the &quot;reach&quot; of the function extends further, allowing it to
+influence more distant points. This derivative helps algorithms determine whether extending
+that reach would improve the function's ability to model the data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/WendlandRBF.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

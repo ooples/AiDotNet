@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>AutoML Industry Excellence Implementation Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="AutoML Industry Excellence Implementation Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/design/AutoML-Industry-Excellence-Plan.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="automl-industry-excellence-implementation-plan">AutoML Industry Excellence Implementation Plan</h1>
+
+<h2 id="executive-summary">Executive Summary</h2>
+<p>This document outlines the implementation roadmap to elevate AiDotNet's AutoML capabilities to meet and exceed industry standards set by Google AutoML, Microsoft NNI, Meta's FBNet, and leading open-source frameworks like AutoKeras and Ray Tune.</p>
+<p><strong>Current State:</strong> Solid NAS algorithm foundation (DARTS, GDAS, OnceForAll) with FLOP-based cost estimation. Existing quantization infrastructure (Int8Quantizer, Float16Quantizer) and CompressionOptimizer AutoML.</p>
+<p><strong>Target State:</strong> Production-ready, hardware-aware AutoML system with end-to-end training, real performance measurement, distributed execution, and <strong>full facade integration via PredictionModelBuilder</strong>.</p>
+<hr>
+<h2 id="facade-architecture-integration">Facade Architecture Integration</h2>
+<p><strong>CRITICAL:</strong> All NAS functionality MUST be accessible through the existing facade pattern:</p>
+<ul>
+<li><strong>Training/Building:</strong> Users access NAS via <code>PredictionModelBuilder.ConfigureAutoML()</code></li>
+<li><strong>Inference:</strong> Users access trained models via <code>PredictionModelResult</code></li>
+</ul>
+<h3 id="user-facing-api-design">User-Facing API Design</h3>
+<h4 id="option-1-automlsearchstrategy-enum-extension">Option 1: AutoMLSearchStrategy Enum Extension</h4>
+<p>Add NAS strategies to the existing enum in <code>src/Enums/AutoMLSearchStrategy.cs</code>:</p>
+<pre><code class="lang-csharp">public enum AutoMLSearchStrategy
+{
+    // Existing strategies
+    RandomSearch,
+    BayesianOptimization,
+    Evolutionary,
+    MultiFidelity,
+
+    // NEW: Neural Architecture Search strategies
+    NeuralArchitectureSearch,     // Auto-selects best NAS algorithm
+    DARTS,                        // Differentiable Architecture Search
+    GDAS,                         // Gumbel-softmax DARTS
+    OnceForAll,                   // Train once, specialize anywhere
+    ProxylessNAS                  // Future: Direct search on target hardware
+}
+</code></pre>
+<h4 id="option-2-automloptions-extension">Option 2: AutoMLOptions Extension</h4>
+<p>Add NAS-specific configuration to <code>src/Configuration/AutoMLOptions.cs</code>:</p>
+<pre><code class="lang-csharp">public class AutoMLOptions&lt;T, TInput, TOutput&gt;
+{
+    // ... existing properties ...
+
+    /// &lt;summary&gt;
+    /// Neural Architecture Search options. Used when SearchStrategy is a NAS variant.
+    /// &lt;/summary&gt;
+    public NASOptions&lt;T&gt;? NeuralArchitectureSearch { get; set; }
+}
+
+/// &lt;summary&gt;
+/// Configuration for Neural Architecture Search strategies.
+/// &lt;/summary&gt;
+public class NASOptions&lt;T&gt;
+{
+    /// &lt;summary&gt;
+    /// Hardware constraints for architecture optimization.
+    /// &lt;/summary&gt;
+    public HardwareConstraints&lt;T&gt;? HardwareConstraints { get; set; }
+
+    /// &lt;summary&gt;
+    /// Target hardware platform for latency optimization.
+    /// &lt;/summary&gt;
+    public HardwarePlatform TargetPlatform { get; set; } = HardwarePlatform.CPU;
+
+    /// &lt;summary&gt;
+    /// Search space configuration (operations, depths, widths).
+    /// If null, uses sensible defaults for the task family.
+    /// &lt;/summary&gt;
+    public SearchSpaceConfiguration? SearchSpace { get; set; }
+
+    /// &lt;summary&gt;
+    /// Elastic dimensions for OnceForAll networks.
+    /// &lt;/summary&gt;
+    public ElasticDimensions? ElasticDimensions { get; set; }
+
+    /// &lt;summary&gt;
+    /// Enable quantization-aware search.
+    /// &lt;/summary&gt;
+    public bool QuantizationAware { get; set; } = false;
+
+    /// &lt;summary&gt;
+    /// Quantization mode to use during search.
+    /// &lt;/summary&gt;
+    public QuantizationMode QuantizationMode { get; set; } = QuantizationMode.Int8;
+}
+</code></pre>
+<h3 id="user-facing-code-example">User-Facing Code Example</h3>
+<pre><code class="lang-csharp">// Simple NAS usage through facade
+var builder = new PredictionModelBuilder&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;()
+    .WithTrainingData(trainData, trainLabels)
+    .WithValidationData(valData, valLabels)
+    .ConfigureAutoML(options =&gt;
+    {
+        options.SearchStrategy = AutoMLSearchStrategy.OnceForAll;
+        options.Budget = new AutoMLBudgetOptions
+        {
+            MaxTrials = 100,
+            MaxDuration = TimeSpan.FromHours(4)
+        };
+        options.NeuralArchitectureSearch = new NASOptions&lt;double&gt;
+        {
+            TargetPlatform = HardwarePlatform.Mobile,
+            HardwareConstraints = new HardwareConstraints&lt;double&gt;
+            {
+                MaxLatency = 20.0,    // 20ms latency budget
+                MaxMemory = 50.0      // 50MB memory budget
+            },
+            QuantizationAware = true,
+            QuantizationMode = QuantizationMode.Int8
+        };
+    });
+
+var result = await builder.TrainAsync();
+
+// Access discovered architecture
+var architecture = result.AutoMLSummary?.BestArchitecture;
+Console.WriteLine($&quot;Best architecture: {architecture?.GetDescription()}&quot;);
+
+// Use for inference
+var predictions = result.Predict(testData);
+</code></pre>
+<h3 id="implementation-in-predictionmodelbuilder">Implementation in PredictionModelBuilder</h3>
+<p>The factory method <code>CreateBuiltInAutoMLModel()</code> needs extension:</p>
+<pre><code class="lang-csharp">private IAutoMLModel&lt;T, TInput, TOutput&gt; CreateBuiltInAutoMLModel(AutoMLSearchStrategy strategy)
+{
+    return strategy switch
+    {
+        // Existing strategies...
+        AutoMLSearchStrategy.RandomSearch =&gt; new RandomSearchAutoML&lt;T, TInput, TOutput&gt;(...),
+
+        // NEW: NAS strategies
+        AutoMLSearchStrategy.NeuralArchitectureSearch =&gt; CreateNASAutoML(inferredStrategy),
+        AutoMLSearchStrategy.DARTS =&gt; new DARTSAutoML&lt;T, TInput, TOutput&gt;(...),
+        AutoMLSearchStrategy.GDAS =&gt; new GDASAutoML&lt;T, TInput, TOutput&gt;(...),
+        AutoMLSearchStrategy.OnceForAll =&gt; new OnceForAllAutoML&lt;T, TInput, TOutput&gt;(...),
+        _ =&gt; throw new NotSupportedException($&quot;Strategy {strategy} not supported&quot;)
+    };
+}
+</code></pre>
+<hr>
+<h2 id="existing-infrastructure-analysis">Existing Infrastructure Analysis</h2>
+<h3 id="already-implemented-can-be-leveraged">Already Implemented (Can Be Leveraged)</h3>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Location</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Quantization</strong></td>
+<td><code>src/Deployment/Optimization/Quantization/</code></td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td>Int8Quantizer</td>
+<td><code>Int8Quantizer.cs</code></td>
+<td>✅ Full implementation</td>
+</tr>
+<tr>
+<td>Float16Quantizer</td>
+<td><code>Float16Quantizer.cs</code></td>
+<td>✅ Full implementation</td>
+</tr>
+<tr>
+<td>QuantizationConfiguration</td>
+<td><code>QuantizationConfiguration.cs</code></td>
+<td>✅ Full implementation</td>
+</tr>
+<tr>
+<td><strong>Compression AutoML</strong></td>
+<td><code>src/AutoML/CompressionOptimizer.cs</code></td>
+<td>✅ Reference pattern</td>
+</tr>
+<tr>
+<td><strong>Hardware Cost Model</strong></td>
+<td><code>src/AutoML/NAS/HardwareCostModel.cs</code></td>
+<td>✅ 202 tests passing</td>
+</tr>
+<tr>
+<td><strong>NAS Algorithms</strong></td>
+<td><code>src/AutoML/NAS/</code></td>
+<td>✅ DARTS, GDAS, OFA</td>
+</tr>
+<tr>
+<td><strong>Search Space</strong></td>
+<td><code>src/AutoML/SearchSpace/</code></td>
+<td>✅ Base implementation</td>
+</tr>
+<tr>
+<td><strong>SuperNet</strong></td>
+<td><code>src/AutoML/NAS/SuperNet.cs</code></td>
+<td>✅ Weight sharing</td>
+</tr>
+</tbody>
+</table>
+<h3 id="integration-points">Integration Points</h3>
+<ol>
+<li><strong>CompressionOptimizer Pattern:</strong> Follow the same AutoML facade pattern used in <code>CompressionOptimizer&lt;T&gt;</code> for NAS</li>
+<li><strong>Existing Quantizers:</strong> Use <code>Int8Quantizer</code> and <code>Float16Quantizer</code> for quantization-aware NAS</li>
+<li><strong>Hardware Cost Model:</strong> Already integrated with OnceForAll for constraint checking</li>
+</ol>
+<hr>
+<h2 id="gap-analysis-current-vs-industry-standards">Gap Analysis: Current vs Industry Standards</h2>
+<table>
+<thead>
+<tr>
+<th>Capability</th>
+<th>Current State</th>
+<th>Industry Standard</th>
+<th>Gap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NAS Algorithms</td>
+<td>DARTS, GDAS, OFA implemented</td>
+<td>Same algorithms + ENAS, ProxylessNAS</td>
+<td>Minor</td>
+</tr>
+<tr>
+<td>Training Integration</td>
+<td>Architecture search only</td>
+<td>End-to-end train + search</td>
+<td><strong>Critical</strong></td>
+</tr>
+<tr>
+<td>Hardware Cost</td>
+<td>FLOP estimation + HardwareCostModel</td>
+<td>Real latency measurement</td>
+<td>Moderate</td>
+</tr>
+<tr>
+<td>Performance Prediction</td>
+<td>None</td>
+<td>Neural predictors, surrogate models</td>
+<td><strong>Major</strong></td>
+</tr>
+<tr>
+<td>Weight Sharing</td>
+<td>SuperNet with shared weights</td>
+<td>Full supernet training</td>
+<td>Moderate</td>
+</tr>
+<tr>
+<td>Multi-Objective</td>
+<td>Single objective</td>
+<td>Pareto-optimal search</td>
+<td>Moderate</td>
+</tr>
+<tr>
+<td>Distributed Training</td>
+<td>None</td>
+<td>Multi-GPU, multi-node</td>
+<td><strong>Major</strong></td>
+</tr>
+<tr>
+<td>Quantization Infrastructure</td>
+<td>✅ Int8/Float16 Quantizers exist</td>
+<td>INT8/FP16 in search loop</td>
+<td>Minor (integration only)</td>
+</tr>
+<tr>
+<td>Compression AutoML</td>
+<td>✅ CompressionOptimizer exists</td>
+<td>Pruning/quantization automation</td>
+<td>Minor (NAS integration)</td>
+</tr>
+<tr>
+<td>Early Stopping</td>
+<td>None</td>
+<td>ASHA, Hyperband, Median stopping</td>
+<td><strong>Major</strong></td>
+</tr>
+<tr>
+<td>Search Space</td>
+<td>Manual definition</td>
+<td>Auto search space construction</td>
+<td>Moderate</td>
+</tr>
+<tr>
+<td><strong>Facade Integration</strong></td>
+<td>❌ Not integrated</td>
+<td>Single API entry point</td>
+<td><strong>Critical</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="implementation-phases">Implementation Phases</h2>
+<h3 id="phase-1-foundation--training-integration-weeks-1-3">Phase 1: Foundation &amp; Training Integration (Weeks 1-3)</h3>
+<p><strong>Goal:</strong> Connect NAS to actual model training with measurable results.</p>
+<h4 id="sprint-11-training-loop-integration">Sprint 1.1: Training Loop Integration</h4>
+<ul>
+<li>[ ] Create <code>INasTrainer&lt;T&gt;</code> interface for training architectures</li>
+<li>[ ] Implement <code>NasTrainingPipeline&lt;T&gt;</code> that:
+<ul>
+<li>Takes discovered architecture</li>
+<li>Builds actual neural network from architecture spec</li>
+<li>Trains with configurable optimizers (SGD, Adam, AdamW)</li>
+<li>Reports validation metrics during training</li>
+</ul>
+</li>
+<li>[ ] Add training callbacks for metrics collection</li>
+<li>[ ] Implement checkpoint saving/loading for architectures</li>
+</ul>
+<h4 id="sprint-12-supernet-weight-sharing">Sprint 1.2: Supernet Weight Sharing</h4>
+<ul>
+<li>[ ] Implement proper <code>SuperNetTrainer&lt;T&gt;</code> with shared weights</li>
+<li>[ ] Add weight inheritance when sampling sub-networks</li>
+<li>[ ] Implement path dropout for regularization</li>
+<li>[ ] Add sandwich sampling (smallest, largest, random) per OFA paper</li>
+<li>[ ] Create weight extraction for derived architectures</li>
+</ul>
+<h4 id="sprint-13-validation--benchmarking">Sprint 1.3: Validation &amp; Benchmarking</h4>
+<ul>
+<li>[ ] Implement k-fold cross-validation for architecture evaluation</li>
+<li>[ ] Add holdout validation with proper data splitting</li>
+<li>[ ] Create benchmark suite with standard datasets (CIFAR-10, ImageNet subset)</li>
+<li>[ ] Add reproducibility guarantees (seeding, deterministic ops)</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>Working end-to-end NAS pipeline</li>
+<li>Training integration tests</li>
+<li>Benchmark results on CIFAR-10</li>
+</ul>
+<hr>
+<h3 id="phase-2-real-hardware-measurement-weeks-4-6">Phase 2: Real Hardware Measurement (Weeks 4-6)</h3>
+<p><strong>Goal:</strong> Replace FLOP estimation with actual hardware profiling.</p>
+<h4 id="sprint-21-hardware-profiler-infrastructure">Sprint 2.1: Hardware Profiler Infrastructure</h4>
+<ul>
+<li>[ ] Create <code>IHardwareProfiler&lt;T&gt;</code> interface</li>
+<li>[ ] Implement <code>LatencyProfiler</code> with:
+<ul>
+<li>Warmup runs (discard first N iterations)</li>
+<li>Statistical measurement (mean, std, percentiles)</li>
+<li>Memory profiling (peak, average)</li>
+<li>Energy estimation where available</li>
+</ul>
+</li>
+<li>[ ] Add caching layer for profiled operations (LRU cache)</li>
+<li>[ ] Support profiling on CPU, CUDA, and ONNX Runtime</li>
+</ul>
+<h4 id="sprint-22-latency-lookup-table-lut">Sprint 2.2: Latency Lookup Table (LUT)</h4>
+<ul>
+<li>[ ] Pre-profile common operations at various input sizes</li>
+<li>[ ] Build interpolation for unseen configurations</li>
+<li>[ ] Create platform-specific LUT files (mobile, server GPU, edge)</li>
+<li>[ ] Add LUT serialization/deserialization</li>
+</ul>
+<h4 id="sprint-23-hardware-in-the-loop-search">Sprint 2.3: Hardware-in-the-Loop Search</h4>
+<ul>
+<li>[ ] Integrate real profiler into NAS loop</li>
+<li>[ ] Implement lazy profiling (profile only promising candidates)</li>
+<li>[ ] Add hardware constraint validation during search</li>
+<li>[ ] Create <code>HardwareAwareSearchSpace</code> that prunes infeasible ops</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>Accurate latency measurements (&lt; 5% error vs wall clock)</li>
+<li>Platform-specific cost models</li>
+<li>Hardware-constrained architecture search</li>
+</ul>
+<hr>
+<h3 id="phase-3-performance-prediction--efficiency-weeks-7-9">Phase 3: Performance Prediction &amp; Efficiency (Weeks 7-9)</h3>
+<p><strong>Goal:</strong> Reduce search cost through intelligent prediction.</p>
+<h4 id="sprint-31-neural-performance-predictor">Sprint 3.1: Neural Performance Predictor</h4>
+<ul>
+<li>[ ] Implement <code>ArchitectureEncoder</code> (GNN-based or LSTM-based)</li>
+<li>[ ] Create <code>PerformancePredictor&lt;T&gt;</code> that predicts:
+<ul>
+<li>Validation accuracy</li>
+<li>Training convergence speed</li>
+<li>Final loss estimate</li>
+</ul>
+</li>
+<li>[ ] Train predictor on architecture-performance pairs</li>
+<li>[ ] Add uncertainty estimation (ensemble or dropout-based)</li>
+</ul>
+<h4 id="sprint-32-surrogate-assisted-search">Sprint 3.2: Surrogate-Assisted Search</h4>
+<ul>
+<li>[ ] Implement Bayesian Optimization with surrogate model</li>
+<li>[ ] Add acquisition functions (EI, UCB, Thompson Sampling)</li>
+<li>[ ] Create hybrid search: surrogate + actual training</li>
+<li>[ ] Implement progressive training (low fidelity → high fidelity)</li>
+</ul>
+<h4 id="sprint-33-early-stopping-strategies">Sprint 3.3: Early Stopping Strategies</h4>
+<ul>
+<li>[ ] Implement ASHA (Asynchronous Successive Halving)</li>
+<li>[ ] Add Hyperband scheduler</li>
+<li>[ ] Implement median stopping rule</li>
+<li>[ ] Create learning curve extrapolation</li>
+<li>[ ] Add patience-based early stopping</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>10x reduction in search cost</li>
+<li>Accurate performance prediction (Kendall tau &gt; 0.8)</li>
+<li>Resource-efficient multi-fidelity search</li>
+</ul>
+<hr>
+<h3 id="phase-4-multi-objective--advanced-search-weeks-10-12">Phase 4: Multi-Objective &amp; Advanced Search (Weeks 10-12)</h3>
+<p><strong>Goal:</strong> Enable complex trade-off optimization.</p>
+<h4 id="sprint-41-multi-objective-optimization">Sprint 4.1: Multi-Objective Optimization</h4>
+<ul>
+<li>[ ] Implement NSGA-II for Pareto-optimal search</li>
+<li>[ ] Add MOEA/D (decomposition-based)</li>
+<li>[ ] Create scalarization methods (weighted sum, Chebyshev)</li>
+<li>[ ] Implement Pareto front visualization</li>
+<li>[ ] Add hypervolume indicator for solution quality</li>
+</ul>
+<h4 id="sprint-42-constrained-optimization">Sprint 4.2: Constrained Optimization</h4>
+<ul>
+<li>[ ] Implement penalty-based constraint handling</li>
+<li>[ ] Add feasibility-first ranking</li>
+<li>[ ] Create adaptive constraint relaxation</li>
+<li>[ ] Support multiple hardware targets simultaneously</li>
+</ul>
+<h4 id="sprint-43-advanced-search-spaces">Sprint 4.3: Advanced Search Spaces</h4>
+<ul>
+<li>[ ] Implement hierarchical search spaces</li>
+<li>[ ] Add cell-based search (normal cell + reduction cell)</li>
+<li>[ ] Create macro-architecture search (network depth, width)</li>
+<li>[ ] Implement joint architecture + hyperparameter search</li>
+<li>[ ] Add neural architecture recycling (transfer from smaller search)</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>Pareto-optimal architecture sets</li>
+<li>Multi-hardware deployment from single search</li>
+<li>Flexible, extensible search spaces</li>
+</ul>
+<hr>
+<h3 id="phase-5-quantization-aware-nas--deployment-weeks-13-15">Phase 5: Quantization-Aware NAS &amp; Deployment (Weeks 13-15)</h3>
+<p><strong>Goal:</strong> Integrate existing quantization infrastructure with NAS for production-ready models.</p>
+<p><strong>NOTE:</strong> Quantization infrastructure already exists! This phase focuses on NAS integration, not building from scratch.</p>
+<h4 id="sprint-51-quantization-aware-nas-leveraging-existing-infrastructure">Sprint 5.1: Quantization-Aware NAS (Leveraging Existing Infrastructure)</h4>
+<ul>
+<li>[ ] Integrate existing <code>Int8Quantizer</code> and <code>Float16Quantizer</code> into NAS search loop</li>
+<li>[ ] Add quantization cost to <code>HardwareCostModel&lt;T&gt;</code> (latency impact of INT8 vs FP32)</li>
+<li>[ ] Create <code>QuantizationAwareSearchSpace</code> that respects quantization constraints</li>
+<li>[ ] Use existing <code>QuantizationConfiguration</code> for search-time quantization simulation</li>
+<li>[ ] Add mixed-precision support using existing <code>PrecisionMode</code> enum</li>
+</ul>
+<h4 id="sprint-52-compression--nas-integration-using-compressionoptimizer">Sprint 5.2: Compression + NAS Integration (Using CompressionOptimizer)</h4>
+<ul>
+<li>[ ] Integrate <code>CompressionOptimizer&lt;T&gt;</code> with NAS pipeline</li>
+<li>[ ] Create joint NAS + compression search (architecture + pruning ratio)</li>
+<li>[ ] Add knowledge distillation using existing <code>DistillationConfig</code></li>
+<li>[ ] Leverage existing <code>PruningConfig</code> for architecture-aware pruning</li>
+<li>[ ] Create unified compression-aware cost model</li>
+</ul>
+<h4 id="sprint-53-export--deployment">Sprint 5.3: Export &amp; Deployment</h4>
+<ul>
+<li>[ ] Export to ONNX with quantization applied</li>
+<li>[ ] Add TensorRT export for NVIDIA GPUs (use existing optimizers)</li>
+<li>[ ] Implement CoreML export for Apple devices</li>
+<li>[ ] Create TFLite export for mobile</li>
+<li>[ ] Add deployment validation (verify exported model accuracy)</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>Quantized NAS models with &lt; 1% accuracy drop</li>
+<li>Seamless integration with existing quantization APIs</li>
+<li>Deployment-ready model packages</li>
+</ul>
+<p><strong>Existing Components to Leverage:</strong></p>
+<pre><code>src/Deployment/Optimization/Quantization/
+├── IQuantizer.cs           # Interface for quantizers
+├── Int8Quantizer.cs        # INT8 quantization
+├── Float16Quantizer.cs     # FP16 quantization
+└── QuantizationConfiguration.cs
+
+src/AutoML/CompressionOptimizer.cs  # Compression AutoML pattern
+</code></pre>
+<hr>
+<h3 id="phase-6-scale--production-weeks-16-18">Phase 6: Scale &amp; Production (Weeks 16-18)</h3>
+<p><strong>Goal:</strong> Enterprise-grade distributed AutoML.</p>
+<h4 id="sprint-61-distributed-search">Sprint 6.1: Distributed Search</h4>
+<ul>
+<li>[ ] Implement distributed architecture evaluation</li>
+<li>[ ] Add parameter server for weight sharing</li>
+<li>[ ] Create async parallel search (population-based)</li>
+<li>[ ] Support multi-GPU single-node training</li>
+<li>[ ] Add multi-node cluster support</li>
+</ul>
+<h4 id="sprint-62-experiment-management">Sprint 6.2: Experiment Management</h4>
+<ul>
+<li>[ ] Create experiment tracking (metrics, configs, artifacts)</li>
+<li>[ ] Add experiment comparison and visualization</li>
+<li>[ ] Implement experiment resumption from checkpoint</li>
+<li>[ ] Create experiment versioning and reproducibility</li>
+</ul>
+<h4 id="sprint-63-production-hardening">Sprint 6.3: Production Hardening</h4>
+<ul>
+<li>[ ] Add comprehensive error handling and recovery</li>
+<li>[ ] Implement resource monitoring and limits</li>
+<li>[ ] Create audit logging for compliance</li>
+<li>[ ] Add security (input validation, sandboxing)</li>
+<li>[ ] Performance optimization and profiling</li>
+</ul>
+<p><strong>Deliverables:</strong></p>
+<ul>
+<li>Linear scaling to 100+ GPUs</li>
+<li>Complete experiment lifecycle management</li>
+<li>Production SLA compliance</li>
+</ul>
+<hr>
+<h2 id="success-metrics">Success Metrics</h2>
+<h3 id="accuracy-benchmarks">Accuracy Benchmarks</h3>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Current Best</th>
+<th>Our Target</th>
+<th>Industry SOTA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CIFAR-10</td>
+<td>N/A</td>
+<td>97.5%</td>
+<td>99.0% (EfficientNet)</td>
+</tr>
+<tr>
+<td>CIFAR-100</td>
+<td>N/A</td>
+<td>85.0%</td>
+<td>91.7% (EfficientNet)</td>
+</tr>
+<tr>
+<td>ImageNet</td>
+<td>N/A</td>
+<td>77.0% top-1</td>
+<td>88.5% (CoAtNet)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="efficiency-benchmarks">Efficiency Benchmarks</h3>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Current</th>
+<th>Target</th>
+<th>Industry Best</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Search Cost (GPU hours)</td>
+<td>N/A</td>
+<td>&lt; 4 hours</td>
+<td>0.1 hours (GDAS)</td>
+</tr>
+<tr>
+<td>Latency Prediction Error</td>
+<td>~50%</td>
+<td>&lt; 5%</td>
+<td>3% (nn-Meter)</td>
+</tr>
+<tr>
+<td>Memory Overhead</td>
+<td>Unknown</td>
+<td>&lt; 2x base</td>
+<td>1.5x (ProxylessNAS)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="feature-parity">Feature Parity</h3>
+<table>
+<thead>
+<tr>
+<th>Framework</th>
+<th>Features We'll Match</th>
+<th>Features We'll Exceed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AutoKeras</td>
+<td>End-to-end pipeline</td>
+<td>Hardware awareness</td>
+</tr>
+<tr>
+<td>NNI</td>
+<td>Algorithm variety</td>
+<td>Unified API</td>
+</tr>
+<tr>
+<td>Ray Tune</td>
+<td>Distributed training</td>
+<td>.NET integration</td>
+</tr>
+<tr>
+<td>Google AutoML</td>
+<td>Multi-objective</td>
+<td>Open source, customizable</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="risk-mitigation">Risk Mitigation</h2>
+<table>
+<thead>
+<tr>
+<th>Risk</th>
+<th>Probability</th>
+<th>Impact</th>
+<th>Mitigation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Training integration complexity</td>
+<td>High</td>
+<td>High</td>
+<td>Start with simple CNN, expand gradually</td>
+</tr>
+<tr>
+<td>Hardware profiling accuracy</td>
+<td>Medium</td>
+<td>High</td>
+<td>Validate against published benchmarks</td>
+</tr>
+<tr>
+<td>Search cost explosion</td>
+<td>Medium</td>
+<td>Medium</td>
+<td>Implement early stopping first</td>
+</tr>
+<tr>
+<td>Distributed debugging</td>
+<td>High</td>
+<td>Medium</td>
+<td>Extensive logging, local simulation mode</td>
+</tr>
+<tr>
+<td>ONNX export compatibility</td>
+<td>Medium</td>
+<td>Low</td>
+<td>Test on multiple runtimes early</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="resource-requirements">Resource Requirements</h2>
+<h3 id="development">Development</h3>
+<ul>
+<li>2-3 developers full-time for 18 weeks</li>
+<li>GPU access for training/profiling (recommend 4x A100 or equivalent)</li>
+<li>CI/CD with GPU runners for testing</li>
+</ul>
+<h3 id="testing">Testing</h3>
+<ul>
+<li>Standard benchmark datasets (CIFAR, ImageNet subset)</li>
+<li>Multiple hardware targets (CPU, CUDA, mobile simulator)</li>
+<li>Automated regression testing</li>
+</ul>
+<h3 id="documentation">Documentation</h3>
+<ul>
+<li>API documentation with examples</li>
+<li>Tutorial notebooks (Jupyter)</li>
+<li>Architecture decision records</li>
+</ul>
+<hr>
+<h2 id="quick-wins-can-start-immediately">Quick Wins (Can Start Immediately)</h2>
+<h3 id="priority-1-facade-integration-critical">Priority 1: Facade Integration (CRITICAL)</h3>
+<ol>
+<li><strong>Add NAS enum values to AutoMLSearchStrategy</strong> - Enable NAS through ConfigureAutoML()</li>
+<li><strong>Create NASOptions<t> configuration class</t></strong> - User-friendly NAS settings</li>
+<li><strong>Wire NAS into CreateBuiltInAutoMLModel()</strong> - Connect existing algorithms to facade</li>
+<li><strong>Add NAS result to AutoMLRunSummary</strong> - Return discovered architecture</li>
+</ol>
+<h3 id="priority-2-algorithm-improvements">Priority 2: Algorithm Improvements</h3>
+<ol start="5">
+<li><strong>Add ASHA early stopping</strong> - Immediate 5-10x search speedup</li>
+<li><strong>Implement proper k-fold validation</strong> - More reliable architecture ranking</li>
+<li><strong>Add architecture serialization</strong> - Save/load discovered architectures</li>
+</ol>
+<h3 id="priority-3-hardware--benchmarks">Priority 3: Hardware &amp; Benchmarks</h3>
+<ol start="8">
+<li><strong>Integrate existing quantizers with HardwareCostModel</strong> - Quantization-aware cost estimation</li>
+<li><strong>Create simple latency profiler</strong> - CPU-based real timing</li>
+<li><strong>Add CIFAR-10 benchmark script</strong> - Establish baseline metrics</li>
+</ol>
+<hr>
+<h2 id="definition-of-exceeding-industry-standards">Definition of &quot;Exceeding Industry Standards&quot;</h2>
+<p>We will have exceeded industry standards when:</p>
+<ol>
+<li><strong>Performance:</strong> Discovered architectures match or beat published results on standard benchmarks</li>
+<li><strong>Efficiency:</strong> Search completes in comparable or less time than competing frameworks</li>
+<li><strong>Usability:</strong> Single API call can run complete AutoML pipeline</li>
+<li><strong>Hardware-Awareness:</strong> Automatically optimizes for target deployment platform</li>
+<li><strong>Scalability:</strong> Linear scaling demonstrated on distributed infrastructure</li>
+<li><strong>Reproducibility:</strong> Results reproducible with seeded runs</li>
+<li><strong>Documentation:</strong> Comprehensive docs with tutorials and examples</li>
+</ol>
+<hr>
+<h2 id="appendix-reference-implementations">Appendix: Reference Implementations</h2>
+<h3 id="papers-to-implement">Papers to Implement</h3>
+<ol>
+<li>DARTS: Differentiable Architecture Search (ICLR 2019) ✅ Done</li>
+<li>GDAS: Searching for A Robust Neural Architecture (CVPR 2019) ✅ Done</li>
+<li>Once-for-All: Train One Network and Specialize (ICLR 2020) ✅ Done</li>
+<li>ProxylessNAS: Direct Neural Architecture Search (ICLR 2019) 🔲 Todo</li>
+<li>FBNet: Hardware-Aware Efficient ConvNet Design (CVPR 2019) 🔲 Todo</li>
+<li>ASHA: A System for Massively Parallel Hyperparameter Tuning (MLSys 2020) 🔲 Todo</li>
+<li>nn-Meter: Towards Accurate Latency Prediction (MobiSys 2021) 🔲 Todo</li>
+</ol>
+<h3 id="open-source-references">Open Source References</h3>
+<ul>
+<li><a href="https://github.com/microsoft/nni">Microsoft NNI</a></li>
+<li><a href="https://github.com/keras-team/autokeras">AutoKeras</a></li>
+<li><a href="https://github.com/ray-project/ray/tree/master/python/ray/tune">Ray Tune</a></li>
+<li><a href="https://github.com/NVIDIA/DALI">NVIDIA DALI</a> (for data loading)</li>
+<li><a href="https://github.com/microsoft/nn-Meter">nn-Meter</a> (latency prediction)</li>
+</ul>
+<hr>
+<p><em>Last Updated: December 2024</em>
+<em>Status: Planning - Facade Integration Required</em>
+<em>Owner: AiDotNet Team</em></p>
+<hr>
+<h2 id="appendix-b-facade-integration-checklist">Appendix B: Facade Integration Checklist</h2>
+<p>Before any NAS feature is considered complete, verify:</p>
+<ul>
+<li>[ ] Accessible via <code>PredictionModelBuilder.ConfigureAutoML()</code></li>
+<li>[ ] Configuration through <code>AutoMLOptions&lt;T, TInput, TOutput&gt;</code></li>
+<li>[ ] Results returned via <code>PredictionModelResult.AutoMLSummary</code></li>
+<li>[ ] No direct usage of internal NAS classes required by users</li>
+<li>[ ] Works with existing <code>AutoMLBudgetOptions</code> for time/trial limits</li>
+<li>[ ] Integrates with existing quantization via <code>Int8Quantizer</code>/<code>Float16Quantizer</code></li>
+<li>[ ] Follows <code>CompressionOptimizer&lt;T&gt;</code> pattern for AutoML facade</li>
+</ul>
+<h3 id="entry-points-reference">Entry Points Reference</h3>
+<table>
+<thead>
+<tr>
+<th>User Action</th>
+<th>Entry Point</th>
+<th>Internal Component</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Configure NAS</td>
+<td><code>builder.ConfigureAutoML(opts =&gt; opts.SearchStrategy = AutoMLSearchStrategy.OnceForAll)</code></td>
+<td><code>OnceForAll&lt;T&gt;</code></td>
+</tr>
+<tr>
+<td>Set hardware constraints</td>
+<td><code>opts.NeuralArchitectureSearch.HardwareConstraints</code></td>
+<td><code>HardwareConstraints&lt;T&gt;</code></td>
+</tr>
+<tr>
+<td>Enable quantization-aware</td>
+<td><code>opts.NeuralArchitectureSearch.QuantizationAware = true</code></td>
+<td><code>Int8Quantizer</code>, <code>Float16Quantizer</code></td>
+</tr>
+<tr>
+<td>Get discovered architecture</td>
+<td><code>result.AutoMLSummary.BestArchitecture</code></td>
+<td><code>Architecture&lt;T&gt;</code></td>
+</tr>
+<tr>
+<td>Run inference</td>
+<td><code>result.Predict(input)</code></td>
+<td>Trained model from NAS</td>
+</tr>
+</tbody>
+</table>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/design/AutoML-Industry-Excellence-Plan.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

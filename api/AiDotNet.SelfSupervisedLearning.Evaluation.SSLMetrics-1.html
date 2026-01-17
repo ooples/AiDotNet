@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SSLMetrics&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SSLMetrics&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Metrics for monitoring and evaluating self-supervised learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1.md&amp;value=---%0Auid%3A%20AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1">
+
+
+
+  <h1 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1" class="text-break">
+Class SSLMetrics&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.html">SelfSupervisedLearning</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.html">Evaluation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Metrics for monitoring and evaluating self-supervised learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SSLMetrics&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SSLMetrics&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> These metrics help track the quality of SSL training
+and detect potential issues like representation collapse. Monitoring these
+during training helps ensure the model is learning useful representations.</p>
+<p><b>Key metrics:</b></p>
+<ul><li><b>Representation collapse:</b> All embeddings become identical (very bad)</li><li><b>Feature std:</b> Standard deviation of features (should be positive)</li><li><b>Alignment:</b> Similarity between positive pairs (should be high)</li><li><b>Uniformity:</b> Distribution of features on hypersphere (should be uniform)</li></ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeAlignment_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeAlignment*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeAlignment_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeAlignment(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeAlignment(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes alignment loss between positive pairs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeAlignment(Tensor&lt;T&gt; z1, Tensor&lt;T&gt; z2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>First view representations [batch_size, dim].</p>
+</dd>
+    <dt><code>z2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Second view representations [batch_size, dim].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Average squared distance between positive pairs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeAlignment_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Lower alignment loss means positive pairs are closer together in
+representation space, which is desirable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeCosineSimilarity_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeCosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeCosineSimilarity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeCosineSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeCosineSimilarity(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine similarity between corresponding pairs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeCosineSimilarity(Tensor&lt;T&gt; z1, Tensor&lt;T&gt; z2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>z2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeEffectiveRank_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeEffectiveRank*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeEffectiveRank_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeEffectiveRank(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeEffectiveRank(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the effective rank of the representation matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeEffectiveRank(Tensor&lt;T&gt; representations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>representations</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Representations [batch_size, dim].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Effective rank (normalized entropy of singular values).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeEffectiveRank_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Effective rank measures the &quot;dimensionality&quot; of the learned representations.
+Collapsed representations have low effective rank. Good representations
+should use many dimensions effectively.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeFullReport_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeFullReport*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeFullReport_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeFullReport(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeFullReport(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a full set of SSL metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SSLMetricReport&lt;T&gt; ComputeFullReport(Tensor&lt;T&gt; z1, Tensor&lt;T&gt; z2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>z2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetricReport-1.html">SSLMetricReport</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeRepresentationStd_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeRepresentationStd*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeRepresentationStd_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeRepresentationStd(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeRepresentationStd(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the standard deviation of representations (collapse detection).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeRepresentationStd(Tensor&lt;T&gt; representations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>representations</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Representations [batch_size, dim].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Standard deviation per dimension, averaged.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeRepresentationStd_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A low standard deviation indicates potential collapse - all representations
+are becoming similar. Good representations should have reasonable variance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeUniformity_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeUniformity*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeUniformity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.ComputeUniformity(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  ComputeUniformity(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes uniformity loss (how uniformly distributed embeddings are).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeUniformity(Tensor&lt;T&gt; representations, double t = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>representations</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Representations [batch_size, dim].</p>
+</dd>
+    <dt><code>t</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Temperature parameter (default: 2).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Uniformity metric (lower is more uniform).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_ComputeUniformity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Measures how uniformly representations are distributed on the hypersphere.
+More uniform distributions indicate better representations that capture
+diverse information.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_DetectCollapse_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.DetectCollapse*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_Evaluation_SSLMetrics_1_DetectCollapse_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetrics`1.DetectCollapse(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  DetectCollapse(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects if representations are collapsing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DetectCollapse(Tensor&lt;T&gt; representations, double threshold = 0.01)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>representations</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Representations to check.</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Threshold for collapse detection (default: 0.01).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if collapse is detected.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/Evaluation/SSLMetrics.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

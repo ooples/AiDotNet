@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LLIRGraph | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LLIRGraph | AiDotNet Documentation ">
+      
+      <meta name="description" content="Low-Level Intermediate Representation Graph. Represents the computation graph optimized for hardware execution.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph.md&amp;value=---%0Auid%3A%20AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph">
+
+
+
+  <h1 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph" class="text-break">
+Class LLIRGraph  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.InferenceOptimization.html">InferenceOptimization</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.html">IR</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.html">LowLevel</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Low-Level Intermediate Representation Graph.
+Represents the computation graph optimized for hardware execution.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LLIRGraph</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LLIRGraph</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Design Philosophy:</b></p>
+<p>
+LLIRGraph is the final representation before code generation. It contains:
+- Operations with scheduling information
+- Memory allocation plan
+- Device placement decisions
+- Execution order
+</p>
+<p><b>Exceeds Standards By:</b></p>
+<ul><li>Integrated memory planning with buffer reuse</li><li>Multi-device execution support</li><li>Streaming execution capability</li><li>Auto-tuning integration points</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_BufferShapes_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.BufferShapes*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_BufferShapes" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.BufferShapes">
+  BufferShapes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mapping from buffer ID to shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, int[]&gt; BufferShapes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_BufferTypes_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.BufferTypes*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_BufferTypes" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.BufferTypes">
+  BufferTypes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mapping from buffer ID to data type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, IRDataType&gt; BufferTypes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.InferenceOptimization.IR.Common.IRDataType.html">IRDataType</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_DeviceConfig_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.DeviceConfig*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_DeviceConfig" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.DeviceConfig">
+  DeviceConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Target device configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeviceConfiguration DeviceConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.DeviceConfiguration.html">DeviceConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_InputIds_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.InputIds*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_InputIds" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.InputIds">
+  InputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Input buffer IDs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; InputIds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_MemoryPlan_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.MemoryPlan*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_MemoryPlan" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.MemoryPlan">
+  MemoryPlan
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Memory allocation plan.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryPlan? MemoryPlan { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.MemoryPlan.html">MemoryPlan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Metadata_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Metadata*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Metadata" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Name_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Name*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Name" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Graph name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Operations_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Operations*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Operations" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Operations">
+  Operations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Operations in execution order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;LLIROp&gt; Operations { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIROp.html">LLIROp</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_OutputIds_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.OutputIds*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_OutputIds" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.OutputIds">
+  OutputIds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Output buffer IDs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; OutputIds { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AddOperation_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AddOperation*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AddOperation_AiDotNet_InferenceOptimization_IR_LowLevel_LLIROp_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AddOperation(AiDotNet.InferenceOptimization.IR.LowLevel.LLIROp)">
+  AddOperation(LLIROp)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an operation to the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddOperation(LLIROp op)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>op</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIROp.html">LLIROp</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AllocateBufferId_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AllocateBufferId*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AllocateBufferId" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AllocateBufferId">
+  AllocateBufferId()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new buffer ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AllocateBufferId()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AutoSchedule_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AutoSchedule*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_AutoSchedule" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.AutoSchedule">
+  AutoSchedule()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L405"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects optimal schedules for operations based on device capabilities.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AutoSchedule()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Clone_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Clone*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Clone" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L474"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a copy of the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LLIRGraph Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.html">LLIRGraph</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeCriticalPath_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeCriticalPath*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeCriticalPath" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeCriticalPath">
+  ComputeCriticalPath()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the critical path length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long ComputeCriticalPath()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeMetrics_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeMetrics*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeMetrics" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeMetrics">
+  ComputeMetrics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes total metrics for the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LLIRGraphMetrics ComputeMetrics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraphMetrics.html">LLIRGraphMetrics</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeStructureHash_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeStructureHash*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ComputeStructureHash" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ComputeStructureHash">
+  ComputeStructureHash()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L510"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes structure hash for caching.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ComputeStructureHash()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_GetConsumers_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.GetConsumers*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_GetConsumers_System_Int32_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.GetConsumers(System.Int32)">
+  GetConsumers(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all operations that use a buffer as input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;LLIROp&gt; GetConsumers(int bufferId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>bufferId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIROp.html">LLIROp</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_GetOperationByOutputId_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.GetOperationByOutputId*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_GetOperationByOutputId_System_Int32_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.GetOperationByOutputId(System.Int32)">
+  GetOperationByOutputId(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets an operation by output buffer ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LLIROp? GetOperationByOutputId(int bufferId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>bufferId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIROp.html">LLIROp</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_OptimizeMemory_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.OptimizeMemory*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_OptimizeMemory" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.OptimizeMemory">
+  OptimizeMemory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies memory optimization to reuse buffers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void OptimizeMemory()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ToString_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ToString*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_ToString" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L549"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string that represents the current object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that represents the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Validate_" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Validate*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_LowLevel_LLIRGraph_Validate" data-uid="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the graph structure and scheduling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LLIRValidationResult Validate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRValidationResult.html">LLIRValidationResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/LowLevel/LLIRGraph.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

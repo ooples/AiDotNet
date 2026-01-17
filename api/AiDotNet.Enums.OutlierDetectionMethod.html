@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum OutlierDetectionMethod | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum OutlierDetectionMethod | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines different methods for detecting outliers in datasets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_OutlierDetectionMethod.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.OutlierDetectionMethod%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.OutlierDetectionMethod">
+
+
+
+
+  <h1 id="AiDotNet_Enums_OutlierDetectionMethod" data-uid="AiDotNet.Enums.OutlierDetectionMethod" class="text-break">
+Enum OutlierDetectionMethod  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/OutlierDetectionMethod.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines different methods for detecting outliers in datasets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum OutlierDetectionMethod</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_OutlierDetectionMethod_Combined"><code>Combined = 2</code></dt>
+  <dd><p>Uses both Z-Score and IQR methods together to identify outliers.</p>
+<p>
+<b>For Beginners:</b> The Combined method uses both Z-Score and IQR approaches together for more reliable 
+outlier detection. A data point is flagged as an outlier only if both methods identify it as unusual.
+<p>This is like getting a second opinion - if only one doctor thinks something is wrong but another
+doesn't, you might want more information before taking action. But if both doctors agree there's an
+issue, you can be more confident.</p>
+<p>The Combined approach reduces the chance of incorrectly flagging normal data points as outliers,
+making it more conservative but potentially more accurate, especially when you're not sure which
+method is best for your specific data.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_OutlierDetectionMethod_IQR"><code>IQR = 1</code></dt>
+  <dd><p>Detects outliers using the Interquartile Range method, which is resistant to extreme values.</p>
+<p>
+<b>For Beginners:</b> The IQR (Interquartile Range) method is like focusing on the middle 50% of your data 
+and then identifying values that fall too far outside this range.
+<p>Here's how it works:</p>
+<ol>
+<li>Arrange all your data from smallest to largest</li>
+<li>Find Q1 (the value 25% of the way through your sorted data)</li>
+<li>Find Q3 (the value 75% of the way through your sorted data)</li>
+<li>Calculate IQR = Q3 - Q1</li>
+<li>Any value below Q1 - 1.5×IQR or above Q3 + 1.5×IQR is considered an outlier</li>
+</ol>
+<p>The advantage of IQR is that it's not affected by extreme values, making it more robust than Z-Score
+for skewed data or when you're not sure if your data follows a bell curve.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_OutlierDetectionMethod_ZScore"><code>ZScore = 0</code></dt>
+  <dd><p>Detects outliers based on how many standard deviations a value is from the mean.</p>
+<p>
+<b>For Beginners:</b> The Z-Score method measures how far away a data point is from the average (mean) 
+in terms of standard deviations. Standard deviation is just a measure of how spread out the data is.
+<p>Imagine a classroom where the average height is 5'6&quot; with a standard deviation of 2 inches.
+Using Z-Score:</p>
+<ul>
+<li>Someone 5'10&quot; tall has a Z-Score of +2 (2 standard deviations above average)</li>
+<li>Someone 5'2&quot; tall has a Z-Score of -2 (2 standard deviations below average)</li>
+<li>Someone 6'4&quot; tall has a Z-Score of +5 (5 standard deviations above average) - likely an outlier!</li>
+</ul>
+<p>Typically, values with Z-Scores beyond +/-3 are considered potential outliers. This method works
+best when your data follows a bell curve (normal distribution).</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_OutlierDetectionMethod_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Outliers are data points that differ significantly from other observations in your dataset.
+Think of them as unusual values that stand out from the pattern - like if most people in a classroom are 
+between 5'0" and 6'0" tall, someone who is 7'5" would be an outlier. Detecting outliers is important because 
+they can skew your analysis or cause your AI model to learn incorrect patterns. These methods help you 
+identify which data points might be outliers so you can decide whether to investigate them further or 
+remove them from your analysis.
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/OutlierDetectionMethod.cs/#L16" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

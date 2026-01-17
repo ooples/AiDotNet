@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CheckpointManagerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CheckpointManagerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for checkpoint management implementations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_CheckpointManagement_CheckpointManagerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.CheckpointManagement.CheckpointManagerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3">
+
+
+
+  <h1 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3" class="text-break">
+Class CheckpointManagerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.CheckpointManagement.html">CheckpointManagement</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for checkpoint management implementations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class CheckpointManagerBase&lt;T, TInput, TOutput&gt; : ICheckpointManager&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for models.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for models.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CheckpointManagerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointManager-3.html">ICheckpointManager</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CheckpointManagement.CheckpointManager-3.html">CheckpointManager&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This abstract base class provides common functionality for checkpoint
+management systems. It handles storage path management, security validation, and JSON serialization
+while leaving the specific storage implementation to derived classes.</p>
+<p>Key features:</p>
+<ul>
+<li>Path security validation to prevent traversal attacks</li>
+<li>Consistent JSON serialization settings</li>
+<li>Thread-safe checkpoint tracking</li>
+<li>Auto-checkpointing configuration support</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3__ctor_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3__ctor_System_String_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.#ctor(System.String,System.String)">
+  CheckpointManagerBase(string?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the CheckpointManagerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected CheckpointManagerBase(string? checkpointDirectory = null, string? baseDirectory = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to store checkpoints.</p>
+</dd>
+    <dt><code>baseDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Base directory for path validation. Defaults to current directory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3__ctor_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When a custom checkpointDirectory is provided without a baseDirectory, the checkpoint directory
+itself becomes the base for path validation. This allows users to store checkpoints in
+any location they choose (like temp directories for tests) while still preventing
+path traversal attacks within that chosen directory.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_AutoConfig" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.AutoConfig">
+  AutoConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configuration for auto-checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected CheckpointManagerBase&lt;T, TInput, TOutput&gt;.AutoCheckpointConfiguration? AutoConfig</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CheckpointManagement.CheckpointManagerBase-3.html">CheckpointManagerBase</a>&lt;T, TInput, TOutput&gt;.<a class="xref" href="AiDotNet.CheckpointManagement.CheckpointManagerBase-3.AutoCheckpointConfiguration.html">AutoCheckpointConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_BestMetricValue" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.BestMetricValue">
+  BestMetricValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The best metric value seen for improvement-based checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double? BestMetricValue</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_CheckpointDirectory" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.CheckpointDirectory">
+  CheckpointDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The directory where checkpoints are stored.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly string CheckpointDirectory</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_JsonSettings" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.JsonSettings">
+  JsonSettings
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>JSON serialization settings for consistent serialization.
+Uses TypeNameHandling.None for security - no type metadata in JSON output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly JsonSerializerSettings JsonSettings</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">JsonSerializerSettings</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LastAutoSaveStep" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LastAutoSaveStep">
+  LastAutoSaveStep
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The last step at which an auto-checkpoint was saved.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int LastAutoSaveStep</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_SyncLock" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.SyncLock">
+  SyncLock
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lock object for thread-safe operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly object SyncLock</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_CleanupKeepBest_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.CleanupKeepBest*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_CleanupKeepBest_System_String_System_Int32_AiDotNet_Enums_MetricOptimizationDirection_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.CleanupKeepBest(System.String,System.Int32,AiDotNet.Enums.MetricOptimizationDirection)">
+  CleanupKeepBest(string, int, MetricOptimizationDirection)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes checkpoints except the best N according to a metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int CleanupKeepBest(string metricName, int keepBest = 3, MetricOptimizationDirection direction = MetricOptimizationDirection.Minimize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>keepBest</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>direction</code> <a class="xref" href="AiDotNet.Enums.MetricOptimizationDirection.html">MetricOptimizationDirection</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_CleanupOldCheckpoints_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.CleanupOldCheckpoints*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_CleanupOldCheckpoints_System_Int32_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.CleanupOldCheckpoints(System.Int32)">
+  CleanupOldCheckpoints(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes old checkpoints, keeping only the most recent ones.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int CleanupOldCheckpoints(int keepLast = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>keepLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ConfigureAutoCheckpointing_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ConfigureAutoCheckpointing*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ConfigureAutoCheckpointing_System_Int32_System_Int32_System_Boolean_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ConfigureAutoCheckpointing(System.Int32,System.Int32,System.Boolean,System.String)">
+  ConfigureAutoCheckpointing(int, int, bool, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets up automatic checkpointing during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ConfigureAutoCheckpointing(int saveFrequency, int keepLast = 5, bool saveOnImprovement = true, string? metricName = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>saveFrequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>keepLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>saveOnImprovement</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+    <dt><code>metricName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_DeleteCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.DeleteCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_DeleteCheckpoint_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.DeleteCheckpoint(System.String)">
+  DeleteCheckpoint(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a specific checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void DeleteCheckpoint(string checkpointId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_DeserializeFromJson_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.DeserializeFromJson*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_DeserializeFromJson__1_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.DeserializeFromJson``1(System.String)">
+  DeserializeFromJson&lt;TResult&gt;(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L353"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a JSON string to an object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual TResult? DeserializeFromJson&lt;TResult&gt;(string json) where TResult : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>json</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The JSON string.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TResult</span></dt>
+    <dd><p>The deserialized object.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type to deserialize to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_EnsureCheckpointDirectoryExists_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.EnsureCheckpointDirectoryExists*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_EnsureCheckpointDirectoryExists" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.EnsureCheckpointDirectoryExists">
+  EnsureCheckpointDirectoryExists()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ensures the checkpoint directory exists.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void EnsureCheckpointDirectoryExists()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetAutoCheckpointState_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetAutoCheckpointState*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetAutoCheckpointState" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetAutoCheckpointState">
+  GetAutoCheckpointState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current auto-checkpointing state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual AutoCheckpointState GetAutoCheckpointState()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CheckpointManagement.AutoCheckpointState.html">AutoCheckpointState</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetCheckpointDirectory_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetCheckpointDirectory*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetCheckpointDirectory" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetCheckpointDirectory">
+  GetCheckpointDirectory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the storage path for checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual string GetCheckpointDirectory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetCheckpointFilePath_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetCheckpointFilePath*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetCheckpointFilePath_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetCheckpointFilePath(System.String)">
+  GetCheckpointFilePath(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a checkpoint file path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual string GetCheckpointFilePath(string checkpointId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The checkpoint identifier.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The full path to the checkpoint file.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetSanitizedFileName_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetSanitizedFileName*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetSanitizedFileName_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetSanitizedFileName(System.String)">
+  GetSanitizedFileName(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sanitizes a file name to prevent path traversal attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static string GetSanitizedFileName(string fileName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fileName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetSanitizedPath_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetSanitizedPath*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetSanitizedPath_System_String_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.GetSanitizedPath(System.String,System.String)">
+  GetSanitizedPath(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a sanitized path, ensuring it doesn't escape the base directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static string GetSanitizedPath(string path, string baseDirectory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>baseDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_GetSanitizedPath_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method enforces strict path containment. All paths must resolve to within
+the base directory or match it exactly. Rooted paths that point outside the
+base directory are rejected to prevent directory traversal attacks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ListCheckpoints_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ListCheckpoints*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ListCheckpoints_System_String_System_Boolean_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ListCheckpoints(System.String,System.Boolean)">
+  ListCheckpoints(string?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all available checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract List&lt;CheckpointMetadata&lt;T&gt;&gt; ListCheckpoints(string? sortBy = null, bool descending = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sortBy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>descending</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.CheckpointMetadata-1.html">CheckpointMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadBestCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadBestCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadBestCheckpoint_System_String_AiDotNet_Enums_MetricOptimizationDirection_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadBestCheckpoint(System.String,AiDotNet.Enums.MetricOptimizationDirection)">
+  LoadBestCheckpoint(string, MetricOptimizationDirection)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the checkpoint with the best metric value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Checkpoint&lt;T, TInput, TOutput&gt;? LoadBestCheckpoint(string metricName, MetricOptimizationDirection direction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>direction</code> <a class="xref" href="AiDotNet.Enums.MetricOptimizationDirection.html">MetricOptimizationDirection</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Checkpoint-3.html">Checkpoint</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadCheckpoint_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadCheckpoint(System.String)">
+  LoadCheckpoint(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a checkpoint and restores the training state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Checkpoint&lt;T, TInput, TOutput&gt; LoadCheckpoint(string checkpointId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Checkpoint-3.html">Checkpoint</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadLatestCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadLatestCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_LoadLatestCheckpoint" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.LoadLatestCheckpoint">
+  LoadLatestCheckpoint()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the most recent checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Checkpoint&lt;T, TInput, TOutput&gt;? LoadLatestCheckpoint()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Checkpoint-3.html">Checkpoint</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_SaveCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.SaveCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_SaveCheckpoint__1_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Interfaces_IOptimizer__0__1__2__System_Int32_System_Int32_System_Collections_Generic_Dictionary_System_String__0__System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.SaveCheckpoint``1(AiDotNet.Interfaces.IModel{`1,`2,``0},AiDotNet.Interfaces.IOptimizer{`0,`1,`2},System.Int32,System.Int32,System.Collections.Generic.Dictionary{System.String,`0},System.Collections.Generic.Dictionary{System.String,System.Object})">
+  SaveCheckpoint&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, int, int, Dictionary&lt;string, T&gt;, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves a checkpoint of the current training state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string SaveCheckpoint&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt; model, IOptimizer&lt;T, TInput, TOutput&gt; optimizer, int epoch, int step, Dictionary&lt;string, T&gt; metrics, Dictionary&lt;string, object&gt;? metadata = null) where TMetadata : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, TMetadata&gt;</dt>
+    <dd></dd>
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>metrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TMetadata</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_SerializeToJson_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.SerializeToJson*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_SerializeToJson_System_Object_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.SerializeToJson(System.Object)">
+  SerializeToJson(object)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L342"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes an object to JSON.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual string SerializeToJson(object obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The object to serialize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The JSON string representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ShouldAutoSaveCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ShouldAutoSaveCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ShouldAutoSaveCheckpoint_System_Int32_System_Nullable_System_Double__System_Boolean_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ShouldAutoSaveCheckpoint(System.Int32,System.Nullable{System.Double},System.Boolean)">
+  ShouldAutoSaveCheckpoint(int, double?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether an automatic checkpoint should be saved based on current configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool ShouldAutoSaveCheckpoint(int currentStep, double? metricValue = null, bool shouldMinimize = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentStep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current training step.</p>
+</dd>
+    <dt><code>metricValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Optional metric value for improvement-based checkpointing.</p>
+</dd>
+    <dt><code>shouldMinimize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the metric should be minimized (true) or maximized (false).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a checkpoint should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ShouldAutoSaveCheckpoint_System_Int32_System_Nullable_System_Double__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this method during training to check if you should save:</p>
+<pre><code class="lang-csharp">for (int epoch = 0; epoch &lt; maxEpochs; epoch++)
+{
+    double loss = TrainEpoch();
+    if (checkpointManager.ShouldAutoSaveCheckpoint(epoch, loss, shouldMinimize: true))
+    {
+        checkpointManager.SaveCheckpoint(model);
+    }
+}</code></pre>
+</div>
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_TryAutoSaveCheckpoint_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.TryAutoSaveCheckpoint*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_TryAutoSaveCheckpoint__1_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Interfaces_IOptimizer__0__1__2__System_Int32_System_Int32_System_Collections_Generic_Dictionary_System_String__0__System_Nullable_System_Double__System_Boolean_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.TryAutoSaveCheckpoint``1(AiDotNet.Interfaces.IModel{`1,`2,``0},AiDotNet.Interfaces.IOptimizer{`0,`1,`2},System.Int32,System.Int32,System.Collections.Generic.Dictionary{System.String,`0},System.Nullable{System.Double},System.Boolean,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  TryAutoSaveCheckpoint&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, int, int, Dictionary&lt;string, T&gt;, double?, bool, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to save a checkpoint automatically based on configured auto-checkpoint settings.
+This method is called internally by training facades - users don't need to call it directly.
+The training loop calls this every step and it automatically decides when to save.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string? TryAutoSaveCheckpoint&lt;TMetadata&gt;(IModel&lt;TInput, TOutput, TMetadata&gt; model, IOptimizer&lt;T, TInput, TOutput&gt; optimizer, int epoch, int step, Dictionary&lt;string, T&gt; metrics, double? metricValue = null, bool shouldMinimize = true, Dictionary&lt;string, object&gt;? metadata = null) where TMetadata : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, TMetadata&gt;</dt>
+    <dd><p>The model to checkpoint.</p>
+</dd>
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer state to checkpoint.</p>
+</dd>
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current epoch.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current training step.</p>
+</dd>
+    <dt><code>metrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Training metrics to store with the checkpoint.</p>
+</dd>
+    <dt><code>metricValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Optional metric value for improvement-based checkpointing.</p>
+</dd>
+    <dt><code>shouldMinimize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the metric should be minimized (true) or maximized (false).</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Optional additional metadata.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The checkpoint ID if saved, or null if no checkpoint was saved.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TMetadata</code></dt>
+    <dd><p>The type of model metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_UpdateAutoSaveState_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.UpdateAutoSaveState*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_UpdateAutoSaveState_System_Int32_System_Nullable_System_Double__System_Boolean_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.UpdateAutoSaveState(System.Int32,System.Nullable{System.Double},System.Boolean)">
+  UpdateAutoSaveState(int, double?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the auto-save state after a checkpoint is saved.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void UpdateAutoSaveState(int step, double? metricValue = null, bool shouldMinimize = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The step at which the checkpoint was saved.</p>
+</dd>
+    <dt><code>metricValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Optional metric value for improvement tracking.</p>
+</dd>
+    <dt><code>shouldMinimize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the metric should be minimized.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_UpdateAutoSaveState_System_Int32_System_Nullable_System_Double__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Call this after saving a checkpoint to update internal tracking state.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ValidatePathWithinDirectory_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ValidatePathWithinDirectory*"></a>
+
+  <h3 id="AiDotNet_CheckpointManagement_CheckpointManagerBase_3_ValidatePathWithinDirectory_System_String_System_String_" data-uid="AiDotNet.CheckpointManagement.CheckpointManagerBase`3.ValidatePathWithinDirectory(System.String,System.String)">
+  ValidatePathWithinDirectory(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a path is within the specified directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static void ValidatePathWithinDirectory(string path, string directory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>directory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/CheckpointManagement/CheckpointManagerBase.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

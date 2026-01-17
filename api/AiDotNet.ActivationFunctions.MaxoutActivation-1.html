@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MaxoutActivation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MaxoutActivation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Maxout activation function for neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActivationFunctions_MaxoutActivation_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActivationFunctions.MaxoutActivation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1">
+
+
+
+  <h1 id="AiDotNet_ActivationFunctions_MaxoutActivation_1" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1" class="text-break">
+Class MaxoutActivation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActivationFunctions.html">ActivationFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Maxout activation function for neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MaxoutActivation&lt;T&gt; : ActivationFunctionBase&lt;T&gt;, IActivationFunction&lt;T&gt;, IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html">ActivationFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MaxoutActivation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_NumOps">ActivationFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Engine">ActivationFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Activate__0_">ActivationFunctionBase&lt;T&gt;.Activate(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Derivative__0_">ActivationFunctionBase&lt;T&gt;.Derivative(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Activate(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Derivative(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_SupportsGpuTraining">ActivationFunctionBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.ForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.BackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> The Maxout activation function is different from most activation functions.
+Instead of applying a mathematical formula to each value, it:
+<ol>
+<li>Groups your input values into small sets (e.g., groups of 2, 3, or more values)</li>
+<li>For each group, it selects only the largest (maximum) value</li>
+<li>The output is smaller than the input (it's reduced by a factor equal to the group size)</li>
+</ol>
+<p>For example, with groups of 2 (numPieces = 2):
+Input: [1, 5, 3, 7]
+Groups: [1, 5] and [3, 7]
+Output: [5, 7] (the maximum value from each group)</p>
+<p>Maxout is powerful because it can learn to approximate many different activation functions,
+making it very flexible. However, it requires more parameters in your neural network.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1__ctor_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1__ctor_System_Int32_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.#ctor(System.Int32)">
+  MaxoutActivation(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Maxout activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MaxoutActivation(int numPieces)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numPieces</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of pieces (group size) to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The numPieces parameter determines how many input values are grouped together.
+For example, if numPieces is 3, then every 3 consecutive values in your input will be grouped,
+and only the maximum value from each group will be kept in the output.
+<p>The minimum value is 2 because with only 1 piece, there would be no &quot;maximum&quot; to select.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when numPieces is less than 2.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsJitCompilation_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsJitCompilation" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because TensorOperations.Maxout provides full forward and backward pass support.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Maxout supports JIT compilation with sparse gradient routing.
+The backward pass routes gradients only to the maximum element in each group.
+</p>
+<p>
+Note: Currently implemented for 2D tensors (batch, features) where features is divisible by numPieces.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Activate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Maxout activation function to a vector of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Activate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector with the maximum value from each group.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method takes your input values and:
+1. Divides them into groups of size _numPieces
+2. Finds the maximum value in each group
+3. Returns these maximum values as a new, smaller vector
+<p>The input length must be divisible by _numPieces so that all values can be properly grouped.
+For example, if _numPieces is 3, your input length could be 3, 6, 9, etc., but not 4 or 5.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input length is not divisible by the number of pieces.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1_ApplyToGraph_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with Maxout activation applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps to TensorOperations&lt;T&gt;.Maxout(input) which handles both
+forward and backward passes for JIT compilation with argmax tracking.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if input is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Derivative(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative (Jacobian matrix) of the Maxout function for a vector input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Derivative(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector at which to calculate the derivative.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A Jacobian matrix representing the derivative of Maxout.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The derivative helps us understand how the output changes when we slightly change the input.
+<p>For Maxout, the derivative is simple but special:</p>
+<ul>
+<li>For each group, only the maximum value affects the output</li>
+<li>The derivative is 1 for the maximum value in each group</li>
+<li>The derivative is 0 for all other values in the group</li>
+</ul>
+<p>This creates a &quot;sparse&quot; matrix (mostly filled with zeros) where:</p>
+<ul>
+<li>Each row corresponds to an output value</li>
+<li>Each column corresponds to an input value</li>
+<li>A value of 1 indicates which input was the maximum in its group</li>
+</ul>
+<p>During neural network training, this helps the network understand which inputs
+were most important (the maximum ones) and should be adjusted.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input length is not divisible by the number of pieces.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsScalarOperations_" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.SupportsScalarOperations*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsScalarOperations" data-uid="AiDotNet.ActivationFunctions.MaxoutActivation`1.SupportsScalarOperations">
+  SupportsScalarOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if the activation function supports operations on individual scalar values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsScalarOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>False, as Maxout requires a vector of values to operate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_MaxoutActivation_1_SupportsScalarOperations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This returns false because Maxout needs to compare multiple values
+to find the maximum in each group. It can't process just one number at a time.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/MaxoutActivation.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

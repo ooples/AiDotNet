@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BidirectionalLayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BidirectionalLayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a bidirectional layer that processes input sequences in both forward and backward directions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Layers.BidirectionalLayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1" class="text-break">
+Class BidirectionalLayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Layers.html">Layers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a bidirectional layer that processes input sequences in both forward and backward directions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BidirectionalLayer&lt;T&gt; : LayerBase&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">BidirectionalLayer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterCount">LayerBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose_System_Boolean_">LayerBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A bidirectional layer processes input sequences in two directions: forward (from first to last) and backward 
+(from last to first). This approach allows the layer to capture patterns that depend on both past and future 
+context. The outputs from both directions can either be merged (typically added together) or kept separate, 
+depending on the configuration.
+</p>
+<p><b>For Beginners:</b> This layer looks at input data in two ways at the same time - both forward and backward.
+<p>Think of it like reading a sentence:</p>
+<ul>
+<li>Forward reading: &quot;The cat sat on the mat&quot; (left to right)</li>
+<li>Backward reading: &quot;mat the on sat cat The&quot; (right to left)</li>
+</ul>
+<p>By processing data in both directions:</p>
+<ul>
+<li>The layer can understand context from both past and future elements</li>
+<li>It can discover patterns that might be missed if only looking in one direction</li>
+<li>It often improves performance on sequence tasks like text processing</li>
+</ul>
+<p>For example, in the sentence &quot;The bank is by the river&quot;, the meaning of &quot;bank&quot;
+depends on both previous words (&quot;The&quot;) and future words (&quot;by the river&quot;).
+A bidirectional layer helps capture these relationships.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_AiDotNet_NeuralNetworks_Layers_LayerBase__0__System_Boolean_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_Engines_IEngine_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.#ctor(AiDotNet.NeuralNetworks.Layers.LayerBase{`0},System.Boolean,AiDotNet.Interfaces.IActivationFunction{`0},AiDotNet.Tensors.Engines.IEngine)">
+  BidirectionalLayer(LayerBase&lt;T&gt;, bool, IActivationFunction&lt;T&gt;?, IEngine?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer-1.html">BidirectionalLayer&lt;T&gt;</a> class with the specified inner layer
+and a ReLU activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BidirectionalLayer(LayerBase&lt;T&gt; innerLayer, bool mergeMode = true, IActivationFunction&lt;T&gt;? activationFunction = null, IEngine? engine = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>innerLayer</code> <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</dt>
+    <dd><p>The layer to be used for both forward and backward processing.</p>
+</dd>
+    <dt><code>mergeMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If <code>true</code>, outputs from both directions are added; otherwise, they are kept separate.</p>
+</dd>
+    <dt><code>activationFunction</code> <a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The activation function to apply after processing. Defaults to ReLU if not specified.</p>
+</dd>
+    <dt><code>engine</code> <a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_AiDotNet_NeuralNetworks_Layers_LayerBase__0__System_Boolean_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_Engines_IEngine__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a bidirectional layer using the specified inner layer for both forward and backward
+processing. A copy of the inner layer is created for backward processing to ensure independent parameters.
+The mergeMode parameter determines how outputs from both directions are combined.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new bidirectional layer with a standard activation function.
+<p>When you create a bidirectional layer this way:</p>
+<ul>
+<li>The same type of layer is used for both forward and backward processing</li>
+<li>The mergeMode parameter decides how to combine the results from both directions</li>
+<li>The ReLU activation function is used by default, which helps the network learn non-linear patterns</li>
+</ul>
+<p>For example, if innerLayer is an LSTM layer, this creates a bidirectional LSTM that
+processes sequences in both directions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_AiDotNet_NeuralNetworks_Layers_LayerBase__0__System_Boolean_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_Engines_IEngine_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.#ctor(AiDotNet.NeuralNetworks.Layers.LayerBase{`0},System.Boolean,AiDotNet.Interfaces.IVectorActivationFunction{`0},AiDotNet.Tensors.Engines.IEngine)">
+  BidirectionalLayer(LayerBase&lt;T&gt;, bool, IVectorActivationFunction&lt;T&gt;?, IEngine?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer-1.html">BidirectionalLayer&lt;T&gt;</a> class with the specified inner layer
+and a vector activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BidirectionalLayer(LayerBase&lt;T&gt; innerLayer, bool mergeMode = true, IVectorActivationFunction&lt;T&gt;? vectorActivationFunction = null, IEngine? engine = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>innerLayer</code> <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</dt>
+    <dd><p>The layer to be used for both forward and backward processing.</p>
+</dd>
+    <dt><code>mergeMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If <code>true</code>, outputs from both directions are added; otherwise, they are kept separate.</p>
+</dd>
+    <dt><code>vectorActivationFunction</code> <a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</dt>
+    <dd><p>The vector activation function to apply after processing. Defaults to Identity if not specified.</p>
+</dd>
+    <dt><code>engine</code> <a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1__ctor_AiDotNet_NeuralNetworks_Layers_LayerBase__0__System_Boolean_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_Engines_IEngine__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a bidirectional layer using the specified inner layer for both forward and backward
+processing. A copy of the inner layer is created for backward processing to ensure independent parameters.
+This overload accepts a vector activation function, which operates on entire vectors rather than individual elements.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new bidirectional layer with a vector-based activation function.
+<p>A vector activation function:</p>
+<ul>
+<li>Operates on entire groups of numbers at once, rather than one at a time</li>
+<li>Can capture relationships between different elements in the output</li>
+<li>Defaults to the Identity function, which doesn't change the values</li>
+</ul>
+<p>This constructor is useful when you need more complex activation patterns
+that consider the relationships between different outputs.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuExecution_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsGpuExecution*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuExecution" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsGpuExecution">
+  SupportsGpuExecution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports GPU-accelerated forward pass.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsGpuExecution { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuExecution_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The bidirectional layer supports GPU execution when both the forward and backward inner layers
+support GPU execution. This ensures that the entire bidirectional processing can be done on the GPU.
+</p>
+<p><b>For Beginners:</b> This property indicates whether this layer can use the GPU for faster processing.
+Since the bidirectional layer wraps two inner layers, it can only use the GPU if both of those layers
+support GPU execution.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuTraining_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsGpuTraining*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuTraining" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsGpuTraining">
+  SupportsGpuTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this layer supports GPU-resident training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsGpuTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsGpuTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The bidirectional layer supports GPU training when both inner layers support GPU training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsJitCompilation_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsJitCompilation" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L968"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the layer can be JIT compiled, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the layer has implemented ExportComputationGraph()
+and can benefit from JIT compilation. All layers MUST implement this property.
+</p>
+<p><b>For Beginners:</b> JIT compilation can make inference 5-10x faster by converting
+the layer's operations into optimized native code.
+<p>Layers should return false if they:</p>
+<ul>
+<li>Have not yet implemented a working ExportComputationGraph()</li>
+<li>Use dynamic operations that change based on input data</li>
+<li>Are too simple to benefit from JIT compilation</li>
+</ul>
+<p>When false, the layer will use the standard Forward() method instead.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsTraining_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsTraining*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsTraining" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SupportsTraining">
+  SupportsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The computation engine (CPU or GPU) for vectorized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> if either the forward or backward layer supports training; otherwise, <code>false</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SupportsTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the bidirectional layer can be trained through backpropagation. 
+The layer supports training if either of its internal layers (forward or backward) supports training.
+This is typically the case for layers that have trainable parameters, such as weights or biases.
+</p>
+<p><b>For Beginners:</b> This property tells you if the layer can learn from data.
+<p>A value of true means:</p>
+<ul>
+<li>The layer can adjust its internal values during training</li>
+<li>It will improve its performance as it sees more data</li>
+<li>It participates in the learning process</li>
+</ul>
+<p>The bidirectional layer supports training if either of its two internal layers
+(forward or backward) supports training.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Backward_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.Backward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L621"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass of the bidirectional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the backward pass of the bidirectional layer, which is used during training to propagate
+error gradients back through the network. It splits the output gradient according to the merge mode, propagates
+it through both forward and backward inner layers, and combines the resulting input gradients.
+</p>
+<p><b>For Beginners:</b> This method is used during training to calculate how the layer's input
+should change to reduce errors.
+<p>During the backward pass:</p>
+<ul>
+<li>The error gradient from the next layer is received</li>
+<li>If the outputs were merged, the same gradient is sent to both forward and backward layers</li>
+<li>If the outputs were separate, the gradient is split for each direction</li>
+<li>The gradients from both layers are combined to update the previous layer</li>
+</ul>
+<p>This process is part of the &quot;backpropagation&quot; algorithm that helps neural networks learn.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_BackwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.BackwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.BackwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0})">
+  BackwardGpu(IGpuTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>GPU-accelerated backward pass for the bidirectional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; BackwardGpu(IGpuTensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to the layer's input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the GPU-optimized backward pass that propagates gradients
+through both forward and backward inner layers while keeping all data on the GPU.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ExportComputationGraph_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L930"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the layer's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the layer's operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method constructs a computation graph representation of the layer's forward pass
+that can be JIT compiled for faster inference. All layers MUST implement this method
+to support JIT compilation.
+</p>
+<p><b>For Beginners:</b> JIT (Just-In-Time) compilation converts the layer's operations
+into optimized native code for 5-10x faster inference.
+<p>To support JIT compilation, a layer must:</p>
+<ol>
+<li>Implement this method to export its computation graph</li>
+<li>Set SupportsJitCompilation to true</li>
+<li>Use ComputationNode and TensorOperations to build the graph</li>
+</ol>
+<p>All layers are required to implement this method, even if they set SupportsJitCompilation = false.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Forward_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.Forward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass of the bidirectional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor after bidirectional processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the forward pass of the bidirectional layer. It processes the input in both forward
+and backward directions using the respective inner layers, and then combines the outputs according to the
+merge mode. The input and outputs are cached for use during the backward pass.
+</p>
+<p><b>For Beginners:</b> This method processes the input data through both forward and backward layers.
+<p>During the forward pass:</p>
+<ul>
+<li>The original input is sent through the forward layer</li>
+<li>A reversed version of the input is sent through the backward layer</li>
+<li>The results from both directions are either combined or kept separate</li>
+</ul>
+<p>This method also saves the inputs and outputs for later use during training.</p>
+<p>For example, with a text sequence, the forward layer sees &quot;Hello world&quot; while
+the backward layer sees &quot;world Hello&quot;, and then the results are combined.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ForwardGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ForwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0}[])">
+  ForwardGpu(params IGpuTensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a GPU-resident forward pass of the bidirectional layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IGpuTensor&lt;T&gt; ForwardGpu(params IGpuTensor&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>GPU-resident input tensor(s).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>GPU-resident output tensor after bidirectional processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
+All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.
+The input sequence is processed in both forward and backward directions using GPU operations,
+and the results are merged on the GPU.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when no input tensor is provided.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when GPU backend is unavailable or inner layers don't support GPU.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L820"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters from both the forward and backward layers as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method retrieves all trainable parameters from both the forward and backward inner layers and combines them
+into a single vector. This is useful for optimization algorithms that operate on all parameters at once, or for
+saving and loading model weights.
+</p>
+<p><b>For Beginners:</b> This method collects all the learnable values from both forward and backward layers.
+<p>The parameters:</p>
+<ul>
+<li>Are the numbers that the neural network learns during training</li>
+<li>Include weights and biases from both forward and backward layers</li>
+<li>Are combined into a single long list (vector)</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving the model to disk</li>
+<li>Loading parameters from a previously trained model</li>
+<li>Advanced optimization techniques that need access to all parameters</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ResetState_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ResetState" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L920"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the bidirectional layer and its inner layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_ResetState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the internal state of the bidirectional layer, including the cached inputs and outputs,
+as well as the states of both forward and backward inner layers. This is useful when starting to process
+a new sequence or when implementing stateful recurrent networks.
+</p>
+<p><b>For Beginners:</b> This method clears the layer's memory to start fresh.
+<p>When resetting the state:</p>
+<ul>
+<li>Stored inputs and outputs are cleared</li>
+<li>Both forward and backward layers are also reset</li>
+<li>The layer forgets any information from previous sequences</li>
+</ul>
+<p>This is important for:</p>
+<ul>
+<li>Processing a new, unrelated sequence</li>
+<li>Preventing information from one sequence affecting another</li>
+<li>Starting a new training episode</li>
+</ul>
+<p>For example, if you've processed one sentence and want to start with a new sentence,
+you should reset the state to prevent the new sentence from being influenced by the previous one.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SetParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L869"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the trainable parameters for both the forward and backward layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all parameters to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the trainable parameters for both the forward and backward inner layers from a single vector.
+It extracts the appropriate portions of the input vector for each inner layer. This is useful for loading
+saved model weights or for implementing optimization algorithms that operate on all parameters at once.
+</p>
+<p><b>For Beginners:</b> This method updates all the learnable values in both forward and backward layers.
+<p>When setting parameters:</p>
+<ul>
+<li>The input must be a vector with the correct length</li>
+<li>The first part of the vector is used for the forward layer</li>
+<li>The second part of the vector is used for the backward layer</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Loading a previously saved model</li>
+<li>Transferring parameters from another model</li>
+<li>Testing different parameter values</li>
+</ul>
+<p>An error is thrown if the input vector doesn't have the expected number of parameters.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the parameters vector has incorrect length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_UpdateParameters__0_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L713"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of both forward and backward layers using the calculated gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate to use for the parameter updates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method updates the parameters of both the forward and backward inner layers based on the gradients
+calculated during the backward pass. The learning rate controls the size of the parameter updates.
+</p>
+<p><b>For Beginners:</b> This method updates the layer's internal values during training.
+<p>When updating parameters:</p>
+<ul>
+<li>Both forward and backward layers are updated independently</li>
+<li>The learning rate controls how big each update step is</li>
+<li>Smaller learning rates mean slower but more stable learning</li>
+<li>Larger learning rates mean faster but potentially unstable learning</li>
+</ul>
+<p>This is how the layer &quot;learns&quot; from data over time.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_UpdateParametersGpu_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.UpdateParametersGpu*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Layers_BidirectionalLayer_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_" data-uid="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer`1.UpdateParametersGpu(AiDotNet.Interfaces.IGpuOptimizerConfig)">
+  UpdateParametersGpu(IGpuOptimizerConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L981"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass on GPU tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParametersGpu(IGpuOptimizerConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Interfaces.IGpuOptimizerConfig.html">IGpuOptimizerConfig</a></dt>
+    <dd><p>The GPU optimizer configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Layers/BidirectionalLayer.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

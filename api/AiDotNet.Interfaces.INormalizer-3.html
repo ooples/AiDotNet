@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface INormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface INormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_INormalizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.INormalizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.INormalizer`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_INormalizer_3" data-uid="AiDotNet.Interfaces.INormalizer`3" class="text-break">
+Interface INormalizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface INormalizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_INormalizer_3_Denormalize_" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize(`1,`2,`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the denormalized Y-intercept (constant term) for a linear model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <span class="xref">TInput</span></dt>
+    <dd><p>The original input feature matrix (before normalization).</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original target vector (before normalization).</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model coefficients (can be either normalized or denormalized).</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters used for the input features (X).</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters used for the target variable (Y).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The denormalized Y-intercept (constant term) for use with non-normalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method computes the Y-intercept for a model trained on normalized data so it can
+be used with non-normalized input data.</p>
+<p><b>For Beginners:</b> This calculates the starting point (base value) for your model's predictions.</p>
+<p>In a linear model like house price prediction:</p>
+<ul>
+<li>Coefficients tell you how much each feature contributes (e.g., $100 per square foot)</li>
+<li>The Y-intercept is the base value (e.g., $50,000 base price before adjustments)</li>
+</ul>
+<p>When you train on normalized data:</p>
+<ul>
+<li>The Y-intercept learned by the model works for normalized values</li>
+<li>This method calculates the correct Y-intercept for original, non-normalized data</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>Your house price model might have a normalized Y-intercept of 0.5</li>
+<li>This method converts it to a meaningful value like $150,000</li>
+</ul>
+<p>This is typically used together with denormalized coefficients to create a complete
+model that works with original, non-normalized data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INormalizer_3_Denormalize_" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize(`2,AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses the normalization of data using the original normalization parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TOutput Denormalize(TOutput data, NormalizationParameters&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The normalized data to denormalize.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters that were used during normalization.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The denormalized data in its original scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms normalized data back to its original scale using the
+normalization parameters that were generated during the normalization process.</p>
+<p><b>For Beginners:</b> This converts normalized values back to their original scale.</p>
+<p>For example:</p>
+<ul>
+<li>If normalization converted ages (5, 18, 35, 62, 80) to (0.0, 0.17, 0.4, 0.76, 1.0)</li>
+<li>Denormalization would convert (0.0, 0.17, 0.4, 0.76, 1.0) back to (5, 18, 35, 62, 80)</li>
+</ul>
+<p>This is typically used:</p>
+<ul>
+<li>After making predictions with a model (to convert predictions back to meaningful units)</li>
+<li>When you need to interpret normalized data in its original context</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INormalizer_3_Denormalize_" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Interfaces.INormalizer`3.Denormalize(`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes model coefficients to make them applicable to non-normalized input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TOutput Denormalize(TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model coefficients from a model trained on normalized data.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters used for the input features (X).</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters used for the target variable (Y).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Denormalized coefficients that can be used with original, non-normalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method adjusts the coefficients of a model trained on normalized data so they can
+be used directly with non-normalized input data.</p>
+<p><b>For Beginners:</b> This converts the model's internal numbers to work with your original data.</p>
+<p>When you train a model on normalized data:</p>
+<ul>
+<li>The model learns coefficients (weights) that work with normalized values</li>
+<li>To use the model with original, non-normalized data, these coefficients need adjustment</li>
+<li>This method performs that adjustment</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You trained a house price model on normalized data (size, bedrooms, age)</li>
+<li>The model learned coefficients like [0.7, 0.2, -0.1]</li>
+<li>This method converts these to coefficients that work with the original units
+(e.g., dollars per square foot, dollars per bedroom, etc.)</li>
+</ul>
+<p>This is typically used when:</p>
+<ul>
+<li>You want to interpret what the model learned (e.g., &quot;each additional bedroom adds $20,000&quot;)</li>
+<li>You want to use the model with non-normalized input data</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INormalizer_3_NormalizeInput_" data-uid="AiDotNet.Interfaces.INormalizer`3.NormalizeInput*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INormalizer_3_NormalizeInput__1_" data-uid="AiDotNet.Interfaces.INormalizer`3.NormalizeInput(`1)">
+  NormalizeInput(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes input data to a standard range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(TInput, List&lt;NormalizationParameters&lt;T&gt;&gt;) NormalizeInput(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>The normalized data</li>
+<li>A list of normalization parameters for each feature (needed for later denormalization)</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INormalizer_3_NormalizeInput__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms each feature of the input data to a normalized scale and returns
+both the normalized data and the parameters used for normalization of each feature.</p>
+<p><b>For Beginners:</b> This converts a table of numbers to a standard scale.</p>
+<p>For example:</p>
+<ul>
+<li>If your data contains information about houses (columns for size, bedrooms, age, price),
+each feature is normalized separately</li>
+<li>Size values might range from 1,000-5,000 sq ft, but are converted to 0-1</li>
+<li>Bedroom values might range from 1-6, but are also converted to 0-1</li>
+<li>The normalization parameters for each feature are saved separately</li>
+</ul>
+<p>This is typically used to prepare multiple features (input variables) for machine learning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_INormalizer_3_NormalizeOutput_" data-uid="AiDotNet.Interfaces.INormalizer`3.NormalizeOutput*"></a>
+
+  <h3 id="AiDotNet_Interfaces_INormalizer_3_NormalizeOutput__2_" data-uid="AiDotNet.Interfaces.INormalizer`3.NormalizeOutput(`2)">
+  NormalizeOutput(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes output data to a standard range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(TOutput, NormalizationParameters&lt;T&gt;) NormalizeOutput(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TOutput, <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>The normalized data</li>
+<li>The normalization parameters that were used (needed for later denormalization)</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_INormalizer_3_NormalizeOutput__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method transforms the input data to a normalized scale and returns both
+the normalized data and the parameters used for normalization.</p>
+<p><b>For Beginners:</b> This converts a list of numbers to a standard scale.</p>
+<p>For example:</p>
+<ul>
+<li>If your data contains ages (5, 18, 35, 62, 80), normalization might convert these to
+values between 0 and 1: (0.0, 0.17, 0.4, 0.76, 1.0)</li>
+<li>The normalization parameters (like minimum and maximum values) are also returned
+so you can reverse this process later</li>
+</ul>
+<p>This is typically used to prepare a single feature or target variable for machine learning.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/INormalizer.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

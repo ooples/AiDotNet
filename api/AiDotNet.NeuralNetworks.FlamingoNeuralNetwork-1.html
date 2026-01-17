@@ -1,0 +1,2402 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FlamingoNeuralNetwork&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FlamingoNeuralNetwork&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Flamingo neural network for in-context visual learning and few-shot tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.FlamingoNeuralNetwork%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1" class="text-break">
+Class FlamingoNeuralNetwork&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Flamingo neural network for in-context visual learning and few-shot tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FlamingoNeuralNetwork&lt;T&gt; : NeuralNetworkBase&lt;T&gt;, INeuralNetworkModel&lt;T&gt;, INeuralNetwork&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;, IInterpretableModel&lt;T&gt;, IInputGradientComputable&lt;T&gt;, IDisposable, IFlamingoModel&lt;T&gt;, IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html">NeuralNetworkBase</a>&lt;T&gt;</div>
+      <div><span class="xref">FlamingoNeuralNetwork&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INeuralNetworkModel-1.html">INeuralNetworkModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInterpretableModel-1.html">IInterpretableModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInputGradientComputable-1.html">IInputGradientComputable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFlamingoModel-1.html">IFlamingoModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html">IMultimodalEmbedding</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Layers">NeuralNetworkBase&lt;T&gt;.Layers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LayerCount">NeuralNetworkBase&lt;T&gt;.LayerCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Architecture">NeuralNetworkBase&lt;T&gt;.Architecture</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_NumOps">NeuralNetworkBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Engine">NeuralNetworkBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__layerInputs">NeuralNetworkBase&lt;T&gt;._layerInputs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__layerOutputs">NeuralNetworkBase&lt;T&gt;._layerOutputs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Random">NeuralNetworkBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LossFunction">NeuralNetworkBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LastLoss">NeuralNetworkBase&lt;T&gt;.LastLoss</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsTrainingMode">NeuralNetworkBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsTraining">NeuralNetworkBase&lt;T&gt;.SupportsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsGpuTraining">NeuralNetworkBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_CanTrainOnGpu">NeuralNetworkBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GpuEngine">NeuralNetworkBase&lt;T&gt;.GpuEngine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_MaxGradNorm">NeuralNetworkBase&lt;T&gt;.MaxGradNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__mixedPrecisionContext">NeuralNetworkBase&lt;T&gt;._mixedPrecisionContext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__memoryManager">NeuralNetworkBase&lt;T&gt;._memoryManager</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsMemoryManagementEnabled">NeuralNetworkBase&lt;T&gt;.IsMemoryManagementEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsGradientCheckpointingEnabled">NeuralNetworkBase&lt;T&gt;.IsGradientCheckpointingEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsMixedPrecisionEnabled">NeuralNetworkBase&lt;T&gt;.IsMixedPrecisionEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradients_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">NeuralNetworkBase&lt;T&gt;.ClipGradients(List&lt;Tensor&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ClipGradient(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClipGradient_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.ClipGradient(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Backpropagate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.Backpropagate(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateWithRecompute_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.BackpropagateWithRecompute(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.BackpropagateGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackpropagateGpuDeferred_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.BackpropagateGpuDeferred(IGpuTensor&lt;T&gt;, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpu__0__0__0_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpu(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UpdateParametersGpuDeferred_AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.UpdateParametersGpuDeferred(IGpuOptimizerConfig, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TrainBatchGpuDeferred_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.TrainBatchGpuDeferred(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;, IGpuOptimizerConfig, GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TrainBatchGpuDeferredAsync_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Interfaces_IGpuOptimizerConfig_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_System_Threading_CancellationToken_">NeuralNetworkBase&lt;T&gt;.TrainBatchGpuDeferredAsync(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;, IGpuOptimizerConfig, GpuExecutionOptions, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_UploadWeightsToGpu">NeuralNetworkBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DownloadWeightsFromGpu">NeuralNetworkBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ZeroGradientsGpu">NeuralNetworkBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ExtractSingleExample_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.ExtractSingleExample(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithMemory_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithMemory(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithCheckpointing_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithCheckpointing(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_CanUseGpuResidentPath">NeuralNetworkBase&lt;T&gt;.CanUseGpuResidentPath()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_TryForwardGpuOptimized_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___">NeuralNetworkBase&lt;T&gt;.TryForwardGpuOptimized(Tensor&lt;T&gt;, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardGpu_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardGpu(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardDeferred_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardDeferred(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardDeferredAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Threading_CancellationToken_">NeuralNetworkBase&lt;T&gt;.ForwardDeferredAsync(Tensor&lt;T&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BeginGpuExecution_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">NeuralNetworkBase&lt;T&gt;.BeginGpuExecution(GpuExecutionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithGpuContext_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithGpuContext(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithGpuContext_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">NeuralNetworkBase&lt;T&gt;.ForwardWithGpuContext(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGpuMemoryStats">NeuralNetworkBase&lt;T&gt;.GetGpuMemoryStats()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ForwardWithFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">NeuralNetworkBase&lt;T&gt;.ForwardWithFeatures(Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetParameterCount">NeuralNetworkBase&lt;T&gt;.GetParameterCount()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_InvalidateParameterCountCache">NeuralNetworkBase&lt;T&gt;.InvalidateParameterCountCache()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLayerToCollection_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.AddLayerToCollection(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_RemoveLayerFromCollection_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.RemoveLayerFromCollection(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ClearLayers">NeuralNetworkBase&lt;T&gt;.ClearLayers()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateCustomLayers_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___">NeuralNetworkBase&lt;T&gt;.ValidateCustomLayers(List&lt;ILayer&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateCustomLayersInternal_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___">NeuralNetworkBase&lt;T&gt;.ValidateCustomLayersInternal(List&lt;ILayer&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsValidInputLayer_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.IsValidInputLayer(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsValidOutputLayer_AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.IsValidOutputLayer(ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AreLayersCompatible_AiDotNet_Interfaces_ILayer__0__AiDotNet_Interfaces_ILayer__0__">NeuralNetworkBase&lt;T&gt;.AreLayersCompatible(ILayer&lt;T&gt;, ILayer&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetParameterGradients">NeuralNetworkBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnsureArchitectureInitialized">NeuralNetworkBase&lt;T&gt;.EnsureArchitectureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetTrainingMode_System_Boolean_">NeuralNetworkBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnableMemoryManagement_AiDotNet_Training_Memory_TrainingMemoryConfig_">NeuralNetworkBase&lt;T&gt;.EnableMemoryManagement(TrainingMemoryConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DisableMemoryManagement">NeuralNetworkBase&lt;T&gt;.DisableMemoryManagement()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetMemoryEstimate_System_Int32_System_Int32_">NeuralNetworkBase&lt;T&gt;.GetMemoryEstimate(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLastLoss">NeuralNetworkBase&lt;T&gt;.GetLastLoss()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ResetState">NeuralNetworkBase&lt;T&gt;.ResetState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_BackwardWithInputGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.BackwardWithInputGradient(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeInputGradient_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.ComputeInputGradient(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeInputGradient_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.ComputeInputGradient(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SaveModel_System_String_">NeuralNetworkBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LoadModel_System_String_">NeuralNetworkBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Serialize">NeuralNetworkBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Deserialize_System_Byte___">NeuralNetworkBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetActiveFeatureIndices">NeuralNetworkBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_IsFeatureUsed_System_Int32_">NeuralNetworkBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DeepCopy">NeuralNetworkBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Clone">NeuralNetworkBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NeuralNetworkBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__enabledMethods">NeuralNetworkBase&lt;T&gt;._enabledMethods</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__sensitiveFeatures">NeuralNetworkBase&lt;T&gt;._sensitiveFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__fairnessMetrics">NeuralNetworkBase&lt;T&gt;._fairnessMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1__baseModel">NeuralNetworkBase&lt;T&gt;._baseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGlobalFeatureImportanceAsync">NeuralNetworkBase&lt;T&gt;.GetGlobalFeatureImportanceAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLocalFeatureImportanceAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetLocalFeatureImportanceAsync(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetShapValuesAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetShapValuesAsync(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLimeExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetLimeExplanationAsync(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetPartialDependenceAsync_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetPartialDependenceAsync(Vector&lt;int&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetCounterfactualAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.GetCounterfactualAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetModelSpecificInterpretabilityAsync">NeuralNetworkBase&lt;T&gt;.GetModelSpecificInterpretabilityAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GenerateTextExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GenerateTextExplanationAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetFeatureInteractionAsync_System_Int32_System_Int32_">NeuralNetworkBase&lt;T&gt;.GetFeatureInteractionAsync(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ValidateFairnessAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">NeuralNetworkBase&lt;T&gt;.ValidateFairnessAsync(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetAnchorExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0_">NeuralNetworkBase&lt;T&gt;.GetAnchorExplanationAsync(Tensor&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetBaseModel__2_AiDotNet_Interfaces_IFullModel__0___0___1__">NeuralNetworkBase&lt;T&gt;.SetBaseModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_EnableMethod_AiDotNet_Interpretability_InterpretationMethod___">NeuralNetworkBase&lt;T&gt;.EnableMethod(params InterpretationMethod[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ConfigureFairness_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__AiDotNet_Interpretability_FairnessMetric___">NeuralNetworkBase&lt;T&gt;.ConfigureFairness(Vector&lt;int&gt;, params FairnessMetric[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetNamedLayerActivations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetNamedLayerActivations(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetArchitecture">NeuralNetworkBase&lt;T&gt;.GetArchitecture()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetFeatureImportance">NeuralNetworkBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NeuralNetworkBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLayer_AiDotNet_Enums_LayerType_System_Int32_AiDotNet_Enums_ActivationFunction_">NeuralNetworkBase&lt;T&gt;.AddLayer(LayerType, int, ActivationFunction)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddConvolutionalLayer_System_Int32_System_Int32_System_Int32_AiDotNet_Enums_ActivationFunction_">NeuralNetworkBase&lt;T&gt;.AddConvolutionalLayer(int, int, int, ActivationFunction)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddLSTMLayer_System_Int32_System_Boolean_">NeuralNetworkBase&lt;T&gt;.AddLSTMLayer(int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddDropoutLayer_System_Double_">NeuralNetworkBase&lt;T&gt;.AddDropoutLayer(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddBatchNormalizationLayer_System_Int32_System_Double_System_Double_">NeuralNetworkBase&lt;T&gt;.AddBatchNormalizationLayer(int, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_AddPoolingLayer_System_Int32___AiDotNet_Enums_PoolingType_System_Int32_System_Nullable_System_Int32__">NeuralNetworkBase&lt;T&gt;.AddPoolingLayer(int[], PoolingType, int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetGradients">NeuralNetworkBase&lt;T&gt;.GetGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetInputShape">NeuralNetworkBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_GetLayerActivations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">NeuralNetworkBase&lt;T&gt;.GetLayerActivations(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_DefaultLossFunction">NeuralNetworkBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">NeuralNetworkBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NeuralNetworkBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SaveState_System_IO_Stream_">NeuralNetworkBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_LoadState_System_IO_Stream_">NeuralNetworkBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Dispose">NeuralNetworkBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_Dispose_System_Boolean_">NeuralNetworkBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_SupportsJitCompilation">NeuralNetworkBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">NeuralNetworkBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkBase-1.html#AiDotNet_NeuralNetworks_NeuralNetworkBase_1_ConvertLayerToGraph_AiDotNet_Interfaces_ILayer__0__AiDotNet_Autodiff_ComputationNode__0__">NeuralNetworkBase&lt;T&gt;.ConvertLayerToGraph(ILayer&lt;T&gt;, ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Flamingo is a visual language model that excels at few-shot learning. It uses a Perceiver
+Resampler to compress visual features and gated cross-attention layers to integrate
+visual information into a frozen language model.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1__ctor_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Enums_LanguageModelBackbone_System_Int32_AiDotNet_Tokenization_Interfaces_ITokenizer_AiDotNet_Interfaces_IOptimizer__0_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Enums.LanguageModelBackbone,System.Int32,AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Interfaces.ILossFunction{`0})">
+  FlamingoNeuralNetwork(NeuralNetworkArchitecture&lt;T&gt;, int, int, int, int, int, int, int, int, int, int, int, int, LanguageModelBackbone, int, ITokenizer?, IOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;?, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance using native layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FlamingoNeuralNetwork(NeuralNetworkArchitecture&lt;T&gt; architecture, int embeddingDimension = 768, int maxSequenceLength = 2048, int imageSize = 224, int channels = 3, int numPerceiverTokens = 64, int maxImagesInContext = 5, int visionHiddenDim = 1024, int lmHiddenDim = 2048, int numVisionLayers = 24, int numLmLayers = 32, int numHeads = 16, int vocabularySize = 32000, LanguageModelBackbone languageModelBackbone = LanguageModelBackbone.Chinchilla, int numPerceiverLayers = 6, ITokenizer? tokenizer = null, IOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;? optimizer = null, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>embeddingDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxSequenceLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>imageSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>channels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numPerceiverTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxImagesInContext</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>visionHiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>lmHiddenDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numVisionLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numLmLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numHeads</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>vocabularySize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>languageModelBackbone</code> <a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html">LanguageModelBackbone</a></dt>
+    <dd></dd>
+    <dt><code>numPerceiverLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>tokenizer</code> <a class="xref" href="AiDotNet.Tokenization.Interfaces.ITokenizer.html">ITokenizer</a></dt>
+    <dd></dd>
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1__ctor_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1__ctor_AiDotNet_NeuralNetworks_NeuralNetworkArchitecture__0__System_String_System_String_AiDotNet_Tokenization_Interfaces_ITokenizer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_AiDotNet_Interfaces_IOptimizer__0_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.#ctor(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture{`0},System.String,System.String,AiDotNet.Tokenization.Interfaces.ITokenizer,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Interfaces.ILossFunction{`0})">
+  FlamingoNeuralNetwork(NeuralNetworkArchitecture&lt;T&gt;, string, string, ITokenizer, int, int, int, int, int, IOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;?, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance using ONNX models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FlamingoNeuralNetwork(NeuralNetworkArchitecture&lt;T&gt; architecture, string visionEncoderPath, string languageModelPath, ITokenizer tokenizer, int embeddingDimension = 768, int maxSequenceLength = 2048, int imageSize = 224, int numPerceiverTokens = 64, int maxImagesInContext = 5, IOptimizer&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;? optimizer = null, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.NeuralNetworks.NeuralNetworkArchitecture-1.html">NeuralNetworkArchitecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>visionEncoderPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>languageModelPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>tokenizer</code> <a class="xref" href="AiDotNet.Tokenization.Interfaces.ITokenizer.html">ITokenizer</a></dt>
+    <dd></dd>
+    <dt><code>embeddingDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxSequenceLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>imageSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>numPerceiverTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>maxImagesInContext</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>optimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EmbeddingDimension_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EmbeddingDimension" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of the embedding space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ImageSize_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ImageSize*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ImageSize" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ImageSize">
+  ImageSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected image size (square images: ImageSize x ImageSize pixels).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ImageSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_LanguageModelBackbone_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.LanguageModelBackbone*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_LanguageModelBackbone" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.LanguageModelBackbone">
+  LanguageModelBackbone
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the language model backbone used for generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LanguageModelBackbone LanguageModelBackbone { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html">LanguageModelBackbone</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_LanguageModelBackbone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Flamingo typically uses <a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html#AiDotNet_Enums_LanguageModelBackbone_Chinchilla">Chinchilla</a> as the backbone.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_MaxImagesInContext_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.MaxImagesInContext*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_MaxImagesInContext" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.MaxImagesInContext">
+  MaxImagesInContext
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of images that can be processed in a single context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxImagesInContext { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_MaxSequenceLength_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.MaxSequenceLength*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_MaxSequenceLength" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.MaxSequenceLength">
+  MaxSequenceLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum sequence length for text input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxSequenceLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_NumPerceiverTokens_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.NumPerceiverTokens*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_NumPerceiverTokens" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.NumPerceiverTokens">
+  NumPerceiverTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of visual tokens per image after the Perceiver Resampler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumPerceiverTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_NumPerceiverTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Perceiver Resampler compresses visual features to a fixed number of tokens
+(typically 64) regardless of input image size. This enables efficient processing
+of multiple images in context.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ParameterCount_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ParameterCount" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1006"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many adjustable values (weights and biases) your neural network has.
+More complex networks typically have more parameters and can learn more complex patterns, but also
+require more data to train effectively. This is part of the IFullModel interface for consistency with other model types.</p>
+<p>
+<b>Performance:</b> This property uses caching to avoid recomputing the sum on every access.
+The cache is invalidated when layers are modified.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_AnswerQuestion_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.AnswerQuestion*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_AnswerQuestion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.AnswerQuestion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32)">
+  AnswerQuestion(Tensor&lt;T&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L543"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string AnswerQuestion(Tensor&lt;T&gt; image, string question, int maxLength = 64)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Backward_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Backward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1070"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Backward pass through perceiver and gated cross-attention layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; gradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ComputeImageTextSimilarity_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ComputeImageTextSimilarity*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ComputeImageTextSimilarity_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ComputeImageTextSimilarity(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ComputeImageTextSimilarity(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L465"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeImageTextSimilarity(Tensor&lt;T&gt; image, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ComputeSimilarity_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ComputeSimilarity*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ComputeSimilarity(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L444"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes similarity between two embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeSimilarity(Vector&lt;T&gt; embedding1, Vector&lt;T&gt; embedding2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>embedding1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first embedding.</p>
+</dd>
+    <dt><code>embedding2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second embedding.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Similarity score (cosine similarity for normalized embeddings).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_CreateNewInstance_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_CreateNewInstance" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the same type as this neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the same neural network type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This creates a blank version of the same type of neural network.
+<p>It's used internally by methods like DeepCopy and Clone to create the right type of
+network before copying the data into it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DescribeVideo_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.DescribeVideo*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DescribeVideo_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.DescribeVideo(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  DescribeVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L803"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates captions for a video represented as a sequence of frames.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string DescribeVideo(IEnumerable&lt;Tensor&lt;T&gt;&gt; frames, string? prompt = null, int maxLength = 256)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of video frame tensors.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt to guide generation.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated video description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DescribeVideo_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Flamingo can process multiple frames as separate images interleaved in context,
+enabling basic video understanding.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DeserializeNetworkSpecificData_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.DeserializeNetworkSpecificData*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DeserializeNetworkSpecificData_System_IO_BinaryReader_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.DeserializeNetworkSpecificData(System.IO.BinaryReader)">
+  DeserializeNetworkSpecificData(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes network-specific data that was not covered by the general deserialization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void DeserializeNetworkSpecificData(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The BinaryReader to read the data from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_DeserializeNetworkSpecificData_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is called at the end of the general deserialization process to allow derived classes
+to read any additional data specific to their implementation.
+</p>
+<p>
+<b>For Beginners:</b> Continuing the suitcase analogy, this is like unpacking that special 
+compartment. After the main deserialization method has unpacked the common items (layers, parameters), 
+this method allows each specific type of neural network to unpack its own unique items 
+that were stored during serialization.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeImage_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeImage*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeImage_System_Double___" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeImage(System.Double[])">
+  EncodeImage(double[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes an image into an embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; EncodeImage(double[] imageData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The preprocessed image data as a flattened array in CHW format.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeImageBatch_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeImageBatch*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeImageBatch(System.Collections.Generic.IEnumerable{System.Double[]})">
+  EncodeImageBatch(IEnumerable&lt;double[]&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes multiple images into embedding vectors in a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; EncodeImageBatch(IEnumerable&lt;double[]&gt; imageDataBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageDataBatch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]&gt;</dt>
+    <dd><p>The preprocessed images as flattened arrays.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row is an embedding for the corresponding image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeText_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeText*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeText_System_String_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeText(System.String)">
+  EncodeText(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes text into an embedding vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; EncodeText(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to encode.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A normalized embedding vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeTextBatch_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeTextBatch*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.EncodeTextBatch(System.Collections.Generic.IEnumerable{System.String})">
+  EncodeTextBatch(IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes multiple texts into embedding vectors in a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; EncodeTextBatch(IEnumerable&lt;string&gt; texts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The texts to encode.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row is an embedding for the corresponding text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ExtractPerceiverFeatures_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ExtractPerceiverFeatures*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ExtractPerceiverFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ExtractPerceiverFeatures(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractPerceiverFeatures(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L656"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts visual features using the Perceiver Resampler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ExtractPerceiverFeatures(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Resampled visual tokens with shape [numPerceiverTokens, hiddenDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ExtractPerceiverFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Perceiver Resampler uses cross-attention with learnable queries to compress
+variable-length visual features into a fixed number of tokens.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotGenerate_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotGenerate*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotGenerate_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotGenerate(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32)">
+  FewShotGenerate(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Text)&gt;, Tensor&lt;T&gt;, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L553"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs few-shot visual learning with interleaved image-text examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string FewShotGenerate(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Text)&gt; examples, Tensor&lt;T&gt; queryImage, string? queryPrompt = null, int maxLength = 256)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.text">Text</a>)&gt;</dt>
+    <dd><p>Few-shot examples as (image, text) pairs.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The new image to process.</p>
+</dd>
+    <dt><code>queryPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt for the query (e.g., &quot;What is this?&quot;).</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated response based on learned pattern.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotGenerate_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Learn a task from examples, then apply it!
+<p>Example - Learning to identify dog breeds:
+Examples:</p>
+<ul>
+<li>[image of labrador] &quot;This is a Labrador Retriever&quot;</li>
+<li>[image of poodle] &quot;This is a Poodle&quot;</li>
+<li>[image of beagle] &quot;This is a Beagle&quot;</li>
+</ul>
+<p>Query: [image of golden retriever] &quot;This is a...&quot;
+Response: &quot;Golden Retriever&quot;</p>
+<p>Flamingo learned the pattern from examples without any training!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotImageRetrieval_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotImageRetrieval*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotImageRetrieval_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotImageRetrieval(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32)">
+  FewShotImageRetrieval(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string?, IEnumerable&lt;Tensor&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L833"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the most similar images from a database using few-shot context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;(int Index, T Score)&gt; FewShotImageRetrieval(IEnumerable&lt;Tensor&lt;T&gt;&gt; queryExamples, string? queryDescription, IEnumerable&lt;Tensor&lt;T&gt;&gt; candidateImages, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryExamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Example images representing what you're looking for.</p>
+</dd>
+    <dt><code>queryDescription</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional text description of desired images.</p>
+</dd>
+    <dt><code>candidateImages</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Database of images to search.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Indices of most similar images with scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotVQA_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotVQA*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_FewShotVQA_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.FewShotVQA(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  FewShotVQA(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Question, string Answer)&gt;, Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L639"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs visual question answering with few-shot examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string FewShotVQA(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Question, string Answer)&gt; examples, Tensor&lt;T&gt; queryImage, string question)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>examples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.question">Question</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string,system.string-.answer">Answer</a>)&gt;</dt>
+    <dd><p>Example (image, question, answer) tuples.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to ask about.</p>
+</dd>
+    <dt><code>question</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The question to answer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated answer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GenerateCaption_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GenerateCaption*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GenerateCaption_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GenerateCaption(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GenerateCaption(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L537"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateCaption(Tensor&lt;T&gt; image, int maxLength = 77)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GenerateWithMultipleImages_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GenerateWithMultipleImages*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GenerateWithMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GenerateWithMultipleImages(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String,System.Int32)">
+  GenerateWithMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt;, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L589"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates text for multiple images interleaved in a single context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateWithMultipleImages(IEnumerable&lt;Tensor&lt;T&gt;&gt; images, string prompt, int maxLength = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Sequence of images to process.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt that may reference images using special tokens.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Generated text response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GenerateWithMultipleImages_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Supports prompts like: "&lt;image&gt; shows a cat and &lt;image&gt; shows a dog. Compare them."
+where &lt;image&gt; tokens are replaced with corresponding image features.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetImageEmbedding_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetImageEmbedding*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetImageEmbedding_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetImageEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetImageEmbedding(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L326"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetImageEmbedding(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetImageEmbeddings_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetImageEmbeddings*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetImageEmbeddings_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetImageEmbeddings(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  GetImageEmbeddings(IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Vector&lt;T&gt;&gt; GetImageEmbeddings(IEnumerable&lt;Tensor&lt;T&gt;&gt; images)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetModelMetadata_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetModelMetadata" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the metadata for this neural network model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetaData object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetParameters_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetParameters" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1030"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the network as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all parameters of the network.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Neural networks learn by adjusting their "parameters" (also called weights and biases).
+This method collects all those adjustable values into a single list so they can be updated during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetTextEmbedding_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetTextEmbedding*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetTextEmbedding_System_String_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetTextEmbedding(System.String)">
+  GetTextEmbedding(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetTextEmbedding(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetTextEmbeddings_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetTextEmbeddings*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_GetTextEmbeddings_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.GetTextEmbeddings(System.Collections.Generic.IEnumerable{System.String})">
+  GetTextEmbeddings(IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Vector&lt;T&gt;&gt; GetTextEmbeddings(IEnumerable&lt;string&gt; texts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InContextClassify_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.InContextClassify*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InContextClassify_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.InContextClassify(System.Collections.Generic.IEnumerable{System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  InContextClassify(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Label)&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L610"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs in-context visual classification without explicit labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; InContextClassify(IEnumerable&lt;(Tensor&lt;T&gt; Image, string Label)&gt; labeledExamples, Tensor&lt;T&gt; queryImage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>labeledExamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.text">Text</a>)&gt;</dt>
+    <dd><p>Examples with (image, label) pairs.</p>
+</dd>
+    <dt><code>queryImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The image to classify.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping labels to confidence scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InContextClassify_System_Collections_Generic_IEnumerable_System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String___AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Classify images using just a few examples!
+<p>Instead of training a classifier on thousands of images:</p>
+<ol>
+<li>Show a few examples per class</li>
+<li>Flamingo learns the categories</li>
+<li>It can now classify new images</li>
+</ol>
+<p>This is &quot;few-shot classification&quot; - works with any categories!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InitializeLayers_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.InitializeLayers*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InitializeLayers" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.InitializeLayers">
+  InitializeLayers()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the layers of the neural network based on the architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void InitializeLayers()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_InitializeLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method sets up all the layers in your neural network according to the architecture
+you've defined. It's like assembling the parts of your network before you can use it.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Predict_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Predict*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Predict(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Predict(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1056"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a prediction using the neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Predict(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input data to process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The network's prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the main method you'll use to get results from your trained neural network.
+You provide some input data (like an image or text), and the network processes it through all its
+layers to produce an output (like a classification or prediction).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_RetrieveImages_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.RetrieveImages*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_RetrieveImages_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.RetrieveImages(System.String,System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Int32)">
+  RetrieveImages(string, IEnumerable&lt;Vector&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L498"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;(int Index, T Score)&gt; RetrieveImages(string query, IEnumerable&lt;Vector&lt;T&gt;&gt; imageEmbeddings, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>imageEmbeddings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_RetrieveTexts_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.RetrieveTexts*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_RetrieveTexts_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_String__System_Int32_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.RetrieveTexts(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.String},System.Int32)">
+  RetrieveTexts(Tensor&lt;T&gt;, IEnumerable&lt;string&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L517"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;(int Index, T Score)&gt; RetrieveTexts(Tensor&lt;T&gt; image, IEnumerable&lt;string&gt; texts, int topK = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.index">Index</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,-0-.score">Score</a>)&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ScoreImageText_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ScoreImageText*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ScoreImageText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ScoreImageText(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  ScoreImageText(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L821"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log probability of a given text completion for an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ScoreImageText(Tensor&lt;T&gt; image, string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to score.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Log probability of the text given the image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ScoreImageText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Useful for ranking candidate captions or performing discriminative tasks
+with a generative model.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_SerializeNetworkSpecificData_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.SerializeNetworkSpecificData*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_SerializeNetworkSpecificData_System_IO_BinaryWriter_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.SerializeNetworkSpecificData(System.IO.BinaryWriter)">
+  SerializeNetworkSpecificData(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes network-specific data that is not covered by the general serialization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void SerializeNetworkSpecificData(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The BinaryWriter to write the data to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_SerializeNetworkSpecificData_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is called at the end of the general serialization process to allow derived classes
+to write any additional data specific to their implementation.
+</p>
+<p>
+<b>For Beginners:</b> Think of this as packing a special compartment in your suitcase. 
+While the main serialization method packs the common items (layers, parameters), 
+this method allows each specific type of neural network to pack its own unique items 
+that other networks might not have.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Train_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Train*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.Train(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1093"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the neural network on a single input-output pair.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Tensor&lt;T&gt; input, Tensor&lt;T&gt; expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The expected output for the given input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs one training step on the neural network using the provided input and expected output.
+It updates the network's parameters to reduce the error between the network's prediction and the expected output.
+</p>
+<p>
+<b>For Beginners:</b> This is how your neural network learns. You provide:
+- An input (what the network should process)
+- The expected output (what the correct answer should be)
+<p>The network then:</p>
+<ol>
+<li>Makes a prediction based on the input</li>
+<li>Compares its prediction to the expected output</li>
+<li>Calculates how wrong it was (the loss)</li>
+<li>Adjusts its internal values to do better next time</li>
+</ol>
+<p>After training, you can get the loss value using the GetLastLoss() method to see how well the network is learning.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_UpdateParameters_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the network's parameters with new values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> During training, a neural network's internal values (parameters) get adjusted to improve 
+its performance. This method allows you to update all those values at once by providing a complete set 
+of new parameters.
+</p>
+<p>
+This is typically used by optimization algorithms that calculate better parameter values based on 
+training data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ZeroShotClassify_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ZeroShotClassify*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ZeroShotClassify_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ZeroShotClassify(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.String})">
+  ZeroShotClassify(Tensor&lt;T&gt;, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L473"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; ZeroShotClassify(Tensor&lt;T&gt; image, IEnumerable&lt;string&gt; classLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>classLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ZeroShotClassify_" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ZeroShotClassify*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_FlamingoNeuralNetwork_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.NeuralNetworks.FlamingoNeuralNetwork`1.ZeroShotClassify(System.Double[],System.Collections.Generic.IEnumerable{System.String})">
+  ZeroShotClassify(double[], IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L1328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs zero-shot classification of an image against text labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; ZeroShotClassify(double[] imageData, IEnumerable&lt;string&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The preprocessed image data.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The candidate class labels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping each label to its probability score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/FlamingoNeuralNetwork.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

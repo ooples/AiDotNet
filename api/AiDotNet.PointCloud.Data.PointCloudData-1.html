@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PointCloudData&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PointCloudData&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a point cloud data structure with coordinates and optional features.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PointCloud_Data_PointCloudData_1.md&amp;value=---%0Auid%3A%20AiDotNet.PointCloud.Data.PointCloudData%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PointCloud.Data.PointCloudData`1">
+
+
+
+  <h1 id="AiDotNet_PointCloud_Data_PointCloudData_1" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1" class="text-break">
+Class PointCloudData&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PointCloud.html">PointCloud</a>.<a class="xref" href="AiDotNet.PointCloud.Data.html">Data</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a point cloud data structure with coordinates and optional features.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PointCloudData&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PointCloudData&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PointCloud_Data_PointCloudData_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This class stores 3D point cloud data in an organized way.</p>
+<p>A point cloud consists of:</p>
+<ul>
+<li>Points: XYZ coordinates representing positions in 3D space</li>
+<li>Features: Optional additional information per point (color, intensity, normals, etc.)</li>
+<li>Labels: Optional category or class information for each point</li>
+</ul>
+<p>Think of it as a spreadsheet where:</p>
+<ul>
+<li>Each row is a point</li>
+<li>First 3 columns are X, Y, Z coordinates</li>
+<li>Additional columns can store colors, surface properties, etc.</li>
+<li>Another column can store what category each point belongs to</li>
+</ul>
+<p>This structure makes it easy to:</p>
+<ul>
+<li>Load point cloud data from sensors or files</li>
+<li>Pass data to neural networks for processing</li>
+<li>Store results from classification or segmentation</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1__ctor_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1__ctor_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PointCloudData(Tensor&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the PointCloudData class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PointCloudData(Tensor&lt;T&gt; points, Vector&lt;T&gt;? labels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>points</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of shape [N, 3+F] containing point coordinates and features.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional labels for the points.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_Labels_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.Labels*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_Labels" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.Labels">
+  Labels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets optional labels for classification or segmentation tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt;? Labels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_Labels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This stores the correct answers for training or the predictions for testing.</p>
+<p>Depending on the task:</p>
+<ul>
+<li>Classification: Single label for the entire point cloud (e.g., &quot;chair&quot;)</li>
+<li>Segmentation: One label per point (e.g., point 1 is &quot;leg&quot;, point 2 is &quot;seat&quot;)</li>
+</ul>
+<p>During training:</p>
+<ul>
+<li>Labels contain the ground truth (correct answers)</li>
+<li>The model learns by comparing its predictions to these labels</li>
+</ul>
+<p>During inference:</p>
+<ul>
+<li>Labels can store the model's predictions</li>
+<li>Or be null if we just want the raw output probabilities</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_NumFeatures_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.NumFeatures*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_NumFeatures" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.NumFeatures">
+  NumFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of features per point (including XYZ coordinates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_NumFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells how much information we have for each point.</p>
+<p>Common feature counts:</p>
+<ul>
+<li>3: Just XYZ coordinates</li>
+<li>6: XYZ + RGB color</li>
+<li>7: XYZ + RGBA (color with transparency)</li>
+<li>9: XYZ + RGB + surface normal (3 values)</li>
+<li>Custom: Any combination of features you need</li>
+</ul>
+<p>The features help the neural network understand more about each point
+than just its position in space.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_NumPoints_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.NumPoints*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_NumPoints" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.NumPoints">
+  NumPoints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of points in the cloud.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumPoints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_NumPoints_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how many individual points are in the point cloud.</p>
+<p>Point clouds can vary greatly in size:</p>
+<ul>
+<li>Small objects: hundreds to thousands of points</li>
+<li>Detailed scans: hundreds of thousands of points</li>
+<li>Large environments: millions of points</li>
+</ul>
+<p>More points provide more detail but require more memory and processing time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_Points_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.Points*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_Points" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.Points">
+  Points
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the tensor containing point coordinates and features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Points { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_Points_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This stores all the point data.</p>
+<p>The tensor shape is [N, 3+F] where:</p>
+<ul>
+<li>N = number of points (could be thousands or millions)</li>
+<li>3 = XYZ coordinates (required for every point)</li>
+<li>F = number of additional features (optional, could be 0)</li>
+</ul>
+<p>Example with RGB colors:</p>
+<ul>
+<li>Shape would be [N, 6]</li>
+<li>First 3 values per point: X, Y, Z position</li>
+<li>Last 3 values per point: R, G, B color values</li>
+</ul>
+<p>Example without features:</p>
+<ul>
+<li>Shape would be [N, 3]</li>
+<li>Only XYZ coordinates</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_FromCoordinates_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.FromCoordinates*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_FromCoordinates_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.FromCoordinates(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  FromCoordinates(Matrix&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a point cloud from coordinates only (no additional features).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static PointCloudData&lt;T&gt; FromCoordinates(Matrix&lt;T&gt; coordinates, Vector&lt;T&gt;? labels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coordinates</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of shape [N, 3] with XYZ coordinates.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional labels for the points.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PointCloud.Data.PointCloudData-1.html">PointCloudData</a>&lt;T&gt;</dt>
+    <dd><p>A new PointCloudData instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_FromCoordinates_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A convenient way to create a basic point cloud with just positions.</p>
+<p>Use this when:</p>
+<ul>
+<li>You only have position data (no colors, normals, etc.)</li>
+<li>You want to process purely geometric information</li>
+<li>Your data source only provides XYZ coordinates</li>
+</ul>
+<p>This automatically converts the coordinate matrix to the tensor format needed internally.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_GetCoordinates_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.GetCoordinates*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_GetCoordinates" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.GetCoordinates">
+  GetCoordinates()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts only the XYZ coordinates from the point cloud.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetCoordinates()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of shape [N, 3] containing only position information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_GetCoordinates_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Gets just the position data, ignoring any additional features.</p>
+<p>Useful when:</p>
+<ul>
+<li>You need only geometric information</li>
+<li>Performing operations that work on positions only</li>
+<li>Visualizing the basic 3D structure</li>
+</ul>
+<p>If the point cloud has colors or other features, this method discards them
+and returns only the X, Y, Z coordinates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PointCloud_Data_PointCloudData_1_GetFeatures_" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.GetFeatures*"></a>
+
+  <h3 id="AiDotNet_PointCloud_Data_PointCloudData_1_GetFeatures" data-uid="AiDotNet.PointCloud.Data.PointCloudData`1.GetFeatures">
+  GetFeatures()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts additional features (excluding XYZ coordinates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt;? GetFeatures()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of shape [N, F] containing feature data, or null if no features exist.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PointCloud_Data_PointCloudData_1_GetFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Gets the extra information (like colors) without the positions.</p>
+<p>Useful when:</p>
+<ul>
+<li>Processing features separately from geometry</li>
+<li>Analyzing color or intensity patterns</li>
+<li>Applying feature-specific transformations</li>
+</ul>
+<p>Returns null if the point cloud only has XYZ coordinates (NumFeatures == 3).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PointCloud/Data/PointCloudData.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

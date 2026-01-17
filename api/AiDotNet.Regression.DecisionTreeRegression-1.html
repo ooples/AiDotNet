@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DecisionTreeRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DecisionTreeRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a decision tree regression model that predicts continuous values based on input features.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_DecisionTreeRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.DecisionTreeRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.DecisionTreeRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_DecisionTreeRegression_1" data-uid="AiDotNet.Regression.DecisionTreeRegression`1" class="text-break">
+Class DecisionTreeRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a decision tree regression model that predicts continuous values based on input features.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DecisionTreeRegression&lt;T&gt; : DecisionTreeRegressionBase&lt;T&gt;, ITreeBasedRegression&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html">DecisionTreeRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DecisionTreeRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITreeBasedRegression-1.html">ITreeBasedRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_NumOps">DecisionTreeRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_Engine">DecisionTreeRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_Root">DecisionTreeRegressionBase&lt;T&gt;.Root</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_Options">DecisionTreeRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_Regularization">DecisionTreeRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_MaxDepth">DecisionTreeRegressionBase&lt;T&gt;.MaxDepth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_FeatureNames">DecisionTreeRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_FeatureImportances">DecisionTreeRegressionBase&lt;T&gt;.FeatureImportances</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_GetParameters">DecisionTreeRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DecisionTreeRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_GetActiveFeatureIndices">DecisionTreeRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32_">DecisionTreeRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DecisionTreeRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">DecisionTreeRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_GetFeatureImportance">DecisionTreeRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_DeepCopy">DecisionTreeRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_Clone">DecisionTreeRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_ParameterCount">DecisionTreeRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SaveModel_System_String_">DecisionTreeRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_LoadModel_System_String_">DecisionTreeRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_DefaultLossFunction">DecisionTreeRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">DecisionTreeRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">DecisionTreeRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SaveState_System_IO_Stream_">DecisionTreeRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_LoadState_System_IO_Stream_">DecisionTreeRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_UseSoftTree">DecisionTreeRegressionBase&lt;T&gt;.UseSoftTree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SoftTreeTemperature">DecisionTreeRegressionBase&lt;T&gt;.SoftTreeTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_SupportsJitCompilation">DecisionTreeRegressionBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.DecisionTreeRegressionBase-1.html#AiDotNet_Regression_DecisionTreeRegressionBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">DecisionTreeRegressionBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_DecisionTreeRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Decision tree regression builds a model in the form of a tree structure where each internal node represents a 
+decision based on a feature, each branch represents an outcome of that decision, and each leaf node 
+represents a predicted value. The model is trained by recursively splitting the data based on the optimal 
+feature and threshold that minimizes the prediction error.
+</p>
+<p><b>For Beginners:</b> A decision tree regression is like a flowchart that helps predict numerical values.
+<p>Think of it like answering a series of yes/no questions to reach a prediction:</p>
+<ul>
+<li>&quot;Is the temperature above 75—F?&quot;</li>
+<li>&quot;Is the humidity below 50%?&quot;</li>
+<li>&quot;Is it a weekend?&quot;</li>
+</ul>
+<p>Each question splits the data into two groups, and the tree learns which questions to ask
+to make the most accurate predictions. For example, a decision tree might predict house prices
+based on features like square footage, number of bedrooms, and neighborhood.</p>
+<p>The model is called a &quot;tree&quot; because it resembles an upside-down tree, with a single starting point (root)
+that branches out into multiple endpoints (leaves) where the final predictions are made.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1__ctor_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1__ctor_AiDotNet_Models_Options_DecisionTreeOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.#ctor(AiDotNet.Models.Options.DecisionTreeOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  DecisionTreeRegression(DecisionTreeOptions?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.DecisionTreeRegression-1.html">DecisionTreeRegression&lt;T&gt;</a> class with optional configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DecisionTreeRegression(DecisionTreeOptions? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html">DecisionTreeOptions</a></dt>
+    <dd><p>Optional configuration options for the decision tree algorithm.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1__ctor_AiDotNet_Models_Options_DecisionTreeOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new decision tree regression model with the specified options and regularization strategy.
+If no options are provided, default values are used. If no regularization is specified, no regularization is applied.
+</p>
+<p><b>For Beginners:</b> This is how you create a new decision tree prediction model.
+<p>When creating a decision tree, you can specify two main things:</p>
+<ul>
+<li>Options: Controls how the tree grows (like its maximum depth or how many samples are needed to split)</li>
+<li>Regularization: Helps prevent the model from becoming too complex and &quot;memorizing&quot; the training data</li>
+</ul>
+<p>If you don't specify these parameters, the model will use reasonable default settings.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create a decision tree with default settings
+var tree = new DecisionTreeRegression&lt;double&gt;();
+
+// Create a decision tree with custom options
+var options = new DecisionTreeOptions { MaxDepth = 5 };
+var customTree = new DecisionTreeRegression&lt;double&gt;(options);
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_NumberOfTrees_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_NumberOfTrees" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of trees in this model, which is always 1 for a single decision tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int NumberOfTrees { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of trees in the model, which is 1 for this implementation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_NumberOfTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of decision trees used in the model. For the DecisionTreeRegression class, 
+this is always 1, as it implements a single decision tree. This property is provided for compatibility with 
+ensemble methods that may use multiple trees.
+</p>
+<p><b>For Beginners:</b> This property simply tells you how many trees are in the model.
+<p>A single decision tree model (like this one) always returns 1.</p>
+<p>Other algorithms like Random Forests or Gradient Boosting use multiple trees
+(sometimes hundreds or thousands) to make better predictions, but a basic
+decision tree uses just one tree structure.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_CalculateFeatureImportances_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.CalculateFeatureImportances*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_CalculateFeatureImportances_System_Int32_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.CalculateFeatureImportances(System.Int32)">
+  CalculateFeatureImportances(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L921"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates feature importances based on the number of features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void CalculateFeatureImportances(int featureCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_CreateNewInstance_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_CreateNewInstance" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L1026"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the decision tree regression model with the same options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of the model with the same configuration but no trained parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the decision tree regression model with the same configuration
+options and regularization method as the current instance, but without copying the trained parameters.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model configuration without 
+any learned parameters.
+<p>Think of it like getting a blank notepad with the same paper quality and size,
+but without any writing on it yet. The new model has the same:</p>
+<ul>
+<li>Maximum depth setting</li>
+<li>Minimum samples split setting</li>
+<li>Split criterion (how nodes decide which feature to split on)</li>
+<li>Random seed (if specified)</li>
+<li>Regularization method</li>
+</ul>
+<p>But it doesn't have any of the actual tree structure that was learned from data.</p>
+<p>This is mainly used internally when doing things like cross-validation or
+creating ensembles of similar models with different training data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_Deserialize_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L382"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized decision tree model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs a decision tree model from a byte array that was previously created using the
+Serialize method. It restores the model's configuration options and tree structure, allowing the model
+to be used for predictions without retraining.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+<p>Deserialization allows you to:</p>
+<ul>
+<li>Load a model that was saved earlier</li>
+<li>Use a model without having to retrain it</li>
+<li>Share models between different applications</li>
+</ul>
+<p>When you deserialize a model:</p>
+<ul>
+<li>All settings are restored</li>
+<li>The entire tree structure is reconstructed</li>
+<li>The model is ready to make predictions immediately</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Load from a file
+byte[] modelData = File.ReadAllBytes(&quot;decisionTree.model&quot;);
+
+// Deserialize the model
+var decisionTree = new DecisionTreeRegression&lt;double&gt;();
+decisionTree.Deserialize(modelData);
+
+// Now you can use the model for predictions
+var predictions = decisionTree.Predict(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_GetFeatureImportance_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_GetFeatureImportance_System_Int32_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.GetFeatureImportance(System.Int32)">
+  GetFeatureImportance(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the importance score of a specific feature in the decision tree model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetFeatureImportance(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature to get the importance score for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The importance score of the specified feature.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_GetFeatureImportance_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the importance score of the specified feature in the trained decision tree model. Feature
+importance scores indicate how useful each feature was in building the tree, with higher values indicating 
+more important features. The scores are normalized to sum to 1.
+</p>
+<p><b>For Beginners:</b> This method tells you how important each feature is for making predictions.
+<p>Feature importance:</p>
+<ul>
+<li>Measures how much each feature contributes to the model's predictions</li>
+<li>Higher values mean the feature has more influence on the predictions</li>
+<li>Values range from 0 to 1, and all feature importances sum to 1</li>
+</ul>
+<p>For example, when predicting house prices:</p>
+<ul>
+<li>Square footage might have importance 0.6 (very important)</li>
+<li>Number of bedrooms might have importance 0.3 (somewhat important)</li>
+<li>Year built might have importance 0.1 (less important)</li>
+</ul>
+<p>This helps you understand which features matter most for your predictions.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Get importance of the first feature (index 0)
+var importance = decisionTree.GetFeatureImportance(0);
+Console.WriteLine($&quot;Feature 0 importance: {importance}&quot;);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the model hasn't been trained yet.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the feature index is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the decision tree model and its configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type and configuration options. This information
+can be useful for model management, comparison, and documentation purposes.
+</p>
+<p><b>For Beginners:</b> This method provides information about your decision tree model.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Decision Tree)</li>
+<li>Maximum depth of the tree (how many questions it can ask)</li>
+<li>Minimum samples required to split a node (how much data is needed to create a new decision point)</li>
+<li>Maximum features considered at each split (how many features the model looks at when deciding how to split)</li>
+</ul>
+<p>This information is helpful when:</p>
+<ul>
+<li>Comparing different models</li>
+<li>Documenting your model's configuration</li>
+<li>Troubleshooting model performance</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var metadata = decisionTree.GetModelMetadata();
+Console.WriteLine($&quot;Model type: {metadata.ModelType}&quot;);
+Console.WriteLine($&quot;Max depth: {metadata.AdditionalInfo[&quot;MaxDepth&quot;]}&quot;);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_Predict_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts target values for the provided input features using the trained decision tree model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values corresponding to each input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method traverses the decision tree for each input sample to find the leaf node that corresponds to the sample's features.
+The prediction stored in the leaf node is then returned as the predicted value for that sample. Any specified regularization
+is applied to both the input data and the predictions.
+</p>
+<p><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+<p>How it works:</p>
+<ol>
+<li>For each row of input data, the model starts at the top of the decision tree</li>
+<li>At each decision point (node), it checks the value of a specific feature</li>
+<li>Based on that value, it follows the appropriate branch</li>
+<li>It continues until it reaches a leaf node (endpoint)</li>
+<li>The value stored in that leaf node becomes the prediction</li>
+</ol>
+<p>For example, if predicting house prices:</p>
+<ul>
+<li>&quot;Is square footage &gt; 2000?&quot; If yes, go left; if no, go right</li>
+<li>&quot;Is number of bedrooms &gt; 3?&quot; If yes, go left; if no, go right</li>
+<li>Reach leaf node: Predict price = $350,000</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create test data
+var newFeatures = new Matrix&lt;double&gt;(...);
+
+// Make predictions
+var predictions = decisionTree.Predict(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_Serialize_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_Serialize" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the decision tree model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the decision tree model into a byte array that can be stored in a file, database,
+or transmitted over a network. The serialized data includes the model's configuration options and the
+complete tree structure.
+</p>
+<p><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+<p>Serialization allows you to:</p>
+<ul>
+<li>Save your model to a file</li>
+<li>Store your model in a database</li>
+<li>Send your model over a network</li>
+<li>Keep your model for later use without having to retrain it</li>
+</ul>
+<p>The serialized data includes:</p>
+<ul>
+<li>All the model's settings (like maximum depth)</li>
+<li>The entire tree structure with all its decision rules</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Serialize the model
+byte[] modelData = decisionTree.Serialize();
+
+// Save to a file
+File.WriteAllBytes(&quot;decisionTree.model&quot;, modelData);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_Train_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Train*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the decision tree model using the provided input features and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Train(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds the decision tree model by recursively splitting the data based on features and thresholds
+that best reduce the prediction error. Unlike traditional regression models, decision trees do not apply data
+regularization transformations. Instead, they control model complexity through structural parameters such as
+MaxDepth, MinSamplesSplit, and MinSamplesLeaf. After building the tree, feature importances are calculated.
+</p>
+<p><b>For Beginners:</b> This method teaches the decision tree how to make predictions using your data.
+<p>You provide:</p>
+<ul>
+<li>x: Your input data (features) - like house size, number of bedrooms, location, etc.</li>
+<li>y: The values you want to predict - like house prices</li>
+</ul>
+<p>The training process:</p>
+<ol>
+<li>Looks at your data to find patterns</li>
+<li>Decides which features are most useful for predictions</li>
+<li>Creates a tree structure with decision rules</li>
+<li>Figures out how important each feature is</li>
+</ol>
+<p>After training, the model is ready to make predictions on new data.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create training data
+var features = new Matrix&lt;double&gt;(...); // Input features
+var targets = new Vector&lt;double&gt;(...);  // Target values
+
+// Train the model
+decisionTree.Train(features, targets);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_DecisionTreeRegression_1_TrainWithWeights_" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.TrainWithWeights*"></a>
+
+  <h3 id="AiDotNet_Regression_DecisionTreeRegression_1_TrainWithWeights_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.DecisionTreeRegression`1.TrainWithWeights(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainWithWeights(Matrix&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L434"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the decision tree model using the provided input features, target values, and sample weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void TrainWithWeights(Matrix&lt;T&gt; x, Vector&lt;T&gt; y, Vector&lt;T&gt; sampleWeights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in x.</p>
+</dd>
+    <dt><code>sampleWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of weights for each sample, indicating their importance during training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_DecisionTreeRegression_1_TrainWithWeights_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds the decision tree model similar to the Train method, but allows specifying different weights
+for each training sample. Samples with higher weights have more influence on the training process, which can be 
+useful for handling imbalanced datasets or for boosting algorithms.
+</p>
+<p><b>For Beginners:</b> This method is similar to the regular Train method, but lets you specify how important each training example is.
+<p>Sample weights allow you to:</p>
+<ul>
+<li>Give more importance to certain examples during training</li>
+<li>Make the model pay more attention to rare cases</li>
+<li>Balance uneven datasets (where some outcomes are much more common than others)</li>
+</ul>
+<p>For example, when predicting house prices:</p>
+<ul>
+<li>You might give higher weights to recent sales (more relevant)</li>
+<li>You might give lower weights to unusual properties (potential outliers)</li>
+<li>You might give higher weights to properties similar to the ones you'll make predictions for</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create training data
+var features = new Matrix&lt;double&gt;(...);  // Input features
+var targets = new Vector&lt;double&gt;(...);   // Target values
+var weights = new Vector&lt;double&gt;(...);   // Sample weights
+
+// Train the model with weights
+decisionTree.TrainWithWeights(features, targets, weights);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/DecisionTreeRegression.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

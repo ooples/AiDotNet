@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DenclueOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DenclueOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for DENCLUE clustering.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_Options_DenclueOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.Options.DenclueOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.Options.DenclueOptions`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_Options_DenclueOptions_1" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1" class="text-break">
+Class DenclueOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for DENCLUE clustering.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DenclueOptions&lt;T&gt; : ClusteringOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html">ClusteringOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">DenclueOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations">ClusteringOptions&lt;T&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance">ClusteringOptions&lt;T&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState">ClusteringOptions&lt;T&gt;.RandomState</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations">ClusteringOptions&lt;T&gt;.NumInitializations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Clustering.Options.ClusteringOptions-1.html#AiDotNet_Clustering_Options_ClusteringOptions_1_Verbose">ClusteringOptions&lt;T&gt;.Verbose</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_Options_DenclueOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DENCLUE (DENsity-based CLUstEring) uses kernel density estimation
+to find clusters. Points are attracted to density maxima using
+gradient ascent, and clusters are formed by grouping points that
+converge to the same attractor.
+</p>
+<p><b>For Beginners:</b> DENCLUE sees data as a "landscape" where
+dense areas form "mountains" (attractors).
+<p>Imagine pouring water on a terrain:</p>
+<ul>
+<li>Water flows downhill to valleys</li>
+<li>In DENCLUE, points &quot;flow uphill&quot; to peaks</li>
+<li>Points reaching the same peak form a cluster</li>
+</ul>
+<p>Key parameters:</p>
+<ul>
+<li>Bandwidth (h): Controls how wide the &quot;mountains&quot; are
+<ul>
+<li>Small h: Many narrow peaks (more clusters)</li>
+<li>Large h: Few wide peaks (fewer clusters)</li>
+</ul>
+</li>
+<li>MinDensity: Minimum density for a peak to be a cluster center</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1__ctor_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1__ctor" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.#ctor">
+  DenclueOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes DenclueOptions with appropriate defaults.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DenclueOptions()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1_AttractorMergeThreshold_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.AttractorMergeThreshold*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1_AttractorMergeThreshold" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.AttractorMergeThreshold">
+  AttractorMergeThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distance threshold for merging attractors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AttractorMergeThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Attractor merge threshold. Default is 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_DenclueOptions_1_AttractorMergeThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Attractors closer than this threshold are merged into a single cluster.
+This helps avoid creating many tiny clusters from nearly identical attractors.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1_Bandwidth_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.Bandwidth*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1_Bandwidth" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.Bandwidth">
+  Bandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter for the Gaussian kernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Bandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Bandwidth (h). Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_DenclueOptions_1_Bandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls the width of the Gaussian kernel used for density estimation.
+Smaller values make the density function more peaked; larger values
+smooth it out.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1_ConvergenceThreshold_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.ConvergenceThreshold*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1_ConvergenceThreshold" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.ConvergenceThreshold">
+  ConvergenceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence threshold for hill climbing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ConvergenceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Convergence threshold. Default is 1e-6.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1_DistanceMetric_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.DistanceMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1_DistanceMetric" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.DistanceMetric">
+  DistanceMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distance metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistanceMetric&lt;T&gt;? DistanceMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Interfaces.IDistanceMetric-1.html">IDistanceMetric</a>&lt;T&gt;</dt>
+    <dd><p>Distance metric, or null for Euclidean.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_DenclueOptions_1_MinDensity_" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.MinDensity*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_DenclueOptions_1_MinDensity" data-uid="AiDotNet.Clustering.Options.DenclueOptions`1.MinDensity">
+  MinDensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum density threshold for cluster attractors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinDensity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum density. Default is 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_DenclueOptions_1_MinDensity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Points converging to attractors with density below this threshold
+are considered noise and not assigned to any cluster.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/DenclueOptions.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

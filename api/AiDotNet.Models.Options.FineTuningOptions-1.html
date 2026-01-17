@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FineTuningOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FineTuningOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for fine-tuning methods.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_FineTuningOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.FineTuningOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.FineTuningOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_FineTuningOptions_1" data-uid="AiDotNet.Models.Options.FineTuningOptions`1" class="text-break">
+Class FineTuningOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for fine-tuning methods.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FineTuningOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FineTuningOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_FineTuningOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides a comprehensive set of options that cover all fine-tuning method categories.
+Each method type uses the relevant subset of options.
+</p>
+<p><b>For Beginners:</b> These settings control how the fine-tuning process works.
+Most settings have sensible defaults based on research papers, so you can start with
+the defaults and adjust as needed.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_BatchSize_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_BatchSize" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_Beta_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Beta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_Beta" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Beta">
+  Beta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the beta parameter for DPO-family methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_Beta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls the strength of the KL penalty from the reference model.
+Higher beta = stay closer to reference model.
+</p>
+<p>Default: 0.1 (DPO paper recommendation)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_CheckpointSteps_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CheckpointSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_CheckpointSteps" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CheckpointSteps">
+  CheckpointSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the checkpoint frequency in steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_CompileModel_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CompileModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_CompileModel" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CompileModel">
+  CompileModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to compile the model for faster training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CompileModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_ConstitutionalPrinciples_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ConstitutionalPrinciples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_ConstitutionalPrinciples" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ConstitutionalPrinciples">
+  ConstitutionalPrinciples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the constitutional principles for CAI methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] ConstitutionalPrinciples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_ConstitutionalPrinciples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These principles guide the model's self-critique and revision process.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_CritiqueIterations_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CritiqueIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_CritiqueIterations" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.CritiqueIterations">
+  CritiqueIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of critique-revision iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CritiqueIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationAlpha_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.DistillationAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationAlpha" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.DistillationAlpha">
+  DistillationAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the alpha weight between hard and soft labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DistillationAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Alpha = 1.0 uses only soft labels, Alpha = 0.0 uses only hard labels.
+</p>
+<p>Default: 0.5 (balanced)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationTemperature_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.DistillationTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationTemperature" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.DistillationTemperature">
+  DistillationTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distillation temperature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DistillationTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_DistillationTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Higher temperature produces softer probability distributions.
+</p>
+<p>Default: 2.0</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_EntropyCoefficient_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.EntropyCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_EntropyCoefficient" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.EntropyCoefficient">
+  EntropyCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the entropy coefficient for exploration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EntropyCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_Epochs_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Epochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_Epochs" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Epochs">
+  Epochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of training epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Epochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_GAELambda_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GAELambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_GAELambda" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GAELambda">
+  GAELambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GAE lambda for advantage estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GAELambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_GAELambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.95 (standard for PPO)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_GRPOGroupSize_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GRPOGroupSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_GRPOGroupSize" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GRPOGroupSize">
+  GRPOGroupSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L204"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the group size for GRPO sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GRPOGroupSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_GRPOGroupSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Number of responses to generate per prompt for group comparison.
+</p>
+<p>Default: 8 (DeepSeek recommendation)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_GRPOTemperature_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GRPOTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_GRPOTemperature" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GRPOTemperature">
+  GRPOTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GRPO temperature for sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GRPOTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_Gamma_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Gamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_Gamma" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.Gamma">
+  Gamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the discount factor for rewards.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Gamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_GradientAccumulationSteps_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GradientAccumulationSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_GradientAccumulationSteps" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.GradientAccumulationSteps">
+  GradientAccumulationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gradient accumulation steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GradientAccumulationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_GradientAccumulationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Allows effective batch sizes larger than memory permits.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_KLCoefficient_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KLCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_KLCoefficient" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KLCoefficient">
+  KLCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the KL coefficient for RL-based methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double KLCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_KLCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls the KL penalty to prevent the model from diverging too far from the reference.
+</p>
+<p>Default: 0.02</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_KTODesirableWeight_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KTODesirableWeight*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_KTODesirableWeight" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KTODesirableWeight">
+  KTODesirableWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the desirable weight for KTO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double KTODesirableWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_KTODesirableWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+KTO uses prospect theory with separate weights for desirable/undesirable.
+</p>
+<p>Default: 1.0</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_KTOUndesirableWeight_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KTOUndesirableWeight*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_KTOUndesirableWeight" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.KTOUndesirableWeight">
+  KTOUndesirableWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the undesirable weight for KTO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double KTOUndesirableWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_KTOUndesirableWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically higher to emphasize avoiding bad outputs (loss aversion).
+</p>
+<p>Default: 1.0</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_LabelSmoothing_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LabelSmoothing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_LabelSmoothing" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LabelSmoothing">
+  LabelSmoothing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the label smoothing factor for preference learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LabelSmoothing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_LabelSmoothing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.0 (no smoothing). Values like 0.1 can help with noisy preferences.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for fine-tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 1e-5 (suitable for most preference methods)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_LoRAConfig_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LoRAConfig*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_LoRAConfig" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LoRAConfig">
+  LoRAConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the LoRA configuration when UseLoRA is true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LoRAConfiguration? LoRAConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.LoRAConfiguration.html">LoRAConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_LoggingSteps_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LoggingSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_LoggingSteps" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.LoggingSteps">
+  LoggingSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the logging frequency in steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LoggingSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_MaxCheckpoints_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxCheckpoints*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_MaxCheckpoints" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxCheckpoints">
+  MaxCheckpoints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of checkpoints to keep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxCheckpoints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_MaxGradientNorm_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxGradientNorm*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_MaxGradientNorm" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxGradientNorm">
+  MaxGradientNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradientNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_MaxSequenceLength_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxSequenceLength*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_MaxSequenceLength" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MaxSequenceLength">
+  MaxSequenceLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L317"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum sequence length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxSequenceLength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_MethodType_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MethodType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_MethodType" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.MethodType">
+  MethodType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fine-tuning method type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningMethodType MethodType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.FineTuningMethodType.html">FineTuningMethodType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_ORPOLambda_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ORPOLambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_ORPOLambda" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ORPOLambda">
+  ORPOLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lambda parameter for ORPO odds ratio loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ORPOLambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_ORPOLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls the weight of the odds ratio loss relative to the SFT loss.
+</p>
+<p>Default: 0.1 (ORPO paper recommendation)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_PPOClipRange_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.PPOClipRange*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_PPOClipRange" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.PPOClipRange">
+  PPOClipRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the PPO clip range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PPOClipRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_PPOClipRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Standard PPO clipping parameter for policy updates.
+</p>
+<p>Default: 0.2</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_PPOEpochsPerBatch_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.PPOEpochsPerBatch*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_PPOEpochsPerBatch" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.PPOEpochsPerBatch">
+  PPOEpochsPerBatch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of PPO epochs per batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PPOEpochsPerBatch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_RandomSeed_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_RandomSeed" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_RankingMargin_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RankingMargin*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_RankingMargin" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RankingMargin">
+  RankingMargin
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the margin for ranking loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RankingMargin { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_RankingTemperature_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RankingTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_RankingTemperature" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.RankingTemperature">
+  RankingTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature for ranking softmax.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RankingTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_SPINIterations_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.SPINIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_SPINIterations" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.SPINIterations">
+  SPINIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of self-play iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SPINIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_SimPOGamma_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.SimPOGamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_SimPOGamma" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.SimPOGamma">
+  SimPOGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gamma parameter for SimPO length normalization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SimPOGamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FineTuningOptions_1_SimPOGamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+SimPO uses average log probability instead of sum, and gamma controls
+the target reward margin.
+</p>
+<p>Default: 0.5 (SimPO paper recommendation)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_UseLoRA_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.UseLoRA*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_UseLoRA" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.UseLoRA">
+  UseLoRA
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use LoRA for parameter-efficient fine-tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLoRA { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_UseMixedPrecision_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.UseMixedPrecision*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_UseMixedPrecision" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.UseMixedPrecision">
+  UseMixedPrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use mixed precision training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseMixedPrecision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_ValueCoefficient_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ValueCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_ValueCoefficient" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.ValueCoefficient">
+  ValueCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the value function coefficient for PPO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ValueCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_WarmupRatio_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.WarmupRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_WarmupRatio" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.WarmupRatio">
+  WarmupRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the warmup ratio for learning rate scheduling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double WarmupRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_FineTuningOptions_1_WeightDecay_" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.WeightDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FineTuningOptions_1_WeightDecay" data-uid="AiDotNet.Models.Options.FineTuningOptions`1.WeightDecay">
+  WeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight decay for regularization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double WeightDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FineTuningOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

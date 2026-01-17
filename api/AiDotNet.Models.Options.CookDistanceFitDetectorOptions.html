@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CookDistanceFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CookDistanceFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Cook&#39;s Distance fit detector, which helps identify influential data points and detect potential overfitting or underfitting in regression models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_CookDistanceFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.CookDistanceFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions" class="text-break">
+Class CookDistanceFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CookDistanceFitDetectorOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Cook's Distance fit detector, which helps identify influential data points
+and detect potential overfitting or underfitting in regression models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CookDistanceFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CookDistanceFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Cook's Distance is a statistical measure that identifies how much influence each data point has on a regression model.
+Points with high Cook's Distance values have a disproportionate effect on the model's predictions and parameters.
+This detector analyzes the distribution of Cook's Distance values across your dataset to identify potential
+fitting problems.
+</p>
+<p><b>For Beginners:</b> Imagine you're trying to draw a straight line through a set of points. Some points
+might have a big effect on where you place that line - if you removed them, the line would move significantly.
+These are called "influential points." Cook's Distance measures how influential each point is. This detector
+looks at all your data points and checks if too many (or too few) are highly influential, which could indicate
+problems with how well your model fits the data. If many points are influential, your model might be too simple
+(underfitting). If very few points are influential, your model might be too complex (overfitting).</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_InfluentialThreshold_" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.InfluentialThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_InfluentialThreshold" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.InfluentialThreshold">
+  InfluentialThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CookDistanceFitDetectorOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for determining when a data point is considered influential.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InfluentialThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The influential threshold, defaulting to 0.04 (4/100).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_InfluentialThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Cook's Distance values above this threshold indicate that a data point has significant influence on the model.
+The traditional rule of thumb is to use 4/n, where n is the sample size. The default value of 0.04 is
+appropriate for datasets with around 100 observations.
+</p>
+<p><b>For Beginners:</b> This setting determines when a data point is considered "influential" enough
+to potentially affect your model's accuracy. The default value (0.04) works well for most datasets with
+around 100 data points. For larger datasets, you might want to use a smaller value (like 0.01 for 400 data points),
+and for smaller datasets, a larger value (like 0.1 for 40 data points). The general formula is 4 divided by
+the number of data points you have. Points with influence above this threshold might be outliers or important
+edge cases in your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_OverfitThreshold_" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.OverfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_OverfitThreshold" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.OverfitThreshold">
+  OverfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CookDistanceFitDetectorOptions.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for the proportion of influential points that suggests overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OverfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The overfit threshold as a proportion, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_OverfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+If the proportion of data points with Cook's Distance values above the InfluentialThreshold exceeds this value,
+the model may be overfitting the data. Overfitting occurs when a model learns the training data too well,
+including its noise and outliers, resulting in poor generalization to new data.
+</p>
+<p><b>For Beginners:</b> This setting helps detect if your model is "overfitting" - meaning it's too
+complex and is essentially memorizing your training data rather than learning general patterns. The default
+value (0.1 or 10%) means that if more than 10% of your data points are highly influential, your model might
+be overfitting. This could happen if you're using too many features or a model that's too complex for your
+data. Overfitting models perform well on training data but poorly on new data they haven't seen before.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_UnderfitThreshold_" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.UnderfitThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_UnderfitThreshold" data-uid="AiDotNet.Models.Options.CookDistanceFitDetectorOptions.UnderfitThreshold">
+  UnderfitThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CookDistanceFitDetectorOptions.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for the proportion of influential points that suggests underfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UnderfitThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The underfit threshold as a proportion, defaulting to 0.01 (1%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_CookDistanceFitDetectorOptions_UnderfitThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+If the proportion of data points with Cook's Distance values above the InfluentialThreshold is below this value,
+the model may be underfitting the data. Underfitting occurs when a model is too simple to capture the underlying
+patterns in the data, resulting in poor performance on both training and new data.
+</p>
+<p><b>For Beginners:</b> This setting helps detect if your model is "underfitting" - meaning it's too
+simple and isn't capturing important patterns in your data. The default value (0.01 or 1%) means that if
+fewer than 1% of your data points are highly influential, your model might be underfitting. This could happen
+if you're using too few features or a model that's too simple. Underfitting models perform poorly on both
+training data and new data because they haven't learned the important relationships in the data.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/CookDistanceFitDetectorOptions.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

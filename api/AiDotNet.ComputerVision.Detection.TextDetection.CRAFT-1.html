@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CRAFT&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CRAFT&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="CRAFT (Character Region Awareness for Text) detector.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.TextDetection.CRAFT%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1" class="text-break">
+Class CRAFT&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.html">TextDetection</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>CRAFT (Character Region Awareness for Text) detector.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CRAFT&lt;T&gt; : TextDetectorBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html">TextDetectorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">CRAFT&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_NumOps">TextDetectorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_Options">TextDetectorBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_Backbone">TextDetectorBase&lt;T&gt;.Backbone</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">TextDetectorBase&lt;T&gt;.Preprocess(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_GetParameterCount">TextDetectorBase&lt;T&gt;.GetParameterCount()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_FitMinAreaRect_System_Collections_Generic_List_System_ValueTuple_System_Double_System_Double___">TextDetectorBase&lt;T&gt;.FitMinAreaRect(List&lt;(double X, double Y)&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase-1.html#AiDotNet_ComputerVision_Detection_TextDetection_TextDetectorBase_1_SimplifyPolygon_System_Collections_Generic_List_System_ValueTuple_System_Double_System_Double___System_Double_">TextDetectorBase&lt;T&gt;.SimplifyPolygon(List&lt;(double X, double Y)&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> CRAFT detects text by identifying individual characters
+and the connections (affinity) between them. This approach works well for scene text
+with arbitrary orientations and curved text.</p>
+<p>Key features:
+- Character region score map
+- Affinity score map (character connections)
+- Works with arbitrary shaped text
+- Good for scene text detection
+</p>
+<p>Reference: Baek et al., "Character Region Awareness for Text Detection", CVPR 2019</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1__ctor_AiDotNet_ComputerVision_Detection_TextDetection_TextDetectionOptions__0__" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.#ctor(AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions{`0})">
+  CRAFT(TextDetectionOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new CRAFT text detector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CRAFT(TextDetectionOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions-1.html">TextDetectionOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Name_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Name" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this text detector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Detect_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Detect*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Detect(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects text regions in an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TextDetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionResult-1.html">TextDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Text detection result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Detect_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Detect*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  Detect(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects text regions with custom threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TextDetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; image, double confidenceThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionResult-1.html">TextDetectionResult</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Forward_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Forward*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Forward pass through the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;Tensor&lt;T&gt;&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_GetHeadParameterCount_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.GetHeadParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_GetHeadParameterCount" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.GetHeadParameterCount">
+  GetHeadParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameter count of the detection head.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override long GetHeadParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_LoadWeightsAsync_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.LoadWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_LoadWeightsAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.LoadWeightsAsync(System.String,System.Threading.CancellationToken)">
+  LoadWeightsAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads pretrained weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pathOrUrl</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_PostProcess_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.PostProcess*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_PostProcess_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.PostProcess(System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32,System.Int32,System.Double)">
+  PostProcess(List&lt;Tensor&lt;T&gt;&gt;, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Post-processes network outputs to get text regions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;TextRegion&lt;T&gt;&gt; PostProcess(List&lt;Tensor&lt;T&gt;&gt; outputs, int imageWidth, int imageHeight, double confidenceThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.TextDetection.TextRegion-1.html">TextRegion</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_SaveWeights_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.SaveWeights*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_TextDetection_CRAFT_1_SaveWeights_System_String_" data-uid="AiDotNet.ComputerVision.Detection.TextDetection.CRAFT`1.SaveWeights(System.String)">
+  SaveWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L289"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves model weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SaveWeights(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/TextDetection/CRAFT.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

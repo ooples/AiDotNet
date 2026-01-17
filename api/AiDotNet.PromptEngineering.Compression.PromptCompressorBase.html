@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PromptCompressorBase | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PromptCompressorBase | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base implementation for prompt compressors with common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Compression_PromptCompressorBase.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Compression.PromptCompressorBase%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase" class="text-break">
+Class PromptCompressorBase  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Compression.html">Compression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base implementation for prompt compressors with common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class PromptCompressorBase : IPromptCompressor</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PromptCompressorBase</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptCompressor.html">IPromptCompressor</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.CachingCompressor.html">CachingCompressor</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.CompositeCompressor.html">CompositeCompressor</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.LLMSummarizationCompressor.html">LLMSummarizationCompressor</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.RedundancyRemovalCompressor.html">RedundancyRemovalCompressor</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.SentenceCompressor.html">SentenceCompressor</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.html">StopWordRemovalCompressor</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class implements the IPromptCompressor interface and provides common functionality
+for prompt compression strategies. It handles token counting, validation, and delegates to
+derived classes for the core compression logic.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all prompt compressors build upon.
+<p>Think of it like a template for making prompts shorter:</p>
+<ul>
+<li>It handles common tasks (counting tokens, checking inputs)</li>
+<li>Specific compression methods fill in how they compress</li>
+<li>This ensures all compressors work consistently</li>
+</ul>
+<p>Derived classes just need to implement CompressCore to define their compression logic.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase__ctor_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase__ctor_System_String_System_Func_System_String_System_Int32__" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.#ctor(System.String,System.Func{System.String,System.Int32})">
+  PromptCompressorBase(string, Func&lt;string, int&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the PromptCompressorBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected PromptCompressorBase(string name, Func&lt;string, int&gt;? tokenCounter = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of this compressor.</p>
+</dd>
+    <dt><code>tokenCounter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Optional custom token counter function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Name_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.Name*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Name" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this compressor implementation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Compress_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.Compress*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Compress_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.Compress(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  Compress(string, CompressionOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt to reduce its token count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Compress(string prompt, CompressionOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The compressed prompt string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressAsync_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressAsync_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_System_Threading_CancellationToken_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressAsync(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions,System.Threading.CancellationToken)">
+  CompressAsync(string, CompressionOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;string&gt; CompressAsync(string prompt, CompressionOptions? options = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that resolves to the compressed prompt string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressCore_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressCore_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressCore(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  CompressCore(string, CompressionOptions)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core compression logic to be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract string CompressCore(string prompt, CompressionOptions options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated prompt to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>The compression options.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The compressed prompt.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressCore_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> This is where you implement your specific compression algorithm.
+<p>You don't need to:</p>
+<ul>
+<li>Validate the prompt (already done)</li>
+<li>Count tokens (use CountTokens helper if needed)</li>
+<li>Handle null inputs (already validated)</li>
+</ul>
+<p>Just focus on: Making the prompt shorter while preserving meaning.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressWithMetrics_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressWithMetrics*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressWithMetrics_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CompressWithMetrics(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  CompressWithMetrics(string, CompressionOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt and returns detailed metrics about the compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompressionResult CompressWithMetrics(string prompt, CompressionOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionResult.html">CompressionResult</a></dt>
+    <dd><p>A CompressionResult containing the compressed prompt and metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CountTokens_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CountTokens*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CountTokens_System_String_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.CountTokens(System.String)">
+  CountTokens(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Counts tokens in the given text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int CountTokens(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to count tokens in.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The estimated token count.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CountTokens_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses custom token counter if provided, otherwise uses a simple word-based approximation
+(1 token ≈ 0.75 words for English).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractCodeBlocks_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ExtractCodeBlocks*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractCodeBlocks_System_String_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ExtractCodeBlocks(System.String)">
+  ExtractCodeBlocks(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts and preserves code blocks from a prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;string, string&gt; ExtractCodeBlocks(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt to extract code blocks from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A dictionary mapping placeholder tokens to original code blocks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractVariables_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ExtractVariables*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractVariables_System_String_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ExtractVariables(System.String)">
+  ExtractVariables(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts and preserves variables from a prompt (like {variable_name}).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;string, string&gt; ExtractVariables(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt to extract variables from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A dictionary mapping placeholder tokens to original variables.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceCodeBlocksWithPlaceholders_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ReplaceCodeBlocksWithPlaceholders*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceCodeBlocksWithPlaceholders_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ReplaceCodeBlocksWithPlaceholders(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  ReplaceCodeBlocksWithPlaceholders(string, Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Replaces code blocks with placeholders to protect them during compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string ReplaceCodeBlocksWithPlaceholders(string prompt, Dictionary&lt;string, string&gt; codeBlocks)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>codeBlocks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceVariablesWithPlaceholders_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ReplaceVariablesWithPlaceholders*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceVariablesWithPlaceholders_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ReplaceVariablesWithPlaceholders(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  ReplaceVariablesWithPlaceholders(string, Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Replaces variables with placeholders to protect them during compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string ReplaceVariablesWithPlaceholders(string prompt, Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt to process.</p>
+</dd>
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The variable mappings.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt with variables replaced by placeholders.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreCodeBlocks_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.RestoreCodeBlocks*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreCodeBlocks_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.RestoreCodeBlocks(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  RestoreCodeBlocks(string, Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restores code blocks from placeholders after compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string RestoreCodeBlocks(string prompt, Dictionary&lt;string, string&gt; codeBlocks)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>codeBlocks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreVariables_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.RestoreVariables*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreVariables_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.RestoreVariables(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  RestoreVariables(string, Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restores variables from placeholders after compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected string RestoreVariables(string prompt, Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The compressed prompt with placeholders.</p>
+</dd>
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The variable mappings.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt with variables restored.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ValidatePrompt_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ValidatePrompt*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ValidatePrompt_System_String_" data-uid="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.ValidatePrompt(System.String)">
+  ValidatePrompt(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the prompt input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidatePrompt(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/PromptCompressorBase.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

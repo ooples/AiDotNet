@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SchurDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SchurDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Performs Schur decomposition on a matrix, factoring it into the product of a unitary matrix and an upper triangular matrix.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1" class="text-break">
+Class SchurDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Performs Schur decomposition on a matrix, factoring it into the product of a unitary matrix and an upper triangular matrix.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SchurDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;T&gt;, IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the matrix.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SchurDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;T&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;T&gt;.ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;T&gt;.FrobeniusNorm(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;T&gt;.ApproximatelyEqual(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Schur decomposition factors a matrix A into the product A = USU*, where U is a unitary matrix
+and S is an upper triangular matrix. This decomposition is particularly useful for computing
+eigenvalues and for analyzing the properties of linear transformations.
+</p>
+<p>
+<b>For Beginners:</b> Schur decomposition breaks down a complex matrix into simpler parts that are easier to work with.
+It's like factoring a number (e.g., 12 = 3 * 4), but for matrices. The decomposition produces two matrices:
+a unitary matrix (which preserves lengths and angles) and an upper triangular matrix (which has zeros below the diagonal).
+This makes many calculations much simpler.
+</p>
+<p>
+Real-world applications:
+- Computing eigenvalues and eigenvectors efficiently
+- Solving differential equations in engineering
+- Control theory and system stability analysis
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_SchurAlgorithmType_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Enums.AlgorithmTypes.SchurAlgorithmType)">
+  SchurDecomposition(Matrix&lt;T&gt;, SchurAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SchurDecomposition class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SchurDecomposition(Matrix&lt;T&gt; matrix, SchurAlgorithmType algorithm = SchurAlgorithmType.Francis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose.</p>
+</dd>
+    <dt><code>algorithm</code> <a class="xref" href="AiDotNet.Enums.AlgorithmTypes.SchurAlgorithmType.html">SchurAlgorithmType</a></dt>
+    <dd><p>The algorithm to use for the decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_SchurMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.SchurMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_SchurMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.SchurMatrix">
+  SchurMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the upper triangular Schur matrix (S) from the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; SchurMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_SchurMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the triangular matrix that has all its non-zero elements on or above the diagonal.
+It's easier to work with than the original matrix for many calculations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_UnitaryMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.UnitaryMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_UnitaryMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.UnitaryMatrix">
+  UnitaryMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unitary matrix (U) from the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; UnitaryMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_UnitaryMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A unitary matrix preserves the length of vectors and the angles between them.
+When you multiply a vector by a unitary matrix, the result has the same length as the original vector.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the Schur decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L390"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the inverse of the original matrix using the Schur decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse of the original matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number. Just as 1/x is the reciprocal of x,
+the inverse of a matrix A (written as A⁻¹) is a matrix that, when multiplied by A, gives the identity matrix.
+</p>
+<p>
+This method uses the Schur decomposition to find the inverse more efficiently than direct methods.
+It first inverts the simpler components (the unitary and upper triangular matrices) and then
+combines them to get the inverse of the original matrix.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.SchurDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a system of linear equations Ax = b using the Schur decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_SchurDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method finds the solution to a system of equations represented by Ax = b,
+where A is the original matrix, x is the unknown vector we're solving for, and b is a known vector.
+It uses the Schur decomposition A = Q*T*Q^H to break this problem into simpler steps.
+</p>
+<p>
+The method works by:
+1. Transforming b to Schur coordinates: b' = Q^H * b
+2. Solving the system T*y = b' using LU decomposition (robust for general Schur forms)
+3. Transforming back to original coordinates: x = Q * y
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/SchurDecomposition.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

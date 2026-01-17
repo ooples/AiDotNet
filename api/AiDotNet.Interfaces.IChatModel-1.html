@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IChatModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IChatModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for chat-based language models that can generate responses to prompts. This interface abstracts the underlying implementation, allowing agents to work with different LLM providers. Extends ILanguageModel to provide unified language model capabilities across the AiDotNet ecosystem.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IChatModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IChatModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IChatModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IChatModel_1" data-uid="AiDotNet.Interfaces.IChatModel`1" class="text-break">
+Interface IChatModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChatModel.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for chat-based language models that can generate responses to prompts.
+This interface abstracts the underlying implementation, allowing agents to work with different LLM providers.
+Extends ILanguageModel to provide unified language model capabilities across the AiDotNet ecosystem.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IChatModel&lt;T&gt; : ILanguageModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html#AiDotNet_Interfaces_ILanguageModel_1_ModelName">ILanguageModel&lt;T&gt;.ModelName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html#AiDotNet_Interfaces_ILanguageModel_1_MaxContextTokens">ILanguageModel&lt;T&gt;.MaxContextTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html#AiDotNet_Interfaces_ILanguageModel_1_MaxGenerationTokens">ILanguageModel&lt;T&gt;.MaxGenerationTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html#AiDotNet_Interfaces_ILanguageModel_1_GenerateAsync_System_String_System_Threading_CancellationToken_">ILanguageModel&lt;T&gt;.GenerateAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html#AiDotNet_Interfaces_ILanguageModel_1_Generate_System_String_">ILanguageModel&lt;T&gt;.Generate(string)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IChatModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+A chat model is like having a conversation partner that can understand and respond to text.
+Think of it as the &quot;brain&quot; of an AI agent - it reads prompts (questions or instructions) and
+generates intelligent responses.</p>
+<p>This interface allows the AiDotNet library to work with different language model providers
+(like OpenAI's GPT, Anthropic's Claude, or local models) without changing the agent code.
+The generic type parameter T allows the model to work with different numeric precision levels.</p>
+<p>This interface extends ILanguageModel, which means it inherits:</p>
+<ul>
+<li>GenerateAsync() - Primary async method for text generation</li>
+<li>Generate() - Sync version for simple scripts</li>
+<li>ModelName - Model identifier</li>
+<li>MaxContextTokens - Context window size</li>
+<li>MaxGenerationTokens - Maximum response length</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">IChatModel&lt;double&gt; model = new OpenAIChatModel&lt;double&gt;(apiKey);
+
+// Using the base ILanguageModel method
+string response1 = await model.GenerateAsync("What is 2 + 2?");
+
+// Using the IChatModel alias method (same as GenerateAsync)
+string response2 = await model.GenerateResponseAsync("What is 2 + 2?");
+
+// Both produce: "2 + 2 equals 4."</code></pre>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IChatModel_1_GenerateResponseAsync_" data-uid="AiDotNet.Interfaces.IChatModel`1.GenerateResponseAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IChatModel_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IChatModel`1.GenerateResponseAsync(System.String,System.Threading.CancellationToken)">
+  GenerateResponseAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChatModel.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt asynchronously.
+This is an alias for GenerateAsync() provided for backward compatibility and clarity in chat contexts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;string&gt; GenerateResponseAsync(string prompt, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.
+This can be a question, instruction, or any text that requires a response.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Optional cancellation token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IChatModel_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method is the core of how we communicate with a language model. You give it a prompt
+(what you want to ask or tell the model), and it generates a response.</p>
+<p>This method is identical to GenerateAsync() from ILanguageModel - it's provided as an
+alias because &quot;GenerateResponseAsync&quot; is clearer in chat/agent contexts.</p>
+<p>The method is asynchronous (uses async/await) because communicating with language models
+can take time, especially when calling external APIs. This prevents your application from
+freezing while waiting for a response.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">string prompt = "Explain what a neural network is in simple terms.";
+string response = await chatModel.GenerateResponseAsync(prompt);
+Console.WriteLine(response);</code></pre>
+<p>Implementation notes for developers:</p>
+<ul>
+<li>Most implementations just call GenerateAsync() internally</li>
+<li>Handle API errors gracefully and return meaningful error messages</li>
+<li>Consider implementing retry logic for transient failures</li>
+<li>Respect rate limits and timeouts</li>
+<li>Sanitize sensitive information from logs</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChatModel.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

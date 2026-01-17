@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClipTokenizerFactory | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClipTokenizerFactory | AiDotNet Documentation ">
+      
+      <meta name="description" content="Factory for creating CLIP-compatible tokenizers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tokenization_ClipTokenizerFactory.md&amp;value=---%0Auid%3A%20AiDotNet.Tokenization.ClipTokenizerFactory%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tokenization.ClipTokenizerFactory">
+
+
+
+  <h1 id="AiDotNet_Tokenization_ClipTokenizerFactory" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory" class="text-break">
+Class ClipTokenizerFactory  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tokenization.html">Tokenization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Factory for creating CLIP-compatible tokenizers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class ClipTokenizerFactory</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ClipTokenizerFactory</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tokenization_ClipTokenizerFactory_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CLIP uses a BPE tokenizer with a vocabulary of 49408 tokens. This factory
+provides methods to create tokenizers from pretrained vocabulary files
+or to use a default configuration for testing.
+</p>
+<p><b>For Beginners:</b> CLIP needs a special tokenizer to break text into pieces.
+<p>A tokenizer factory is like a tool shop that builds tokenizers:</p>
+<ol>
+<li>You can load a pretrained tokenizer (recommended for production)</li>
+<li>You can create a simple tokenizer for testing</li>
+<li>The factory handles all the configuration details</li>
+</ol>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">// Load from pretrained files (recommended)
+var tokenizer = ClipTokenizerFactory.FromPretrained(
+    "path/to/vocab.json",
+    "path/to/merges.txt"
+);
+
+// Or create a simple one for testing
+var tokenizer = ClipTokenizerFactory.CreateSimple();</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_ClipPattern" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.ClipPattern">
+  ClipPattern
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The CLIP-specific pre-tokenization pattern.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const string ClipPattern = &quot;&lt;\\|startoftext\\|&gt;|&lt;\\|endoftext\\|&gt;|&#39;s|&#39;t|&#39;re|&#39;ve|&#39;m|&#39;ll|&#39;d|[\\p{L}]+|[\\p{N}]|[^\\s\\p{L}\\p{N}]+&quot;</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tokenization_ClipTokenizerFactory_ClipPattern_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This pattern is similar to GPT-2 but handles lowercase conversion and
+special handling of punctuation that CLIP expects.
+</p>
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_DefaultMaxLength" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.DefaultMaxLength">
+  DefaultMaxLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The default maximum sequence length for CLIP text encoder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int DefaultMaxLength = 77</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_DefaultVocabSize" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.DefaultVocabSize">
+  DefaultVocabSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The default vocabulary size for CLIP models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int DefaultVocabSize = 49408</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tokenization_ClipTokenizerFactory_CreateSimple_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple*"></a>
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_CreateSimple_System_Collections_Generic_IEnumerable_System_String__System_Int32_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.CreateSimple(System.Collections.Generic.IEnumerable{System.String},System.Int32)">
+  CreateSimple(IEnumerable&lt;string&gt;?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a simple CLIP tokenizer for testing without pretrained files.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static BpeTokenizer CreateSimple(IEnumerable&lt;string&gt;? corpus = null, int vocabSize = 1000)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>corpus</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional corpus to train on. If null, uses a minimal configuration.</p>
+</dd>
+    <dt><code>vocabSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The vocabulary size to train. Default is 1000 for quick testing.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Algorithms.BpeTokenizer.html">BpeTokenizer</a></dt>
+    <dd><p>A CLIP-style BPE tokenizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tokenization_ClipTokenizerFactory_CreateSimple_System_Collections_Generic_IEnumerable_System_String__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This creates a minimal tokenizer suitable for testing and development.
+For production use, always use <a class="xref" href="AiDotNet.Tokenization.ClipTokenizerFactory.html#AiDotNet_Tokenization_ClipTokenizerFactory_FromPretrained_System_String_System_String_">FromPretrained(string, string)</a> with the
+actual CLIP vocabulary files.
+</p>
+<p><b>For Beginners:</b> Use this for quick testing only!
+<p>This tokenizer won't produce the same results as the real CLIP tokenizer.
+It's only meant for:</p>
+<ul>
+<li>Unit testing</li>
+<li>Development and debugging</li>
+<li>Understanding how the tokenizer works</li>
+</ul>
+<p>For real applications, always use the pretrained vocabulary files.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tokenization_ClipTokenizerFactory_FromPretrained_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.FromPretrained*"></a>
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_FromPretrained_System_String_System_String_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.FromPretrained(System.String,System.String)">
+  FromPretrained(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a CLIP tokenizer from pretrained vocabulary and merge files.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static BpeTokenizer FromPretrained(string vocabPath, string mergesPath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vocabPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the vocabulary JSON file (vocab.json).</p>
+</dd>
+    <dt><code>mergesPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the merges text file (merges.txt).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Algorithms.BpeTokenizer.html">BpeTokenizer</a></dt>
+    <dd><p>A CLIP-compatible BPE tokenizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tokenization_ClipTokenizerFactory_FromPretrained_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The vocabulary file should be a JSON dictionary mapping tokens to IDs.
+The merges file should contain BPE merge rules, one per line.
+</p>
+<p><b>For Beginners:</b> To use CLIP's pretrained tokenizer:
+<ol>
+<li><p>Download the vocabulary files from HuggingFace:</p>
+<ul>
+<li>openai/clip-vit-base-patch32</li>
+<li>Files: vocab.json, merges.txt</li>
+</ul>
+</li>
+<li><p>Load them using this method:</p>
+<pre><code class="lang-csharp">var tokenizer = ClipTokenizerFactory.FromPretrained(
+    "vocab.json",
+    "merges.txt"
+);</code></pre>
+</li>
+<li><p>Use the tokenizer:</p>
+<pre><code class="lang-csharp">var result = tokenizer.Encode("a photo of a cat");
+// result.TokenIds: [49406, 320, 1125, 539, 320, 2368, 49407, ...]</code></pre>
+</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tokenization_ClipTokenizerFactory_GetDefaultEncodingOptions_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.GetDefaultEncodingOptions*"></a>
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_GetDefaultEncodingOptions_System_Int32_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.GetDefaultEncodingOptions(System.Int32)">
+  GetDefaultEncodingOptions(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default encoding options for CLIP text encoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static EncodingOptions GetDefaultEncodingOptions(int maxLength = 77)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum sequence length. Default is 77.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tokenization.Models.EncodingOptions.html">EncodingOptions</a></dt>
+    <dd><p>Encoding options configured for CLIP.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tokenization_ClipTokenizerFactory_GetDefaultEncodingOptions_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+CLIP expects text to be:
+- Padded to exactly 77 tokens (or truncated if longer)
+- Starting with the BOS token
+- Ending with the EOS token
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tokenization_ClipTokenizerFactory_IsClipCompatible_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.IsClipCompatible*"></a>
+
+  <h3 id="AiDotNet_Tokenization_ClipTokenizerFactory_IsClipCompatible_AiDotNet_Tokenization_Interfaces_ITokenizer_" data-uid="AiDotNet.Tokenization.ClipTokenizerFactory.IsClipCompatible(AiDotNet.Tokenization.Interfaces.ITokenizer)">
+  IsClipCompatible(ITokenizer)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a tokenizer is compatible with CLIP.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsClipCompatible(ITokenizer tokenizer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tokenizer</code> <a class="xref" href="AiDotNet.Tokenization.Interfaces.ITokenizer.html">ITokenizer</a></dt>
+    <dd><p>The tokenizer to validate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the tokenizer is compatible, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tokenization_ClipTokenizerFactory_IsClipCompatible_AiDotNet_Tokenization_Interfaces_ITokenizer__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A CLIP-compatible tokenizer must:
+- Have the correct special tokens
+- Support the expected vocabulary size (close to 49408)
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Tokenization/ClipTokenizerFactory.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

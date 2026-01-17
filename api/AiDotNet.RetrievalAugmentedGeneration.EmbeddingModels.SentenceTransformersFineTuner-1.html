@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SentenceTransformersFineTuner&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SentenceTransformersFineTuner&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Fine-tuner for sentence transformer embedding models on domain-specific training data using triplet loss.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1" class="text-break">
+Class SentenceTransformersFineTuner&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.html">EmbeddingModels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Fine-tuner for sentence transformer embedding models on domain-specific training data using triplet loss.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SentenceTransformersFineTuner&lt;T&gt; : EmbeddingModelBase&lt;T&gt;, IEmbeddingModel&lt;T&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for vector operations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html">EmbeddingModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SentenceTransformersFineTuner&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IEmbeddingModel-1.html">IEmbeddingModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_NumOps">EmbeddingModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_Embed_System_String_">EmbeddingModelBase&lt;T&gt;.Embed(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_EmbedAsync_System_String_">EmbeddingModelBase&lt;T&gt;.EmbedAsync(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_EmbedBatch_System_Collections_Generic_IEnumerable_System_String__">EmbeddingModelBase&lt;T&gt;.EmbedBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_EmbedBatchAsync_System_Collections_Generic_IEnumerable_System_String__">EmbeddingModelBase&lt;T&gt;.EmbedBatchAsync(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_EmbedBatchCore_System_Collections_Generic_IList_System_String__">EmbeddingModelBase&lt;T&gt;.EmbedBatchCore(IList&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_EmbedBatchCoreAsync_System_Collections_Generic_IList_System_String__">EmbeddingModelBase&lt;T&gt;.EmbedBatchCoreAsync(IList&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_ValidateText_System_String_">EmbeddingModelBase&lt;T&gt;.ValidateText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_CreateMatrixFromVectors_System_Collections_Generic_IList_AiDotNet_Tensors_LinearAlgebra_Vector__0___">EmbeddingModelBase&lt;T&gt;.CreateMatrixFromVectors(IList&lt;Vector&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Embeddings.EmbeddingModelBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Embeddings_EmbeddingModelBase_1_Dispose">EmbeddingModelBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Fine-tuning adapts pre-trained embedding models to perform better on specific domains or tasks by
+training on custom (anchor, positive, negative) triplets. This improves embedding quality for
+specialized use cases like legal documents, medical terminology, or company-specific content.
+</p>
+<p><b>For Beginners:</b> Think of fine-tuning like teaching a translator specialized vocabulary.
+<p>Pre-trained model (general knowledge):</p>
+<ul>
+<li>&quot;bank&quot; → embedding that works for both &quot;river bank&quot; and &quot;financial bank&quot;</li>
+<li>Problem: Not precise for your specific domain!</li>
+</ul>
+<p>Fine-tuned model (specialized):</p>
+<ul>
+<li>If you're building a financial app, train it with examples:
+<ul>
+<li>Anchor: &quot;bank account&quot;</li>
+<li>Positive: &quot;savings account&quot; (similar in YOUR domain)</li>
+<li>Negative: &quot;river bank&quot; (different in YOUR domain)</li>
+</ul>
+</li>
+<li>Result: Model learns &quot;bank&quot; means &quot;financial institution&quot; in your context</li>
+</ul>
+<p>Real-world example:
+Medical domain:</p>
+<ul>
+<li>General model: &quot;cold&quot; could mean temperature or illness</li>
+<li>After fine-tuning with medical data:
+<ul>
+<li>Anchor: &quot;patient has cold&quot;</li>
+<li>Positive: &quot;patient has flu&quot; (similar symptoms)</li>
+<li>Negative: &quot;cold weather&quot; (unrelated)</li>
+</ul>
+</li>
+<li>Model now correctly groups medical conditions together</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// Initialize fine-tuner
+var fineTuner = new SentenceTransformersFineTuner&lt;double&gt;(
+    baseModelPath: "models/all-MiniLM-L6-v2.onnx",
+    outputModelPath: "models/my-domain-model.onnx",
+    epochs: 10,
+    learningRate: 2e-5,
+    dimension: 384
+);
+
+// Prepare training data (anchor, positive, negative)
+var trainingData = new List&lt;(string, string, string)&gt;
+{
+    ("fraud detection", "fraudulent transaction", "legitimate payment"),
+    ("credit card", "debit card", "business card"),
+    ("interest rate", "APR", "laptop battery"),
+    // ... more examples
+};
+
+// Fine-tune the model
+fineTuner.FineTune(trainingData);
+
+// Use fine-tuned model
+var embedding = fineTuner.Embed("detect fraudulent activity");
+// Now produces embeddings optimized for your financial domain!</code></pre>
+
+<p><b>How It Works:</b>
+Training process:
+<ol>
+<li><p>Triplet Loss Function:</p>
+<ul>
+<li>Anchor embedding (A): Embed(&quot;fraud detection&quot;)</li>
+<li>Positive embedding (P): Embed(&quot;fraudulent transaction&quot;) - should be similar</li>
+<li>Negative embedding (N): Embed(&quot;legitimate payment&quot;) - should be different</li>
+<li>Loss = max(0, distance(A,P) - distance(A,N) + margin)</li>
+<li>Goal: Make distance(A,P) small and distance(A,N) large</li>
+</ul>
+</li>
+<li><p>Training Loop:</p>
+<ul>
+<li>For each epoch (10 iterations):
+<ul>
+<li>For each training triplet:
+<ul>
+<li>Generate embeddings for anchor, positive, negative</li>
+<li>Calculate triplet loss</li>
+<li>Update model weights to minimize loss</li>
+<li>Cache updated embeddings</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p>Result:</p>
+<ul>
+<li>Model learns to embed domain-specific texts closer together</li>
+<li>Generic texts pushed further apart</li>
+<li>Improved retrieval accuracy for your specific use case</li>
+</ul>
+</li>
+</ol>
+<p>Current implementation simulates training with embedding caching.
+Real training requires gradient descent and backpropagation through the neural network.</p>
+
+<p><b>Benefits:</b>
+- Domain adaptation - Customize embeddings for specific industry/task
+- Improved accuracy - Better retrieval performance on your data
+- Less training data - Fine-tuning needs 100-10,000 examples vs millions for pre-training
+- Transfer learning - Leverages existing knowledge from pre-trained model
+- Cost-effective - Faster and cheaper than training from scratch
+</p>
+<p><b>Limitations:</b>
+- Requires quality training data (good triplets are crucial)
+- Can overfit with too few examples (aim for 1,000+ triplets minimum)
+- Needs domain expertise to create meaningful triplets
+- Current implementation simulates training (real training requires ML framework)
+- Training time increases with model size and dataset size
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1__ctor_System_String_System_String_System_Int32__0_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.#ctor(System.String,System.String,System.Int32,`0,System.Int32)">
+  SentenceTransformersFineTuner(string, string, int, T, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner-1.html">SentenceTransformersFineTuner&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SentenceTransformersFineTuner(string baseModelPath, string outputModelPath, int epochs, T learningRate, int dimension)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseModelPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the base model to fine-tune.</p>
+</dd>
+    <dt><code>outputModelPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path where fine-tuned model will be saved.</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training epochs.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>Learning rate for fine-tuning.</p>
+</dd>
+    <dt><code>dimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The embedding dimension.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_EmbeddingDimension_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_EmbeddingDimension" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of the embedding vectors produced by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_MaxTokens_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.MaxTokens*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_MaxTokens" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.MaxTokens">
+  MaxTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum length of text (in tokens) that this model can process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int MaxTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_Dispose_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_Dispose_System_Boolean_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases unmanaged and - optionally - managed resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> to release both managed and unmanaged resources; <code>false</code> to release only unmanaged resources.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_EmbedCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.EmbedCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_EmbedCore_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.EmbedCore(System.String)">
+  EmbedCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Vector&lt;T&gt; EmbedCore(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_FineTune_" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.FineTune*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_EmbeddingModels_SentenceTransformersFineTuner_1_FineTune_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String_System_String___" data-uid="AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels.SentenceTransformersFineTuner`1.FineTune(System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.String}})">
+  FineTune(IEnumerable&lt;(string anchor, string positive, string negative)&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fine-tunes the model on provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FineTune(IEnumerable&lt;(string anchor, string positive, string negative)&gt; trainingPairs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainingPairs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.string-.anchor">anchor</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.string-.positive">positive</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.string-.negative">negative</a>)&gt;</dt>
+    <dd><p>Training pairs of (anchor, positive, negative) texts.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Embeddings/SentenceTransformersFineTuner.cs/#L112" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

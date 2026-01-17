@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BeamSearchOptimizer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BeamSearchOptimizer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Optimizer that uses beam search to explore multiple promising prompt variations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1" class="text-break">
+Class BeamSearchOptimizer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Optimization.html">Optimization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Optimizer that uses beam search to explore multiple promising prompt variations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BeamSearchOptimizer&lt;T&gt; : PromptOptimizerBase&lt;T&gt;, IPromptOptimizer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of numeric data used for scoring.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html">PromptOptimizerBase</a>&lt;T&gt;</div>
+      <div><span class="xref">BeamSearchOptimizer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptOptimizer-1.html">IPromptOptimizer</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_NumOps">PromptOptimizerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_History">PromptOptimizerBase&lt;T&gt;.History</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_Optimize_System_String_System_Func_System_String__0__System_Int32_">PromptOptimizerBase&lt;T&gt;.Optimize(string, Func&lt;string, T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken_">PromptOptimizerBase&lt;T&gt;.OptimizeAsync(string, Func&lt;string, Task&lt;T&gt;&gt;, int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_GetOptimizationHistory">PromptOptimizerBase&lt;T&gt;.GetOptimizationHistory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase-1.html#AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_RecordIteration_System_Int32_System_String__0_">PromptOptimizerBase&lt;T&gt;.RecordIteration(int, string, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Beam search maintains a fixed number of best candidates at each step,
+exploring variations of all candidates before selecting the top performers.
+</p>
+<p><b>For Beginners:</b> Explores multiple paths simultaneously.
+<p>Example:</p>
+<pre><code class="lang-csharp">var optimizer = new BeamSearchOptimizer&lt;double&gt;(beamWidth: 5);
+
+var optimized = optimizer.Optimize(
+    initialPrompt: "Classify sentiment:",
+    evaluationFunction: prompt =&gt; EvaluateAccuracy(prompt),
+    maxIterations: 50
+);</code></pre>
+<p>How it works:</p>
+<ul>
+<li>Keep track of top N prompts (the &quot;beam&quot;)</li>
+<li>Generate variations of all N prompts</li>
+<li>Score all variations</li>
+<li>Keep only the top N again</li>
+<li>Repeat</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>More thorough than greedy search</li>
+<li>Less likely to get stuck in local optima</li>
+<li>Faster than exhaustive search</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1__ctor_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1__ctor_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.#ctor(System.Int32,System.Int32,System.Nullable{System.Int32})">
+  BeamSearchOptimizer(int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the BeamSearchOptimizer class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BeamSearchOptimizer(int beamWidth = 5, int variationsPerCandidate = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>beamWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of candidates to maintain at each step.</p>
+</dd>
+    <dt><code>variationsPerCandidate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of variations to generate per candidate.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed for reproducibility (null for random).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_AddVariations_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.AddVariations*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_AddVariations_System_Collections_Generic_IEnumerable_System_String__System_Collections_Generic_IEnumerable_System_String__System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.AddVariations(System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String},System.Collections.Generic.IEnumerable{System.String})">
+  AddVariations(IEnumerable&lt;string&gt;?, IEnumerable&lt;string&gt;?, IEnumerable&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds custom variations for beam search.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddVariations(IEnumerable&lt;string&gt;? prefixes = null, IEnumerable&lt;string&gt;? suffixes = null, IEnumerable&lt;string&gt;? insertions = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prefixes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>suffixes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>insertions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_OptimizeCore_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.OptimizeCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_OptimizeCore_System_String_System_Func_System_String__0__System_Int32_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.OptimizeCore(System.String,System.Func{System.String,`0},System.Int32)">
+  OptimizeCore(string, Func&lt;string, T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes using beam search.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IPromptTemplate OptimizeCore(string initialPrompt, Func&lt;string, T&gt; evaluationFunction, int maxIterations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_OptimizeCoreAsync_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.OptimizeCoreAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_BeamSearchOptimizer_1_OptimizeCoreAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer`1.OptimizeCoreAsync(System.String,System.Func{System.String,System.Threading.Tasks.Task{`0}},System.Int32,System.Threading.CancellationToken)">
+  OptimizeCoreAsync(string, Func&lt;string, Task&lt;T&gt;&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes using beam search asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;IPromptTemplate&gt; OptimizeCoreAsync(string initialPrompt, Func&lt;string, Task&lt;T&gt;&gt; evaluationFunction, int maxIterations, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/BeamSearchOptimizer.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

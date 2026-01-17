@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StopWordRemovalCompressor | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StopWordRemovalCompressor | AiDotNet Documentation ">
+      
+      <meta name="description" content="Compressor that removes common stop words to reduce prompt length.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor" data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor" class="text-break">
+Class StopWordRemovalCompressor  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/StopWordRemovalCompressor.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Compression.html">Compression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Compressor that removes common stop words to reduce prompt length.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StopWordRemovalCompressor : PromptCompressorBase, IPromptCompressor</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html">PromptCompressorBase</a></div>
+      <div><span class="xref">StopWordRemovalCompressor</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptCompressor.html">IPromptCompressor</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Name">PromptCompressorBase.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_Compress_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_">PromptCompressorBase.Compress(string, CompressionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressWithMetrics_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_">PromptCompressorBase.CompressWithMetrics(string, CompressionOptions)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CompressAsync_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_System_Threading_CancellationToken_">PromptCompressorBase.CompressAsync(string, CompressionOptions, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_CountTokens_System_String_">PromptCompressorBase.CountTokens(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ValidatePrompt_System_String_">PromptCompressorBase.ValidatePrompt(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractVariables_System_String_">PromptCompressorBase.ExtractVariables(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceVariablesWithPlaceholders_System_String_System_Collections_Generic_Dictionary_System_String_System_String__">PromptCompressorBase.ReplaceVariablesWithPlaceholders(string, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreVariables_System_String_System_Collections_Generic_Dictionary_System_String_System_String__">PromptCompressorBase.RestoreVariables(string, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ExtractCodeBlocks_System_String_">PromptCompressorBase.ExtractCodeBlocks(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_ReplaceCodeBlocksWithPlaceholders_System_String_System_Collections_Generic_Dictionary_System_String_System_String__">PromptCompressorBase.ReplaceCodeBlocksWithPlaceholders(string, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Compression.PromptCompressorBase.html#AiDotNet_PromptEngineering_Compression_PromptCompressorBase_RestoreCodeBlocks_System_String_System_Collections_Generic_Dictionary_System_String_System_String__">PromptCompressorBase.RestoreCodeBlocks(string, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This compressor removes frequently occurring words that often don't add significant
+meaning to the prompt (articles, prepositions, auxiliary verbs, etc.). It's more aggressive
+than redundancy removal and may slightly reduce readability.
+</p>
+<p><b>For Beginners:</b> Removes common words like "the", "a", "is" to make prompts shorter.
+<p>Example:</p>
+<pre><code class="lang-csharp">var compressor = new StopWordRemovalCompressor();
+
+string original = "Please analyze the document and provide a summary of the main points";
+string compressed = compressor.Compress(original);
+// Result: "analyze document provide summary main points"</code></pre>
+<p>When to use:</p>
+<ul>
+<li>When maximum compression is needed</li>
+<li>When the AI can infer meaning from keywords</li>
+<li>Not recommended for conversational prompts</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor__ctor_" data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor__ctor_AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor_AggressivenessLevel_System_Func_System_String_System_Int32__" data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.#ctor(AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.AggressivenessLevel,System.Func{System.String,System.Int32})">
+  StopWordRemovalCompressor(AggressivenessLevel, Func&lt;string, int&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/StopWordRemovalCompressor.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the StopWordRemovalCompressor class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StopWordRemovalCompressor(StopWordRemovalCompressor.AggressivenessLevel level = AggressivenessLevel.Medium, Func&lt;string, int&gt;? tokenCounter = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>level</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.html">StopWordRemovalCompressor</a>.<a class="xref" href="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.AggressivenessLevel.html">AggressivenessLevel</a></dt>
+    <dd><p>The aggressiveness level for stop word removal.</p>
+</dd>
+    <dt><code>tokenCounter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Optional custom token counter function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor_CompressCore_" data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.CompressCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Compression_StopWordRemovalCompressor_CompressCore_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.PromptEngineering.Compression.StopWordRemovalCompressor.CompressCore(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  CompressCore(string, CompressionOptions)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/StopWordRemovalCompressor.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses the prompt by removing stop words.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string CompressCore(string prompt, CompressionOptions options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Compression/StopWordRemovalCompressor.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

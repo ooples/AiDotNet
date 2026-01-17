@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BootstrapResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BootstrapResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of bootstrap validation for a machine learning model, containing R&#178; metrics for training, validation, and test datasets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_BootstrapResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.BootstrapResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.BootstrapResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_BootstrapResult_1" data-uid="AiDotNet.Models.Results.BootstrapResult`1" class="text-break">
+Class BootstrapResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of bootstrap validation for a machine learning model, containing R² metrics
+for training, validation, and test datasets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BootstrapResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for R² values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BootstrapResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_BootstrapResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Bootstrap validation is a resampling technique used to evaluate machine learning models by repeatedly 
+sampling from the available data with replacement. This class stores the R² (coefficient of determination) 
+values for different data splits in the bootstrap process. R² measures the proportion of variance in the 
+dependent variable that is predictable from the independent variables, with values ranging from 0 to 1 
+where higher values indicate better model fit. The class uses generic type parameter T to support different 
+numeric types for the R² values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> This class stores how well a model performs on different parts of your data.
+<p>When evaluating machine learning models:</p>
+<ul>
+<li>It's important to know how well they perform on different datasets</li>
+<li>Bootstrap validation creates multiple samples from your data to test model stability</li>
+<li>R² (R-squared) is a common metric that measures how well your model explains the variation in the data</li>
+</ul>
+<p>This class stores three R² values:</p>
+<ul>
+<li>Training R²: How well the model fits the data it was trained on</li>
+<li>Validation R²: How well the model performs on data used for tuning</li>
+<li>Test R²: How well the model generalizes to completely new data</li>
+</ul>
+<p>These values help you understand:</p>
+<ul>
+<li>If your model is underfitting (low R² on all datasets)</li>
+<li>If your model is overfitting (high training R², much lower test R²)</li>
+<li>How stable your model's performance is across different data splits</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_BootstrapResult_1__ctor_" data-uid="AiDotNet.Models.Results.BootstrapResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_BootstrapResult_1__ctor" data-uid="AiDotNet.Models.Results.BootstrapResult`1.#ctor">
+  BootstrapResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the BootstrapResult class with all R² values set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BootstrapResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_BootstrapResult_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new BootstrapResult instance and initializes all R² values (TrainingR2, 
+ValidationR2, and TestR2) to zero using the numeric operations appropriate for the generic type T. 
+It uses the MathHelper.GetNumericOperations method to obtain the appropriate numeric operations for 
+the type T, which allows the class to work with different numeric types such as float, double, or 
+decimal. This initialization ensures that the R² values start at a well-defined state before being 
+updated with actual results from the bootstrap validation process.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with all values initialized to zero.
+<p>When a new BootstrapResult is created:</p>
+<ul>
+<li>All three R² values are set to zero</li>
+<li>The constructor uses MathHelper to handle different numeric types</li>
+<li>This provides a clean starting point before actual results are calculated</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized values</li>
+<li>It makes the code more robust across different numeric types</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally by the bootstrap validation process.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_BootstrapResult_1_TestR2_" data-uid="AiDotNet.Models.Results.BootstrapResult`1.TestR2*"></a>
+
+  <h3 id="AiDotNet_Models_Results_BootstrapResult_1_TestR2" data-uid="AiDotNet.Models.Results.BootstrapResult`1.TestR2">
+  TestR2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the R² value for the test dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TestR2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The R² value for the test dataset, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_BootstrapResult_1_TestR2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the coefficient of determination (R²) for the test dataset, which is the portion 
+of data set aside and not used during model training or validation. The test R² provides the most realistic 
+estimate of how well the model will perform on completely new, unseen data. It is the final evaluation 
+metric used to assess the model's generalization ability. The test R² should be reasonably close to the 
+validation R² if the validation process was effective. A significant drop from validation R² to test R² 
+may indicate that the validation process was not representative of real-world data or that the model was 
+indirectly overfitted through repeated hyperparameter tuning based on the validation set.
+</p>
+<p><b>For Beginners:</b> This value shows how well your model performs on completely new data.
+<p>The test R²:</p>
+<ul>
+<li>Measures how well your model generalizes to data it has never seen before</li>
+<li>Provides the most realistic estimate of real-world performance</li>
+<li>Is the final evaluation metric for your model</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It represents how your model will likely perform in production</li>
+<li>It's the most honest assessment of your model's capabilities</li>
+<li>It helps determine if your model is ready for deployment</li>
+</ul>
+<p>For example, a test R² of 0.80 means your model can explain 80% of the
+variation in new data, which would generally be considered good performance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_BootstrapResult_1_TrainingR2_" data-uid="AiDotNet.Models.Results.BootstrapResult`1.TrainingR2*"></a>
+
+  <h3 id="AiDotNet_Models_Results_BootstrapResult_1_TrainingR2" data-uid="AiDotNet.Models.Results.BootstrapResult`1.TrainingR2">
+  TrainingR2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the R² value for the training dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TrainingR2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The R² value for the training dataset, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_BootstrapResult_1_TrainingR2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the coefficient of determination (R²) for the training dataset, which is the 
+portion of data used to fit the model parameters. The R² value measures how well the model explains the 
+variance in the dependent variable, with values ranging from 0 to 1. A value of 1 indicates that the model 
+perfectly explains all the variance, while a value of 0 indicates that the model explains none of the 
+variance. The training R² is typically higher than validation or test R² because the model is optimized 
+specifically for the training data. A very high training R² compared to validation and test R² may indicate 
+overfitting.
+</p>
+<p><b>For Beginners:</b> This value shows how well your model fits the data it was trained on.
+<p>The training R²:</p>
+<ul>
+<li>Measures how well your model explains the variation in the training data</li>
+<li>Ranges from 0 (poor fit) to 1 (perfect fit)</li>
+<li>Is calculated using the same data used to build the model</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It shows whether your model can capture patterns in the data</li>
+<li>It serves as a baseline to compare with validation and test performance</li>
+<li>Very high values (close to 1) might indicate overfitting</li>
+</ul>
+<p>For example, a training R² of 0.85 means your model explains 85% of the
+variation in the training data, which generally indicates a good fit.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_BootstrapResult_1_ValidationR2_" data-uid="AiDotNet.Models.Results.BootstrapResult`1.ValidationR2*"></a>
+
+  <h3 id="AiDotNet_Models_Results_BootstrapResult_1_ValidationR2" data-uid="AiDotNet.Models.Results.BootstrapResult`1.ValidationR2">
+  ValidationR2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the R² value for the validation dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ValidationR2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The R² value for the validation dataset, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_BootstrapResult_1_ValidationR2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the coefficient of determination (R²) for the validation dataset, which is the 
+portion of data used to tune hyperparameters and evaluate the model during training. The validation R² 
+provides an estimate of how well the model will perform on unseen data. It is typically lower than the 
+training R² but should be reasonably close if the model is not overfitting. A significant drop from 
+training R² to validation R² may indicate that the model is overfitting to the training data and not 
+generalizing well. In bootstrap validation, the validation set is typically created by sampling with 
+replacement from the original dataset.
+</p>
+<p><b>For Beginners:</b> This value shows how well your model performs on data used for tuning.
+<p>The validation R²:</p>
+<ul>
+<li>Measures how well your model generalizes to data not used in training</li>
+<li>Helps detect overfitting (when a model performs well on training data but poorly on new data)</li>
+<li>Is used to guide model selection and hyperparameter tuning</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It provides feedback during the model development process</li>
+<li>It helps you choose between different model configurations</li>
+<li>It gives an early indication of how well the model might perform in production</li>
+</ul>
+<p>For example, if your training R² is 0.85 but validation R² is only 0.65,
+this suggests your model might be overfitting to the training data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/BootstrapResult.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

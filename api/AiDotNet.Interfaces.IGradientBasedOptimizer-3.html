@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IGradientBasedOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IGradientBasedOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IGradientBasedOptimizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IGradientBasedOptimizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3" class="text-break">
+Interface IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IGradientBasedOptimizer&lt;T, TInput, TOutput&gt; : IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html#AiDotNet_Interfaces_IOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">IOptimizer&lt;T, TInput, TOutput&gt;.Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html#AiDotNet_Interfaces_IOptimizer_3_ShouldEarlyStop">IOptimizer&lt;T, TInput, TOutput&gt;.ShouldEarlyStop()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html#AiDotNet_Interfaces_IOptimizer_3_GetOptions">IOptimizer&lt;T, TInput, TOutput&gt;.GetOptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html#AiDotNet_Interfaces_IOptimizer_3_Reset">IOptimizer&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_LastComputedGradients_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.LastComputedGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_LastComputedGradients" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.LastComputedGradients">
+  LastComputedGradients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the gradients computed during the last optimization step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; LastComputedGradients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of gradients for each parameter. Returns empty vector if no optimization performed yet.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_LastComputedGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides access to the gradients (partial derivatives) calculated
+during the most recent optimization. Essential for distributed training, gradient clipping,
+and debugging.
+</p>
+<p><b>For Beginners:</b> Gradients are "directions" showing how to adjust each parameter
+to improve the model. This property lets you see those directions after optimization runs.
+</p>
+<p><b>Industry Standard:</b>
+PyTorch, TensorFlow, and JAX all expose gradients for features like gradient clipping,
+true Distributed Data Parallel (DDP), and gradient compression.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_SupportsGpuUpdate_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.SupportsGpuUpdate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_SupportsGpuUpdate" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.SupportsGpuUpdate">
+  SupportsGpuUpdate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this optimizer supports GPU-accelerated parameter updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsGpuUpdate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_SupportsGpuUpdate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This indicates whether the optimizer can update parameters
+directly on the GPU without transferring data to the CPU. GPU updates are much faster
+for large models.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ApplyGradients(Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to a model's parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IFullModel&lt;T, TInput, TOutput&gt; ApplyGradients(Vector&lt;T&gt; gradients, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients to apply (must match model parameter count)</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Model whose parameters should be updated</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Model with updated parameters</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Allows applying externally-computed or modified gradients (averaged, compressed, clipped, etc.)
+to update model parameters. Essential for production distributed training.
+</p>
+<p><b>For Beginners:</b> This takes pre-calculated "directions" (gradients) and uses them
+to update the model. Like having a GPS tell you which way to go, this method moves you there.
+</p>
+<p><b>Production Use Cases:</b>
+- **True DDP**: Average gradients across GPUs, then apply
+- **Gradient Compression**: Compress, sync, decompress, then apply
+- **Federated Learning**: Average gradients from clients before applying
+- **Gradient Clipping**: Clip gradients to prevent exploding, then apply
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If gradients or model is null</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If gradient size doesn't match parameters</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to explicit original parameters (double-step safe).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IFullModel&lt;T, TInput, TOutput&gt; ApplyGradients(Vector&lt;T&gt; originalParameters, Vector&lt;T&gt; gradients, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>originalParameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Pre-update parameters to start from</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients to apply</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Model template (only used for structure, parameters ignored)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>New model with updated parameters</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>⚠️ RECOMMENDED for Distributed Training:</b>
+This overload accepts originalParameters explicitly, making it impossible to accidentally
+apply gradients twice. Use this in distributed optimizers where you need explicit control
+over which parameter state to start from.
+</p>
+<p>
+Prevents double-stepping bug:
+- WRONG: ApplyGradients(g_avg, modelWithLocalUpdate) → double step!
+- RIGHT: ApplyGradients(originalParams, g_avg, modelTemplate) → single step!
+</p>
+<p><b>Distributed Pattern:</b>
+1. Save originalParams before local optimization
+2. Run local optimization → get localGradients
+3. Synchronize gradients → get avgGradients
+4. Call ApplyGradients(originalParams, avgGradients, model) → correct result!
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_DisposeGpuState_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.DisposeGpuState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_DisposeGpuState" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.DisposeGpuState">
+  DisposeGpuState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes GPU-allocated optimizer state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void DisposeGpuState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_DisposeGpuState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Frees GPU memory used by the optimizer's internal state.
+Call this when you're done training or want to reclaim GPU memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_InitializeGpuState_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.InitializeGpuState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_InitializeGpuState_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.InitializeGpuState(System.Int32,AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend)">
+  InitializeGpuState(int, IDirectGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes optimizer state on the GPU for a given parameter count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parameters to initialize state for.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for memory allocation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_InitializeGpuState_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Many optimizers maintain internal state (like momentum or
+adaptive learning rates). This method allocates that state on the GPU so that
+all updates can happen without CPU transfers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ReverseUpdate_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ReverseUpdate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ReverseUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.ReverseUpdate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ReverseUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses a gradient update to recover original parameters before the update was applied.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; ReverseUpdate(Vector&lt;T&gt; updatedParameters, Vector&lt;T&gt; appliedGradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>updatedParameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Parameters after gradient application</p>
+</dd>
+    <dt><code>appliedGradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients that were applied to produce updated parameters</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Original parameters before the gradient update</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_ReverseUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the original parameters given updated parameters and the gradients
+that were applied. Each optimizer implements this differently based on its update rule.
+</p>
+<p><b>For Beginners:</b> This is like "undo" for a gradient update. Given where you are now
+(updated parameters) and the directions you took (gradients), it calculates where you started.
+</p>
+<p><b>Optimizer-Specific Behavior:</b>
+- **SGD**: params_old = params_new + learning_rate * gradients
+- **Adam**: Requires reversing momentum and adaptive learning rate adjustments
+- **RMSprop**: Requires reversing adaptive learning rate based on gradient history
+</p>
+<p><b>Production Use Cases:</b>
+- **Distributed Training**: Reverse local updates before applying synchronized gradients
+- **Checkpointing**: Recover previous parameter states
+- **Debugging**: Validate gradient application correctness
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If parameters or gradients are null</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If parameter and gradient sizes don't match</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  UpdateParameters(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates matrix parameters based on their gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; UpdateParameters(Matrix&lt;T&gt; parameters, Matrix&lt;T&gt; gradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The current matrix parameter values.</p>
+</dd>
+    <dt><code>gradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The gradient matrix indicating the direction of steepest increase in error.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The updated matrix parameter values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adjusts a grid of numbers (matrix parameters) to make your model better.</p>
+<p>The parameters:</p>
+<ul>
+<li>parameters: The current matrix settings of your model (like weights in a neural network layer)</li>
+<li>gradient: Information about which direction to change each matrix element to reduce errors</li>
+</ul>
+<p>What this method does:</p>
+<ol>
+<li>Takes your current matrix parameters</li>
+<li>Looks at the gradient matrix to see which direction would reduce errors for each element</li>
+<li>Decides how big of a step to take in that direction for each element</li>
+<li>Returns a new, improved matrix of parameter values</li>
+</ol>
+<p>Think of it like adjusting multiple rows and columns of knobs on a complex control panel:</p>
+<ul>
+<li>The parameters matrix represents the current positions of all these knobs</li>
+<li>The gradient matrix tells you which knobs to turn up or down and by how much</li>
+<li>This method returns the new positions for all the knobs, organized in the same grid</li>
+</ul>
+<p>This matrix-specific version avoids the need to flatten matrices into vectors and then
+reshape them back, making the code more efficient and easier to understand when working
+with matrix parameters like neural network weights.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateParameters(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates parameters based on their gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; UpdateParameters(Vector&lt;T&gt; parameters, Vector&lt;T&gt; gradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current parameter values.</p>
+</dd>
+    <dt><code>gradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient indicating the direction of steepest increase in error.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The updated parameter values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adjusts a set of numbers (parameters) to make your model better.</p>
+<p>The parameters:</p>
+<ul>
+<li>parameters: The current settings of your model (like weights in a neural network)</li>
+<li>gradient: Information about which direction to change each parameter to reduce errors</li>
+</ul>
+<p>What this method does:</p>
+<ol>
+<li>Takes your current model parameters</li>
+<li>Looks at the gradient to see which direction would reduce errors</li>
+<li>Decides how big of a step to take in that direction</li>
+<li>Returns new, improved parameter values</li>
+</ol>
+<p>Think of it like adjusting the volume, bass, and treble knobs on a stereo:</p>
+<ul>
+<li>The parameters are the current knob positions</li>
+<li>The gradient tells you which knobs to turn up or down</li>
+<li>This method returns the new positions for all the knobs</li>
+</ul>
+<p>Different optimizers (like Adam, SGD, or RMSProp) will make different decisions
+about how far to turn each knob based on the gradient information.</p>
+<p>This method is flexible enough to handle different data structures (e.g., vectors, matrices, or tensors)
+depending on the type of model and the specific implementation of the optimizer.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0___" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParameters(System.Collections.Generic.List{AiDotNet.Interfaces.ILayer{`0}})">
+  UpdateParameters(List&lt;ILayer&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the parameters of all layers in a model based on their calculated gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateParameters(List&lt;ILayer&lt;T&gt;&gt; layers)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list of layers in the model whose parameters need to be updated.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParameters_System_Collections_Generic_List_AiDotNet_Interfaces_ILayer__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adjusts the settings (parameters) of each part (layer) of your model to make it better at its task.</p>
+<p>What this method does:</p>
+<ol>
+<li>Goes through each layer of your model</li>
+<li>For each layer that can be trained:
+<ul>
+<li>Looks at how the layer's current settings are contributing to errors (the gradients)</li>
+<li>Decides how much to change each setting to reduce errors</li>
+<li>Updates the layer's settings with these new values</li>
+</ul>
+</li>
+</ol>
+<p>Think of it like tuning a complex machine with many knobs:</p>
+<ul>
+<li>Each layer is a set of knobs</li>
+<li>The gradients tell you which way to turn each knob</li>
+<li>This method goes through and adjusts all the knobs to make the machine work better</li>
+</ul>
+<p>This method is crucial in the training process because:</p>
+<ul>
+<li>It applies the learning from the backward pass to actually improve the model</li>
+<li>It handles the intricacies of updating different types of layers (e.g., convolutional, recurrent)</li>
+<li>It ensures that all trainable parts of your model are updated consistently</li>
+</ul>
+<p>Different optimizers may implement this method differently, using various strategies to determine
+the best way to update parameters based on the gradients and potentially other factors like
+momentum or adaptive learning rates.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParametersGpu_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParametersGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParametersGpu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_" data-uid="AiDotNet.Interfaces.IGradientBasedOptimizer`3.UpdateParametersGpu(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend)">
+  UpdateParametersGpu(IGpuBuffer, IGpuBuffer, int, IDirectGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates parameters on the GPU using optimizer-specific GPU kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>GPU buffer containing parameters to update (modified in-place).</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>GPU buffer containing gradients.</p>
+</dd>
+    <dt><code>parameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parameters.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for execution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGradientBasedOptimizer_3_UpdateParametersGpu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method performs the same parameter update as
+UpdateParameters, but executes directly on the GPU for maximum performance.
+The parameters and gradients must already be on the GPU.</p>
+<p><b>Production Use Cases:</b>
+- **Large-scale training**: Avoid CPU-GPU data transfers during training
+- **GPU-resident training**: Keep all training data on GPU for maximum throughput
+- **Mixed-precision training**: Combine with FP16 gradients for even faster training
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGradientBasedOptimizer.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

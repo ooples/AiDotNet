@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum TrainingStageType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum TrainingStageType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Types of training stages in a multi-stage training pipeline.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_TrainingStageType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.TrainingStageType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.TrainingStageType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_TrainingStageType" data-uid="AiDotNet.Enums.TrainingStageType" class="text-break">
+Enum TrainingStageType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TrainingStageType.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Types of training stages in a multi-stage training pipeline.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum TrainingStageType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_TrainingStageType_AdapterMerging"><code>AdapterMerging = 33</code></dt>
+  <dd><p>Adapter merging stage.</p>
+<p>Merges multiple trained LoRA adapters into the base model.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_AdversarialTraining"><code>AdversarialTraining = 50</code></dt>
+  <dd><p>Adversarial training for robustness.</p>
+<p>Trains on adversarial examples to improve robustness.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_AgenticTraining"><code>AgenticTraining = 43</code></dt>
+  <dd><p>Agentic behavior training stage.</p>
+<p>Trains the model for multi-step autonomous task completion.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_AudioLanguageAlignment"><code>AudioLanguageAlignment = 38</code></dt>
+  <dd><p>Audio-language alignment stage.</p>
+<p>Aligns audio and language representations.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_BestOfNSampling"><code>BestOfNSampling = 24</code></dt>
+  <dd><p>Best-of-N sampling and fine-tuning.</p>
+<p>Generates N responses, selects best using reward model, fine-tunes on selection.
+Simple but effective baseline approach.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ChainOfThoughtTraining"><code>ChainOfThoughtTraining = 41</code></dt>
+  <dd><p>Chain-of-thought training stage.</p>
+<p>Trains the model to produce step-by-step reasoning.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Checkpoint"><code>Checkpoint = 54</code></dt>
+  <dd><p>Checkpoint and validation stage.</p>
+<p>Saves a checkpoint and runs validation metrics.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_CodeFineTuning"><code>CodeFineTuning = 39</code></dt>
+  <dd><p>Code-specific fine-tuning stage.</p>
+<p>Fine-tuning on code with execution feedback.
+May include unit test feedback.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Constitutional"><code>Constitutional = 15</code></dt>
+  <dd><p>Constitutional AI training stage.</p>
+<p>Uses a set of principles to generate critiques and revisions.
+The model learns to self-correct based on constitutional principles.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ContinuedPreTraining"><code>ContinuedPreTraining = 1</code></dt>
+  <dd><p>Continued pre-training on domain-specific data.</p>
+<p>Extends pre-training with domain-focused data (e.g., code, medical, legal).
+Used to create domain-specialized foundation models.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ContrastivePreference"><code>ContrastivePreference = 6</code></dt>
+  <dd><p>Contrastive Preference Optimization (CPO, NCA, Safe-NCA).</p>
+<p>Uses contrastive learning objectives for preference optimization.
+Often more stable than standard DPO on noisy preference data.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Cooldown"><code>Cooldown = 49</code></dt>
+  <dd><p>Cooldown stage with learning rate decay.</p>
+<p>Final training stage with decreasing learning rate.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_CurriculumLearning"><code>CurriculumLearning = 46</code></dt>
+  <dd><p>Curriculum learning stage with progressively harder examples.</p>
+<p>Trains on easy examples first, then progressively harder ones.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Custom"><code>Custom = 56</code></dt>
+  <dd><p>Custom user-defined training logic.</p>
+<p>Allows users to implement arbitrary training logic.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Evaluation"><code>Evaluation = 53</code></dt>
+  <dd><p>Evaluation-only stage (no training).</p>
+<p>Runs evaluation metrics without modifying the model.
+Used for checkpointing and monitoring.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_FeatureDistillation"><code>FeatureDistillation = 30</code></dt>
+  <dd><p>Feature distillation stage.</p>
+<p>Distills intermediate layer representations from teacher to student.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_GroupRelativePolicyOptimization"><code>GroupRelativePolicyOptimization = 9</code></dt>
+  <dd><p>Group Relative Policy Optimization (GRPO) - DeepSeek's approach.</p>
+<p>Groups responses and uses relative rankings instead of absolute rewards.
+More stable than PPO and doesn't require a separate reward model.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_HarmlessnessTraining"><code>HarmlessnessTraining = 17</code></dt>
+  <dd><p>Harmlessness training stage.</p>
+<p>Trains the model to refuse harmful requests appropriately.
+Often uses adversarial examples and refusal training.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_HelpfulnessTraining"><code>HelpfulnessTraining = 18</code></dt>
+  <dd><p>Helpfulness training stage.</p>
+<p>Trains the model to be maximally helpful within safety constraints.
+Balances helpfulness with harmlessness.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_HonestyTraining"><code>HonestyTraining = 19</code></dt>
+  <dd><p>Honesty/truthfulness training stage.</p>
+<p>Trains the model to be truthful and acknowledge uncertainty.
+Uses factuality datasets and calibration training.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_InstructionTuning"><code>InstructionTuning = 3</code></dt>
+  <dd><p>Instruction tuning - SFT specifically for following instructions.</p>
+<p>A specialized form of SFT focused on instruction-following datasets.
+Examples: FLAN, T0, Alpaca-style instruction datasets.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_JailbreakResistance"><code>JailbreakResistance = 52</code></dt>
+  <dd><p>Jailbreak resistance training.</p>
+<p>Specifically trains to resist jailbreak attempts.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_KnowledgeDistillation"><code>KnowledgeDistillation = 28</code></dt>
+  <dd><p>Knowledge distillation from teacher model.</p>
+<p>Transfers knowledge from a larger teacher model to a smaller student.
+Used for model compression and capability transfer.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_LoRAAdapterTraining"><code>LoRAAdapterTraining = 32</code></dt>
+  <dd><p>LoRA/QLoRA adapter training stage.</p>
+<p>Parameter-efficient fine-tuning using low-rank adapters.
+Significantly reduces memory and compute requirements.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_LongContextTraining"><code>LongContextTraining = 44</code></dt>
+  <dd><p>Long context training stage.</p>
+<p>Extends the model's context window through position interpolation or similar techniques.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_MathReasoningFineTuning"><code>MathReasoningFineTuning = 40</code></dt>
+  <dd><p>Math/reasoning fine-tuning stage.</p>
+<p>Fine-tuning on mathematical reasoning with solution verification.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ModelMerging"><code>ModelMerging = 55</code></dt>
+  <dd><p>Model merging stage.</p>
+<p>Merges multiple models using techniques like SLERP, TIES, or DARE.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_MultiTurnConversation"><code>MultiTurnConversation = 45</code></dt>
+  <dd><p>Multi-turn conversation training stage.</p>
+<p>Trains on multi-turn dialogues to improve conversation coherence.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_OddsRatioPreference"><code>OddsRatioPreference = 5</code></dt>
+  <dd><p>Odds Ratio Preference Optimization (ORPO).</p>
+<p>Combines SFT and preference learning in a single stage.
+Uses odds ratios instead of log probability differences.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_OutcomeRewardModelTraining"><code>OutcomeRewardModelTraining = 14</code></dt>
+  <dd><p>Outcome reward model training (final answer rewards).</p>
+<p>Traditional reward model that only evaluates final outputs.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_PreTraining"><code>PreTraining = 0</code></dt>
+  <dd><p>Pre-training on large unlabeled text corpora (next token prediction).</p>
+<p>The foundation stage where models learn general language understanding.
+Uses self-supervised learning on massive datasets (trillions of tokens).</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_PreferenceOptimization"><code>PreferenceOptimization = 4</code></dt>
+  <dd><p>Direct Preference Optimization family (DPO, IPO, KTO, SimPO, CPO, R-DPO, etc.).</p>
+<p>
+Learns directly from preference pairs without a reward model.
+More efficient than RLHF with comparable results.
+</p>
+<p>Includes: DPO, IPO, KTO, SimPO, CPO, R-DPO, CalDPO, TPO, APO, LCPO</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_PreferenceRanking"><code>PreferenceRanking = 23</code></dt>
+  <dd><p>Preference Ranking Optimization (PRO).</p>
+<p>Optimizes based on preference rankings over multiple responses.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_PrefixTuning"><code>PrefixTuning = 34</code></dt>
+  <dd><p>Prefix tuning stage.</p>
+<p>Learns soft prompts prepended to the input.
+Very parameter-efficient but less flexible than LoRA.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ProcessRewardModelTraining"><code>ProcessRewardModelTraining = 13</code></dt>
+  <dd><p>Process reward model training (step-level rewards).</p>
+<p>Trains reward models that evaluate reasoning steps, not just final outputs.
+Used for math reasoning and complex problem solving.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ProgressiveTraining"><code>ProgressiveTraining = 47</code></dt>
+  <dd><p>Progressive training with increasing model capacity.</p>
+<p>Gradually increases model size or unfreezes more layers.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_PromptTuning"><code>PromptTuning = 35</code></dt>
+  <dd><p>Prompt tuning stage.</p>
+<p>Learns soft prompt tokens. Even more efficient than prefix tuning.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ProximalPolicyOptimization"><code>ProximalPolicyOptimization = 8</code></dt>
+  <dd><p>Proximal Policy Optimization (PPO) stage.</p>
+<p>The policy optimization step of RLHF.
+Requires a trained reward model.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_RankResponses"><code>RankResponses = 21</code></dt>
+  <dd><p>Rank Responses to align Human Feedback (RRHF).</p>
+<p>Uses response rankings instead of pairwise preferences.
+More efficient data collection than pairwise comparisons.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_RedTeamingTraining"><code>RedTeamingTraining = 51</code></dt>
+  <dd><p>Red-teaming data training.</p>
+<p>Trains on data from red-teaming efforts to patch vulnerabilities.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ReinforcementLearning"><code>ReinforcementLearning = 7</code></dt>
+  <dd><p>Reinforcement Learning from Human Feedback (RLHF).</p>
+<p>The classic OpenAI approach: train a reward model, then optimize with PPO.
+Most computationally expensive but historically most effective.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ReinforcementLearningAIFeedback"><code>ReinforcementLearningAIFeedback = 10</code></dt>
+  <dd><p>Reinforcement Learning from AI Feedback (RLAIF).</p>
+<p>Uses AI-generated feedback instead of human feedback.
+Often combined with Constitutional AI principles.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ReinforcementLearningVerifiable"><code>ReinforcementLearningVerifiable = 11</code></dt>
+  <dd><p>Reinforcement Learning with Verifiable Rewards (RLVR).</p>
+<p>Uses programmatically verifiable rewards (e.g., code execution, math checking).
+Popular for reasoning and code models.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_RejectionSampling"><code>RejectionSampling = 20</code></dt>
+  <dd><p>Rejection sampling optimization (RSO).</p>
+<p>Generates multiple responses and filters using a reward model.
+Fine-tunes on the best responses. Used in Llama 2.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ResponseDistillation"><code>ResponseDistillation = 29</code></dt>
+  <dd><p>Response distillation stage.</p>
+<p>Distills only the response behavior, not intermediate representations.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_RewardModelTraining"><code>RewardModelTraining = 12</code></dt>
+  <dd><p>Reward model training stage.</p>
+<p>Trains a model to predict human preferences from comparison data.
+Required for RLHF pipelines.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SafetyAlignment"><code>SafetyAlignment = 16</code></dt>
+  <dd><p>Safety alignment training.</p>
+<p>Specifically focuses on reducing harmful outputs.
+May use red-teaming data or safety-focused preferences.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SelfPlay"><code>SelfPlay = 25</code></dt>
+  <dd><p>Self-Play Fine-Tuning (SPIN).</p>
+<p>Model generates responses, then learns to prefer human responses over its own.
+Iteratively improves without new human data.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SelfRewarding"><code>SelfRewarding = 27</code></dt>
+  <dd><p>Self-rewarding language models stage.</p>
+<p>Model acts as both generator and reward model.
+Meta's approach to scalable alignment.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SelfTraining"><code>SelfTraining = 26</code></dt>
+  <dd><p>Self-training / self-improvement stage.</p>
+<p>Model generates training data for itself using consistency filtering.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SequenceLikelihoodCalibration"><code>SequenceLikelihoodCalibration = 22</code></dt>
+  <dd><p>Sequence Likelihood Calibration (SLiC-HF).</p>
+<p>Calibrates sequence likelihoods using human feedback.
+Alternative to DPO with different optimization properties.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SupervisedFineTuning"><code>SupervisedFineTuning = 2</code></dt>
+  <dd><p>Supervised fine-tuning on input-output pairs.</p>
+<p>The most common fine-tuning approach where models learn from labeled examples.
+Used for instruction following, question answering, and task-specific training.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_SyntheticDataTraining"><code>SyntheticDataTraining = 31</code></dt>
+  <dd><p>Synthetic data generation and training.</p>
+<p>Uses a teacher model to generate training data for the student.
+Common approach for instruction tuning without human data.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_ToolUseTraining"><code>ToolUseTraining = 42</code></dt>
+  <dd><p>Tool use training stage.</p>
+<p>Trains the model to use external tools (calculators, search, code execution).</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_VisionLanguagePreTraining"><code>VisionLanguagePreTraining = 36</code></dt>
+  <dd><p>Vision-language pre-training stage.</p>
+<p>Aligns vision and language representations.
+Used for models like LLaVA, GPT-4V.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_VisualInstructionTuning"><code>VisualInstructionTuning = 37</code></dt>
+  <dd><p>Visual instruction tuning stage.</p>
+<p>Instruction tuning with image-text pairs.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TrainingStageType_Warmup"><code>Warmup = 48</code></dt>
+  <dd><p>Warmup stage with lower learning rate.</p>
+<p>Initial training with reduced learning rate before main training.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_TrainingStageType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Training pipelines consist of multiple stages, each with a specific purpose.
+Modern LLM training typically follows patterns like:
+</p>
+<ul><li><b>InstructGPT/ChatGPT:</b> Pre-training → SFT → Reward Model → PPO</li><li><b>Llama 2:</b> Pre-training → SFT → Rejection Sampling → DPO</li><li><b>Anthropic:</b> Pre-training → SFT → Constitutional AI → RLHF</li><li><b>DeepSeek:</b> Pre-training → SFT → GRPO</li></ul>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TrainingStageType.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

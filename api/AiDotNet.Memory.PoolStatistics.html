@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PoolStatistics | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PoolStatistics | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides statistics about the current state of a tensor pool. Use this class to monitor pool usage and tune pooling parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Memory_PoolStatistics.md&amp;value=---%0Auid%3A%20AiDotNet.Memory.PoolStatistics%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Memory.PoolStatistics">
+
+
+
+  <h1 id="AiDotNet_Memory_PoolStatistics" data-uid="AiDotNet.Memory.PoolStatistics" class="text-break">
+Class PoolStatistics  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Memory.html">Memory</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides statistics about the current state of a tensor pool.
+Use this class to monitor pool usage and tune pooling parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PoolStatistics</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PoolStatistics</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Memory_PoolStatistics_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Pool statistics help you understand:
+- How much memory is currently being used by pooled tensors
+- How many tensors are available for reuse
+- Whether the pool is operating efficiently
+</p>
+<p>
+Example usage:
+<pre><code class="lang-csharp">var pool = new TensorPool&lt;float&gt;();
+// ... use the pool for inference operations ...
+<p>var stats = pool.GetStatistics();
+Console.WriteLine($&quot;Pool using {stats.MemoryUtilizationPercent:F1}% of max capacity&quot;);
+Console.WriteLine($&quot;Tensors in pool: {stats.PooledTensorCount}&quot;);</p></code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Memory_PoolStatistics_CurrentMemoryBytes_" data-uid="AiDotNet.Memory.PoolStatistics.CurrentMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_Memory_PoolStatistics_CurrentMemoryBytes" data-uid="AiDotNet.Memory.PoolStatistics.CurrentMemoryBytes">
+  CurrentMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total memory currently used by pooled tensors, in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long CurrentMemoryBytes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The current memory usage in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PoolStatistics_CurrentMemoryBytes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This value represents the memory reserved for pooled tensors.
+It does not include tensors that have been rented and are currently in use.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Memory_PoolStatistics_MaxMemoryBytes_" data-uid="AiDotNet.Memory.PoolStatistics.MaxMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_Memory_PoolStatistics_MaxMemoryBytes" data-uid="AiDotNet.Memory.PoolStatistics.MaxMemoryBytes">
+  MaxMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum memory allowed for pooling, in bytes.
+This corresponds to <a class="xref" href="AiDotNet.Memory.PoolingOptions.html#AiDotNet_Memory_PoolingOptions_MaxPoolSizeBytes">MaxPoolSizeBytes</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long MaxMemoryBytes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The maximum pool memory capacity in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_PoolStatistics_MemoryUtilizationPercent_" data-uid="AiDotNet.Memory.PoolStatistics.MemoryUtilizationPercent*"></a>
+
+  <h3 id="AiDotNet_Memory_PoolStatistics_MemoryUtilizationPercent" data-uid="AiDotNet.Memory.PoolStatistics.MemoryUtilizationPercent">
+  MemoryUtilizationPercent
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the percentage of maximum pool memory currently in use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MemoryUtilizationPercent { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A value from 0 to 100 representing memory utilization percentage.
+Returns 0 if <a class="xref" href="AiDotNet.Memory.PoolStatistics.html#AiDotNet_Memory_PoolStatistics_MaxMemoryBytes">MaxMemoryBytes</a> is 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PoolStatistics_MemoryUtilizationPercent_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Use this metric to determine if your pool size is appropriate:
+- Values consistently near 100% suggest increasing <a class="xref" href="AiDotNet.Memory.PoolingOptions.html#AiDotNet_Memory_PoolingOptions_MaxPoolSizeMB">MaxPoolSizeMB</a>
+- Values consistently near 0% suggest decreasing the pool size to save memory
+- Values between 40-80% typically indicate good pool sizing
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Memory_PoolStatistics_PooledTensorCount_" data-uid="AiDotNet.Memory.PoolStatistics.PooledTensorCount*"></a>
+
+  <h3 id="AiDotNet_Memory_PoolStatistics_PooledTensorCount" data-uid="AiDotNet.Memory.PoolStatistics.PooledTensorCount">
+  PooledTensorCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tensors currently held in the pool.
+These tensors are available for immediate reuse without allocation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PooledTensorCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The count of pooled tensors across all shape buckets.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_PoolStatistics_TensorBuckets_" data-uid="AiDotNet.Memory.PoolStatistics.TensorBuckets*"></a>
+
+  <h3 id="AiDotNet_Memory_PoolStatistics_TensorBuckets" data-uid="AiDotNet.Memory.PoolStatistics.TensorBuckets">
+  TensorBuckets
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of shape buckets in the pool.
+Each unique tensor shape has its own bucket for storing reusable tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TensorBuckets { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of distinct shape buckets.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PoolStatistics_TensorBuckets_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A high number of buckets may indicate many different tensor shapes in use,
+which can reduce pooling effectiveness. Consider standardizing tensor shapes
+when possible to improve reuse rates.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PoolStatistics.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

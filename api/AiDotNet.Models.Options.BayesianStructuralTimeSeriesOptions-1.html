@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BayesianStructuralTimeSeriesOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BayesianStructuralTimeSeriesOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Bayesian Structural Time Series models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1" class="text-break">
+Class BayesianStructuralTimeSeriesOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Bayesian Structural Time Series models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BayesianStructuralTimeSeriesOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used by the time series model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">BayesianStructuralTimeSeriesOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Bayesian Structural Time Series (BSTS) models are flexible time series models that decompose a time series
+into trend, seasonal, and regression components. They use Bayesian methods to estimate model parameters
+and can handle missing data, incorporate prior knowledge, and provide uncertainty estimates.
+</p>
+<p><b>For Beginners:</b> A time series is simply data collected over time (like daily temperatures, 
+monthly sales, or yearly population). Bayesian Structural Time Series is a powerful way to analyze this 
+kind of data by breaking it down into different parts: the overall direction (trend), repeating patterns 
+(seasonality), and the influence of other factors (regression). The "Bayesian" part means it can express 
+uncertainty about its predictions and incorporate what you already know about the data. Think of it like 
+weather forecasting that not only predicts tomorrow's temperature but also tells you how confident it is 
+in that prediction.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_ConvergenceTolerance_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.ConvergenceTolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_ConvergenceTolerance" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.ConvergenceTolerance">
+  ConvergenceTolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ConvergenceTolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 1e-6 (0.000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_ConvergenceTolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm will stop iterating when the change in parameter estimates between iterations
+is less than this tolerance value, indicating that it has converged to a solution.
+</p>
+<p><b>For Beginners:</b> This determines how precise the algorithm needs to be before it decides it's 
+"good enough" and stops calculating. The default value (0.000001) is very small, meaning high precision. 
+You rarely need to change this unless you're dealing with extremely precise data (smaller value) or want 
+faster but less precise results (larger value).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_IncludeRegression_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.IncludeRegression*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_IncludeRegression" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.IncludeRegression">
+  IncludeRegression
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to include regression components in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IncludeRegression { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to include regression, false otherwise (default).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_IncludeRegression_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set to true, the model will include regression components that can capture the relationship
+between the time series and external variables (covariates). This allows the model to account for
+the influence of known factors on the time series.
+</p>
+<p><b>For Beginners:</b> Setting this to true lets you include other factors that might influence your data. 
+For example, if you're predicting ice cream sales over time, you might want to include temperature as a factor 
+because hot days typically lead to more sales. By default, this is set to false, meaning the model will only 
+look at patterns in your time series data itself without considering external factors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialLevelValue_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialLevelValue*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialLevelValue" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialLevelValue">
+  InitialLevelValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for the level component of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLevelValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial level value, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialLevelValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The level component represents the baseline value of the time series at the start of the modeling period.
+Setting an appropriate initial value can help the model converge faster.
+</p>
+<p><b>For Beginners:</b> The "level" is like the starting point or baseline of your data. 
+For example, if you're tracking monthly sales that typically hover around $10,000, you might set this 
+to 10000 instead of the default 0.0. If you're unsure, you can leave it at 0.0, and the algorithm will 
+figure it out from your data, though it might take a few more iterations to do so.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialObservationVariance_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialObservationVariance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialObservationVariance" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialObservationVariance">
+  InitialObservationVariance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial variance of the observation noise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialObservationVariance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial observation variance, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialObservationVariance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter represents the expected amount of random noise or unexplained variation in the observed data.
+It affects how closely the model will try to fit the observed data points.
+</p>
+<p><b>For Beginners:</b> This setting represents how "noisy" or variable you expect your data to be. 
+A higher value (greater than 1.0) tells the model to expect more randomness in the data, resulting in a 
+smoother fit that doesn't chase every up and down. A lower value tells the model that most variations in 
+the data are meaningful and should be captured. The default value of 1.0 is a good starting point for most 
+datasets.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialTrendValue_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialTrendValue*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialTrendValue" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.InitialTrendValue">
+  InitialTrendValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for the trend component of the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialTrendValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial trend value, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_InitialTrendValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The trend component represents the rate of change of the level component over time.
+A positive value indicates an upward trend, while a negative value indicates a downward trend.
+</p>
+<p><b>For Beginners:</b> The "trend" represents how much your data is generally increasing or 
+decreasing over time. If you know your data is growing by about 5% each period, you might set this 
+to 0.05. A value of 0.0 (the default) means you're starting with no assumption about whether the data 
+is trending up or down. The model will learn the actual trend from your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_LevelSmoothingPrior_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.LevelSmoothingPrior*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_LevelSmoothingPrior" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.LevelSmoothingPrior">
+  LevelSmoothingPrior
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prior for the level component's smoothing parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LevelSmoothingPrior { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The level smoothing prior, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_LevelSmoothingPrior_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the level component can change over time. A smaller value
+results in a smoother level component, while a larger value allows for more rapid changes.
+Only used when UseAutomaticPriors is false.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the baseline of your data can change. A small value 
+like the default (0.01) means the baseline changes slowly and smoothly. A larger value (closer to 1) would 
+allow the baseline to jump up and down more rapidly. This setting only matters if you've set UseAutomaticPriors 
+to false. For most cases, the default value works well.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter limits how many iterations the algorithm will perform when trying to find
+the optimal model parameters. The algorithm will stop either when it reaches this limit
+or when the convergence tolerance is met, whichever comes first.
+</p>
+<p><b>For Beginners:</b> This controls how long the algorithm will keep trying to improve its estimates. 
+The default value of 100 iterations is sufficient for most problems. If you notice the model isn't fitting 
+well, you might increase this to give it more chances to find a good solution. However, more iterations mean 
+longer computation time, so there's a trade-off.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_PerformBackwardSmoothing_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.PerformBackwardSmoothing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_PerformBackwardSmoothing" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.PerformBackwardSmoothing">
+  PerformBackwardSmoothing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to perform backward smoothing after forward filtering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool PerformBackwardSmoothing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to perform backward smoothing (default), false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_PerformBackwardSmoothing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Backward smoothing (also known as the Kalman smoother) improves estimates by incorporating
+information from the entire time series, not just the past observations. This typically
+produces more accurate results but requires additional computation.
+</p>
+<p><b>For Beginners:</b> When set to true (the default), the model will make two passes through your data: 
+first forward in time, then backward. This is like being able to see the future when interpreting the past, 
+which usually gives more accurate results. The downside is it takes a bit longer to compute. Set this to false 
+if you need faster processing and are willing to accept slightly less accurate results, or if you're doing 
+real-time predictions where future data isn't available yet.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RegressionDecompositionType_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.RegressionDecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RegressionDecompositionType" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.RegressionDecompositionType">
+  RegressionDecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used for regression calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType RegressionDecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to LU decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RegressionDecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines the mathematical method used to solve the regression equations.
+Different decomposition methods have different numerical properties and performance characteristics.
+This setting only has an effect when IncludeRegression is set to true.
+</p>
+<p><b>For Beginners:</b> This is a technical setting that determines how the math is done behind the scenes 
+when including regression components. The default (LU decomposition) works well for most cases. You typically 
+don't need to change this unless you're experiencing numerical issues with large datasets or have specific 
+performance requirements. This setting only matters if IncludeRegression is set to true.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RidgeParameter_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.RidgeParameter*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RidgeParameter" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.RidgeParameter">
+  RidgeParameter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ridge parameter for regression regularization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RidgeParameter { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The ridge parameter, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_RidgeParameter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The ridge parameter controls the amount of regularization applied to the regression coefficients.
+Regularization helps prevent overfitting by penalizing large coefficient values. A larger ridge
+parameter results in more regularization (smaller coefficients), while a smaller value allows
+for larger coefficients. This setting only has an effect when IncludeRegression is set to true.
+</p>
+<p><b>For Beginners:</b> This setting helps prevent the model from becoming too complex and "overfitting" 
+the data (meaning it fits the training data too closely and performs poorly on new data). The default value 
+of 0.1 provides a moderate amount of regularization. If your model seems to be capturing too much noise in 
+the data, try increasing this value. If it's not capturing important patterns, try decreasing it. This setting 
+only matters if IncludeRegression is set to true.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalPeriods_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.SeasonalPeriods*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalPeriods" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.SeasonalPeriods">
+  SeasonalPeriods
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the list of seasonal periods to model in the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; SeasonalPeriods { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of integers representing seasonal periods, defaulting to an empty list.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalPeriods_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each integer in this list represents a seasonal pattern to model, where the value is the number of
+time steps in one complete seasonal cycle. Multiple seasonal patterns can be modeled simultaneously.
+</p>
+<p><b>For Beginners:</b> This lets you tell the model about any repeating patterns in your data. 
+For example:
+<ul><li>For weekly patterns in daily data, add 7 to the list</li><li>For monthly patterns in daily data, add 30 or 31</li><li>For yearly patterns in monthly data, add 12</li></ul>
+You can include multiple patterns (like both weekly and yearly cycles) by adding multiple numbers to the list. 
+If your data doesn't have any repeating patterns, you can leave this empty (the default).
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalSmoothingPrior_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.SeasonalSmoothingPrior*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalSmoothingPrior" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.SeasonalSmoothingPrior">
+  SeasonalSmoothingPrior
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prior for the seasonal component's smoothing parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SeasonalSmoothingPrior { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The seasonal smoothing prior, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_SeasonalSmoothingPrior_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the seasonal patterns can change over time. A smaller value
+results in more consistent seasonal patterns, while a larger value allows the seasonal patterns
+to evolve more rapidly. Only used when UseAutomaticPriors is false.
+</p>
+<p><b>For Beginners:</b> This controls how much the repeating patterns in your data can change over time. 
+For example, if you're tracking retail sales with a holiday season spike, this determines whether that spike 
+should be similar each year (use the default small value of 0.01) or whether it can change significantly 
+from year to year (use a larger value). This setting only matters if you've set UseAutomaticPriors to false.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_TrendSmoothingPrior_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.TrendSmoothingPrior*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_TrendSmoothingPrior" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.TrendSmoothingPrior">
+  TrendSmoothingPrior
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the prior for the trend component's smoothing parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TrendSmoothingPrior { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The trend smoothing prior, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_TrendSmoothingPrior_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how quickly the trend component can change over time. A smaller value
+results in a more stable trend, while a larger value allows the trend to change more rapidly.
+Only used when UseAutomaticPriors is false.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the trend (direction) of your data can change. 
+A small value like the default (0.01) means the trend changes slowly - if your data is growing, it will 
+continue growing at a similar rate. A larger value would allow the growth rate to change more dramatically 
+between time periods. This setting only matters if you've set UseAutomaticPriors to false.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_UseAutomaticPriors_" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.UseAutomaticPriors*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_UseAutomaticPriors" data-uid="AiDotNet.Models.Options.BayesianStructuralTimeSeriesOptions`1.UseAutomaticPriors">
+  UseAutomaticPriors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to automatically determine prior distributions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAutomaticPriors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use automatic priors (default), false to use manually specified priors.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianStructuralTimeSeriesOptions_1_UseAutomaticPriors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set to true, the algorithm will automatically determine appropriate prior distributions
+based on the data. When false, it will use the manually specified prior values for level,
+trend, and seasonal components.
+</p>
+<p><b>For Beginners:</b> In Bayesian statistics, "priors" represent your initial beliefs about the data 
+before you analyze it. When this is set to true (the default), the algorithm will automatically choose 
+reasonable priors based on your data. Set this to false if you have specific knowledge about how your data 
+behaves and want to manually set the smoothing priors below. For most users, especially beginners, keeping 
+this as true is recommended.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianStructuralTimeSeriesOptions.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

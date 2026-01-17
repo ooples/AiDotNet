@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientCheckpointing&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientCheckpointing&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides gradient checkpointing functionality for memory-efficient training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Autodiff_GradientCheckpointing_1.md&amp;value=---%0Auid%3A%20AiDotNet.Autodiff.GradientCheckpointing%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Autodiff.GradientCheckpointing`1">
+
+
+
+  <h1 id="AiDotNet_Autodiff_GradientCheckpointing_1" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1" class="text-break">
+Class GradientCheckpointing&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Autodiff.html">Autodiff</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides gradient checkpointing functionality for memory-efficient training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class GradientCheckpointing&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GradientCheckpointing&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Autodiff_GradientCheckpointing_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Gradient checkpointing (also known as activation checkpointing or memory checkpointing)
+is a technique that trades computation time for memory by not storing all intermediate
+activations during the forward pass. Instead, it recomputes them during the backward pass.
+</p>
+<p><b>For Beginners:</b> When training large neural networks, storing all intermediate
+results (activations) can use a lot of memory. Gradient checkpointing saves memory by:
+<ol>
+<li>Only storing activations at certain &quot;checkpoints&quot;</li>
+<li>During backpropagation, recomputing the activations between checkpoints</li>
+</ol>
+<p>This uses less memory but takes more time (roughly 30% more computation).
+It's essential for training very large models that wouldn't otherwise fit in GPU memory.</p>
+
+<p>
+This implementation follows patterns from PyTorch's torch.utils.checkpoint and
+TensorFlow's tf.recompute_grad.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_GradientCheckpointing_1_Checkpoint_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.Checkpoint*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientCheckpointing_1_Checkpoint_System_Func_AiDotNet_Autodiff_ComputationNode__0___System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.Checkpoint(System.Func{AiDotNet.Autodiff.ComputationNode{`0}},System.Collections.Generic.IEnumerable{AiDotNet.Autodiff.ComputationNode{`0}})">
+  Checkpoint(Func&lt;ComputationNode&lt;T&gt;&gt;, IEnumerable&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a function with gradient checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ComputationNode&lt;T&gt; Checkpoint(Func&lt;ComputationNode&lt;T&gt;&gt; function, IEnumerable&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The function to execute with checkpointing.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node from the function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientCheckpointing_1_Checkpoint_System_Func_AiDotNet_Autodiff_ComputationNode__0___System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The function will be executed during the forward pass, but its intermediate
+activations will not be saved. During the backward pass, the function will
+be re-executed to recompute the needed activations.
+</p>
+<p><b>For Beginners:</b> Wrap parts of your model in this function to save memory:
+<pre><code class="lang-csharp">// Without checkpointing (uses more memory):
+var output = layer1.Forward(input);
+output = layer2.Forward(output);
+
+// With checkpointing (uses less memory):
+var output = GradientCheckpointing&lt;float&gt;.Checkpoint(
+    () =&gt; {
+        var x = layer1.Forward(input);
+        return layer2.Forward(x);
+    },
+    new[] { input }
+);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientCheckpointing_1_CheckpointMultiOutput_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.CheckpointMultiOutput*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientCheckpointing_1_CheckpointMultiOutput_System_Func_System_Collections_Generic_IReadOnlyList_AiDotNet_Autodiff_ComputationNode__0____System_Collections_Generic_IEnumerable_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.CheckpointMultiOutput(System.Func{System.Collections.Generic.IReadOnlyList{AiDotNet.Autodiff.ComputationNode{`0}}},System.Collections.Generic.IEnumerable{AiDotNet.Autodiff.ComputationNode{`0}})">
+  CheckpointMultiOutput(Func&lt;IReadOnlyList&lt;ComputationNode&lt;T&gt;&gt;&gt;, IEnumerable&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a function with gradient checkpointing, supporting multiple outputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static IReadOnlyList&lt;ComputationNode&lt;T&gt;&gt; CheckpointMultiOutput(Func&lt;IReadOnlyList&lt;ComputationNode&lt;T&gt;&gt;&gt; function, IEnumerable&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The function to execute with checkpointing.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The output nodes from the function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientCheckpointing_1_EstimateMemorySavings_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.EstimateMemorySavings*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientCheckpointing_1_EstimateMemorySavings_System_Int32_System_Int64_System_Int32_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.EstimateMemorySavings(System.Int32,System.Int64,System.Int32)">
+  EstimateMemorySavings(int, long, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates memory savings from using gradient checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (long WithoutCheckpoint, long WithCheckpoint, double SavingsPercent) EstimateMemorySavings(int numLayers, long activationSize, int segmentSize = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of layers in the model.</p>
+</dd>
+    <dt><code>activationSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Size of activations per layer in bytes.</p>
+</dd>
+    <dt><code>segmentSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of layers per checkpoint segment.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int64,system.int64,system.double-.withoutcheckpoint">WithoutCheckpoint</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int64,system.int64,system.double-.withcheckpoint">WithCheckpoint</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int64,system.int64,system.double-.savingspercent">SavingsPercent</a>)</dt>
+    <dd><p>A tuple of (memory without checkpointing, memory with checkpointing, savings percentage).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientCheckpointing_1_EstimateMemorySavings_System_Int32_System_Int64_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This helps you estimate how much memory you'll save:
+<pre><code class="lang-csharp">var (without, with, savings) = GradientCheckpointing&lt;float&gt;.EstimateMemorySavings(
+    numLayers: 24,
+    activationSize: 100_000_000,  // 100MB per layer
+    segmentSize: 4
+);
+Console.WriteLine($"Saves {savings:P1} memory");</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_GradientCheckpointing_1_SequentialCheckpoint_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.SequentialCheckpoint*"></a>
+
+  <h3 id="AiDotNet_Autodiff_GradientCheckpointing_1_SequentialCheckpoint_System_Collections_Generic_IReadOnlyList_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0____AiDotNet_Autodiff_ComputationNode__0__System_Int32_" data-uid="AiDotNet.Autodiff.GradientCheckpointing`1.SequentialCheckpoint(System.Collections.Generic.IReadOnlyList{System.Func{AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0}}},AiDotNet.Autodiff.ComputationNode{`0},System.Int32)">
+  SequentialCheckpoint(IReadOnlyList&lt;Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;&gt;, ComputationNode&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sequential checkpoint that divides a sequence of layers into segments.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ComputationNode&lt;T&gt; SequentialCheckpoint(IReadOnlyList&lt;Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;&gt; layers, ComputationNode&lt;T&gt; input, int segmentSize = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The sequence of layer functions to checkpoint.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The input to the first layer.</p>
+</dd>
+    <dt><code>segmentSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of layers per checkpoint segment. Default: 2</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output from the final layer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_GradientCheckpointing_1_SequentialCheckpoint_System_Collections_Generic_IReadOnlyList_System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0____AiDotNet_Autodiff_ComputationNode__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is a convenience method for checkpointing sequential models. It automatically
+divides the layers into segments and applies checkpointing to each segment.
+</p>
+<p><b>For Beginners:</b> For models with many sequential layers (like ResNet or Transformers),
+this automatically applies checkpointing efficiently:
+<pre><code class="lang-csharp">var layers = new List&lt;Func&lt;ComputationNode&lt;float&gt;, ComputationNode&lt;float&gt;&gt;&gt;
+{
+    x =&gt; layer1.Forward(x),
+    x =&gt; layer2.Forward(x),
+    x =&gt; layer3.Forward(x),
+    x =&gt; layer4.Forward(x)
+};
+
+// Checkpoint every 2 layers
+var output = GradientCheckpointing&lt;float&gt;.SequentialCheckpoint(layers, input, segmentSize: 2);</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/GradientCheckpointing.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

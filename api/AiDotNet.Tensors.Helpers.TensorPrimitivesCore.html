@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorPrimitivesCore | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorPrimitivesCore | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides core dispatch logic for SIMD-accelerated tensor operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Helpers_TensorPrimitivesCore.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Helpers.TensorPrimitivesCore%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore">
+
+
+
+  <h1 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore" class="text-break">
+Class TensorPrimitivesCore  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides core dispatch logic for SIMD-accelerated tensor operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class TensorPrimitivesCore</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorPrimitivesCore</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements Microsoft's operator pattern for hardware-accelerated operations.
+It automatically detects available SIMD instruction sets and dispatches to the widest
+available vector width for maximum performance.
+</p>
+<p>
+<b>SIMD Hierarchy (fastest to slowest):</b>
+- AVX-512: 512-bit vectors (8 doubles or 16 floats) - Intel Skylake-X 2017+, AMD Zen 4 2022+
+- AVX2: 256-bit vectors (4 doubles or 8 floats) - Intel Haswell 2013+, AMD Excavator 2015+
+- SSE/NEON: 128-bit vectors (2 doubles or 4 floats) - All modern x64/ARM64 CPUs
+- Scalar: Fallback for unsupported hardware or remainder elements
+</p>
+<p>
+<b>Performance Impact:</b>
+AVX-512 can process 8x more doubles (16x more floats) per instruction than scalar code,
+achieving 8-12x speedups for transcendental functions like Sin/Cos.
+</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double})">
+  Dot(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L742"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product of two spans of doubles using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Dot(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_System_ReadOnlySpan_System_Int32__System_ReadOnlySpan_System_Int32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot(System.ReadOnlySpan{System.Int32},System.ReadOnlySpan{System.Int32})">
+  Dot(ReadOnlySpan&lt;int&gt;, ReadOnlySpan&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1057"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product of two spans of ints using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int Dot(ReadOnlySpan&lt;int&gt; x, ReadOnlySpan&lt;int&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_System_ReadOnlySpan_System_Int64__System_ReadOnlySpan_System_Int64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot(System.ReadOnlySpan{System.Int64},System.ReadOnlySpan{System.Int64})">
+  Dot(ReadOnlySpan&lt;long&gt;, ReadOnlySpan&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product of two spans of longs using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static long Dot(ReadOnlySpan&lt;long&gt; x, ReadOnlySpan&lt;long&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Dot_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Dot(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single})">
+  Dot(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L787"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product of two spans of floats using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Dot(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_GetHardwareAccelerationInfo_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.GetHardwareAccelerationInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_GetHardwareAccelerationInfo" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.GetHardwareAccelerationInfo">
+  GetHardwareAccelerationInfo()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets diagnostic information about available SIMD instruction sets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string GetHardwareAccelerationInfo()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing available hardware acceleration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan__1_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanIntoSpan``1(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  InvokeSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a unary operator to a span of double values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination) where TOperator : struct, IUnaryOperator&lt;double, double&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The input span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The destination span to write results to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd><p>The unary operator to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan__1_System_ReadOnlySpan_System_Double__System_Span_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan__1_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanIntoSpan``1(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  InvokeSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a unary operator to a span of float values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination) where TOperator : struct, IUnaryOperator&lt;float, float&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The input span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The destination span to write results to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd><p>The unary operator to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanIntoSpan__1_System_ReadOnlySpan_System_Single__System_Span_System_Single___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Automatically dispatches to AVX-512, AVX2, SSE, or scalar based on hardware support.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Byte__System_ReadOnlySpan_System_Byte__System_Span_System_Byte__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Byte},System.ReadOnlySpan{System.Byte},System.Span{System.Byte})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;byte&gt;, ReadOnlySpan&lt;byte&gt;, Span&lt;byte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L570"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of byte values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;byte&gt; x, ReadOnlySpan&lt;byte&gt; y, Span&lt;byte&gt; destination) where TOperator : struct, IBinaryOperator&lt;byte, byte&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of double values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, Span&lt;double&gt; destination) where TOperator : struct, IBinaryOperator&lt;double, double&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The first input span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The second input span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>The destination span to write results to.</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd><p>The binary operator to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Int16__System_ReadOnlySpan_System_Int16__System_Span_System_Int16__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Int16},System.ReadOnlySpan{System.Int16},System.Span{System.Int16})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;short&gt;, ReadOnlySpan&lt;short&gt;, Span&lt;short&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L394"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of short values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;short&gt; x, ReadOnlySpan&lt;short&gt; y, Span&lt;short&gt; destination) where TOperator : struct, IBinaryOperator&lt;short, short&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int16">short</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Int32__System_ReadOnlySpan_System_Int32__System_Span_System_Int32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Int32},System.ReadOnlySpan{System.Int32},System.Span{System.Int32})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;int&gt;, ReadOnlySpan&lt;int&gt;, Span&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of int values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;int&gt; x, ReadOnlySpan&lt;int&gt; y, Span&lt;int&gt; destination) where TOperator : struct, IBinaryOperator&lt;int, int&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Int64__System_ReadOnlySpan_System_Int64__System_Span_System_Int64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Int64},System.ReadOnlySpan{System.Int64},System.Span{System.Int64})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;long&gt;, ReadOnlySpan&lt;long&gt;, Span&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of long values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;long&gt; x, ReadOnlySpan&lt;long&gt; y, Span&lt;long&gt; destination) where TOperator : struct, IBinaryOperator&lt;long, long&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L614"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of sbyte values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, Span&lt;sbyte&gt; destination) where TOperator : struct, IBinaryOperator&lt;sbyte, sbyte&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of float values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, Span&lt;float&gt; destination) where TOperator : struct, IBinaryOperator&lt;float, float&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_UInt16__System_ReadOnlySpan_System_UInt16__System_Span_System_UInt16__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.UInt16},System.ReadOnlySpan{System.UInt16},System.Span{System.UInt16})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;ushort&gt;, ReadOnlySpan&lt;ushort&gt;, Span&lt;ushort&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of ushort values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;ushort&gt; x, ReadOnlySpan&lt;ushort&gt; y, Span&lt;ushort&gt; destination) where TOperator : struct, IBinaryOperator&lt;ushort, ushort&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_UInt32__System_ReadOnlySpan_System_UInt32__System_Span_System_UInt32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.UInt32},System.ReadOnlySpan{System.UInt32},System.Span{System.UInt32})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;uint&gt;, ReadOnlySpan&lt;uint&gt;, Span&lt;uint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L482"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of uint values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;uint&gt; x, ReadOnlySpan&lt;uint&gt; y, Span&lt;uint&gt; destination) where TOperator : struct, IBinaryOperator&lt;uint, uint&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_InvokeSpanSpanIntoSpan__1_System_ReadOnlySpan_System_UInt64__System_ReadOnlySpan_System_UInt64__System_Span_System_UInt64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.InvokeSpanSpanIntoSpan``1(System.ReadOnlySpan{System.UInt64},System.ReadOnlySpan{System.UInt64},System.Span{System.UInt64})">
+  InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;ulong&gt;, ReadOnlySpan&lt;ulong&gt;, Span&lt;ulong&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L526"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a binary operator to two spans of ulong values using the best available SIMD instructions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void InvokeSpanSpanIntoSpan&lt;TOperator&gt;(ReadOnlySpan&lt;ulong&gt; x, ReadOnlySpan&lt;ulong&gt; y, Span&lt;ulong&gt; destination) where TOperator : struct, IBinaryOperator&lt;ulong, ulong&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOperator</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max(System.ReadOnlySpan{System.Double})">
+  Max(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L832"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in a span of doubles using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Max(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_System_ReadOnlySpan_System_Int32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max(System.ReadOnlySpan{System.Int32})">
+  Max(ReadOnlySpan&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in a span of ints using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int Max(ReadOnlySpan&lt;int&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_System_ReadOnlySpan_System_Int64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max(System.ReadOnlySpan{System.Int64})">
+  Max(ReadOnlySpan&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in a span of longs using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static long Max(ReadOnlySpan&lt;long&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Max_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Max(System.ReadOnlySpan{System.Single})">
+  Max(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L869"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in a span of floats using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Max(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min(System.ReadOnlySpan{System.Double})">
+  Min(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L905"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the minimum value in a span of doubles using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Min(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_System_ReadOnlySpan_System_Int32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min(System.ReadOnlySpan{System.Int32})">
+  Min(ReadOnlySpan&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the minimum value in a span of ints using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int Min(ReadOnlySpan&lt;int&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_System_ReadOnlySpan_System_Int64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min(System.ReadOnlySpan{System.Int64})">
+  Min(ReadOnlySpan&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the minimum value in a span of longs using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static long Min(ReadOnlySpan&lt;long&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Min_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Min(System.ReadOnlySpan{System.Single})">
+  Min(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L941"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the minimum value in a span of floats using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Min(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum(System.ReadOnlySpan{System.Double})">
+  Sum(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L662"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of all elements in a span of doubles using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Sum(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_System_ReadOnlySpan_System_Int32__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum(System.ReadOnlySpan{System.Int32})">
+  Sum(ReadOnlySpan&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L977"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of all elements in a span of ints using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int Sum(ReadOnlySpan&lt;int&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_System_ReadOnlySpan_System_Int64__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum(System.ReadOnlySpan{System.Int64})">
+  Sum(ReadOnlySpan&lt;long&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L1017"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of all elements in a span of longs using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static long Sum(ReadOnlySpan&lt;long&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_TensorPrimitivesCore_Sum_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Helpers.TensorPrimitivesCore.Sum(System.ReadOnlySpan{System.Single})">
+  Sum(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L702"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of all elements in a span of floats using SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Sum(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/TensorPrimitivesCore.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

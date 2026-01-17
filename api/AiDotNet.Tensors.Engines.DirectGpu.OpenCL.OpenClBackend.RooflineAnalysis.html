@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OpenClBackend.RooflineAnalysis | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OpenClBackend.RooflineAnalysis | AiDotNet Documentation ">
+      
+      <meta name="description" content="Roofline model analysis result containing bottleneck information.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis" class="text-break">
+Class OpenClBackend.RooflineAnalysis  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4110"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.html">DirectGpu</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.html">OpenCL</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Roofline model analysis result containing bottleneck information.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class OpenClBackend.RooflineAnalysis</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OpenClBackend.RooflineAnalysis</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_AchievedBandwidthGBs_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.AchievedBandwidthGBs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_AchievedBandwidthGBs" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.AchievedBandwidthGBs">
+  AchievedBandwidthGBs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Effective memory bandwidth achieved (GB/s).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AchievedBandwidthGBs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_AchievedGflops_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.AchievedGflops*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_AchievedGflops" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.AchievedGflops">
+  AchievedGflops
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Achieved performance in GFLOPS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AchievedGflops { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_ArithmeticIntensity_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.ArithmeticIntensity*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_ArithmeticIntensity" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.ArithmeticIntensity">
+  ArithmeticIntensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Arithmetic intensity (FLOPs per byte).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ArithmeticIntensity { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_Bottleneck_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.Bottleneck*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_Bottleneck" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.Bottleneck">
+  Bottleneck
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Primary bottleneck identified.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Bottleneck { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_IsMemoryBound_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.IsMemoryBound*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_IsMemoryBound" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.IsMemoryBound">
+  IsMemoryBound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsMemoryBound { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_K_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.K*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_K" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.K">
+  K
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int K { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_M_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.M*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_M" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.M">
+  M
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Matrix dimensions (M x N x K).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int M { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_MemoryBandwidthGBs_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.MemoryBandwidthGBs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_MemoryBandwidthGBs" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.MemoryBandwidthGBs">
+  MemoryBandwidthGBs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Memory bandwidth in GB/s.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MemoryBandwidthGBs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_MemoryBytesTransferred_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.MemoryBytesTransferred*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_MemoryBytesTransferred" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.MemoryBytesTransferred">
+  MemoryBytesTransferred
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimated memory bytes transferred.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long MemoryBytesTransferred { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_N_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.N*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_N" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.N">
+  N
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int N { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_PeakEfficiency_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.PeakEfficiency*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_PeakEfficiency" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.PeakEfficiency">
+  PeakEfficiency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Efficiency as percentage of theoretical peak.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PeakEfficiency { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_PeakGflops_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.PeakGflops*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_PeakGflops" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.PeakGflops">
+  PeakGflops
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Theoretical peak performance in GFLOPS.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PeakGflops { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_Recommendations_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.Recommendations*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_Recommendations" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.Recommendations">
+  Recommendations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recommendations for improvement.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; Recommendations { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RidgePoint_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RidgePoint*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RidgePoint" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RidgePoint">
+  RidgePoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ridge point (AI where memory and compute roofs meet).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RidgePoint { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RooflineEfficiency_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RooflineEfficiency*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RooflineEfficiency" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RooflineEfficiency">
+  RooflineEfficiency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Efficiency as percentage of roofline limit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RooflineEfficiency { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RooflineLimit_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RooflineLimit*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_RooflineLimit" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.RooflineLimit">
+  RooflineLimit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum attainable performance based on roofline model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RooflineLimit { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_TimeMs_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.TimeMs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_TimeMs" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.TimeMs">
+  TimeMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Execution time in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TimeMs { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_TotalFlops_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.TotalFlops*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_TotalFlops" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.TotalFlops">
+  TotalFlops
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total FLOPs performed (2<em>M</em>N*K for GEMM).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long TotalFlops { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_ToString_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.ToString*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_OpenClBackend_RooflineAnalysis_ToString" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.OpenClBackend.RooflineAnalysis.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string that represents the current object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that represents the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/OpenClBackend.cs/#L4110" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

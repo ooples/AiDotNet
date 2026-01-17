@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum GradientType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum GradientType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies different types of gradient descent optimization algorithms used in machine learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_GradientType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.GradientType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.GradientType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_GradientType" data-uid="AiDotNet.Enums.GradientType" class="text-break">
+Enum GradientType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/GradientType.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies different types of gradient descent optimization algorithms used in machine learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum GradientType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_GradientType_Alpha"><code>Alpha = 1</code></dt>
+  <dd><p>Represents a gradient descent algorithm that prioritizes speed of convergence.</p>
+<p>
+<b>For Beginners:</b> Alpha gradient is designed for speed, taking larger steps to reach the solution faster.
+<p>Think of it like a sports car that:</p>
+<ul>
+<li>Moves quickly toward the destination</li>
+<li>Can reach the solution in fewer iterations</li>
+<li>Works well when the &quot;landscape&quot; is smooth</li>
+<li>Might overshoot or become unstable on tricky problems</li>
+</ul>
+<p>Alpha gradient is good when:</p>
+<ul>
+<li>You need quick results</li>
+<li>Your data is well-behaved (not too noisy)</li>
+<li>You're willing to risk some instability for speed</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_GradientType_Beta"><code>Beta = 2</code></dt>
+  <dd><p>Represents a gradient descent algorithm that prioritizes stability and reliability over speed.</p>
+<p>
+<b>For Beginners:</b> Beta gradient is designed for reliability, taking careful steps to ensure stable learning.
+<p>Think of it like an off-road vehicle that:</p>
+<ul>
+<li>Moves more cautiously but consistently</li>
+<li>Is less likely to get stuck or go off-track</li>
+<li>Handles difficult or noisy data better</li>
+<li>Takes more time but is more dependable</li>
+</ul>
+<p>Beta gradient is good when:</p>
+<ul>
+<li>Your data is noisy or complex</li>
+<li>You value consistent, reliable results</li>
+<li>You're willing to wait longer for a solution</li>
+<li>You're dealing with a challenging problem where other methods might fail</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_GradientType_Omega"><code>Omega = 0</code></dt>
+  <dd><p>Represents the standard gradient descent algorithm with momentum and adaptive learning rates.</p>
+<p>
+<b>For Beginners:</b> Omega gradient combines the best features of several optimization methods.
+<p>Think of it like a smart car that:</p>
+<ul>
+<li>Remembers which direction was working well (momentum)</li>
+<li>Automatically adjusts its speed based on the terrain (adaptive learning)</li>
+<li>Can handle both steep and gentle slopes efficiently</li>
+</ul>
+<p>This is often a good default choice when you're not sure which gradient type to use,
+as it balances speed and stability for most common machine learning problems.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_GradientType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Gradient descent is how AI models learn from data. Think of it like finding the 
+lowest point in a valley by taking steps downhill. Different gradient types represent different 
+strategies for how to take these steps - some are faster but riskier, others are slower but more reliable.
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/GradientType.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1211 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RoSAAdapter&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RoSAAdapter&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="RoSA (Robust Adaptation) adapter for parameter-efficient fine-tuning with improved robustness to distribution shifts.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LoRA_Adapters_RoSAAdapter_1.md&amp;value=---%0Auid%3A%20AiDotNet.LoRA.Adapters.RoSAAdapter%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1">
+
+
+
+  <h1 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1" class="text-break">
+Class RoSAAdapter&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LoRA.html">LoRA</a>.<a class="xref" href="AiDotNet.LoRA.Adapters.html">Adapters</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>RoSA (Robust Adaptation) adapter for parameter-efficient fine-tuning with improved robustness to distribution shifts.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RoSAAdapter&lt;T&gt; : LoRAAdapterBase&lt;T&gt;, IDisposable, ILoRAAdapter&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html">LoRAAdapterBase</a>&lt;T&gt;</div>
+      <div><span class="xref">RoSAAdapter&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILoRAAdapter-1.html">ILoRAAdapter</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__baseLayer">LoRAAdapterBase&lt;T&gt;._baseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__loraLayer">LoRAAdapterBase&lt;T&gt;._loraLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__freezeBaseLayer">LoRAAdapterBase&lt;T&gt;._freezeBaseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_BaseLayer">LoRAAdapterBase&lt;T&gt;.BaseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_LoRALayer">LoRAAdapterBase&lt;T&gt;.LoRALayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_IsBaseLayerFrozen">LoRAAdapterBase&lt;T&gt;.IsBaseLayerFrozen</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Rank">LoRAAdapterBase&lt;T&gt;.Rank</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Alpha">LoRAAdapterBase&lt;T&gt;.Alpha</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_SupportsTraining">LoRAAdapterBase&lt;T&gt;.SupportsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_CreateLoRALayer_System_Int32_System_Double_">LoRAAdapterBase&lt;T&gt;.CreateLoRALayer(int, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_CreateMergedLayerWithClone_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LoRAAdapterBase&lt;T&gt;.CreateMergedLayerWithClone(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_MergeToDenseOrFullyConnected">LoRAAdapterBase&lt;T&gt;.MergeToDenseOrFullyConnected()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_UpdateParametersFromLayers">LoRAAdapterBase&lt;T&gt;.UpdateParametersFromLayers()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_SupportsJitCompilation">LoRAAdapterBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">LoRAAdapterBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuExecution">LayerBase&lt;T&gt;.SupportsGpuExecution</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuTraining">LayerBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____">LayerBase&lt;T&gt;.ForwardGpu(params IGpuTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LayerBase&lt;T&gt;.BackwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">LayerBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose_System_Boolean_">LayerBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+RoSA (Robust Adaptation) extends standard LoRA by combining two complementary components:
+1. Low-rank component (standard LoRA): Captures common, structured patterns in adaptations
+2. Sparse component: Captures specific, rare, or outlier patterns that low-rank cannot represent
+</p>
+<p>
+<b>Mathematical Formulation:</b>
+Given input x and pre-trained weights W, RoSA computes:
+- Low-rank component: L = (alpha/rank) * B * A * x
+- Sparse component: S = W_sparse * x (where W_sparse is highly sparse)
+- Final output: y = W*x + L + S
+<p>The sparse component is maintained through magnitude-based pruning, keeping only the
+most significant weights and zeroing out the rest. This creates a sparse matrix that
+captures specific patterns while remaining parameter-efficient.</p>
+
+<p>
+<b>Research Context:</b>
+RoSA was introduced in January 2024 as a robust alternative to standard LoRA.
+The key insight is that low-rank approximations work well for common patterns but
+struggle with distribution shifts and rare patterns. By adding a sparse component,
+RoSA can capture outliers and domain-specific patterns without significantly
+increasing parameter count.
+<p>In experiments on domain adaptation tasks, RoSA showed:</p>
+<ul>
+<li>Better generalization to new domains (+5-10% over standard LoRA)</li>
+<li>More robust to distribution shifts</li>
+<li>Ability to capture both global patterns (low-rank) and local exceptions (sparse)</li>
+<li>Only modest increase in parameters (typically 5-15% more than pure LoRA)</li>
+</ul>
+
+<p>
+<b>For Beginners:</b> RoSA is like LoRA with a safety net for unusual cases.
+<p>Think of it this way:</p>
+<ul>
+<li>Low-rank LoRA is like learning general rules (&quot;most images of cats have pointed ears&quot;)</li>
+<li>Sparse component is like remembering specific exceptions (&quot;this one cat breed has round ears&quot;)</li>
+<li>Together they make a robust model that handles both common and rare cases</li>
+</ul>
+<p>Why RoSA is more robust:</p>
+<ul>
+<li>Low-rank component: Efficient for common patterns across domains</li>
+<li>Sparse component: Handles outliers and domain-specific quirks</li>
+<li>Result: Better performance when test data differs from training data</li>
+</ul>
+<p>When to use RoSA over standard LoRA:</p>
+<ul>
+<li>When you expect distribution shifts (train on news, test on social media)</li>
+<li>When your data has outliers or rare patterns that matter</li>
+<li>When you need robustness more than absolute parameter efficiency</li>
+<li>When adapting to multiple related but distinct domains</li>
+</ul>
+<p>Trade-offs vs standard LoRA:</p>
+<ul>
+<li>More robust to distribution shifts</li>
+<li>Better handles rare patterns</li>
+<li>More flexible adaptation</li>
+</ul>
+<ul>
+<li>Slightly more parameters (sparse component adds ~5-15%)</li>
+<li>Slightly more computation (extra sparse matrix multiply)</li>
+<li>Requires tuning sparsity ratio</li>
+</ul>
+
+<p>
+<b>Reference:</b>
+"RoSA: Robust Adaptation through Sparse Regularization"
+January 2024
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1__ctor_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1__ctor_AiDotNet_Interfaces_ILayer__0__System_Int32_System_Double_System_Double_System_Double_System_Boolean_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.#ctor(AiDotNet.Interfaces.ILayer{`0},System.Int32,System.Double,System.Double,System.Double,System.Boolean)">
+  RoSAAdapter(ILayer&lt;T&gt;, int, double, double, double, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new RoSA adapter wrapping an existing layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RoSAAdapter(ILayer&lt;T&gt; baseLayer, int rank, double alpha = -1, double sparsityRatio = 0.95, double sparseThreshold = 0.01, bool freezeBaseLayer = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseLayer</code> <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>The layer to adapt with RoSA.</p>
+</dd>
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the low-rank LoRA decomposition.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The LoRA scaling factor (defaults to rank if negative).</p>
+</dd>
+    <dt><code>sparsityRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0.0 to 1.0, typically 0.9-0.99).</p>
+</dd>
+    <dt><code>sparseThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Magnitude threshold for pruning sparse weights (typically 0.001-0.1).</p>
+</dd>
+    <dt><code>freezeBaseLayer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to freeze the base layer's parameters during training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1__ctor_AiDotNet_Interfaces_ILayer__0__System_Int32_System_Double_System_Double_System_Double_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the RoSA adapter by:
+1. Setting up the standard LoRA components (via base constructor)
+2. Initializing the sparse weight matrix (starts with small random values)
+3. Applying initial pruning to enforce sparsity
+</p>
+<p>
+<b>For Beginners:</b> This creates a RoSA adapter around your existing layer.
+<p>Parameters:</p>
+<ul>
+<li>baseLayer: The layer you want to fine-tune efficiently and robustly</li>
+<li>rank: How much compression for the low-rank component (lower = fewer parameters)</li>
+<li>alpha: Scaling factor for LoRA contribution (usually equals rank)</li>
+<li>sparsityRatio: How sparse the sparse component should be (0.95 = 95% zeros)</li>
+<li>sparseThreshold: Minimum importance for keeping a sparse weight (0.01 is typical)</li>
+<li>freezeBaseLayer: Usually true - we only train LoRA + sparse, not base weights</li>
+</ul>
+<p>Example: For a 1000x1000 layer with rank=8 and sparsityRatio=0.95:</p>
+<ul>
+<li>Base layer: 1,000,000 parameters (frozen)</li>
+<li>LoRA: 16,000 parameters (8 * (1000 + 1000))</li>
+<li>Sparse: ~50,000 parameters (5% of 1,000,000)</li>
+<li>Total trainable: ~66,000 parameters (vs 1M for full fine-tuning!)</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when baseLayer is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when sparsityRatio is not between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_ParameterCount_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_ParameterCount" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of trainable parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+RoSA parameters include:
+- Base layer parameters (if not frozen)
+- LoRA parameters (rank * (inputSize + outputSize))
+- Non-zero sparse parameters (varies based on sparsity)
+<p>For parameter counting, we report the full sparse matrix size, but in practice
+only the non-zero elements need to be stored and updated.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparseThreshold_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SparseThreshold*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparseThreshold" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SparseThreshold">
+  SparseThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Threshold for magnitude-based pruning of sparse weights.
+Weights with magnitude below this threshold are set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SparseThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparseThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold controls the sparsity of the sparse component. Lower values
+result in more non-zero weights (less sparse), higher values result in
+fewer non-zero weights (more sparse).
+</p>
+<p>
+<b>For Beginners:</b> This is like a "minimum importance" cutoff.
+If a weight's importance is below this value, we zero it out to maintain
+sparsity. Typical values: 0.001 to 0.1
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparsityRatio_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SparsityRatio*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparsityRatio" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SparsityRatio">
+  SparsityRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Target sparsity ratio (fraction of zeros in sparse component).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SparsityRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SparsityRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value controls how sparse the sparse component should be.
+- 0.0 = no sparsity (all weights can be non-zero)
+- 0.5 = 50% of weights are zero
+- 0.95 = 95% of weights are zero (very sparse)
+- 0.99 = 99% of weights are zero (extremely sparse)
+</p>
+<p>
+<b>For Beginners:</b> This is the target percentage of zeros we want.
+Higher values (like 0.95) mean fewer non-zero weights, which keeps the
+model efficient. Lower values mean more flexibility but more parameters.
+<p>Typical values:</p>
+<ul>
+<li>0.90 (90% zeros): More flexible, for complex domains</li>
+<li>0.95 (95% zeros): Good balance (recommended starting point)</li>
+<li>0.99 (99% zeros): Very efficient, for simple adaptations</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Backward_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.Backward*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L499"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the backward pass through RoSA adapter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Gradient flowing back from the next layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Gradient to pass to the previous layer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The backward pass computes gradients for all three components:
+1. LoRA component (via LoRA layer's backward)
+2. Sparse component (direct gradient computation)
+3. Base layer (if not frozen)
+<p>Gradients are accumulated and input gradients are summed.</p>
+
+<p>
+<b>For Beginners:</b> This is where RoSA learns from errors.
+<p>The backward pass tells each component how to improve:</p>
+<ul>
+<li>LoRA component: Update low-rank matrices A and B</li>
+<li>Sparse component: Update the sparse weight matrix</li>
+<li>Base layer: Update if not frozen (usually frozen)</li>
+</ul>
+<p>After this, UpdateParameters() will apply the learning using these gradients.
+The sparse gradients will be pruned to maintain sparsity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Forward_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.Forward*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the forward pass through RoSA adapter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Output combining base layer, low-rank LoRA, and sparse components.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The RoSA forward pass computes:
+1. Base output: y_base = base_layer(input)
+2. LoRA output: y_lora = lora_layer(input)
+3. Sparse output: y_sparse = input @ sparse_weights^T
+4. Final output: y = y_base + y_lora + y_sparse
+</p>
+<p>
+<b>For Beginners:</b> This is where all three components work together.
+<p>Think of it as three parallel processing paths:</p>
+<ul>
+<li>Base layer: Original pre-trained knowledge (usually frozen)</li>
+<li>LoRA component: Low-rank corrections for common patterns</li>
+<li>Sparse component: Specific corrections for rare patterns</li>
+</ul>
+<p>All three outputs are added together to get the final result.
+This combination gives RoSA its robustness: the low-rank handles
+common patterns efficiently, while sparse handles outliers.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_GetParameters_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_GetParameters" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L666"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current parameters as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector containing all parameters (base if not frozen, LoRA, sparse).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_GetSparsity_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.GetSparsity*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_GetSparsity" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.GetSparsity">
+  GetSparsity()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current sparsity of the sparse component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GetSparsity()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The fraction of zeros in the sparse weight matrix (0.0 to 1.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_GetSparsity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the actual sparsity by counting zero and near-zero elements.
+The result can be compared to SparsityRatio to see how well pruning is working.
+</p>
+<p>
+<b>For Beginners:</b> This tells you what percentage of the sparse component is actually zero.
+<p>If you set SparsityRatio to 0.95, this should return close to 0.95 after pruning.
+If it's much lower, you might need to adjust the threshold or pruning frequency.</p>
+<p>Example return values:</p>
+<ul>
+<li>0.95 = 95% zeros (good for target of 0.95)</li>
+<li>0.80 = 80% zeros (less sparse than target)</li>
+<li>0.99 = 99% zeros (more sparse than target)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_MergeToOriginalLayer_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.MergeToOriginalLayer*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_MergeToOriginalLayer" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.MergeToOriginalLayer">
+  MergeToOriginalLayer()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L800"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Merges the RoSA adaptation into the base layer and returns the merged layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ILayer&lt;T&gt; MergeToOriginalLayer()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>A new layer with both LoRA and sparse weights merged into the base layer's weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_MergeToOriginalLayer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a final layer by merging both components:
+- Merged weights: W' = W_base + W_lora + W_sparse
+where W_lora = (alpha/rank) * B * A
+</p>
+<p>
+<b>For Beginners:</b> This "bakes in" both the LoRA and sparse adaptations for deployment.
+<p>After training with RoSA, you can create a single efficient layer by:</p>
+<ol>
+<li>Computing the LoRA weight contribution (B * A)</li>
+<li>Adding the sparse weights</li>
+<li>Adding both to the base weights</li>
+<li>Creating a new layer with the merged weights</li>
+</ol>
+<p>The result is a standard layer that has all the adaptations built in:</p>
+<ul>
+<li>Faster inference (no need for three separate computations)</li>
+<li>Simpler deployment (single layer instead of adapter)</li>
+<li>Same behavior as the RoSA adapter</li>
+<li>Compatible with any system (doesn't need RoSA support)</li>
+</ul>
+<p>Trade-off: You lose the ability to adjust LoRA/sparse contributions separately,
+but gain inference speed and simplicity.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the base layer type is not supported for merging.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_PruneSparseWeights_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.PruneSparseWeights*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_PruneSparseWeights" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.PruneSparseWeights">
+  PruneSparseWeights()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prunes sparse weights based on magnitude to maintain target sparsity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void PruneSparseWeights()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_PruneSparseWeights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements magnitude-based pruning:
+1. Computes magnitude of all sparse weights
+2. Determines threshold based on target sparsity ratio
+3. Sets weights below threshold to zero
+<p>This ensures the sparse component maintains its sparsity during training.</p>
+
+<p>
+<b>For Beginners:</b> This is like cleaning up the sparse component.
+<p>We keep only the most important weights:</p>
+<ol>
+<li>Look at all the weights and their magnitudes</li>
+<li>Sort them by importance (magnitude)</li>
+<li>Keep the top X% (based on sparsity ratio)</li>
+<li>Zero out the rest</li>
+</ol>
+<p>Example with sparsity ratio 0.95:</p>
+<ul>
+<li>We have 1000 weights</li>
+<li>We want 95% zeros (950 zeros, 50 non-zeros)</li>
+<li>Keep the 50 largest magnitudes</li>
+<li>Set the other 950 to zero</li>
+</ul>
+<p>This is called periodically during training to maintain sparsity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_ResetState_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_ResetState" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L853"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the adapter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SetParameters_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L675"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the layer parameters from a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector containing all parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_UpdateParameters_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_UpdateParameters__0_" data-uid="AiDotNet.LoRA.Adapters.RoSAAdapter`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L631"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates parameters using the specified learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for parameter updates.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_RoSAAdapter_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method updates all trainable components:
+1. LoRA layer (always)
+2. Sparse weights (always, then prunes to maintain sparsity)
+3. Base layer (only if not frozen)
+</p>
+<p>
+<b>For Beginners:</b> This applies the learning from the backward pass.
+<p>For each component:</p>
+<ul>
+<li>Use the gradients to update parameters</li>
+<li>For sparse weights: update, then prune to maintain sparsity</li>
+<li>This ensures we're always learning while keeping the model efficient</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/RoSAAdapter.cs/#L74" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

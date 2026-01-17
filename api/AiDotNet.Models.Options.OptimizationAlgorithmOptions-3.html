@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for optimization algorithms used in machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_OptimizationAlgorithmOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.OptimizationAlgorithmOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3" class="text-break">
+Class OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for optimization algorithms used in machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; : ModelOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><span class="xref">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.AntColonyOptimizationOptions-3.html">AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.BayesianOptimizerOptions-3.html">BayesianOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NelderMeadOptimizerOptions-3.html">NelderMeadOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ParticleSwarmOptimizationOptions-3.html">ParticleSwarmOptimizationOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PowellOptimizerOptions-3.html">PowellOptimizerOptions&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SimulatedAnnealingOptions-3.html">SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Optimization algorithms are methods used to find the best parameters for a machine learning model
+by minimizing or maximizing an objective function.
+</p>
+<p><b>For Beginners:</b> Think of optimization as the process of "learning" in machine learning.
+It's like adjusting the knobs on a radio until you get the clearest signal. These settings control
+how quickly and accurately the algorithm learns from your data.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.BadFitPatience*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.BadFitPatience">
+  BadFitPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of iterations to wait before adjusting parameters when the model is performing poorly.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BadFitPatience { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of iterations to wait, defaulting to 5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If your model is performing poorly, this setting determines how long to wait
+before making adjustments. It's like giving the model a few more chances before changing your approach.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.EarlyStoppingPatience*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.EarlyStoppingPatience">
+  EarlyStoppingPatience
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of iterations to wait before stopping if no improvement is observed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EarlyStoppingPatience { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of iterations to wait, defaulting to 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how patient the algorithm is. If it hasn't seen any improvement
+for this many iterations, it will stop training. Higher values make the algorithm more patient,
+giving it more chances to find improvements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ExplorationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ExplorationRate">
+  ExplorationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the exploration rate for reinforcement learning and some optimization algorithms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ExplorationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The exploration rate, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This balances between trying new things (exploration) and using what's already known to work (exploitation).
+A value of 0.5 means the algorithm spends equal time exploring new possibilities and exploiting known good solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FeatureSelectionProbability*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FeatureSelectionProbability">
+  FeatureSelectionProbability
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L354"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability of selecting a feature during feature selection mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FeatureSelectionProbability { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The feature selection probability, defaulting to 0.5 (50% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+FeatureSelectionProbability controls how likely each feature is to be included when the optimizer
+is performing feature selection. Higher values mean more features will typically be selected, while
+lower values result in sparser feature sets. Value must be between 0 and 1.
+</p>
+<p><b>For Beginners:</b> When the optimizer is choosing which features (input variables) to use,
+this setting controls how likely each one is to be included. A value of 0.5 means each feature has
+a 50/50 chance of being selected. Increase this to use more features, decrease it to use fewer.</p>
+<p><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+will throw an ArgumentException.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FitDetector*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FitDetector">
+  FitDetector
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L439"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fit detector to determine when a model has converged or is overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFitDetector&lt;T, TInput, TOutput&gt; FitDetector { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitDetector-3.html">IFitDetector</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fit detector implementation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fit detector helps determine when training should stop. It can detect
+when your model has learned as much as it can from the data, or when it's starting to memorize the
+training data instead of learning general patterns (overfitting).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FitnessCalculator*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.FitnessCalculator">
+  FitnessCalculator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fitness calculator to evaluate model quality during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFitnessCalculator&lt;T, TInput, TOutput&gt; FitnessCalculator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fitness calculator implementation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fitness calculator assigns a score to your model based on how well it performs.
+This score is used by the optimization algorithm to determine which model parameters are better than others,
+guiding the learning process toward better solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.InitialLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.InitialLearningRate">
+  InitialLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial learning rate for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The learning rate controls how big of steps the algorithm takes when learning.
+A higher rate means bigger steps (faster learning but might overshoot), while a lower rate means smaller steps
+(more precise but slower learning). Think of it like adjusting the speed of learning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.InitialMomentum*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.InitialMomentum">
+  InitialMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial momentum value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialMomentum { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial momentum, defaulting to 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Momentum determines how much the previous update influences the current one.
+A value of 0.9 means 90% of the previous update is carried forward. Higher values make the algorithm
+less likely to get stuck but might make it harder to settle on the best solution.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.LearningRateDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.LearningRateDecay">
+  LearningRateDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the rate at which the learning rate decreases over time.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decay factor, defaulting to 0.99.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This controls how quickly the learning rate decreases. A value of 0.99 means
+the learning rate becomes 99% of its previous value after each iteration, gradually slowing down the learning process.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxExplorationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxExplorationRate">
+  MaxExplorationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed exploration rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxExplorationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum exploration rate, defaulting to 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This limits how much time the algorithm spends exploring new possibilities
+(at most 90% with the default value). This ensures the algorithm always spends some time using what
+it already knows works well.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations (epochs) for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how many times the algorithm will go through your entire dataset.
+Each complete pass is called an "epoch". More iterations give the algorithm more chances to learn,
+but too many can lead to overfitting (memorizing the data instead of learning patterns).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum learning rate, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This prevents the learning rate from becoming too large,
+which could cause the algorithm to make wild guesses instead of learning properly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxMomentum*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaxMomentum">
+  MaxMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed momentum value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxMomentum { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum momentum, defaulting to 0.99.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This prevents the momentum from becoming too large,
+which could cause the algorithm to overshoot good solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaximumFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MaximumFeatures">
+  MaximumFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of features to consider in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaximumFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of features.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This limits how many characteristics (features) from your data the model can use.
+Setting a maximum can help prevent the model from becoming too complex.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinExplorationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinExplorationRate">
+  MinExplorationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed exploration rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinExplorationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum exploration rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This ensures the algorithm always spends at least some time exploring new
+possibilities (at least 10% with the default value), even if it's found a good solution. This helps
+prevent the algorithm from getting stuck in a suboptimal solution.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinLearningRate">
+  MinLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum learning rate, defaulting to 0.000001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This prevents the learning rate from becoming too small.
+Even if the rate keeps decreasing, it won't go below this value.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinMomentum*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinMomentum">
+  MinMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed momentum value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinMomentum { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum momentum, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This prevents the momentum from becoming too small.
+Even if the momentum keeps decreasing, it won't go below this value.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinimumFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MinimumFeatures">
+  MinimumFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum number of features to consider in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinimumFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The minimum number of features.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Features are the characteristics or attributes in your data (like height, weight, color).
+This setting defines the minimum number of these characteristics the model should use.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelCache*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelCache">
+  ModelCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L461"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model cache to store and retrieve previously evaluated models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IModelCache&lt;T, TInput, TOutput&gt; ModelCache { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelCache-3.html">IModelCache</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model cache implementation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The model cache stores models that have already been evaluated, which can
+save time if the same model parameters are encountered again during optimization. This is especially
+useful for complex models that take a long time to evaluate.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelEvaluator*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelEvaluator">
+  ModelEvaluator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model evaluator to use for assessing model performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IModelEvaluator&lt;T, TInput, TOutput&gt; ModelEvaluator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model evaluator implementation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The model evaluator is responsible for testing how well your model performs
+on data. It calculates metrics like accuracy or error rates that tell you how good your model is.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelStatsOptions*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ModelStatsOptions">
+  ModelStatsOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the options for model statistics calculation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelStatsOptions ModelStatsOptions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.ModelStatsOptions.html">ModelStatsOptions</a></dt>
+    <dd><p>The model statistics options.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These settings control what statistics are calculated about your model,
+such as complexity metrics or feature importance. This helps you understand how your model works
+and what factors are most important in its predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MomentumDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MomentumDecreaseFactor">
+  MomentumDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which momentum decreases when performance worsens.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MomentumDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The momentum decrease factor, defaulting to 0.95.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When the model is getting worse, momentum will be decreased by this factor.
+A value of 0.95 means momentum becomes 95% of its previous value, helping the model slow down
+when it might be heading in the wrong direction.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MomentumIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.MomentumIncreaseFactor">
+  MomentumIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which momentum increases when performance improves.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MomentumIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The momentum increase factor, defaulting to 1.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When the model is improving, momentum will be increased by this factor.
+A value of 1.05 means momentum becomes 105% of its previous value, helping the model move faster
+in promising directions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.OptimizationMode*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.OptimizationMode">
+  OptimizationMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimization mode (feature selection, parameter tuning, or both).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationMode OptimizationMode { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OptimizationMode.html">OptimizationMode</a></dt>
+    <dd><p>The optimization mode, defaulting to Both.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+OptimizationMode determines what aspects of the model the optimizer will modify.
+FeatureSelectionOnly only selects which features to use, ParametersOnly only adjusts model parameters,
+and Both allows the optimizer to do both.
+</p>
+<p><b>For Beginners:</b> This controls what the optimizer is allowed to change. It can choose
+which features (input variables) to use, adjust the model's internal settings, or do both. The default
+is 'Both', which gives the optimizer maximum flexibility to improve your model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ParameterAdjustmentProbability*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ParameterAdjustmentProbability">
+  ParameterAdjustmentProbability
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability of adjusting a parameter during parameter tuning mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ParameterAdjustmentProbability { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The parameter adjustment probability, defaulting to 0.3 (30% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+ParameterAdjustmentProbability determines how likely each parameter is to be modified during
+parameter tuning. Lower values result in more conservative updates (fewer parameters changed),
+while higher values make more aggressive updates. Value must be between 0 and 1.
+</p>
+<p><b>For Beginners:</b> When the optimizer is adjusting model parameters, this controls how many
+of them get changed at once. A value of 0.3 means each parameter has a 30% chance of being adjusted.
+Lower values make smaller, more careful changes; higher values make bigger, bolder changes.</p>
+<p><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+will throw an ArgumentException.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ParameterAdjustmentScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.ParameterAdjustmentScale">
+  ParameterAdjustmentScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the scale factor for parameter adjustments during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ParameterAdjustmentScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The parameter adjustment scale, defaulting to 0.1. Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+ParameterAdjustmentScale controls how much model parameters are changed during each perturbation.
+Larger values result in bigger parameter changes, which can speed up exploration but may overshoot
+optimal values. Smaller values make smaller changes, leading to more precise but slower optimization.
+</p>
+<p><b>For Beginners:</b> This controls how big the changes are when the optimizer adjusts your model's
+parameters. A value of 0.1 means parameters change by about 10%. Increase this if optimization is too slow,
+decrease it if the optimizer seems to be overshooting good solutions.</p>
+<p><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+will throw an ArgumentException.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.PredictionOptions*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.PredictionOptions">
+  PredictionOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the options for prediction statistics calculation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PredictionStatsOptions PredictionOptions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.PredictionStatsOptions.html">PredictionStatsOptions</a></dt>
+    <dd><p>The prediction statistics options.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These settings control how predictions are evaluated and what additional
+information (like confidence intervals) is included with predictions. This is useful for understanding
+how reliable your model's predictions are.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.SignFlipProbability*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.SignFlipProbability">
+  SignFlipProbability
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the probability of flipping the sign of a parameter during perturbation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SignFlipProbability { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sign flip probability, defaulting to 0.1 (10% chance). Values are automatically clamped to [0.0, 1.0] and invalid values (NaN/Infinity) are rejected.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+SignFlipProbability determines how often parameter signs are randomly flipped during optimization.
+This helps the optimizer explore different regions of the solution space by allowing parameters to
+change direction. Value must be between 0 and 1.
+</p>
+<p><b>For Beginners:</b> Sometimes the optimizer tries flipping a parameter from positive to negative
+(or vice versa) to see if that improves the model. This setting controls how often that happens.
+A value of 0.1 means there's a 10% chance of flipping each time.</p>
+<p><b>Validation:</b> The value is automatically clamped between 0.0 and 1.0. Invalid values (NaN, Infinity)
+will throw an ArgumentException.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.000001 (1e-6).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Tolerance defines how close the algorithm needs to get to the optimal solution before considering
+the optimization process complete. When the change in the objective function between iterations
+becomes smaller than this value, the algorithm will stop, assuming it has converged to a solution.
+</p>
+<p><b>For Beginners:</b> Think of tolerance as the precision level of your answer. A smaller value
+(like 0.000001) means the algorithm will try to find a more precise answer, but might take longer.
+It's like deciding whether you need to measure something to the nearest millimeter or just the nearest
+centimeter. If the improvement between steps becomes smaller than this value, the algorithm decides
+it's close enough to the best answer and stops searching.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseAdaptiveLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseAdaptiveLearningRate">
+  UseAdaptiveLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to automatically adjust the learning rate during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use adaptive learning rate (default), false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When enabled, the algorithm will automatically adjust how fast it learns
+based on its progress. It's like slowing down when you're getting close to your destination.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseAdaptiveMomentum*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseAdaptiveMomentum">
+  UseAdaptiveMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to automatically adjust the momentum during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveMomentum { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use adaptive momentum (default), false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Momentum helps the algorithm push through flat areas and avoid getting stuck in local minima.
+It's like a ball rolling downhill that can roll through small bumps. When adaptive momentum is enabled,
+the algorithm will adjust this effect based on its progress.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseEarlyStopping">
+  UseEarlyStopping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use early stopping to prevent overfitting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseEarlyStopping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use early stopping (default), false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Early stopping is like knowing when to stop studying - if your performance
+isn't improving anymore, it's time to stop. This prevents the model from memorizing the training data
+(overfitting) instead of learning general patterns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseExpressionTrees*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.UseExpressionTrees">
+  UseExpressionTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use expression trees for optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseExpressionTrees { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use expression trees, false otherwise (default).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Expression trees are a way to represent code as data, which can make
+certain operations faster. This is an advanced feature that most beginners won't need to change.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.CreateDefaults*"></a>
+
+  <h3 id="AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_" data-uid="AiDotNet.Models.Options.OptimizationAlgorithmOptions`3.CreateDefaults(AiDotNet.Enums.OptimizerType)">
+  CreateDefaults(OptimizerType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L479"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; CreateDefaults(OptimizerType optimizerType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>optimizerType</code> <a class="xref" href="AiDotNet.Enums.OptimizerType.html">OptimizerType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/OptimizationAlgorithmOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

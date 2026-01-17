@@ -1,0 +1,1073 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KNearestNeighborsRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KNearestNeighborsRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements K-Nearest Neighbors algorithm for regression, which predicts target values by averaging the values of the K closest training examples.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_KNearestNeighborsRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.KNearestNeighborsRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_KNearestNeighborsRegression_1" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1" class="text-break">
+Class KNearestNeighborsRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements K-Nearest Neighbors algorithm for regression, which predicts target values
+by averaging the values of the K closest training examples.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KNearestNeighborsRegression&lt;T&gt; : NonLinearRegressionBase&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html">NonLinearRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">KNearestNeighborsRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_NumOps">NonLinearRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Engine">NonLinearRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Options">NonLinearRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Regularization">NonLinearRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SupportVectors">NonLinearRegressionBase&lt;T&gt;.SupportVectors</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Alphas">NonLinearRegressionBase&lt;T&gt;.Alphas</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_B">NonLinearRegressionBase&lt;T&gt;.B</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_FeatureNames">NonLinearRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ValidateInputs_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.ValidateInputs(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_InitializeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.InitializeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ExtractModelParameters">NonLinearRegressionBase&lt;T&gt;.ExtractModelParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_KernelFunction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.KernelFunction(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_Clip__0__0__0_">NonLinearRegressionBase&lt;T&gt;.Clip(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetModelMetadata">NonLinearRegressionBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetParameters">NonLinearRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetActiveFeatureIndices">NonLinearRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_IsFeatureUsed_System_Int32_">NonLinearRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">NonLinearRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">NonLinearRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_GetFeatureImportance">NonLinearRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ParameterCount">NonLinearRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveModel_System_String_">NonLinearRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadModel_System_String_">NonLinearRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_DefaultLossFunction">NonLinearRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">NonLinearRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">NonLinearRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_SaveState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.NonLinearRegressionBase-1.html#AiDotNet_Regression_NonLinearRegressionBase_1_LoadState_System_IO_Stream_">NonLinearRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_KNearestNeighborsRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+K-Nearest Neighbors (KNN) is a non-parametric and instance-based learning algorithm that makes
+predictions based on the similarity between the input and training samples. For regression, it computes
+the average of the target values of the K nearest neighbors to the query point. The algorithm doesn't
+build an explicit model but instead stores all training examples and performs computations at prediction time.
+</p>
+<p><b>For Beginners:</b> K-Nearest Neighbors is like asking your neighbors for advice.
+<p>Imagine you want to guess the price of a house:</p>
+<ul>
+<li>You look at the K most similar houses to yours (the &quot;nearest neighbors&quot;)</li>
+<li>You take the average of their prices as your prediction</li>
+</ul>
+<p>The &quot;K&quot; is just how many neighbors you consider. If K=3, you look at the 3 most similar houses.</p>
+<p>This approach is:</p>
+<ul>
+<li>Simple to understand: similar inputs should have similar outputs</li>
+<li>Makes no assumptions about the data's structure</li>
+<li>Works well when similar examples in your data actually have similar target values</li>
+</ul>
+<p>Unlike most machine learning algorithms, KNN doesn't &quot;learn&quot; patterns during training - it simply
+remembers all examples and does the real work at prediction time by finding similar examples.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1__ctor_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1__ctor_AiDotNet_Models_Options_KNearestNeighborsOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.#ctor(AiDotNet.Models.Options.KNearestNeighborsOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  KNearestNeighborsRegression(KNearestNeighborsOptions?, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.KNearestNeighborsRegression-1.html">KNearestNeighborsRegression&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KNearestNeighborsRegression(KNearestNeighborsOptions? options = null, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.KNearestNeighborsOptions.html">KNearestNeighborsOptions</a></dt>
+    <dd><p>Optional configuration options for the KNN algorithm.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1__ctor_AiDotNet_Models_Options_KNearestNeighborsOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new K-Nearest Neighbors regression model with the specified options and
+regularization strategy. If no options are provided, default values are used. If no regularization
+is specified, no regularization is applied.
+</p>
+<p><b>For Beginners:</b> This is how you create a new K-Nearest Neighbors model.
+<p>The key setting is K - the number of neighbors to consider when making predictions:</p>
+<ul>
+<li>Smaller K values (like 1 or 2): More sensitive to noise in the data</li>
+<li>Larger K values (like 10 or 20): Smoother predictions but might miss important patterns</li>
+</ul>
+<p>If you don't specify any options, the model will use reasonable default settings.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create a KNN model with default settings
+var knn = new KNearestNeighborsRegression&lt;double&gt;();
+
+// Create a KNN model with custom options
+var options = new KNearestNeighborsOptions { K = 5 };
+var customKnn = new KNearestNeighborsRegression&lt;double&gt;(options);
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_SoftKNNTemperature_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.SoftKNNTemperature*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_SoftKNNTemperature" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.SoftKNNTemperature">
+  SoftKNNTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L513"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature parameter for soft KNN mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SoftKNNTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The temperature for softmax attention. Lower values produce sharper attention.
+Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_SupportsJitCompilation_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_SupportsJitCompilation" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L534"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> when <a class="xref" href="AiDotNet.Regression.KNearestNeighborsRegression-1.html#AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN">UseSoftKNN</a> is enabled and training data is available;
+<code>false</code> otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When <a class="xref" href="AiDotNet.Regression.KNearestNeighborsRegression-1.html#AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN">UseSoftKNN</a> is enabled, KNN can be exported as a differentiable
+computation graph using attention-weighted averaging. The training data is embedded
+as constants in the computation graph.
+</p>
+<p>
+When <a class="xref" href="AiDotNet.Regression.KNearestNeighborsRegression-1.html#AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN">UseSoftKNN</a> is disabled, JIT compilation is not supported because
+traditional hard KNN requires dynamic neighbor selection that cannot be represented
+as a static computation graph.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.UseSoftKNN*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.UseSoftKNN">
+  UseSoftKNN
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L504"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use soft (differentiable) KNN mode for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseSoftKNN { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> to enable soft KNN mode with attention-weighted outputs for JIT support;
+<code>false</code> (default) for traditional hard K-nearest neighbors.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Soft KNN:</b> Instead of selecting exactly K nearest neighbors and averaging their
+labels, soft KNN computes attention weights over ALL training samples based on distances.
+This makes the algorithm differentiable and JIT-compilable.</p>
+<p><b>Formula:</b> weights = softmax(-distances / temperature)</p>
+<p><b>Output:</b> weighted_output = sum(weights * labels)</p>
+<p><b>Trade-offs:</b></p>
+<ul><li>Soft KNN is differentiable and JIT-compilable</li><li>Results are smooth approximations of hard K selection</li><li>Lower temperature = sharper attention (closer to hard K selection)</li><li>Higher temperature = softer attention (considers more neighbors)</li></ul>
+<p><b>Computational Note:</b> Soft KNN computes attention over ALL training samples,
+which can be expensive for large training sets. The JIT-compiled version embeds all
+support vectors as constants, so the computation graph size scales with training set size.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_Clone_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_Clone" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L425"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a shallow copy of this KNN model including its training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new KNearestNeighborsRegression instance with the same configuration and training data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method overrides the base class Clone to ensure that KNN-specific training data
+(_xTrain and _yTrain) is properly copied. Without this override, cloned models would
+lose their training data and fail when Predict is called.
+</p>
+<p><b>For Beginners:</b> This method creates a copy of your trained model.
+<p>Unlike CreateInstance which creates an empty model, Clone copies:</p>
+<ul>
+<li>All the base class settings (support vectors, alphas, bias, options)</li>
+<li>The training data that KNN needs to make predictions</li>
+<li>The soft KNN settings if enabled</li>
+</ul>
+<p>This is important because KNN stores all training examples and uses them
+at prediction time. A clone without training data would be unusable.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_CreateInstance_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_CreateInstance" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.CreateInstance">
+  CreateInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the KNearestNeighborsRegression with the same configuration as the current instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new KNearestNeighborsRegression instance with the same options and regularization as the current instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_CreateInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new instance of the KNearestNeighborsRegression model with the same configuration options
+and regularization settings as the current instance. This is useful for model cloning, ensemble methods, or
+cross-validation scenarios where multiple instances of the same model with identical configurations are needed.
+</p>
+<p><b>For Beginners:</b> This method creates a fresh copy of the model's blueprint.
+<p>When you need multiple versions of the same type of model with identical settings:</p>
+<ul>
+<li>This method creates a new, empty model with the same configuration</li>
+<li>It's like making a copy of a recipe before you start cooking</li>
+<li>The new model has the same settings but no trained data</li>
+<li>This is useful for techniques that need multiple models, like cross-validation</li>
+</ul>
+<p>For example, when testing your model on different subsets of data,
+you'd want each test to use a model with identical settings.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_DeepCopy_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_DeepCopy" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L462"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this KNN model including its training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new KNearestNeighborsRegression instance with independent copies of all data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method overrides the base class DeepCopy to ensure that KNN-specific training data
+is properly deep copied. The resulting model is completely independent of the original -
+modifications to one will not affect the other.
+</p>
+<p><b>For Beginners:</b> This creates a completely independent copy of your model.
+<p>While Clone shares some data with the original (for efficiency), DeepCopy creates
+entirely new copies of everything including:</p>
+<ul>
+<li>All training feature vectors</li>
+<li>All training labels</li>
+<li>All model parameters</li>
+</ul>
+<p>Use DeepCopy when you need to modify the copy without affecting the original.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_Deserialize_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized K-Nearest Neighbors Regression model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs a KNN model from a byte array that was previously created using the
+Serialize method. It restores the base class data, the number of neighbors (K), and the training
+data that is used for making predictions.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+<p>Deserialization allows you to:</p>
+<ul>
+<li>Load a model that was saved earlier</li>
+<li>Use a model without having to retrain it</li>
+<li>Share models between different applications</li>
+</ul>
+<p>When you deserialize a model:</p>
+<ul>
+<li>The value of K is restored</li>
+<li>All training examples are loaded back into memory</li>
+<li>The model is ready to make predictions immediately</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Load from a file
+byte[] modelData = File.ReadAllBytes(&quot;knn.model&quot;);
+
+// Deserialize the model
+var knn = new KNearestNeighborsRegression&lt;double&gt;();
+knn.Deserialize(modelData);
+
+// Now you can use the model for predictions
+var predictions = knn.Predict(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_ExportComputationGraph_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L554"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the model's computation as a graph of operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes for the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The root node of the exported computation graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When soft KNN mode is enabled, this exports the KNN model as a differentiable computation
+graph using <a class="xref" href="AiDotNet.Autodiff.TensorOperations-1.html#AiDotNet_Autodiff_TensorOperations_1_SoftKNN_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___0_">SoftKNN(ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, T?)</a> operations. The training data
+(support vectors and labels) are embedded as constants in the graph.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when <a class="xref" href="AiDotNet.Regression.KNearestNeighborsRegression-1.html#AiDotNet_Regression_KNearestNeighborsRegression_1_UseSoftKNN">UseSoftKNN</a> is false.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no training data is available.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_GetModelType_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.GetModelType*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_GetModelType" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.GetModelType">
+  GetModelType()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model type of the K-Nearest Neighbors Regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ModelType GetModelType()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd><p>The model type enumeration value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_OptimizeModel_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.OptimizeModel*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.OptimizeModel(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OptimizeModel(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes the KNN model by storing the training data for later use in predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void OptimizeModel(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_OptimizeModel_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method "trains" the KNN model by storing the training data for later use during prediction.
+Unlike many other machine learning algorithms, KNN doesn't build a parametric model during training.
+Instead, it simply stores the training data and uses it to compute predictions at runtime by
+finding the K nearest neighbors to each query point.
+</p>
+<p><b>For Beginners:</b> KNN doesn't really "learn" during training - it just memorizes the examples.
+<p>While most machine learning models try to extract patterns during training, KNN takes a different approach:</p>
+<ol>
+<li>It simply stores all the training examples (both features and target values)</li>
+<li>When asked to make a prediction, it does the actual work of finding similar examples</li>
+</ol>
+<p>Think of it like studying for an exam by memorizing all the examples in a textbook,
+rather than trying to understand the underlying rules. When given a new problem,
+you solve it by finding the most similar examples from the ones you memorized.</p>
+<p>This is why KNN is sometimes called a &quot;lazy learner&quot; - it doesn't do much work during training,
+but has to work harder at prediction time.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_Predict_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts target values for the provided input features using the trained KNN model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predicted values corresponding to each input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method predicts target values for new input data by finding the K nearest neighbors from the
+training data for each input sample and computing the average of their target values. Unlike
+parametric models, KNN is a distance-based method that does not apply data regularization
+transformations. The prediction relies entirely on the stored training data and distance calculations.
+</p>
+<p><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+<p>For each input example, it:</p>
+<ol>
+<li>Calculates how similar the new example is to each training example (using distance)</li>
+<li>Finds the K most similar training examples</li>
+<li>Takes the average of their target values as the prediction</li>
+</ol>
+<p>This method handles multiple inputs at once, making a separate prediction for each one.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Make predictions
+var predictions = knn.Predict(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_PredictSingle_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.PredictSingle*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.PredictSingle(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  PredictSingle(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts the target value for a single input feature vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T PredictSingle(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The feature vector of the sample to predict.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The predicted value for the input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_PredictSingle_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method predicts the target value for a single input feature vector by finding the K nearest
+neighbors from the training data and computing the average of their target values. The distance
+between the input and each training sample is computed using Euclidean distance.
+</p>
+<p><b>For Beginners:</b> This method makes a prediction for a single new data point.
+<p>The prediction process works like this:</p>
+<ol>
+<li>Calculate the distance between the new point and every training example</li>
+<li>Find the K training examples with the smallest distances (the nearest neighbors)</li>
+<li>Calculate the average of their target values</li>
+<li>Return this average as the prediction</li>
+</ol>
+<p>For example, if you want to predict a house price and K=3, this method would:</p>
+<ul>
+<li>Find the 3 most similar houses from the training data</li>
+<li>Calculate the average of their prices</li>
+<li>Return that average as the predicted price</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_KNearestNeighborsRegression_1_Serialize_" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_KNearestNeighborsRegression_1_Serialize" data-uid="AiDotNet.Regression.KNearestNeighborsRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the K-Nearest Neighbors Regression model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_KNearestNeighborsRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the KNN model into a byte array that can be stored in a file, database,
+or transmitted over a network. The serialized data includes the base class data, the number of
+neighbors (K), and the training data that is used for making predictions.
+</p>
+<p><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+<p>Serialization allows you to:</p>
+<ul>
+<li>Save your model to a file</li>
+<li>Store your model in a database</li>
+<li>Send your model over a network</li>
+<li>Keep your model for later use without having to retrain it</li>
+</ul>
+<p>The serialized data includes:</p>
+<ul>
+<li>The value of K (number of neighbors)</li>
+<li>All the training examples (both features and target values)</li>
+</ul>
+<p>Since KNN stores all training data, the serialized model can be quite large
+compared to other machine learning models.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Serialize the model
+byte[] modelData = knn.Serialize();
+
+// Save to a file
+File.WriteAllBytes(&quot;knn.model&quot;, modelData);
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/KNearestNeighborsRegression.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

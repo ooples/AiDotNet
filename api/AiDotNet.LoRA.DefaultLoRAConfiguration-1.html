@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DefaultLoRAConfiguration&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DefaultLoRAConfiguration&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Default LoRA configuration that applies LoRA to all layers with trainable weight matrices.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LoRA_DefaultLoRAConfiguration_1.md&amp;value=---%0Auid%3A%20AiDotNet.LoRA.DefaultLoRAConfiguration%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1">
+
+
+
+  <h1 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1" class="text-break">
+Class DefaultLoRAConfiguration&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LoRA.html">LoRA</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Default LoRA configuration that applies LoRA to all layers with trainable weight matrices.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DefaultLoRAConfiguration&lt;T&gt; : ILoRAConfiguration&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DefaultLoRAConfiguration&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILoRAConfiguration-1.html">ILoRAConfiguration</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This configuration implements an intelligent strategy: wrap all layers that have trainable
+weight matrices with StandardLoRAAdapter, and leave utility layers (activation, pooling, etc.)
+unchanged. This maximizes the benefits of LoRA across all applicable layer types.
+</p>
+<p>
+<b>Supported Layer Types (30+ layer types):</b>
+- Dense/Linear layers (Dense, FullyConnected, FeedForward)
+- Convolutional layers (all Conv variants including depthwise, separable, dilated, etc.)
+- Recurrent layers (LSTM, GRU, ConvLSTM, Bidirectional)
+- Attention layers (Attention, MultiHeadAttention, SelfAttention)
+- Transformer layers (Encoder, Decoder)
+- Embedding layers (Embedding, PatchEmbedding)
+- Specialized layers (Highway, GatedLinearUnit, SqueezeAndExcitation, Capsule, CRF, etc.)
+</p>
+<p>
+<b>Available LoRA Variants:</b> AiDotNet includes 32 cutting-edge LoRA variants for different use cases:
+- StandardLoRAAdapter: Generic LoRA for all layer types
+- QLoRAAdapter: 4-bit quantization for 75% memory reduction
+- DoRAAdapter: Weight decomposition (+3.7% on LLaMA-7B)
+- AdaLoRAAdapter: Adaptive rank allocation
+- VeRAAdapter: Shared matrices (10x fewer parameters)
+- LoRAPlusAdapter: Dual learning rates (2x faster convergence)
+- LoHaAdapter: Hadamard products for CNNs
+- LoKrAdapter: Kronecker products (57x compression)
+- DyLoRAAdapter: Dynamic rank training
+- RoSAAdapter: Robust to distribution shifts
+- DVoRAAdapter: DoRA+VeRA hybrid
+- LoRAFAAdapter: Frozen A matrix (50% reduction)
+- DeltaLoRAAdapter: Delta-based updates with momentum
+- LoRADropAdapter: Dropout regularization
+- PiSSAAdapter: SVD initialization (NeurIPS 2024)
+- GLoRAAdapter: Weight + activation adaptation
+- LongLoRAAdapter: Context length extension
+- MultiLoRAAdapter: Multi-task learning with routing
+- XLoRAAdapter: Mixture of experts
+- TiedLoRAAdapter: Weight tying (90% reduction)
+- ReLoRAAdapter: Restart mechanism prevents forgetting
+- LoftQAdapter: Alternating quantization+LoRA
+- QALoRAAdapter: Quantization-aware training
+- VBLoRAAdapter: Vector banks (2024)
+- SLoRAAdapter: Scalable serving (1000+ adapters)
+- MoRAAdapter: High-rank updates for knowledge tasks
+- LoRAXSAdapter: Extreme efficiency (100x compression)
+- FloraAdapter: Gradient compression view
+- ChainLoRAAdapter: Sequential task chaining
+- HRAAdapter: Hybrid low-rank + sparse
+- LoRETTAAdapter: Tensor-train decomposition
+- NOLAAdapter: Random basis (20x compression)
+<p>To use a specific variant, pass a factory function to the constructor.
+Example: new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, adapterFactory: (layer, r, a, f) =&gt; new QLoRAAdapter&lt;double&gt;(layer, r, a, f))</p>
+
+<p><b>For Beginners:</b> This is a ready-to-use LoRA configuration for most common scenarios.
+<p>When you apply this configuration to a model:</p>
+<ul>
+<li>All Dense layers get wrapped with LoRA adapters</li>
+<li>All FullyConnected layers get wrapped with LoRA adapters</li>
+<li>All other layers (convolutional, pooling, etc.) pass through unchanged</li>
+</ul>
+<p>This is perfect for:</p>
+<ul>
+<li>Fine-tuning pre-trained models on new tasks</li>
+<li>Adapting large language models with limited resources</li>
+<li>Training multiple task-specific adapters for the same base model</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">// Create a configuration with rank=8, alpha=8, and frozen base layers
+var loraConfig = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, freezeBaseLayer: true);
+
+// Apply to all layers in your model
+var adaptedLayers = model.Layers.Select(layer =&gt; loraConfig.ApplyLoRA(layer)).ToList();
+</code></pre>
+<p>The configuration respects these parameters:</p>
+<ul>
+<li>Rank: Controls compression (fewer parameters = lower rank)</li>
+<li>Alpha: Controls adaptation strength (typically same as rank)</li>
+<li>FreezeBaseLayer: Whether to freeze original weights (true for efficiency)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LoRA_DefaultLoRAConfiguration_1__ctor_" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1__ctor_System_Int32_System_Double_System_Boolean_AiDotNet_Interfaces_ILoRAAdapter__0__" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.#ctor(System.Int32,System.Double,System.Boolean,AiDotNet.Interfaces.ILoRAAdapter{`0})">
+  DefaultLoRAConfiguration(int, double, bool, ILoRAAdapter&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new DefaultLoRAConfiguration with the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DefaultLoRAConfiguration(int rank, double alpha = -1, bool freezeBaseLayer = true, ILoRAAdapter&lt;T&gt;? loraAdapter = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of the low-rank decomposition (must be positive).</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scaling factor for LoRA contributions (defaults to rank if negative).</p>
+</dd>
+    <dt><code>freezeBaseLayer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to freeze base layers during training (default: true).</p>
+</dd>
+    <dt><code>loraAdapter</code> <a class="xref" href="AiDotNet.Interfaces.ILoRAAdapter-1.html">ILoRAAdapter</a>&lt;T&gt;</dt>
+    <dd><p>Optional LoRA adapter to use. Defaults to StandardLoRAAdapter if null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_DefaultLoRAConfiguration_1__ctor_System_Int32_System_Double_System_Boolean_AiDotNet_Interfaces_ILoRAAdapter__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a configuration that will be applied to your model's layers.
+<p>Parameters explained:</p>
+<ul>
+<li>rank: How many &quot;compression channels&quot; to use (8 is a good starting point)</li>
+<li>alpha: How strong the LoRA effect is (use -1 to auto-set to rank value)</li>
+<li>freezeBaseLayer: Whether to lock original weights (true = more efficient, recommended)</li>
+</ul>
+<p>Example configurations:</p>
+<pre><code class="lang-csharp">// Standard LoRA (default)
+var standard = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8);
+
+// QLoRA for 4-bit quantization (75% memory reduction)
+var qloraAdapter = new QLoRAAdapter&lt;double&gt;(null, 8, 8, true);
+var qlora = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: qloraAdapter);
+
+// DoRA for improved weight decomposition (+3.7% accuracy on LLaMA-7B)
+var doraAdapter = new DoRAAdapter&lt;double&gt;(null, 8, 8, true);
+var dora = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: doraAdapter);
+
+// VeRA for extreme parameter efficiency (10x fewer parameters)
+var veraAdapter = new VeRAAdapter&lt;double&gt;(null, 8, 8, true);
+var vera = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8, alpha: 8, loraAdapter: veraAdapter);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when rank is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Alpha_" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Alpha" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling factor (alpha) for LoRA adaptations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Alpha controls how strongly LoRA adaptations affect outputs.
+Common practice: alpha = rank (for scaling factor of 1.0)
+Set to -1 to use rank as alpha (automatic scaling).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_FreezeBaseLayer_" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.FreezeBaseLayer*"></a>
+
+  <h3 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_FreezeBaseLayer" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.FreezeBaseLayer">
+  FreezeBaseLayer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether base layers should be frozen during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool FreezeBaseLayer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_FreezeBaseLayer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true (typical), only LoRA parameters are trained while base layer
+weights remain frozen. This dramatically reduces memory and compute requirements.
+</p>
+<p>
+When false, both base layer and LoRA parameters are trained. This uses more
+resources but may achieve better results in some scenarios.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Rank_" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.Rank*"></a>
+
+  <h3 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Rank" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.Rank">
+  Rank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank of the low-rank decomposition to use for adapted layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_Rank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The rank determines the number of parameters in the LoRA adaptation.
+Lower rank = fewer parameters = more efficient but less flexible.
+</p>
+<p>
+Common values:
+- 1-4: Minimal parameters, very efficient
+- 8: Good default balance
+- 16-32: More flexibility
+- 64+: Approaching full fine-tuning
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_ApplyLoRA_" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.ApplyLoRA*"></a>
+
+  <h3 id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_ApplyLoRA_AiDotNet_Interfaces_ILayer__0__" data-uid="AiDotNet.LoRA.DefaultLoRAConfiguration`1.ApplyLoRA(AiDotNet.Interfaces.ILayer{`0})">
+  ApplyLoRA(ILayer&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies LoRA adaptation to layers with trainable weight matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILayer&lt;T&gt; ApplyLoRA(ILayer&lt;T&gt; layer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layer</code> <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>The layer to potentially adapt with LoRA.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>A StandardLoRAAdapter wrapping the layer if it has trainable weights,
+otherwise returns the original layer unchanged.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_DefaultLoRAConfiguration_1_ApplyLoRA_AiDotNet_Interfaces_ILayer__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method examines the layer type and wraps it with StandardLoRAAdapter if it's
+a layer type that benefits from LoRA adaptation (has trainable weight matrices).
+</p>
+<p><b>Supported Layer Types:</b>
+- <b>Dense/Linear:</b> DenseLayer, FullyConnectedLayer, FeedForwardLayer
+- <b>Convolutional:</b> ConvolutionalLayer, DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer,
+  DilatedConvolutionalLayer, SeparableConvolutionalLayer, SubpixelConvolutionalLayer
+- <b>Recurrent:</b> LSTMLayer, GRULayer, RecurrentLayer, ConvLSTMLayer, BidirectionalLayer
+- <b>Attention:</b> AttentionLayer, MultiHeadAttentionLayer, SelfAttentionLayer
+- <b>Transformer:</b> TransformerEncoderLayer, TransformerDecoderLayer
+- <b>Embedding:</b> EmbeddingLayer, PatchEmbeddingLayer
+- <b>Specialized:</b> LocallyConnectedLayer, HighwayLayer, GatedLinearUnitLayer, SqueezeAndExcitationLayer
+- <b>Advanced:</b> CapsuleLayer, PrimaryCapsuleLayer, DigitCapsuleLayer, ConditionalRandomFieldLayer
+<p><b>Excluded Layer Types:</b></p>
+<ul>
+<li>Activation, Pooling, Dropout, Flatten, Reshape, Normalization (no trainable weights)</li>
+<li>GraphConvolutionalLayer (requires specialized adapter that implements IGraphConvolutionLayer)</li>
+</ul>
+
+<p><b>For Beginners:</b> This method decides whether to add LoRA to each layer.
+<p>Decision logic:</p>
+<ul>
+<li>If the layer has trainable weight matrices → Wrap it with StandardLoRAAdapter</li>
+<li>If the layer is just doing math operations (activation, pooling, etc.) → Return unchanged</li>
+</ul>
+<p>This intelligent approach means:</p>
+<ul>
+<li>LoRA is applied to all layers that can benefit from it</li>
+<li>Works with Dense, Convolutional, Recurrent, Attention, and Transformer layers</li>
+<li>Utility layers (pooling, dropout, etc.) pass through unchanged</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var config = new DefaultLoRAConfiguration&lt;double&gt;(rank: 8);
+
+// Dense layer gets adapted
+var denseLayer = new DenseLayer&lt;double&gt;(100, 50);
+var adapted1 = config.ApplyLoRA(denseLayer); // Returns StandardLoRAAdapter
+
+// Convolutional layer gets adapted
+var convLayer = new ConvolutionalLayer&lt;double&gt;(...);
+var adapted2 = config.ApplyLoRA(convLayer); // Returns StandardLoRAAdapter
+
+// Attention layer gets adapted
+var attnLayer = new MultiHeadAttentionLayer&lt;double&gt;(...);
+var adapted3 = config.ApplyLoRA(attnLayer); // Returns StandardLoRAAdapter
+
+// Pooling layer passes through (no weights to adapt)
+var poolLayer = new MaxPoolingLayer&lt;double&gt;(...);
+var unchanged = config.ApplyLoRA(poolLayer); // Returns original poolLayer
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/DefaultLoRAConfiguration.cs/#L93" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

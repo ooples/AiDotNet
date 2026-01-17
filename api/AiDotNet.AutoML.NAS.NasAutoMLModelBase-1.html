@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NasAutoMLModelBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NasAutoMLModelBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for NAS-based AutoML models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_AutoML_NAS_NasAutoMLModelBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.AutoML.NAS.NasAutoMLModelBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1">
+
+
+
+  <h1 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1" class="text-break">
+Class NasAutoMLModelBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.AutoML.html">AutoML</a>.<a class="xref" href="AiDotNet.AutoML.NAS.html">NAS</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for NAS-based AutoML models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class NasAutoMLModelBase&lt;T&gt; : AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IAutoMLModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html">AutoMLModelBase</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">NasAutoMLModelBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAutoMLModel-3.html">IAutoMLModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.AttentiveNAS-1.html">AttentiveNAS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.BigNAS-1.html">BigNAS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.ENAS-1.html">ENAS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.FBNet-1.html">FBNet&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.GDAS-1.html">GDAS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.OnceForAll-1.html">OnceForAll&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.PCDARTS-1.html">PCDARTS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.AutoML.NAS.ProxylessNAS-1.html">ProxylessNAS&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__trialHistory">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._trialHistory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__searchSpace">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._searchSpace</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__candidateModels">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._candidateModels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__constraints">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._constraints</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__lock">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._lock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__optimizationMetric">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._optimizationMetric</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__maximize">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._maximize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__optimizationMetricExplicitlySet">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._optimizationMetricExplicitlySet</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__earlyStoppingPatience">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._earlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__earlyStoppingMinDelta">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._earlyStoppingMinDelta</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__trialsSinceImprovement">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._trialsSinceImprovement</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3__modelEvaluator">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;._modelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_OptimizationMetric">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.OptimizationMetric</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_MaximizeOptimizationMetric">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.MaximizeOptimizationMetric</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Type">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Type</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Status">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Status</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_BestModel">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.BestModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_BestScore">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.BestScore</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_TimeLimit">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.TimeLimit</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_TrialLimit">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.TrialLimit</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SearchAsync__1__2__1__2_System_TimeSpan_System_Threading_CancellationToken_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SearchAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, TimeSpan, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetSearchSpace(Dictionary&lt;string, ParameterRange&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetCandidateModels_System_Collections_Generic_List_AiDotNet_Enums_ModelType__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetCandidateModels(List&lt;ModelType&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetOptimizationMetric_AiDotNet_Enums_MetricType_System_Boolean_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetOptimizationMetric(MetricType, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetTrialHistory">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetTrialHistory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportanceAsync">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetFeatureImportanceAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SuggestNextTrialAsync">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SuggestNextTrialAsync()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialResultAsync_System_Collections_Generic_Dictionary_System_String_System_Object__System_Double_System_TimeSpan_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ReportTrialResultAsync(Dictionary&lt;string, object&gt;, double, TimeSpan)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_EnableEarlyStopping_System_Int32_System_Double_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.EnableEarlyStopping(int, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetConstraints_System_Collections_Generic_List_AiDotNet_AutoML_SearchConstraint__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetConstraints(List&lt;SearchConstraint&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Train_System_Double_____System_Double___">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Train(double[][], double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Predict_System_Double_____">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Predict(double[][])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetModelMetadata">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ShouldStop">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ShouldStop()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ValidateConstraints_System_Collections_Generic_Dictionary_System_String_System_Object__AiDotNet_Interfaces_IFullModel__0__1__2__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ValidateConstraints(Dictionary&lt;string, object&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_CreateModelAsync_AiDotNet_Enums_ModelType_System_Collections_Generic_Dictionary_System_String_System_Object__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.CreateModelAsync(ModelType, Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_EvaluateModelAsync_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.EvaluateModelAsync(IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetDefaultSearchSpace_AiDotNet_Enums_ModelType_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetDefaultSearchSpace(ModelType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Train__1__2_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Predict__1_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SaveModel_System_String_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_LoadModel_System_String_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Serialize">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Deserialize_System_Byte___">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetParameters">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ParameterCount">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_FeatureNames">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetFeatureImportance">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetActiveFeatureIndices">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_IsFeatureUsed_System_Int32_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Clone">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_DeepCopy">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_CreateInstanceForCopy">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.CreateInstanceForCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetModelEvaluator_AiDotNet_Interfaces_IModelEvaluator__0__1__2__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetModelEvaluator(IModelEvaluator&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ExtractMetricFromEvaluation_AiDotNet_Models_ModelEvaluationData__0__1__2__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ExtractMetricFromEvaluation(ModelEvaluationData&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ReportTrialFailureAsync_System_Collections_Generic_Dictionary_System_String_System_Object__System_Exception_System_TimeSpan_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ReportTrialFailureAsync(Dictionary&lt;string, object&gt;, Exception, TimeSpan)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ConfigureSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ConfigureSearchSpace(Dictionary&lt;string, ParameterRange&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetTimeLimit_System_TimeSpan_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetTimeLimit(TimeSpan)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetTrialLimit_System_Int32_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetTrialLimit(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_EnableNAS_System_Boolean_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.EnableNAS(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SearchBestModel__1__2__1__2_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SearchBestModel(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Search__1__2__1__2_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Search(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_GetResults">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetResults()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_Run__1__2__1__2_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Run(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SetModelsToTry_System_Collections_Generic_List_AiDotNet_Enums_ModelType__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetModelsToTry(List&lt;ModelType&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_DefaultLossFunction">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SupportsJitCompilation">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_SaveState_System_IO_Stream_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.AutoML.AutoMLModelBase-3.html#AiDotNet_AutoML_AutoMLModelBase_3_LoadState_System_IO_Stream_">AutoMLModelBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_BestArchitecture_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.BestArchitecture*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_BestArchitecture" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.BestArchitecture">
+  BestArchitecture
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best architecture found by the NAS search.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Architecture&lt;T&gt;? BestArchitecture { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AutoML.Architecture-1.html">Architecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NasNumNodes_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NasNumNodes*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NasNumNodes" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NasNumNodes">
+  NasNumNodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of nodes to search over.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract int NasNumNodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NasSearchSpace_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NasSearchSpace*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NasSearchSpace" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NasSearchSpace">
+  NasSearchSpace
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the NAS search space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract SearchSpaceBase&lt;T&gt; NasSearchSpace { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AutoML.SearchSpace.SearchSpaceBase-1.html">SearchSpaceBase</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NumOps_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NumOps*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_NumOps" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the numeric operations provider for <code class="typeparamref">T</code>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract INumericOperations&lt;T&gt; NumOps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_ApplyArchitectureToModel_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.ApplyArchitectureToModel*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_ApplyArchitectureToModel_AiDotNet_NeuralNetworks_SuperNet__0__AiDotNet_AutoML_Architecture__0__" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.ApplyArchitectureToModel(AiDotNet.NeuralNetworks.SuperNet{`0},AiDotNet.AutoML.Architecture{`0})">
+  ApplyArchitectureToModel(SuperNet&lt;T&gt;, Architecture&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ApplyArchitectureToModel(SuperNet&lt;T&gt; model, Architecture&lt;T&gt; architecture)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.NeuralNetworks.SuperNet-1.html">SuperNet</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>architecture</code> <a class="xref" href="AiDotNet.AutoML.Architecture-1.html">Architecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_CreateModelAsync_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.CreateModelAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_CreateModelAsync_AiDotNet_Enums_ModelType_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.CreateModelAsync(AiDotNet.Enums.ModelType,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  CreateModelAsync(ModelType, Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a model instance for the given type and parameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt; CreateModelAsync(ModelType modelType, Dictionary&lt;string, object&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelType</code> <a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_GetDefaultSearchSpace_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.GetDefaultSearchSpace*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_GetDefaultSearchSpace_AiDotNet_Enums_ModelType_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.GetDefaultSearchSpace(AiDotNet.Enums.ModelType)">
+  GetDefaultSearchSpace(ModelType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default search space for a model type</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Dictionary&lt;string, ParameterRange&gt; GetDefaultSearchSpace(ModelType modelType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelType</code> <a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SearchArchitecture_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SearchArchitecture*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SearchArchitecture_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_TimeSpan_System_Threading_CancellationToken_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SearchArchitecture(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.TimeSpan,System.Threading.CancellationToken)">
+  SearchArchitecture(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, TimeSpan, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs algorithm-specific architecture search.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Architecture&lt;T&gt; SearchArchitecture(Tensor&lt;T&gt; inputs, Tensor&lt;T&gt; targets, Tensor&lt;T&gt; validationInputs, Tensor&lt;T&gt; validationTargets, TimeSpan timeLimit, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>validationInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>validationTargets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AutoML.Architecture-1.html">Architecture</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SearchAsync_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SearchAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SearchAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_TimeSpan_System_Threading_CancellationToken_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SearchAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.TimeSpan,System.Threading.CancellationToken)">
+  SearchAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, TimeSpan, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs the NAS search and returns the best model found.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt; SearchAsync(Tensor&lt;T&gt; inputs, Tensor&lt;T&gt; targets, Tensor&lt;T&gt; validationInputs, Tensor&lt;T&gt; validationTargets, TimeSpan timeLimit, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>validationInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>validationTargets</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SuggestNextTrialAsync_" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SuggestNextTrialAsync*"></a>
+
+  <h3 id="AiDotNet_AutoML_NAS_NasAutoMLModelBase_1_SuggestNextTrialAsync" data-uid="AiDotNet.AutoML.NAS.NasAutoMLModelBase`1.SuggestNextTrialAsync">
+  SuggestNextTrialAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Suggests the next trial parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;Dictionary&lt;string, object&gt;&gt; SuggestNextTrialAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AutoML/NAS/NasAutoMLModelBase.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

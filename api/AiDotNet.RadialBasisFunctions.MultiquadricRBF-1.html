@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MultiquadricRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MultiquadricRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Multiquadric Radial Basis Function (RBF) of the form v(r&#178; + e&#178;).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_MultiquadricRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.MultiquadricRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1" class="text-break">
+Class MultiquadricRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Multiquadric Radial Basis Function (RBF) of the form v(r² + e²).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MultiquadricRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MultiquadricRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of a Radial Basis Function (RBF) that uses a multiquadric form
+of f(r) = v(r² + e²), where r is the radial distance and e (epsilon) is a shape parameter
+controlling the width of the function. The multiquadric RBF is infinitely differentiable and
+increases with distance, unlike many other RBFs that decrease with distance. It was introduced by
+R.L. Hardy and is often used in scattered data interpolation and solving partial differential equations.
+</p>
+<p>
+A notable property of the multiquadric RBF is that it grows with distance rather than decaying,
+which can lead to better conditioning in certain interpolation problems. However, this growth also
+means that the corresponding interpolation matrices can be ill-conditioned for large datasets unless
+appropriate precautions are taken.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Multiquadric RBF is unusual compared to most other RBFs because its value grows larger as you move
+away from the center, rather than smaller. It looks like a cone with a rounded bottom - starting from
+a value of e at the center point (r = 0) and gradually increasing in all directions.</p>
+<p>This RBF has a parameter called epsilon (e) that controls the shape of the function:</p>
+<ul>
+<li>A larger epsilon value creates a flatter, more rounded shape near the center</li>
+<li>A smaller epsilon value creates a sharper, more pointed shape near the center</li>
+</ul>
+<p>The multiquadric function is useful in certain interpolation problems where its growth properties
+can lead to better numerical stability. However, this same growth property means it's often used
+in combination with other techniques when working with large datasets.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1__ctor_System_Double_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.#ctor(System.Double)">
+  MultiquadricRBF(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.MultiquadricRBF-1.html">MultiquadricRBF&lt;T&gt;</a> class with a specified shape parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultiquadricRBF(double epsilon = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The shape parameter, defaults to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Multiquadric Radial Basis Function with a specified shape parameter epsilon.
+Epsilon controls the shape and behavior of the function near the origin. Larger values of epsilon result
+in a flatter shape near the origin, while smaller values result in a sharper, more pointed shape.
+</p>
+<p><b>For Beginners:</b> This creates a new Multiquadric RBF with a specific shape setting.
+<p>The epsilon parameter controls how the function looks near the center:</p>
+<ul>
+<li>Larger epsilon values (like 5.0) create a rounded, flatter shape near the center</li>
+<li>Smaller epsilon values (like 0.1) create a sharp, pointed shape near the center</li>
+</ul>
+<p>The epsilon parameter also determines the minimum value of the function at the center:</p>
+<ul>
+<li>The value at the center (r = 0) is always exactly equal to epsilon</li>
+<li>So with epsilon = 1.0, the center value is 1.0</li>
+<li>With epsilon = 0.5, the center value would be 0.5</li>
+</ul>
+<p>If you're not sure what value to use, the default (epsilon = 1.0) is a good starting point.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Multiquadric Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed function value v(r² + e²).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Multiquadric RBF for a given radius r. The formula used is
+v(r² + e²), which increases with distance. The function reaches its minimum value of e at r = 0
+and increases without bound as r increases.
+</p>
+<p><b>For Beginners:</b> This method computes the "height" or "value" of the Multiquadric function
+at a specific distance (r) from the center.
+<p>The calculation involves:</p>
+<ol>
+<li>Squaring the distance (r² = r * r)</li>
+<li>Squaring the epsilon parameter (e² = e * e)</li>
+<li>Adding these squared values together (r² + e²)</li>
+<li>Taking the square root of this sum</li>
+</ol>
+<p>The result is a single number representing the function's value at the given distance.
+This value increases as the distance increases:</p>
+<ul>
+<li>At the center (r = 0), the value is at its minimum of e (epsilon)</li>
+<li>As you move away from the center, the value grows larger without bound</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Multiquadric RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Multiquadric RBF with respect to the radius r.
+The formula for the derivative is r/v(r² + e²), which is always positive for positive r,
+indicating that the function always increases with distance.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance.
+For the Multiquadric RBF, the derivative is:</p>
+<ul>
+<li>Zero at the center point (r = 0)</li>
+<li>Positive for any positive distance, meaning the function always increases as you move away from the center</li>
+<li>Approaches 1 as distance increases to infinity</li>
+</ul>
+<p>This derivative is useful in machine learning applications when optimizing parameters
+using gradient-based methods.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.MultiquadricRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Multiquadric RBF with respect to the shape parameter epsilon.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to epsilon.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_MultiquadricRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Multiquadric RBF with respect to the shape parameter epsilon.
+The formula for this derivative is e/v(r² + e²). The sign of this derivative is always positive for positive e,
+indicating that increasing epsilon always increases the function value at any radius.
+</p>
+<p><b>For Beginners:</b> This method calculates how the function's value would change
+if you were to adjust the shape parameter (epsilon).
+<p>This is particularly important in machine learning applications:</p>
+<ul>
+<li>When training a model with Multiquadric RBFs, we often need to adjust epsilon to fit the data better</li>
+<li>This derivative tells us exactly how changing epsilon affects the output of the function</li>
+<li>With this information, learning algorithms can automatically find the optimal value of epsilon</li>
+</ul>
+<p>The derivative is positive for all points, which means that increasing the epsilon
+parameter always increases the function value at any distance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/MultiquadricRBF.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

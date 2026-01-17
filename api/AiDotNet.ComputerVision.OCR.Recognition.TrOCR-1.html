@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TrOCR&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TrOCR&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="TrOCR (Transformer-based OCR) for text recognition.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.OCR.Recognition.TrOCR%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1" class="text-break">
+Class TrOCR&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.OCR.html">OCR</a>.<a class="xref" href="AiDotNet.ComputerVision.OCR.Recognition.html">Recognition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>TrOCR (Transformer-based OCR) for text recognition.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TrOCR&lt;T&gt; : OCRBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html">OCRBase</a>&lt;T&gt;</div>
+      <div><span class="xref">TrOCR&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_NumOps">OCRBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_Options">OCRBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_DefaultCharacterSet">OCRBase&lt;T&gt;.DefaultCharacterSet</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_CharToIndex">OCRBase&lt;T&gt;.CharToIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_IndexToChar">OCRBase&lt;T&gt;.IndexToChar</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_VocabularySize">OCRBase&lt;T&gt;.VocabularySize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_PreprocessCrop_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">OCRBase&lt;T&gt;.PreprocessCrop(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_DecodeCTC_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">OCRBase&lt;T&gt;.DecodeCTC(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_DecodeAttention_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">OCRBase&lt;T&gt;.DecodeAttention(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_ComputeConfidence_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_">OCRBase&lt;T&gt;.ComputeConfidence(Tensor&lt;T&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.OCR.OCRBase-1.html#AiDotNet_ComputerVision_OCR_OCRBase_1_ResizeBilinear_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_">OCRBase&lt;T&gt;.ResizeBilinear(Tensor&lt;T&gt;, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> TrOCR uses a Vision Transformer (ViT) as the encoder
+to extract visual features, and a Transformer decoder to generate text autoregressively.
+This architecture leverages the power of pre-trained language models.</p>
+<p>Key features:
+- Vision Transformer encoder for image understanding
+- Transformer decoder with attention for text generation
+- Autoregressive decoding with beam search
+- Can leverage pre-trained models
+</p>
+<p>Reference: Li et al., "TrOCR: Transformer-based Optical Character Recognition
+with Pre-trained Models", AAAI 2023</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1__ctor_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1__ctor_AiDotNet_ComputerVision_OCR_OCROptions__0__" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.#ctor(AiDotNet.ComputerVision.OCR.OCROptions{`0})">
+  TrOCR(OCROptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new TrOCR text recognizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrOCR(OCROptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.ComputerVision.OCR.OCROptions-1.html">OCROptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_Name_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_Name" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this OCR model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_NumHeads_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.NumHeads*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_NumHeads" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.NumHeads">
+  NumHeads
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of attention heads in the transformer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumHeads { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_GetParameterCount_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.GetParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_GetParameterCount" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.GetParameterCount">
+  GetParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total parameter count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override long GetParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_LoadWeightsAsync_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.LoadWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_LoadWeightsAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.LoadWeightsAsync(System.String,System.Threading.CancellationToken)">
+  LoadWeightsAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads pretrained weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pathOrUrl</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_Recognize_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.Recognize*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_Recognize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.Recognize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Recognize(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recognizes text in an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OCRResult&lt;T&gt; Recognize(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.OCR.OCRResult-1.html">OCRResult</a>&lt;T&gt;</dt>
+    <dd><p>OCR result with recognized text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_RecognizeText_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.RecognizeText*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_RecognizeText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.RecognizeText(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  RecognizeText(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recognizes text in a cropped text region.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (string text, T confidence) RecognizeText(Tensor&lt;T&gt; croppedImage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>croppedImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Cropped text region tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.label">Label</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.confidence">Confidence</a>)</dt>
+    <dd><p>Recognized text and confidence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_SaveWeights_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.SaveWeights*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_OCR_Recognition_TrOCR_1_SaveWeights_System_String_" data-uid="AiDotNet.ComputerVision.OCR.Recognition.TrOCR`1.SaveWeights(System.String)">
+  SaveWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L512"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves model weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SaveWeights(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/OCR/Recognition/TrOCR.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

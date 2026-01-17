@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum DistanceMetricType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum DistanceMetricType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different methods for measuring the distance or similarity between data points.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_DistanceMetricType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.DistanceMetricType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.DistanceMetricType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_DistanceMetricType" data-uid="AiDotNet.Enums.DistanceMetricType" class="text-break">
+Enum DistanceMetricType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/DistanceMetricType.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different methods for measuring the distance or similarity between data points.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum DistanceMetricType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_DistanceMetricType_Cosine"><code>Cosine = 2</code></dt>
+  <dd><p>Measures the cosine of the angle between two vectors, focusing on orientation rather than magnitude.</p>
+<p>
+<b>For Beginners:</b> Cosine similarity measures the angle between two vectors, ignoring their magnitude (length).
+<p>Think of it as comparing the direction two people are facing, regardless of how far they've walked.
+Two people facing north are similar (cosine = 1), even if one walked 1 mile and the other 100 miles.
+People facing opposite directions have maximum dissimilarity (cosine = -1).</p>
+<p>Formula: cos(?) = (A·B)/(||A||·||B||)</p>
+<p>Best used for:</p>
+<ul>
+<li>Text documents (comparing document topics regardless of length)</li>
+<li>Recommendation systems</li>
+<li>High-dimensional sparse data</li>
+<li>When the magnitude of vectors doesn't matter, only their direction</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>Document similarity in text analysis</li>
+<li>User preference matching in recommendations</li>
+<li>Image feature comparison</li>
+</ul>
+<p>Note: Cosine similarity ranges from -1 (completely opposite) to 1 (exactly the same),
+with 0 indicating orthogonality (no correlation). To convert to a distance, use 1 - cosine_similarity.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DistanceMetricType_Euclidean"><code>Euclidean = 0</code></dt>
+  <dd><p>The straight-line distance between two points in Euclidean space (also known as L2 distance).</p>
+<p>
+Euclidean distance is the most common and intuitive distance measure - it's the straight-line 
+distance between two points "as the crow flies."
+<p>Formula: sqrt((x2-x1)² + (y2-y1)² + ...)</p>
+<p>Think of it as measuring distance with a ruler in a straight line.</p>
+<p>Best used for:</p>
+<ul>
+<li>Continuous numerical data</li>
+<li>When features have similar scales</li>
+<li>When the data space is relatively low-dimensional</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>Distance between physical locations</li>
+<li>Similarity between customer profiles with numerical attributes</li>
+<li>Image similarity when using pixel values</li>
+</ul>
+<p>Note: Euclidean distance is sensitive to the scale of the features, so normalization
+is often required before using this metric.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DistanceMetricType_Hamming"><code>Hamming = 4</code></dt>
+  <dd><p>Counts the number of positions at which corresponding elements differ (used for strings or binary vectors).</p>
+<p>
+<b>For Beginners:</b> Hamming distance counts how many positions have different values when comparing two strings 
+or sequences of equal length.
+<p>Think of it as comparing two multiple-choice tests and counting how many answers are different.</p>
+<p>For example, comparing &quot;CART&quot; and &quot;PART&quot;:</p>
+<ul>
+<li>Position 1: C vs P (different) ? +1</li>
+<li>Position 2: A vs A (same) ? +0</li>
+<li>Position 3: R vs R (same) ? +0</li>
+<li>Position 4: T vs T (same) ? +0</li>
+<li>Hamming distance = 1</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Strings of equal length</li>
+<li>Binary vectors</li>
+<li>Error detection in communication</li>
+<li>Genetic sequence comparison</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>DNA sequence comparison</li>
+<li>Error detection in data transmission</li>
+<li>Comparing fixed-length binary feature vectors</li>
+<li>Spell checking for words of the same length</li>
+</ul>
+<p>Note: Hamming distance requires sequences of equal length.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DistanceMetricType_Jaccard"><code>Jaccard = 3</code></dt>
+  <dd><p>Measures dissimilarity between sets by comparing elements they share versus elements they don't.</p>
+<p>
+<b>For Beginners:</b> Jaccard distance measures how different two sets are by comparing what they have in common 
+versus what they don't.
+<p>Think of it as comparing two shopping lists:</p>
+<ul>
+<li>How many items appear on both lists?</li>
+<li>How many items appear on at least one list?</li>
+<li>The ratio of these gives you the similarity</li>
+</ul>
+<p>Formula: 1 - |AnB|/|A?B| (1 minus the size of intersection divided by size of union)</p>
+<p>Best used for:</p>
+<ul>
+<li>Binary data (presence/absence)</li>
+<li>Set comparisons</li>
+<li>Categorical data</li>
+<li>Sparse binary vectors</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>Comparing which movies two users have watched</li>
+<li>Measuring similarity between text documents based on shared words</li>
+<li>Comparing species presence/absence in ecological samples</li>
+<li>Comparing shopping baskets</li>
+</ul>
+<p>Jaccard distance ranges from 0 (identical sets) to 1 (completely different sets).</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DistanceMetricType_Mahalanobis"><code>Mahalanobis = 5</code></dt>
+  <dd><p>Measures distance while accounting for correlations between variables and their relative importance.</p>
+<p>
+<b>For Beginners:</b> Mahalanobis distance is an advanced metric that takes into account how variables 
+are related to each other (their correlations).
+<p>Unlike Euclidean distance, which treats all dimensions equally, Mahalanobis distance:</p>
+<ul>
+<li>Gives less weight to variables that have high variance</li>
+<li>Accounts for correlations between variables</li>
+<li>Adjusts for the shape of the data distribution</li>
+</ul>
+<p>Think of it as measuring distance while considering the natural &quot;shape&quot; of your data:</p>
+<ul>
+<li>If you have height and weight data, these are correlated (taller people tend to weigh more)</li>
+<li>Mahalanobis distance accounts for this correlation when measuring similarity</li>
+</ul>
+<p>Formula: sqrt((x-µ)? S?¹ (x-µ)) where S is the covariance matrix</p>
+<p>Best used for:</p>
+<ul>
+<li>Multivariate data with correlated features</li>
+<li>Outlier detection</li>
+<li>Classification problems</li>
+<li>When features have different scales and variances</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>Anomaly detection in multivariate systems</li>
+<li>Face recognition</li>
+<li>Quality control in manufacturing</li>
+</ul>
+<p>Note: Mahalanobis distance requires computing the covariance matrix of your data,
+which can be computationally expensive for high-dimensional data.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DistanceMetricType_Manhattan"><code>Manhattan = 1</code></dt>
+  <dd><p>The sum of absolute differences between coordinates (also known as L1 distance or taxicab distance).</p>
+<p>
+Manhattan distance measures the distance between two points by summing the absolute differences 
+of their coordinates.
+<p>Formula: |x2-x1| + |y2-y1| + ...</p>
+<p>Think of it as the distance a taxi would drive in a city with a grid layout, where you can only
+travel along the streets (horizontal and vertical movements).</p>
+<p>Best used for:</p>
+<ul>
+<li>Grid-based problems</li>
+<li>When diagonal movement costs the same as horizontal/vertical</li>
+<li>Data with discrete or binary features</li>
+<li>When you want to reduce the influence of outliers</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>Navigation in city streets</li>
+<li>Feature comparison when features are independent</li>
+<li>Image processing with pixel-wise comparisons</li>
+</ul>
+<p>Manhattan distance is less sensitive to outliers than Euclidean distance.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_DistanceMetricType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Distance metrics are ways to measure how similar or different two data points are.
+<p>Think of distance metrics like different ways to measure the distance between two cities:</p>
+<ul>
+<li>As the crow flies (straight line)</li>
+<li>By following streets (Manhattan)</li>
+<li>By considering terrain and obstacles (more complex metrics)</li>
+</ul>
+<p>In machine learning, we use these metrics to:</p>
+<ul>
+<li>Group similar items together (clustering)</li>
+<li>Find nearest neighbors</li>
+<li>Measure how well our model is performing</li>
+</ul>
+<p>Different distance metrics work better for different types of data and problems.
+For example, Euclidean distance works well for continuous numerical data,
+while Jaccard distance is better for comparing sets.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/DistanceMetricType.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

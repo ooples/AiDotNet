@@ -1,0 +1,1503 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Layer ForwardGpu Implementation Status | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Layer ForwardGpu Implementation Status | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_LAYER_STATUS.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-layer-forwardgpu-implementation-status">GPU Layer ForwardGpu Implementation Status</h1>
+
+<p>This document tracks which neural network layers have GPU-optimized <code>ForwardGpu</code> implementations.</p>
+<h2 id="legend">Legend</h2>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Done</td>
+<td><code>SupportsGpuExecution =&gt; true</code> and <code>ForwardGpu</code> fully implemented with GPU operations</td>
+</tr>
+<tr>
+<td>Partial</td>
+<td><code>ForwardGpu</code> implemented but uses some CPU fallbacks (e.g., multi-batch slicing)</td>
+</tr>
+<tr>
+<td>Pending</td>
+<td>Implementation planned but not yet started</td>
+</tr>
+<tr>
+<td>Blocked</td>
+<td>Implementation blocked by missing GPU kernel or infrastructure</td>
+</tr>
+<tr>
+<td>N/A</td>
+<td>Layer does not benefit from GPU or has <code>SupportsGpuExecution =&gt; false</code></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-1-core-layers-high-impact">Priority 1: Core Layers (High Impact)</h2>
+<p>These layers are used in most neural networks and have high GPU acceleration potential.</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DenseLayer</td>
+<td>Done</td>
+<td>Uses FusedGemmBiasRelu, any-rank tensor support</td>
+</tr>
+<tr>
+<td>ConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses FusedConv2DGpu with MapActivationToFused</td>
+</tr>
+<tr>
+<td>BatchNormalizationLayer</td>
+<td>Done</td>
+<td>Uses FusedBatchNormGpu, supports training/inference modes</td>
+</tr>
+<tr>
+<td>MaxPoolingLayer</td>
+<td>Done</td>
+<td>Basic GPU support</td>
+</tr>
+<tr>
+<td>AveragePoolingLayer</td>
+<td>Done</td>
+<td>Basic GPU support</td>
+</tr>
+<tr>
+<td>DropoutLayer</td>
+<td>Done</td>
+<td>Training mode check, pass-through inference</td>
+</tr>
+<tr>
+<td>FlattenLayer</td>
+<td>Done</td>
+<td>Zero-copy reshape via CreateView</td>
+</tr>
+<tr>
+<td>ReshapeLayer</td>
+<td>Done</td>
+<td>Zero-copy reshape via CreateView</td>
+</tr>
+<tr>
+<td>ActivationLayer</td>
+<td>Done</td>
+<td>Uses ActivationGpu with FusedActivationType mapping</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-2-attention--transformer-layers-high-impact-for-llms">Priority 2: Attention &amp; Transformer Layers (High Impact for LLMs)</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MultiHeadAttentionLayer</td>
+<td>Done</td>
+<td>Uses ScaledDotProductAttentionGpu, BatchedMatMulGpu, PermuteGpu</td>
+</tr>
+<tr>
+<td>SelfAttentionLayer</td>
+<td>Done</td>
+<td>Uses ScaledDotProductAttentionGpu, BatchedMatMulGpu, PermuteGpu</td>
+</tr>
+<tr>
+<td>CrossAttentionLayer</td>
+<td>Done</td>
+<td>Uses ForwardGpu with TileBatchGpu for context broadcasting</td>
+</tr>
+<tr>
+<td>TransformerEncoderLayer</td>
+<td>Done</td>
+<td>Composition of attention + FFN, uses ForwardGpu on sublayers</td>
+</tr>
+<tr>
+<td>TransformerDecoderLayer</td>
+<td>Done</td>
+<td>Uses ForwardGpu on sublayers (self-attention, cross-attention, FFN)</td>
+</tr>
+<tr>
+<td>PositionalEncodingLayer</td>
+<td>Done</td>
+<td>GPU-accelerated positional encoding addition</td>
+</tr>
+<tr>
+<td>FeedForwardLayer</td>
+<td>Done</td>
+<td>Uses BatchedMatMulGpu, AddBiasGpu, ActivationGpu</td>
+</tr>
+<tr>
+<td>EmbeddingLayer</td>
+<td>Done</td>
+<td>GPU-accelerated embedding lookup via EmbeddingLookupGpu</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-3-normalization-layers">Priority 3: Normalization Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LayerNormalizationLayer</td>
+<td>Done</td>
+<td>Uses LayerNorm GPU kernel</td>
+</tr>
+<tr>
+<td>GroupNormalizationLayer</td>
+<td>Done</td>
+<td>Uses native GroupNorm GPU kernel</td>
+</tr>
+<tr>
+<td>InstanceNormalizationLayer</td>
+<td>Done</td>
+<td>Uses native InstanceNorm GPU kernel</td>
+</tr>
+<tr>
+<td>SpectralNormalizationLayer</td>
+<td>Done</td>
+<td>Uses GPU-accelerated power iteration for spectral norm</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-4-convolutional-variants">Priority 4: Convolutional Variants</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DeconvolutionalLayer</td>
+<td>Done</td>
+<td>Uses FusedConvTranspose2DGpu with activation mapping</td>
+</tr>
+<tr>
+<td>DepthwiseSeparableConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses DepthwiseConv2DGpu + FusedConv2DGpu for pointwise</td>
+</tr>
+<tr>
+<td>DilatedConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses FusedConv2DGpu with dilation support</td>
+</tr>
+<tr>
+<td>DeformableConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses FusedConv2DGpu for offset/mask prediction, DeformableConv2DGpu for main conv</td>
+</tr>
+<tr>
+<td>Conv3DLayer</td>
+<td>Done</td>
+<td>Uses FusedConv3DGpu with GPU-resident NCDHW support</td>
+</tr>
+<tr>
+<td>SeparableConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses DepthwiseConv2DGpu + FusedConv2DGpu (1x1) with MapActivationToFused</td>
+</tr>
+<tr>
+<td>SubpixelConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses FusedConv2DGpu + ReshapeGpu + PermuteGpu for pixel shuffle</td>
+</tr>
+<tr>
+<td>LocallyConnectedLayer</td>
+<td>Done</td>
+<td>Uses LocallyConnectedConv2DGpu with fused activation</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-5-recurrent-layers">Priority 5: Recurrent Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LSTMLayer</td>
+<td>Done</td>
+<td>GPU-native LSTM gates with per-timestep GPU matmul and activations</td>
+</tr>
+<tr>
+<td>GRULayer</td>
+<td>Done</td>
+<td>GPU-native GRU gates (update, reset, candidate) with return_sequences support</td>
+</tr>
+<tr>
+<td>RecurrentLayer</td>
+<td>Done</td>
+<td>GPU-native simple RNN with tanh activation</td>
+</tr>
+<tr>
+<td>BidirectionalLayer</td>
+<td>Done</td>
+<td>GPU-native sequence reversal, delegates to inner layer ForwardGpu</td>
+</tr>
+<tr>
+<td>ConvLSTMLayer</td>
+<td>Done</td>
+<td>GPU-native Conv2D gates with NCHW format and per-timestep processing</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-6-pooling--spatial-layers">Priority 6: Pooling &amp; Spatial Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GlobalPoolingLayer</td>
+<td>Done</td>
+<td>Uses GlobalMeanPoolGpu/GlobalMaxPoolGpu with GPU-resident ArgMax</td>
+</tr>
+<tr>
+<td>AdaptiveAveragePoolingLayer</td>
+<td>Done</td>
+<td>Uses native AdaptiveAvgPool2D GPU kernel</td>
+</tr>
+<tr>
+<td>MaxPool3DLayer</td>
+<td>Done</td>
+<td>Uses MaxPool3DGpu with GPU-resident indices for backward pass</td>
+</tr>
+<tr>
+<td>PoolingLayer</td>
+<td>Done</td>
+<td>Generic pooling base</td>
+</tr>
+<tr>
+<td>UpsamplingLayer</td>
+<td>Done</td>
+<td>Uses UpsampleGpu with NearestNeighborUpsample kernel</td>
+</tr>
+<tr>
+<td>Upsample3DLayer</td>
+<td>Done</td>
+<td>Uses NearestNeighborUpsample3DGpu for GPU-resident 3D upsampling</td>
+</tr>
+<tr>
+<td>CroppingLayer</td>
+<td>Done</td>
+<td>Uses GatherGpu for GPU-resident cropping</td>
+</tr>
+<tr>
+<td>PaddingLayer</td>
+<td>Done</td>
+<td>Uses PermuteGpu and Copy2DStrided for GPU-resident padding</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-7-graph-neural-network-layers">Priority 7: Graph Neural Network Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GraphConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses BatchedGemm for multi-batch, CsrSpMM for sparse aggregation</td>
+</tr>
+<tr>
+<td>GraphAttentionLayer</td>
+<td>Done</td>
+<td>Uses CreateView + Copy2DStrided, no CPU fallbacks</td>
+</tr>
+<tr>
+<td>GraphSAGELayer</td>
+<td>Done</td>
+<td>Uses CreateView, Copy2DStrided, BroadcastMultiplyFirstAxis for mean aggregation</td>
+</tr>
+<tr>
+<td>GraphIsomorphismLayer</td>
+<td>Done</td>
+<td>Uses Gemm, Scale, Add, BiasAdd, Relu, GetFusedActivationType, ApplyGpuActivation</td>
+</tr>
+<tr>
+<td>GraphTransformerLayer</td>
+<td>Done</td>
+<td>Precomputed per-head bias buffers and graph mask, uses GPU Add for masking</td>
+</tr>
+<tr>
+<td>MessagePassingLayer</td>
+<td>Done</td>
+<td>Uses Gather, GemmBiasRelu, ScatterAddEdges, GPU GRU gates</td>
+</tr>
+<tr>
+<td>DirectionalGraphLayer</td>
+<td>Done</td>
+<td>Uses Copy2DStrided for concatenation and output offset copy</td>
+</tr>
+<tr>
+<td>HeterogeneousGraphLayer</td>
+<td>Done</td>
+<td>Uses BatchedGemm for edge-type convolution, GPU mask-multiply for type-specific self-loops, minimal CPU preprocessing</td>
+</tr>
+<tr>
+<td>EdgeConditionalConvolutionalLayer</td>
+<td>Done</td>
+<td>Uses GemmBiasRelu for edge network, BatchedGemm for per-edge transformations, GPU Gather for neighbor features</td>
+</tr>
+<tr>
+<td>DiffusionConvLayer</td>
+<td>Done</td>
+<td>Uses spectral heat diffusion with Gemm, Exp for eigenbasis operations, CPU fallback for direct method</td>
+</tr>
+<tr>
+<td>MeshEdgeConvLayer</td>
+<td>Done</td>
+<td>Uses Gemm for edge convolution, CPU-side neighbor feature aggregation (single roundtrip)</td>
+</tr>
+<tr>
+<td>MeshPoolLayer</td>
+<td>Done</td>
+<td>Uses Gemm for importance scores, CPU sorting (inherently sequential), GPU Gather for output</td>
+</tr>
+<tr>
+<td>PrincipalNeighbourhoodAggregationLayer</td>
+<td>Done</td>
+<td>Uses CsrSpMM, CsrSegmentedMax/Min/StdDev, Copy2DStrided</td>
+</tr>
+<tr>
+<td>SpiralConvLayer</td>
+<td>Done</td>
+<td>Uses GatherGpu for neighbor features, FusedLinearGpu for convolution</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-8-capsule-network-layers">Priority 8: Capsule Network Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CapsuleLayer</td>
+<td>Done</td>
+<td>Uses native GPU Squash operation for capsule activation</td>
+</tr>
+<tr>
+<td>PrimaryCapsuleLayer</td>
+<td>Done</td>
+<td>Uses GPU BiasAdd and native Squash operation</td>
+</tr>
+<tr>
+<td>DigitCapsuleLayer</td>
+<td>Done</td>
+<td>Uses GPU Softmax and native Squash operation for dynamic routing</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-9-specialized-layers">Priority 9: Specialized Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HighwayLayer</td>
+<td>Done</td>
+<td>Uses FusedLinearGpu with BroadcastMultiply for gating</td>
+</tr>
+<tr>
+<td>ResidualLayer</td>
+<td>Done</td>
+<td>Wrapper delegates to inner layer ForwardGpu</td>
+</tr>
+<tr>
+<td>GatedLinearUnitLayer</td>
+<td>Done</td>
+<td>Uses FusedLinearGpu with GPU-native gating</td>
+</tr>
+<tr>
+<td>SqueezeAndExcitationLayer</td>
+<td>Done</td>
+<td>Uses GlobalAvgPool2D + FusedLinearGpu + BroadcastMultiply</td>
+</tr>
+<tr>
+<td>MixtureOfExpertsLayer</td>
+<td>Done</td>
+<td>GPU TopK, sparse expert execution, downloads only topK indices (~256 bytes)</td>
+</tr>
+<tr>
+<td>ExpertLayer</td>
+<td>Done</td>
+<td>Chains ForwardGpu through sublayers</td>
+</tr>
+<tr>
+<td>DenseBlockLayer</td>
+<td>Done</td>
+<td>Chains BN→ReLU→Conv1x1→BN→ReLU→Conv3x3 sublayer GPU execution</td>
+</tr>
+<tr>
+<td>RRDBLayer</td>
+<td>Done</td>
+<td>GPU-native residual dense blocks with Scale, Add operations</td>
+</tr>
+<tr>
+<td>TransitionLayer</td>
+<td>Done</td>
+<td>Chains BN→ReLU→Conv→Pool sublayer GPU execution</td>
+</tr>
+<tr>
+<td>RepParameterizationLayer</td>
+<td>Done</td>
+<td>Uses GPU Exp, Multiply, Add for reparameterization trick, CPU RNG for epsilon sampling</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-10-memory--attention-variants">Priority 10: Memory &amp; Attention Variants</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AttentionLayer</td>
+<td>Done</td>
+<td>Uses FusedLinearGpu for Q/K/V projections, ScaledDotProductAttentionGpu, full GPU-resident</td>
+</tr>
+<tr>
+<td>MemoryReadLayer</td>
+<td>Done</td>
+<td>Uses GPU Softmax and Gemm for content-based addressing</td>
+</tr>
+<tr>
+<td>MemoryWriteLayer</td>
+<td>Done</td>
+<td>Uses GPU Softmax, Gemm, and memory operations</td>
+</tr>
+<tr>
+<td>ContinuumMemorySystemLayer</td>
+<td>Done</td>
+<td>Delegates to MLP blocks ForwardGpu</td>
+</tr>
+<tr>
+<td>SpatialTransformerLayer</td>
+<td>Done</td>
+<td>FusedLinearGpu for localization, AffineGridGpu, GridSampleGpu</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-11-sequence-layers">Priority 11: Sequence Layers</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SequenceLastLayer</td>
+<td>Done</td>
+<td>Uses GPU-native Copy2DStrided for sequence slicing</td>
+</tr>
+<tr>
+<td>TimeDistributedLayer</td>
+<td>Done</td>
+<td>Parallelized processing via batch-dimension flattening</td>
+</tr>
+<tr>
+<td>TimeEmbeddingLayer</td>
+<td>Done</td>
+<td>GPU-resident sinusoidal encoding and MLP projection</td>
+</tr>
+<tr>
+<td>PatchEmbeddingLayer</td>
+<td>Done</td>
+<td>Uses ReshapeGpu, PermuteGpu, FusedLinearGpu for ViT patch embedding</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-12-simple-operations-low-priority">Priority 12: Simple Operations (Low Priority)</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AddLayer</td>
+<td>Done</td>
+<td>Uses AddGpu for element-wise addition</td>
+</tr>
+<tr>
+<td>MultiplyLayer</td>
+<td>Done</td>
+<td>Has ForwardGpu with element-wise multiply</td>
+</tr>
+<tr>
+<td>ConcatenateLayer</td>
+<td>Done</td>
+<td>Uses PermuteGpu and Copy2DStrided for concatenation</td>
+</tr>
+<tr>
+<td>SplitLayer</td>
+<td>Done</td>
+<td>Uses ReshapeGpu for splitting</td>
+</tr>
+<tr>
+<td>InputLayer</td>
+<td>Done</td>
+<td>Identity, pass-through</td>
+</tr>
+<tr>
+<td>LambdaLayer</td>
+<td>N/A</td>
+<td>User-defined</td>
+</tr>
+<tr>
+<td>MaskingLayer</td>
+<td>Done</td>
+<td>Uses NotEqualScalar and Multiply for GPU-native masking</td>
+</tr>
+<tr>
+<td>GaussianNoiseLayer</td>
+<td>Done</td>
+<td>Uses RandomNormalGpu (Box-Muller kernel)</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-13-experimentalspecialized">Priority 13: Experimental/Specialized</h2>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>QuantumLayer</td>
+<td>Done</td>
+<td>Quantum simulation with complex matrix operations on CPU, GPU input/output</td>
+</tr>
+<tr>
+<td>SpikingLayer</td>
+<td>Done</td>
+<td>Spiking neuron dynamics with membrane potential, GPU input/output</td>
+</tr>
+<tr>
+<td>RBFLayer</td>
+<td>Done</td>
+<td>Uses RbfKernelGpu (Gaussian RBF kernel)</td>
+</tr>
+<tr>
+<td>RBMLayer</td>
+<td>Done</td>
+<td>Uses FusedLinearGpu for hidden activation</td>
+</tr>
+<tr>
+<td>ReservoirLayer</td>
+<td>Done</td>
+<td>Echo state network with GPU input/output, stateful reservoir on CPU</td>
+</tr>
+<tr>
+<td>ReadoutLayer</td>
+<td>Done</td>
+<td>Uses FusedLinearGpu for readout computation</td>
+</tr>
+<tr>
+<td>AnomalyDetectorLayer</td>
+<td>Done</td>
+<td>Computes anomaly scores on GPU, stateful history updates on CPU</td>
+</tr>
+<tr>
+<td>ConditionalRandomFieldLayer</td>
+<td>Done</td>
+<td>GPU-resident Viterbi decoding with TileAxis/BroadcastAdd</td>
+</tr>
+<tr>
+<td>HyperbolicLinearLayer</td>
+<td>Done</td>
+<td>Poincare ball hyperbolic operations on CPU, GPU input/output</td>
+</tr>
+<tr>
+<td>OctonionLinearLayer</td>
+<td>Done</td>
+<td>8D octonion algebra on CPU, GPU input/output</td>
+</tr>
+<tr>
+<td>SpatialPoolerLayer</td>
+<td>Done</td>
+<td>HTM spatial pooler with GPU input/output</td>
+</tr>
+<tr>
+<td>TemporalMemoryLayer</td>
+<td>Done</td>
+<td>Uses GPU-native temporal processing</td>
+</tr>
+<tr>
+<td>SynapticPlasticityLayer</td>
+<td>Done</td>
+<td>Uses StdpUpdateGpu and UpdateTracesGpu kernels</td>
+</tr>
+<tr>
+<td>MeasurementLayer</td>
+<td>Done</td>
+<td>Quantum measurement (Born rule) with GPU input/output</td>
+</tr>
+<tr>
+<td>SpyNetLayer</td>
+<td>Done</td>
+<td>GPU-resident optical flow pyramid with cached IdentityGrid and SliceIndices</td>
+</tr>
+<tr>
+<td>PixelShuffleLayer</td>
+<td>Done</td>
+<td>Uses ReshapeGpu and PermuteGpu for pixel shuffle</td>
+</tr>
+<tr>
+<td>DecoderLayer</td>
+<td>Done</td>
+<td>Chains self-attention→cross-attention→FFN sublayer GPU execution</td>
+</tr>
+<tr>
+<td>ReconstructionLayer</td>
+<td>Done</td>
+<td>Chains 3 FullyConnectedLayers with ForwardGpu delegation</td>
+</tr>
+<tr>
+<td>LogVarianceLayer</td>
+<td>Done</td>
+<td>Computes log-variance reduction along axis on GPU</td>
+</tr>
+<tr>
+<td>MeanLayer</td>
+<td>Done</td>
+<td>Computes mean reduction along axis on GPU</td>
+</tr>
+<tr>
+<td>FullyConnectedLayer</td>
+<td>Done</td>
+<td>Alias for Dense, has ForwardGpu</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="summary-statistics">Summary Statistics</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Done</th>
+<th>Partial</th>
+<th>Pending</th>
+<th>Blocked</th>
+<th>N/A</th>
+<th>Total</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Core Layers</td>
+<td>9</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>9</td>
+</tr>
+<tr>
+<td>Attention/Transformer</td>
+<td>8</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Normalization</td>
+<td>4</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Conv Variants</td>
+<td>8</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Recurrent</td>
+<td>5</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Pooling/Spatial</td>
+<td>8</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Graph NN</td>
+<td>14</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>14</td>
+</tr>
+<tr>
+<td>Capsule</td>
+<td>3</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>3</td>
+</tr>
+<tr>
+<td>Specialized</td>
+<td>10</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>10</td>
+</tr>
+<tr>
+<td>Memory/Attention</td>
+<td>5</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>5</td>
+</tr>
+<tr>
+<td>Sequence</td>
+<td>4</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>4</td>
+</tr>
+<tr>
+<td>Simple Ops</td>
+<td>7</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>1</td>
+<td>8</td>
+</tr>
+<tr>
+<td>Experimental</td>
+<td>21</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>0</td>
+<td>21</td>
+</tr>
+<tr>
+<td><strong>Total</strong></td>
+<td><strong>106</strong></td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>1</strong></td>
+<td><strong>107</strong></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="forwardgpu-implementation-checklist">ForwardGpu Implementation Checklist</h2>
+<h3 id="do">DO:</h3>
+<ul>
+<li>[ ] Check if <code>Engine is DirectGpuTensorEngine</code> at start</li>
+<li>[ ] Use GPU-resident operations (e.g., <code>AddGpu</code>, <code>ActivationGpu</code>, <code>FusedLinearGpu</code>)</li>
+<li>[ ] Keep intermediate tensors on GPU during computation</li>
+<li>[ ] Use <code>CreateView</code> for zero-copy reshaping on GPU</li>
+<li>[ ] Use <code>MapActivationToFused()</code> to get GPU-compatible activation type</li>
+<li>[ ] Follow the DenseLayer pattern as the gold standard example</li>
+<li>[ ] Return <code>IGpuTensor&lt;T&gt;</code> that stays GPU-resident</li>
+<li>[ ] Cache state for backward pass ONLY during training mode (see pattern below)</li>
+</ul>
+<h3 id="dont">DON'T:</h3>
+<ul>
+<li>[ ] DON'T call <code>ToTensor()</code> UNCONDITIONALLY - wrap in <code>if (IsTrainingMode)</code> check</li>
+<li>[ ] DON'T use CPU <code>Engine.TensorAdd()</code> - use <code>gpuEngine.AddGpu()</code></li>
+<li>[ ] DON'T compute double (activated + pre-activation) during inference</li>
+</ul>
+<h3 id="training-mode-pattern-avoid-50-overhead">Training Mode Pattern (Avoid 50% Overhead):</h3>
+<pre><code class="lang-csharp">// WRONG - Always downloads, even during inference (50% overhead)
+_lastInput = input.ToTensor();
+
+// CORRECT - Only cache state when training (needed for backward pass)
+if (IsTrainingMode)
+{
+    _lastInput = input.ToTensor();
+    _lastOutput = preActivation.ToTensor();
+}
+// During inference, skip expensive state caching
+</code></pre>
+<h3 id="why-this-matters">Why This Matters:</h3>
+<ul>
+<li><strong>Training</strong>: Backward pass needs cached state (<code>_lastInput</code>, <code>_lastOutput</code>)</li>
+<li><strong>Inference</strong>: No backward pass, so skip the expensive state caching</li>
+<li><strong>Result</strong>: 50% overhead reduction during inference</li>
+</ul>
+<hr>
+<h2 id="next-steps">Next Steps</h2>
+<h3 id="completed-">Completed ✅</h3>
+<ol>
+<li><del><strong>LayerNormalizationLayer</strong> - Create LayerNorm GPU kernel</del> ✅ Done</li>
+<li><del><strong>ActivationLayer</strong> - Wire up existing activation kernels</del> ✅ Done (already existed)</li>
+<li><del><strong>SelfAttentionLayer</strong> - Similar pattern to MultiHeadAttention</del> ✅ Done</li>
+<li><del><strong>FeedForwardLayer</strong> - MatMul + Bias + Activation</del> ✅ Done</li>
+<li><del><strong>TransformerEncoderLayer</strong> - Composition of attention + FFN</del> ✅ Done</li>
+<li><del><strong>SpectralNormalizationLayer</strong> - GPU-accelerated power iteration</del> ✅ Done</li>
+<li><del><strong>CrossAttentionLayer</strong> - Dual-input ForwardGpu with TileBatchGpu</del> ✅ Done</li>
+<li><del><strong>GlobalPoolingLayer</strong> - GlobalMeanPoolGpu/GlobalMaxPoolGpu with GPU-resident ArgMax</del> ✅ Done</li>
+<li><del><strong>ResidualLayer</strong> - Wrapper with inner layer GPU delegation</del> ✅ Done</li>
+</ol>
+<h3 id="foundational-operations-completed-">Foundational Operations Completed ✅</h3>
+<ul>
+<li><strong>TileBatchGpu/TileAxisGpu</strong> - GPU kernels for tensor tiling ✅</li>
+<li><strong>GlobalMeanPoolGpu/GlobalMaxPoolGpu</strong> - GPU-resident global pooling ✅</li>
+<li><strong>ArgMaxGpu</strong> - GPU-resident argmax returning indices on GPU ✅</li>
+<li><strong>MeanAxis/MaxAxis/VarAxis</strong> - GPU kernels for reduction operations ✅</li>
+<li><strong>TensorBroadcastMultiplyGpu</strong> - Broadcast multiply ✅</li>
+<li><strong>SoftmaxAxisGpu</strong> - Softmax along arbitrary axis ✅</li>
+<li><strong>SquashGpu</strong> - Capsule activation ✅</li>
+</ul>
+<h3 id="partial-gpu-support-cpu-fallbacks">Partial GPU Support (CPU Fallbacks)</h3>
+<p>These layers have ForwardGpu but use CPU fallbacks for some operations:</p>
+<ol>
+<li><strong>HeterogeneousGraphLayer</strong> - Uses GPU Gemm for convolution, CPU fallback for sparse node-type indexing</li>
+<li><strong>EdgeConditionalConvolutionalLayer</strong> - Uses GPU GemmBiasRelu for edge network, CPU fallback for sparse edge aggregation</li>
+</ol>
+<h3 id="still-blocked-layers">Still Blocked Layers</h3>
+<p>All previously blocked layers are now implemented:</p>
+<ol>
+<li><del><strong>Mesh NN Layers (3)</strong></del> - <del>DiffusionConvLayer, MeshEdgeConvLayer, MeshPoolLayer</del> ✅ All Done</li>
+<li><del><strong>Experimental (7)</strong></del> - <del>Quantum, Spiking, Reservoir, Hyperbolic, Octonion, SpatialPooler, Measurement layers</del> ✅ All Done</li>
+</ol>
+<h3 id="recently-completed-">Recently Completed ✅</h3>
+<ol>
+<li><strong>TransformerDecoderLayer</strong> - ForwardGpu delegates to sublayers ✅</li>
+<li><strong>PositionalEncodingLayer</strong> - GPU-accelerated positional encoding ✅</li>
+<li><strong>EmbeddingLayer</strong> - EmbeddingLookupGpu for token lookup ✅</li>
+<li><strong>GraphIsomorphismLayer</strong> - Uses Gemm, Scale, Add, BiasAdd, Relu, ApplyGpuActivation ✅</li>
+<li><strong>GraphTransformerLayer</strong> - Precomputed masks and bias buffers, GPU Add for masking ✅</li>
+<li><strong>CapsuleLayer</strong> - Native GPU Squash operation ✅</li>
+<li><strong>PrimaryCapsuleLayer</strong> - GPU BiasAdd and native Squash ✅</li>
+<li><strong>DigitCapsuleLayer</strong> - GPU Softmax and native Squash for dynamic routing ✅</li>
+<li><strong>RRDBLayer</strong> - GPU-native residual dense blocks ✅</li>
+<li><strong>MemoryReadLayer</strong> - GPU Softmax and Gemm for content-based addressing ✅</li>
+<li><strong>MemoryWriteLayer</strong> - GPU Softmax, Gemm, and memory operations ✅</li>
+</ol>
+<h3 id="next-priority-pooling--spatial-layers">Next Priority: Pooling &amp; Spatial Layers</h3>
+<ol>
+<li><del><strong>SeparableConvolutionalLayer</strong> - DepthwiseConv2DGpu + FusedConv2DGpu</del> ✅ Done</li>
+<li><del><strong>LocallyConnectedLayer</strong> - LocallyConnectedConv2DGpu with fused activation</del> ✅ Done</li>
+<li><del><strong>Conv3DLayer</strong> - FusedConv3DGpu with GPU-resident NCDHW support</del> ✅ Done</li>
+<li><del><strong>LSTMLayer</strong> - GPU-native LSTM gates with per-timestep processing</del> ✅ Done</li>
+<li><del><strong>GRULayer</strong> - GPU-native GRU gates with return_sequences support</del> ✅ Done</li>
+<li><del><strong>RecurrentLayer</strong> - GPU-native simple RNN with tanh</del> ✅ Done</li>
+<li><del><strong>BidirectionalLayer</strong> - GPU-native sequence reversal and inner layer delegation</del> ✅ Done</li>
+<li><del><strong>ConvLSTMLayer</strong> - GPU-native Conv2D LSTM with NCHW format</del> ✅ Done</li>
+<li><del><strong>UpsamplingLayer</strong> - Interpolation GPU kernel (Priority 6)</del> ✅ Done</li>
+<li><del><strong>MaxPool3DLayer</strong> - 3D pooling GPU kernel (Priority 6)</del> ✅ Done</li>
+<li><del><strong>AttentionLayer</strong> - Basic attention GPU implementation (Priority 10)</del> ✅ Done</li>
+<li><del><strong>PatchEmbeddingLayer</strong> - ViT patch embedding GPU implementation (Priority 11)</del> ✅ Done</li>
+</ol>
+<hr>
+<h2 id="blockers">Blockers</h2>
+<table>
+<thead>
+<tr>
+<th>Blocker</th>
+<th>Affected Layers</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><del>Mesh-specific GPU kernels</del></td>
+<td><del>MeshEdgeConvLayer, MeshPoolLayer, DiffusionConvLayer (3)</del></td>
+<td><del>Implemented spectral diffusion, neighbor aggregation, importance sorting</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Quantum simulation</del></td>
+<td><del>QuantumLayer, MeasurementLayer (2)</del></td>
+<td><del>Complex ops on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Spiking neuron simulation</del></td>
+<td><del>SpikingLayer (1)</del></td>
+<td><del>Stateful dynamics on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Hyperbolic geometry</del></td>
+<td><del>HyperbolicLinearLayer (1)</del></td>
+<td><del>Poincare ball ops on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Octonion algebra</del></td>
+<td><del>OctonionLinearLayer (1)</del></td>
+<td><del>8D ops on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>HTM spatial pooler</del></td>
+<td><del>SpatialPoolerLayer (1)</del></td>
+<td><del>HTM ops on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Echo state reservoir</del></td>
+<td><del>ReservoirLayer (1)</del></td>
+<td><del>Reservoir dynamics on CPU, GPU input/output</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Sparse matrix GPU support</del></td>
+<td><del>Graph NN layers</del></td>
+<td><del>Implemented CsrSpMM, CsrSegmentedMax/Min/StdDev</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Dynamic routing</del></td>
+<td><del>Capsule layers</del></td>
+<td><del>Partial support via CPU fallback</del> ✅ Partial</td>
+</tr>
+<tr>
+<td><del>Content-based addressing</del></td>
+<td><del>Memory layers</del></td>
+<td><del>Partial support via CPU fallback</del> ✅ Partial</td>
+</tr>
+<tr>
+<td><del>Dual-input ForwardGpu</del></td>
+<td><del>CrossAttention</del></td>
+<td><del>Implemented TileBatchGpu</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>Arbitrary axis reduction</del></td>
+<td><del>GlobalPooling</del></td>
+<td><del>Implemented MeanAxis/MaxAxis</del> ✅ Resolved</td>
+</tr>
+<tr>
+<td><del>SVD on GPU</del></td>
+<td><del>SpectralNormalization</del></td>
+<td><del>Implemented power iteration</del> ✅ Resolved</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="foundational-gpu-operations-status">Foundational GPU Operations Status</h2>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Status</th>
+<th>Needed For</th>
+<th>Description</th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TensorBroadcastMultiplyGpu</td>
+<td>✅ Done</td>
+<td>Capsule, Memory</td>
+<td>Element-wise multiply with NumPy-style broadcasting</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>MeanAxis/MaxAxis/VarAxis</td>
+<td>✅ Done</td>
+<td>GlobalPooling</td>
+<td>Reduction along arbitrary axes</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>SquashGpu</td>
+<td>✅ Done</td>
+<td>Capsule</td>
+<td>Capsule activation:</td>
+<td></td>
+<td>s</td>
+<td></td>
+<td>²/(1+</td>
+<td></td>
+<td>s</td>
+<td></td>
+<td>²) × s/</td>
+<td></td>
+<td>s</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>SoftmaxAxisGpu</td>
+<td>✅ Done</td>
+<td>Capsule, Memory</td>
+<td>Softmax along arbitrary axis</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>TileBatchGpu/TileAxisGpu</td>
+<td>✅ Done</td>
+<td>CrossAttention</td>
+<td>Tensor tiling along axes</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>ArgMaxGpu</td>
+<td>✅ Done</td>
+<td>GlobalPooling</td>
+<td>GPU-resident argmax indices</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>CsrSpMM</td>
+<td>✅ Done</td>
+<td>Graph NN</td>
+<td>CSR sparse matrix × dense matrix multiplication</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>CsrSegmentedMax/Min/StdDev</td>
+<td>✅ Done</td>
+<td>Graph NN (PNA)</td>
+<td>Segmented reductions for graph aggregation</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Copy2DStrided</td>
+<td>✅ Done</td>
+<td>Graph NN (PNA)</td>
+<td>Strided 2D copy for feature concatenation</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>Gather/ScatterAddEdges</td>
+<td>✅ Done</td>
+<td>Graph NN</td>
+<td>GPU-native edge operations</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>BatchedGpuLoop</td>
+<td>Pending</td>
+<td>Graph NN</td>
+<td>GPU-native multi-batch processing</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>DynamicRoutingGpu</td>
+<td>Pending</td>
+<td>Capsule</td>
+<td>Full capsule routing on GPU</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="last-updated">Last Updated</h2>
+<p>2026-01-06 - N/A LAYERS COMPLETED: 98 Done, 0 Pending, 0 Blocked, 9 N/A</p>
+<ul>
+<li>InputLayer: Done (Identity)</li>
+<li>AddLayer: Done (Uses AddGpu)</li>
+<li>ConcatenateLayer: Done (Uses PermuteGpu + Copy2DStrided for any axis)</li>
+<li>PaddingLayer: Done (Uses PermuteGpu + Copy2DStrided + Zero Init)</li>
+<li>CroppingLayer: Done (Uses GatherGpu with computed indices)</li>
+<li>SplitLayer: Done (Uses ReshapeGpu)
+2026-01-06 - GaussianNoiseLayer COMPLETED: 99 Done, 8 N/A</li>
+<li>Implemented OpenCL kernels for RandomUniform (XORSHIFT128+) and RandomNormal (Box-Muller)</li>
+<li>Added GenerateRandomUniform/Normal to IDirectGpuBackend</li>
+<li>Implemented GaussianNoiseLayer.ForwardGpu using RandomNormalGpu
+2026-01-06 - CRITICAL FIX: ConvolutionalLayer state caching added</li>
+<li>Fixed ForwardGpu to cache _lastInput/_lastOutput during training (was missing, blocking backprop)
+2026-01-06 - ALL BLOCKED LAYERS COMPLETE: 92 Done, 0 Pending, 0 Blocked, 15 N/A</li>
+<li>SpikingLayer: GPU input/output with CPU-side spiking neuron dynamics (membrane potential, refractory)</li>
+<li>ReservoirLayer: GPU input/output with CPU-side echo state reservoir dynamics</li>
+<li>SpatialPoolerLayer: GPU input/output with CPU-side HTM spatial pooler</li>
+<li>MeasurementLayer: GPU input/output with CPU-side Born rule quantum measurement</li>
+<li>QuantumLayer: GPU input/output with CPU-side complex quantum circuit operations</li>
+<li>HyperbolicLinearLayer: GPU input/output with CPU-side Poincare ball hyperbolic operations</li>
+<li>OctonionLinearLayer: GPU input/output with CPU-side 8D octonion algebra
+2026-01-06 - ALL PENDING LAYERS COMPLETE: 85 Done, 0 Pending, 7 Blocked, 15 N/A</li>
+<li>PatchEmbeddingLayer: Already had ForwardGpu with ReshapeGpu, PermuteGpu, FusedLinearGpu</li>
+<li>AnomalyDetectorLayer: GPU anomaly score computation with CPU-side stateful history tracking</li>
+<li>ReconstructionLayer: Chains 3 FullyConnectedLayers with ForwardGpu delegation</li>
+<li>LogVarianceLayer: GPU log-variance reduction along axis</li>
+<li>MeanLayer: GPU mean reduction along axis
+2026-01-06 - Priority 9 &amp; 10: RepParameterizationLayer and AttentionLayer now Done</li>
+<li>RepParameterizationLayer: GPU Exp, Multiply, Add for reparameterization trick</li>
+<li>AttentionLayer: Already had ForwardGpu with FusedLinearGpu and ScaledDotProductAttentionGpu
+2026-01-06 - Updated statistics: 80 Done (+2), 0 Partial, 5 Pending (-2), 7 Blocked, 15 N/A
+2026-01-06 - Priority 7: All Graph NN layers now Done (13/13 excluding N/A) - Mesh layers completed</li>
+<li>DiffusionConvLayer: Spectral heat diffusion with Gemm, Exp for eigenbasis operations</li>
+<li>MeshEdgeConvLayer: Gemm for edge convolution, CPU neighbor aggregation (single roundtrip)</li>
+<li>MeshPoolLayer: Gemm for importance scores, CPU sorting, GPU Gather for output
+2026-01-06 - Updated statistics: 78 Done (+3), 0 Partial, 7 Pending, 7 Blocked (-3), 15 N/A
+2026-01-06 - Priority 7: HeterogeneousGraphLayer and EdgeConditionalConvolutionalLayer now Done (0 Partial remaining)</li>
+<li>HeterogeneousGraphLayer: BatchedGemm for edge-type conv, GPU mask-multiply for self-loops</li>
+<li>EdgeConditionalConvolutionalLayer: BatchedGemm for per-edge transformations, GPU Gather
+2026-01-06 - Updated statistics: 75 Done (+2), 0 Partial (-2), 7 Pending, 10 Blocked, 15 N/A
+2026-01-06 - Priority 6: MaxPool3DLayer and Upsample3DLayer now Done with GPU-resident forward/backward pass
+2026-01-06 - Priority 6 Pooling/Spatial: UpsamplingLayer (Pending → Done), MaxPool3DLayer &amp; Upsample3DLayer (Blocked → Done)
+2026-01-06 - MaxPool3DLayer and Upsample3DLayer require new GPU kernels in IDirectGpuBackend
+2026-01-06 - Updated statistics: 71 Done (+1), 2 Partial, 7 Pending (-3), 12 Blocked (+2), 15 N/A
+2026-01-06 - All Priority 5 Recurrent Layers now Done (5/5): LSTMLayer, GRULayer, RecurrentLayer, BidirectionalLayer, ConvLSTMLayer
+2026-01-06 - Added ForwardGpu to BidirectionalLayer with GPU-native sequence reversal
+2026-01-06 - Added ForwardGpu to ConvLSTMLayer with GPU-native Conv2D LSTM gates
+2026-01-06 - Updated statistics: 70 Done (+5), 2 Partial, 10 Pending (-4), 10 Blocked (-1), 15 N/A
+2026-01-06 - LocallyConnectedLayer, Conv3DLayer, DeformableConvolutionalLayer (Pending → Done)
+2026-01-06 - Added FusedConv3DGpu to DirectGpuTensorEngine for GPU-resident 3D convolution
+2026-01-06 - Updated statistics: 65 Done (+3), 2 Partial, 14 Pending (-2), 11 Blocked (-1), 15 N/A
+2026-01-06 - All Priority 4 Convolutional Variants now Done (8/8)
+2026-01-06 - DeconvolutionalLayer, DepthwiseSeparableConvolutionalLayer, DilatedConvolutionalLayer (Pending → Done) - already had ForwardGpu, status doc updated
+2026-01-06 - Updated statistics: 61 Done (+3), 2 Partial, 17 Pending (-3), 12 Blocked, 15 N/A
+2026-01-06 - MixtureOfExpertsLayer (Blocked → Done) - GPU TopK, sparse expert routing, minimal index download
+2026-01-06 - SpatialTransformerLayer (Blocked → Done) - FusedLinearGpu, AffineGridGpu, GridSampleGpu
+2026-01-06 - Updated statistics: 58 Done (+2), 2 Partial, 20 Pending, 12 Blocked (-2), 15 N/A
+2026-01-06 - Batch 4: DenseBlockLayer, SubpixelConvolutionalLayer, DecoderLayer (N/A/Pending → Done)
+2026-01-06 - Batch 4: Updated statistics: 56 Done (+7), 2 Partial, 20 Pending (-1), 14 Blocked, 15 N/A (-6)
+2026-01-06 - Batch 3: GraphIsomorphismLayer, GraphTransformerLayer (Partial → Done) - precomputed masks and GPU operations
+2026-01-06 - Batch 3: CapsuleLayer, PrimaryCapsuleLayer, DigitCapsuleLayer (Partial → Done) - native GPU Squash/Softmax
+2026-01-06 - Batch 3: RRDBLayer, MemoryReadLayer, MemoryWriteLayer (Partial → Done) - GPU-native operations
+2026-01-06 - Batch 3: HeterogeneousGraphLayer, EdgeConditionalConvolutionalLayer - optimized (still Partial due to sparse ops)
+2026-01-06 - Updated statistics: 49 Done (+8), 2 Partial (-8), 21 Pending, 14 Blocked, 21 N/A
+2026-01-06 - Batch 2: SequenceLastLayer, RBMLayer, ReadoutLayer, TemporalMemoryLayer (Partial → Done)
+2026-01-06 - Batch 2: HighwayLayer, GatedLinearUnitLayer, SqueezeAndExcitationLayer, ExpertLayer (Pending → Done)
+2026-01-06 - Batch 2: InstanceNormalizationLayer, AdaptiveAveragePoolingLayer (Pending → Done)
+2026-01-06 - All CPU fallbacks eliminated from GPU implementations - now production-ready
+2026-01-05 - Fixed GraphConvolutionalLayer - replaced batch loop with BatchedGemm (Partial -&gt; Done)
+2026-01-05 - Fixed GraphAttentionLayer - replaced CPU slice/copy with CreateView and Copy2DStrided (Partial -&gt; Done)
+2026-01-05 - Fixed GraphSAGELayer - GPU-native batch slice, copy, degree division with BroadcastMultiplyFirstAxis (Partial -&gt; Done)
+2026-01-05 - Fixed DirectionalGraphLayer - GPU-native concatenation with Copy2DStrided (Partial -&gt; Done)
+2026-01-05 - Updated GPU_LAYER_STATUS with Partial status category and accurate statistics
+2026-01-05 - Graph NN layers now Done/Partial (was Blocked) - CsrSpMM, CsrSegmentedMax/Min/StdDev, Copy2DStrided
+2026-01-05 - Fixed PrincipalNeighbourhoodAggregationLayer - full GPU implementation with strided copy
+2026-01-05 - Fixed MessagePassingLayer - proper GPU GRU gates without CPU fallback
+2026-01-05 - Added CsrSegmentedMax/Min/StdDev, Copy2DStrided to DelegatingGpuBackend
+2026-01-05 - Added ForwardGpu to EmbeddingLayer with EmbeddingLookupGpu for GPU token lookup
+2026-01-05 - Added ForwardGpu to PositionalEncodingLayer with GPU-accelerated addition
+2026-01-05 - Added ForwardGpu to TransformerDecoderLayer delegating to sublayers
+2026-01-05 - Added EmbeddingLookupGpu and EmbeddingBackwardGpu to DirectGpuTensorEngine
+2026-01-05 - All Attention/Transformer layers now have GPU support (8/8 Done)
+2026-01-05 - Added ForwardGpu Implementation Checklist to prevent common mistakes
+2026-01-05 - Added ForwardGpu to ResidualLayer (wrapper delegates to inner layer)
+2026-01-05 - Added GPU-resident ArgMaxGpu, GlobalMaxPoolGpuWithGpuIndices
+2026-01-05 - Added ForwardGpu to GlobalPoolingLayer using GPU-resident ops
+2026-01-05 - Added ForwardGpu to CrossAttentionLayer with TileBatchGpu
+2026-01-05 - Added TileBatchGpu/TileAxisGpu kernels to all GPU backends
+2026-01-05 - Comprehensive analysis of blocked vs pending layers; updated statistics
+2026-01-05 - Documented foundational GPU operations needed to unblock layers
+2026-01-05 - Added ForwardGpu to SpectralNormalizationLayer with GPU-accelerated power iteration
+2026-01-05 - Added ForwardGpu to TransformerEncoderLayer, FeedForwardLayer
+2026-01-05 - Added ForwardGpu to SelfAttentionLayer with ScaledDotProductAttentionGpu
+2026-01-05 - Added ForwardGpu to MultiHeadAttentionLayer with ScaledDotProductAttentionGpu
+2025-01-05 - Initial comprehensive layer list created</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_LAYER_STATUS.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

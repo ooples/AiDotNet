@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BackboneBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BackboneBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for backbone networks used in object detection models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.Backbones.BackboneBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1" class="text-break">
+Class BackboneBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.html">Backbones</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for backbone networks used in object detection models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class BackboneBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BackboneBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.CSPDarknet-1.html">CSPDarknet&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.EfficientNet-1.html">EfficientNet&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.ResNet-1.html">ResNet&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Backbones.SwinTransformer-1.html">SwinTransformer&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A backbone network is the first part of a detection model.
+It takes an input image and extracts meaningful features at multiple scales.
+Think of it as the "eyes" of the detector that learns to recognize patterns like
+edges, textures, and shapes.</p>
+<p>Common backbones include:
+- ResNet: Residual networks with skip connections
+- CSPDarknet: Used in YOLO models, efficient for real-time detection
+- Swin Transformer: Vision transformer with shifted windows
+- EfficientNet: Scalable and efficient convolutional network
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1__ctor" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.#ctor">
+  BackboneBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new backbone with numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected BackboneBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_IsTrainingMode" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.IsTrainingMode">
+  IsTrainingMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the backbone is in training mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool IsTrainingMode</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_NumOps" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_IsFrozen_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.IsFrozen*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_IsFrozen" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.IsFrozen">
+  IsFrozen
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the backbone weights are frozen (not updated during training).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFrozen { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Name_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Name" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this backbone architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_OutputChannels_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.OutputChannels*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_OutputChannels" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.OutputChannels">
+  OutputChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of output channels for each feature level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int[] OutputChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_OutputChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Modern detectors use multi-scale features. This array contains the
+number of channels at each scale, typically from high resolution (small objects)
+to low resolution (large objects).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Strides_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Strides*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Strides" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Strides">
+  Strides
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The stride (downsampling factor) at each feature level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract int[] Strides { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Strides_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A stride of 8 means the feature map is 1/8 the size of the input.
+Common strides are [8, 16, 32] for 3-level feature pyramids.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ExtractFeatures_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ExtractFeatures*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ExtractFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ExtractFeatures(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractFeatures(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts multi-scale features from an input image tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract List&lt;Tensor&lt;T&gt;&gt; ExtractFeatures(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor with shape [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of feature maps at different scales, from highest to lowest resolution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ExtractFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method runs the input image through the backbone
+and returns feature maps at multiple scales. Small objects need high-resolution
+features, while large objects are detected in low-resolution features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Freeze_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Freeze*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Freeze" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Freeze">
+  Freeze()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Freezes the backbone weights so they are not updated during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Freeze()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Freeze_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When fine-tuning a pre-trained model on a small dataset,
+it's often beneficial to freeze the backbone and only train the detection head.
+This prevents the backbone from "forgetting" its pre-trained features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_GetExpectedInputSize_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.GetExpectedInputSize*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_GetExpectedInputSize" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.GetExpectedInputSize">
+  GetExpectedInputSize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the expected input size for this backbone.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual (int Height, int Width) GetExpectedInputSize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.min">min</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.max">max</a>)</dt>
+    <dd><p>Tuple of (height, width) for optimal input size.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_GetParameterCount_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.GetParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_GetParameterCount" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.GetParameterCount">
+  GetParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of parameters in the backbone.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract long GetParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Number of trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ReadParameters_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ReadParameters*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ReadParameters_System_IO_BinaryReader_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ReadParameters(System.IO.BinaryReader)">
+  ReadParameters(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reads parameters from a binary reader for deserialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void ReadParameters(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_SetTrainingMode_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.SetTrainingMode*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_SetTrainingMode_System_Boolean_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.SetTrainingMode(System.Boolean)">
+  SetTrainingMode(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets whether the backbone is in training mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTrainingMode(bool training)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>training</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True for training, false for inference.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Unfreeze_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Unfreeze*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_Unfreeze" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.Unfreeze">
+  Unfreeze()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Unfreezes the backbone weights for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Unfreeze()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ValidateInput_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ValidateInput*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_ValidateInput_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.ValidateInput(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ValidateInput(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the input tensor has the correct shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateInput(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input tensor to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if the input shape is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_WriteParameters_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.WriteParameters*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Backbones_BackboneBase_1_WriteParameters_System_IO_BinaryWriter_" data-uid="AiDotNet.ComputerVision.Detection.Backbones.BackboneBase`1.WriteParameters(System.IO.BinaryWriter)">
+  WriteParameters(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Writes all parameters to a binary writer for serialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void WriteParameters(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Backbones/BackboneBase.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

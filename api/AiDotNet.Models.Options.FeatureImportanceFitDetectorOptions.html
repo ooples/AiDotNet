@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FeatureImportanceFitDetectorOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FeatureImportanceFitDetectorOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Feature Importance Fit Detector, which analyzes how different input features contribute to a model&#39;s predictions and evaluates potential issues with model fit.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions" class="text-break">
+Class FeatureImportanceFitDetectorOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Feature Importance Fit Detector, which analyzes how different input features
+contribute to a model's predictions and evaluates potential issues with model fit.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FeatureImportanceFitDetectorOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FeatureImportanceFitDetectorOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Feature importance analysis helps identify which input variables have the strongest influence on model predictions.
+This detector uses permutation importance (randomly shuffling feature values and measuring the impact on predictions)
+to assess feature relevance and detect potential issues like overfitting, underfitting, or redundant features.
+</p>
+<p><b>For Beginners:</b> Think of this as a tool that helps you understand which of your input data points
+actually matter for making predictions. For example, if you're predicting house prices, this would tell you whether
+square footage, number of bedrooms, or neighborhood has the biggest impact on price predictions. It also helps
+identify potential problems with your model, like whether it's focusing too much on unimportant details or not
+capturing important patterns. The options below let you adjust how sensitive this analysis should be.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_CorrelationThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.CorrelationThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_CorrelationThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.CorrelationThreshold">
+  CorrelationThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering features as correlated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CorrelationThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The correlation threshold, defaulting to 0.7 (70%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_CorrelationThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Features with correlation coefficients above this threshold (in absolute value) are considered strongly correlated.
+Highly correlated features often provide redundant information, and removing some of them might simplify the model
+without significant loss of performance.
+</p>
+<p><b>For Beginners:</b> This setting determines when two features are considered to contain similar information.
+With the default value of 0.7, if two features have a correlation of 70% or higher, they're considered strongly related.
+For example, in housing data, square footage and number of rooms might be highly correlated because larger houses
+tend to have more rooms. Including both features might not add much value compared to just using one of them.
+Identifying correlated features can help you simplify your model by removing redundant inputs. A higher threshold
+(like 0.8 or 0.9) would only flag the most extremely correlated features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighImportanceThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.HighImportanceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighImportanceThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.HighImportanceThreshold">
+  HighImportanceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering feature importance as high.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighImportanceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The high importance threshold, defaulting to 0.1 (10%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighImportanceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Features with importance scores above this threshold are considered highly influential on the model's predictions.
+The importance score represents how much the model's performance decreases when the feature values are randomly shuffled.
+</p>
+<p><b>For Beginners:</b> This setting determines when a feature is considered "very important" to your model.
+With the default value of 0.1, any feature that, when randomized, causes your model's accuracy to drop by 10% or more
+is considered highly important. Think of it like identifying the key players on a sports team - these are the features
+that your model relies on heavily to make good predictions. If you want to be more selective about what counts as
+important, you could increase this value (e.g., to 0.15 or 0.2).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighVarianceThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.HighVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighVarianceThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.HighVarianceThreshold">
+  HighVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering importance variance as high.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double HighVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The high variance threshold, defaulting to 0.2 (20%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_HighVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when the variance in a feature's importance scores across multiple permutations
+is considered high. High variance suggests that the feature's importance is unstable and might indicate
+complex interactions or potential overfitting.
+</p>
+<p><b>For Beginners:</b> This setting helps identify features whose importance is inconsistent or unreliable.
+With the default value of 0.2, if a feature's importance scores vary by more than 20% across calculations,
+its importance is considered unstable. Continuing the runner analogy, this would be like a runner whose race
+times are all over the place - sometimes fast, sometimes slow. Features with high variance might indicate
+complex relationships in your data or potential problems with your model. They warrant closer investigation
+since the model's reliance on them is unpredictable.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowImportanceThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.LowImportanceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowImportanceThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.LowImportanceThreshold">
+  LowImportanceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering feature importance as low.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LowImportanceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The low importance threshold, defaulting to 0.01 (1%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowImportanceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Features with importance scores below this threshold are considered to have minimal influence on the model's predictions.
+These features might be candidates for removal to simplify the model without significant loss of performance.
+</p>
+<p><b>For Beginners:</b> This setting determines when a feature is considered "not important" to your model.
+With the default value of 0.01, any feature that, when randomized, causes your model's accuracy to drop by less than 1%
+is considered unimportant. These are like bench players who rarely affect the outcome of a game. Identifying these
+features can help you simplify your model by removing inputs that don't contribute much. If you want to be more
+aggressive about removing features, you could increase this threshold (e.g., to 0.02 or 0.03).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowVarianceThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.LowVarianceThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowVarianceThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.LowVarianceThreshold">
+  LowVarianceThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for considering importance variance as low.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LowVarianceThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The low variance threshold, defaulting to 0.05 (5%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_LowVarianceThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when the variance (inconsistency) in a feature's importance scores across multiple
+permutations is considered low. Low variance suggests that the feature's importance is stable and reliable.
+</p>
+<p><b>For Beginners:</b> This setting helps determine when a feature's importance is consistent and reliable.
+The system calculates importance multiple times (see NumPermutations), and this threshold checks how much the
+results vary. With the default value of 0.05, if the importance scores vary by less than 5% across calculations,
+the feature's importance is considered stable. Think of it like measuring a runner's race times - if they always
+finish within a few seconds of the same time, their performance is consistent. Features with low variance are
+ones you can confidently say are either important or unimportant to your model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_NumPermutations_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.NumPermutations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_NumPermutations" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.NumPermutations">
+  NumPermutations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of permutations to perform for each feature when calculating importance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumPermutations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of permutations, defaulting to 5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_NumPermutations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines how many times each feature is randomly shuffled to calculate its importance.
+More permutations provide more stable importance estimates but increase computation time.
+</p>
+<p><b>For Beginners:</b> This setting determines how many times the system calculates each feature's importance.
+With the default value of 5, the system will shuffle each feature's values 5 different times and measure the impact
+on predictions each time, then average the results. More permutations (like 10 or 20) give more reliable importance
+scores but take longer to calculate. Think of it like taking multiple measurements to get a more accurate average -
+more measurements generally mean more confidence in the result, but at the cost of more time and effort.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_RandomSeed_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_RandomSeed" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for feature permutation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The random seed, defaulting to 42.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The random seed ensures reproducibility when shuffling feature values during permutation importance calculation.
+Using the same seed value will produce the same random shuffles each time the analysis is run.
+</p>
+<p><b>For Beginners:</b> This setting controls the randomization process used when calculating feature importance.
+The specific value (42) doesn't matter much, but keeping it constant ensures you get the same results each time you
+run the analysis. This is important for reproducibility - like setting a starting point for a random number generator.
+You generally don't need to change this unless you want to verify that your results are stable across different
+randomizations, in which case you might run the analysis multiple times with different seed values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_UncorrelatedRatioThreshold_" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.UncorrelatedRatioThreshold*"></a>
+
+  <h3 id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_UncorrelatedRatioThreshold" data-uid="AiDotNet.Models.Options.FeatureImportanceFitDetectorOptions.UncorrelatedRatioThreshold">
+  UncorrelatedRatioThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the threshold for the ratio of uncorrelated feature pairs to consider features as mostly uncorrelated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double UncorrelatedRatioThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The uncorrelated ratio threshold, defaulting to 0.8 (80%).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_FeatureImportanceFitDetectorOptions_UncorrelatedRatioThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This threshold determines when the overall feature set is considered to have low correlation. If the proportion of
+feature pairs with correlation below the CorrelationThreshold exceeds this value, the feature set is considered
+mostly uncorrelated, which is generally desirable.
+</p>
+<p><b>For Beginners:</b> This setting helps evaluate whether your overall set of features is diverse or redundant.
+With the default value of 0.8, if at least 80% of all possible feature pairs have low correlation (below the
+CorrelationThreshold), then your feature set is considered diverse with minimal redundancy. This is generally good
+because it means each feature is contributing unique information. If this threshold isn't met, it suggests many of
+your features contain overlapping information, and you might benefit from feature selection or dimensionality
+reduction techniques to simplify your model.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/FeatureImportanceFitDetectorOptions.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

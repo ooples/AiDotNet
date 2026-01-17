@@ -1,0 +1,1127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KnowledgeDistillationTrainerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KnowledgeDistillationTrainerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for all knowledge distillation trainers. Provides common functionality for training loops, data shuffling, validation, and evaluation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3" class="text-break">
+Class KnowledgeDistillationTrainerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for all knowledge distillation trainers.
+Provides common functionality for training loops, data shuffling, validation, and evaluation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class KnowledgeDistillationTrainerBase&lt;T, TInput, TOutput&gt; : IKnowledgeDistillationTrainer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">KnowledgeDistillationTrainerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IKnowledgeDistillationTrainer-3.html">IKnowledgeDistillationTrainer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainer-1.html">KnowledgeDistillationTrainer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.SelfDistillationTrainer-1.html">SelfDistillationTrainer&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This base class implements the common training workflow shared by all
+distillation trainers. Specific trainer types (standard, self-distillation, online, etc.) inherit
+from this and customize only the parts that differ.</p>
+<p><b>Design Pattern:</b> Template Method Pattern - the base class defines the training algorithm
+structure, and derived classes fill in specific steps.</p>
+<p><b>Common Functionality Provided:</b>
+- Data shuffling using Fisher-Yates algorithm (O(n) efficiency)
+- Epoch and batch management
+- Validation after each epoch
+- Progress callbacks
+- Evaluation metrics (accuracy, loss)
+- Teacher and strategy property management</p>
+<p><b>Derived Classes Override:</b>
+- GetTeacherPredictions(): How to obtain teacher outputs for training
+- OnEpochStart(): Custom logic before each epoch
+- OnEpochEnd(): Custom logic after each epoch
+- OnTrainingStart(): Custom logic before training begins
+- OnTrainingEnd(): Custom logic after training completes</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3__ctor_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3__ctor_AiDotNet_Interfaces_ITeacherModel__1__2__AiDotNet_Interfaces_IDistillationStrategy__0__AiDotNet_KnowledgeDistillation_DistillationCheckpointConfig_System_Boolean_System_Double_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.#ctor(AiDotNet.Interfaces.ITeacherModel{`1,`2},AiDotNet.Interfaces.IDistillationStrategy{`0},AiDotNet.KnowledgeDistillation.DistillationCheckpointConfig,System.Boolean,System.Double,System.Int32,System.Nullable{System.Int32})">
+  KnowledgeDistillationTrainerBase(ITeacherModel&lt;TInput, TOutput&gt;, IDistillationStrategy&lt;T&gt;, DistillationCheckpointConfig?, bool, double, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the KnowledgeDistillationTrainerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected KnowledgeDistillationTrainerBase(ITeacherModel&lt;TInput, TOutput&gt; teacher, IDistillationStrategy&lt;T&gt; distillationStrategy, DistillationCheckpointConfig? checkpointConfig = null, bool useEarlyStopping = false, double earlyStoppingMinDelta = 0.001, int earlyStoppingPatience = 10, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacher</code> <a class="xref" href="AiDotNet.Interfaces.ITeacherModel-2.html">ITeacherModel</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>The teacher model.</p>
+</dd>
+    <dt><code>distillationStrategy</code> <a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</dt>
+    <dd><p>The distillation strategy.</p>
+</dd>
+    <dt><code>checkpointConfig</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationCheckpointConfig.html">DistillationCheckpointConfig</a></dt>
+    <dd><p>Optional checkpoint configuration for automatic model saving during training.</p>
+</dd>
+    <dt><code>useEarlyStopping</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Enable early stopping based on validation loss.</p>
+</dd>
+    <dt><code>earlyStoppingMinDelta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum improvement required to count as progress.</p>
+</dd>
+    <dt><code>earlyStoppingPatience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of epochs without improvement before stopping.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3__ctor_AiDotNet_Interfaces_ITeacherModel__1__2__AiDotNet_Interfaces_IDistillationStrategy__0__AiDotNet_KnowledgeDistillation_DistillationCheckpointConfig_System_Boolean_System_Double_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The teacher and strategy are the core components:
+- Teacher: Provides the "expert" knowledge to transfer
+- Strategy: Defines how to measure and optimize the knowledge transfer</p>
+<p><b>Automatic Checkpointing:</b> To enable automatic checkpointing, pass a
+<a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationCheckpointConfig.html">DistillationCheckpointConfig</a> instance. If null (default), no automatic checkpointing occurs.
+When enabled, the trainer will automatically:
+- Save checkpoints based on your configuration (e.g., every 5 epochs)
+- Keep only the best N checkpoints to save disk space
+- Load the best checkpoint after training completes</p>
+<p><b>Example with Checkpointing:</b>
+<pre><code class="lang-csharp">var config = new DistillationCheckpointConfig
+{
+    SaveEveryEpochs = 5,
+    KeepBestN = 3
+};
+var trainer = new KnowledgeDistillationTrainer(teacher, strategy, checkpointConfig: config);</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_NumOps" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the numeric operations helper for the type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Random" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the random number generator for data shuffling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly Random Random</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_DistillationStrategy_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.DistillationStrategy*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_DistillationStrategy" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.DistillationStrategy">
+  DistillationStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the distillation strategy for computing loss and gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistillationStrategy&lt;T&gt; DistillationStrategy { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Teacher_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Teacher*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Teacher" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Teacher">
+  Teacher
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the teacher model used for distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ITeacherModel&lt;TInput, TOutput&gt; Teacher { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ITeacherModel-2.html">ITeacherModel</a>&lt;TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_ArgMax_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.ArgMax*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_ArgMax_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.ArgMax(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ArgMax(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L612"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the index of the maximum value in a vector (argmax).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int ArgMax(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to search.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the maximum value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Evaluate_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Evaluate*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Evaluate_System_Func__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Evaluate(System.Func{`1,`2},AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  Evaluate(Func&lt;TInput, TOutput&gt;, Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L498"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the student model's accuracy on a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual double Evaluate(Func&lt;TInput, TOutput&gt; studentForward, Vector&lt;TInput&gt; inputs, Vector&lt;TOutput&gt; trueLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentForward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>Function to perform forward pass through student model.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Evaluation input data.</p>
+</dd>
+    <dt><code>trueLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>True labels for evaluation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Accuracy as a fraction (0-1).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Evaluate_System_Func__1__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Evaluation measures how well the student performs:
+- For each input, get student's prediction
+- Compare with true label (argmax for classification)
+- Calculate fraction of correct predictions</p>
+<p>This is used to monitor training progress and detect overfitting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_FisherYatesShuffle_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.FisherYatesShuffle*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_FisherYatesShuffle_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.FisherYatesShuffle(System.Int32)">
+  FisherYatesShuffle(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L560"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a random permutation of indices using Fisher-Yates shuffle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int[] FisherYatesShuffle(int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The length of the array to shuffle.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array of shuffled indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_GetTeacherPredictions_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.GetTeacherPredictions*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_GetTeacherPredictions__1_System_Int32_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.GetTeacherPredictions(`1,System.Int32)">
+  GetTeacherPredictions(TInput, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L584"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets teacher predictions for a given input. Abstract method to be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract TOutput GetTeacherPredictions(TInput input, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data.</p>
+</dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of this input in the training batch (useful for caching).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Teacher's output predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_GetTeacherPredictions__1_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Derived Classes:</b>
+- Standard trainers: Call teacher.GetLogits(input)
+- Self-distillation: Return cached predictions from previous generation
+- Online distillation: Get predictions from dynamically updated teacher
+- Ensemble: Combine predictions from multiple teachers</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_IsCorrectPrediction_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.IsCorrectPrediction*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_IsCorrectPrediction__2__2_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.IsCorrectPrediction(`2,`2)">
+  IsCorrectPrediction(TOutput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L598"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if a prediction matches the true label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual bool IsCorrectPrediction(TOutput prediction, TOutput trueLabel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prediction</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Student's prediction.</p>
+</dd>
+    <dt><code>trueLabel</code> <span class="xref">TOutput</span></dt>
+    <dd><p>True label.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if prediction is correct.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_IsCorrectPrediction__2__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Classification:</b> Uses argmax to find predicted class and compares with true class.
+The conversion to Vector&lt;T&gt; is handled by ConversionsHelper, so this works for any TOutput type
+(Vector&lt;T&gt;, Tensor&lt;T&gt;, T[], or scalar T).</p>
+<p><b>Override This:</b> If you need different evaluation criteria (e.g., regression).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochEnd_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnEpochEnd*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochEnd_System_Int32__0_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnEpochEnd(System.Int32,`0)">
+  OnEpochEnd(int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L729"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called after each epoch completes. Override for custom per-epoch cleanup/logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnEpochEnd(int epoch, T avgLoss)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current epoch number (0-indexed).</p>
+</dd>
+    <dt><code>avgLoss</code> <span class="xref">T</span></dt>
+    <dd><p>Average loss for this epoch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochEnd_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Use Cases:</b>
+- Log epoch metrics
+- Save checkpoints
+- Update adaptive parameters
+- Implement early stopping logic</p>
+<p><b>IMPORTANT:</b> This base implementation calls Reset() on RelationalDistillationStrategy
+to flush partial batches and prevent buffer leakage between epochs. Derived classes should
+call base.OnEpochEnd() if they override this method.</p>
+<p><b>Automatic Checkpointing:</b> If checkpoint configuration was provided to the constructor,
+this method automatically saves checkpoints based on your configuration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochStart_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnEpochStart*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochStart_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnEpochStart(System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  OnEpochStart(int, Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L705"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called before each epoch starts. Override for custom per-epoch initialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnEpochStart(int epoch, Vector&lt;TInput&gt; trainInputs, Vector&lt;TOutput&gt;? trainLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current epoch number (0-indexed).</p>
+</dd>
+    <dt><code>trainInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Training inputs.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Training labels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnEpochStart_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Use Cases:</b>
+- Update learning rate schedules
+- Adjust temperature schedules
+- Update curriculum difficulty
+- Refresh teacher in online distillation</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingEnd_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnTrainingEnd*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingEnd_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnTrainingEnd(AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  OnTrainingEnd(Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L671"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called after training completes. Override for custom cleanup logic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnTrainingEnd(Vector&lt;TInput&gt; trainInputs, Vector&lt;TOutput&gt;? trainLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Training inputs.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Training labels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingEnd_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Use Cases:</b>
+- Clear caches
+- Save final checkpoints
+- Log final metrics
+- Free temporary resources</p>
+<p><b>Automatic Checkpointing:</b> If checkpoint configuration was provided to the constructor,
+this method automatically loads the best checkpoint (based on validation metrics) after training completes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingStart_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnTrainingStart*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingStart_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnTrainingStart(AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  OnTrainingStart(Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L647"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called before training starts. Override for custom initialization logic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnTrainingStart(Vector&lt;TInput&gt; trainInputs, Vector&lt;TOutput&gt;? trainLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Training inputs.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Training labels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnTrainingStart_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Use Cases:</b>
+- Cache teacher predictions (for efficiency)
+- Initialize EMA buffers (for self-distillation)
+- Setup curriculum schedules
+- Allocate temporary buffers</p>
+<p><b>Automatic Checkpointing:</b> If checkpoint configuration was provided to the constructor,
+this method automatically initializes the checkpoint manager.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnValidationComplete_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnValidationComplete*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnValidationComplete_System_Int32_System_Double_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.OnValidationComplete(System.Int32,System.Double)">
+  OnValidationComplete(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L782"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Called after validation completes for an epoch. Override for custom validation handling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void OnValidationComplete(int epoch, double accuracy)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current epoch number (0-indexed).</p>
+</dd>
+    <dt><code>accuracy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Validation accuracy (0-100).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_OnValidationComplete_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Use Cases:</b>
+- Log validation metrics
+- Implement early stopping
+- Track best model
+- Adjust hyperparameters based on validation performance</p>
+<p><b>Automatic Checkpointing:</b> If CheckpointConfig is set, this method
+automatically tracks validation metrics for best checkpoint selection.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_ShuffleData_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.ShuffleData*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_ShuffleData_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.ShuffleData(AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  ShuffleData(Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L539"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Shuffles training data using Fisher-Yates algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual (Vector&lt;TInput&gt; shuffledInputs, Vector&lt;TOutput&gt;? shuffledLabels) ShuffleData(Vector&lt;TInput&gt; inputs, Vector&lt;TOutput&gt;? labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Input data to shuffle.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Labels to shuffle (maintains alignment with inputs).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--1-,aidotnet.tensors.linearalgebra.vector--2--.shuffledinputs">shuffledInputs</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--1-,aidotnet.tensors.linearalgebra.vector--2--.shuffledlabels">shuffledLabels</a>)</dt>
+    <dd><p>Tuple of shuffled inputs and labels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_ShuffleData_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Data shuffling is important because:
+- Prevents model from learning order-dependent patterns
+- Improves gradient descent convergence
+- Reduces overfitting to batch ordering</p>
+<p>Fisher-Yates is O(n) compared to O(n log n) for sort-based shuffling.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__AiDotNet_Interfaces_ICheckpointableModel_System_Action_System_Int32__0__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Train(System.Func{`1,`2},System.Action{`2},AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2},System.Int32,System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2},AiDotNet.Interfaces.ICheckpointableModel,System.Action{System.Int32,`0})">
+  Train(Func&lt;TInput, TOutput&gt;, Action&lt;TOutput&gt;, Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?, int, int, Vector&lt;TInput&gt;?, Vector&lt;TOutput&gt;?, ICheckpointableModel?, Action&lt;int, T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the student model for multiple epochs using knowledge distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Train(Func&lt;TInput, TOutput&gt; studentForward, Action&lt;TOutput&gt; studentBackward, Vector&lt;TInput&gt; trainInputs, Vector&lt;TOutput&gt;? trainLabels = null, int epochs = 20, int batchSize = 32, Vector&lt;TInput&gt;? validationInputs = null, Vector&lt;TOutput&gt;? validationLabels = null, ICheckpointableModel? student = null, Action&lt;int, T&gt;? onEpochComplete = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentForward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>Function to perform forward pass through student model.</p>
+</dd>
+    <dt><code>studentBackward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;TOutput&gt;</dt>
+    <dd><p>Function to perform backward pass and update weights.</p>
+</dd>
+    <dt><code>trainInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Training input data.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Training labels (optional for pure soft distillation).</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of training epochs.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch size for mini-batch training.</p>
+</dd>
+    <dt><code>validationInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Optional validation inputs for monitoring.</p>
+</dd>
+    <dt><code>validationLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Optional validation labels.</p>
+</dd>
+    <dt><code>student</code> <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></dt>
+    <dd><p>Optional student model for automatic checkpointing (must implement ICheckpointableModel).</p>
+</dd>
+    <dt><code>onEpochComplete</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd><p>Optional callback invoked after each epoch with (epoch, avgLoss).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__AiDotNet_Interfaces_ICheckpointableModel_System_Action_System_Int32__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method orchestrates the complete training process:
+1. Initialize (OnTrainingStart)
+2. For each epoch:
+   a. Shuffle training data
+   b. Process data in batches
+   c. Validate if requested
+   d. Invoke callbacks
+3. Cleanup (OnTrainingEnd)</p>
+<p><b>Training Tips:</b>
+- Use batch sizes that fit in memory (32-128 typical)
+- Monitor validation loss to detect overfitting
+- Invoke callbacks to log progress or save checkpoints</p>
+<p><b>Automatic Checkpointing:</b> If a checkpoint configuration was provided to the constructor
+and you pass the student model parameter, automatic checkpointing will be enabled.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Train*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__System_Int32_System_Int32_System_Action_System_Int32__0__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.Train(System.Func{`1,`2},System.Action{`2},AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2},System.Int32,System.Int32,System.Action{System.Int32,`0})">
+  Train(Func&lt;TInput, TOutput&gt;, Action&lt;TOutput&gt;, Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?, int, int, Action&lt;int, T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L471"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the student model for multiple epochs (interface-compliant overload).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Train(Func&lt;TInput, TOutput&gt; studentForward, Action&lt;TOutput&gt; studentBackward, Vector&lt;TInput&gt; trainInputs, Vector&lt;TOutput&gt;? trainLabels, int epochs, int batchSize = 32, Action&lt;int, T&gt;? onEpochComplete = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentForward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>Function to perform forward pass on student model.</p>
+</dd>
+    <dt><code>studentBackward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;TOutput&gt;</dt>
+    <dd><p>Function to perform backward pass on student model.</p>
+</dd>
+    <dt><code>trainInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Training input data.</p>
+</dd>
+    <dt><code>trainLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Training labels (optional). If null, uses only teacher supervision.</p>
+</dd>
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of epochs to train.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch size for training.</p>
+</dd>
+    <dt><code>onEpochComplete</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd><p>Optional callback invoked after each epoch with (epoch, avgLoss).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_Train_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__System_Int32_System_Int32_System_Action_System_Int32__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This overload matches the interface contract and delegates to the
+extended version with no validation data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_TrainBatch_" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.TrainBatch*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_TrainBatch_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2__" data-uid="AiDotNet.KnowledgeDistillation.KnowledgeDistillationTrainerBase`3.TrainBatch(System.Func{`1,`2},System.Action{`2},AiDotNet.Tensors.LinearAlgebra.Vector{`1},AiDotNet.Tensors.LinearAlgebra.Vector{`2})">
+  TrainBatch(Func&lt;TInput, TOutput&gt;, Action&lt;TOutput&gt;, Vector&lt;TInput&gt;, Vector&lt;TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the student model on a single batch using knowledge distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual T TrainBatch(Func&lt;TInput, TOutput&gt; studentForward, Action&lt;TOutput&gt; studentBackward, Vector&lt;TInput&gt; inputs, Vector&lt;TOutput&gt;? trueLabels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentForward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TInput, TOutput&gt;</dt>
+    <dd><p>Function to perform forward pass through student model.</p>
+</dd>
+    <dt><code>studentBackward</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;TOutput&gt;</dt>
+    <dd><p>Function to perform backward pass and update weights.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TInput&gt;</dt>
+    <dd><p>Batch of input data.</p>
+</dd>
+    <dt><code>trueLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TOutput&gt;</dt>
+    <dd><p>Optional true labels for the batch.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Average loss for the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_KnowledgeDistillationTrainerBase_3_TrainBatch_System_Func__1__2__System_Action__2__AiDotNet_Tensors_LinearAlgebra_Vector__1__AiDotNet_Tensors_LinearAlgebra_Vector__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Training a batch involves:
+1. Get student predictions (forward pass)
+2. Get teacher predictions (from teacher model or cache)
+3. Compute distillation loss (how different student is from teacher)
+4. Compute gradients (how to improve student)
+5. Update student weights (backward pass)</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/KnowledgeDistillationTrainerBase.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

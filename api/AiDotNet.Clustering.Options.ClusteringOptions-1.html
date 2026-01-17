@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClusteringOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClusteringOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base configuration options for clustering algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Clustering_Options_ClusteringOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Clustering.Options.ClusteringOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1">
+
+
+
+  <h1 id="AiDotNet_Clustering_Options_ClusteringOptions_1" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1" class="text-break">
+Class ClusteringOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Clustering.html">Clustering</a>.<a class="xref" href="AiDotNet.Clustering.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base configuration options for clustering algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ClusteringOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ClusteringOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.AffinityPropagationOptions-1.html">AffinityPropagationOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.BIRCHOptions-1.html">BIRCHOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.BisectingKMeansOptions-1.html">BisectingKMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.CLARANSOptions-1.html">CLARANSOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.CLIQUEOptions-1.html">CLIQUEOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.COPKMeansOptions-1.html">COPKMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.CUREOptions-1.html">CUREOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.DBSCANOptions-1.html">DBSCANOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.DenclueOptions-1.html">DenclueOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.FuzzyCMeansOptions-1.html">FuzzyCMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.GMMOptions-1.html">GMMOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.GMeansOptions-1.html">GMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.HDBSCANOptions-1.html">HDBSCANOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.HierarchicalOptions-1.html">HierarchicalOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.KMeansOptions-1.html">KMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.KMedoidsOptions-1.html">KMedoidsOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.MeanShiftOptions-1.html">MeanShiftOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.MiniBatchKMeansOptions-1.html">MiniBatchKMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.OPTICSOptions-1.html">OPTICSOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.OnlineKMeansOptions-1.html">OnlineKMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.SOMOptions-1.html">SOMOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.SUBCLUOptions-1.html">SUBCLUOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.SeededKMeansOptions-1.html">SeededKMeansOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.SpectralOptions-1.html">SpectralOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Clustering.Options.XMeansOptions-1.html">XMeansOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Clustering_Options_ClusteringOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides common configuration options shared by most clustering algorithms.
+Specific clustering implementations may extend this with algorithm-specific options.
+</p>
+<p><b>For Beginners:</b> These are the settings you can adjust to control
+how the clustering algorithm works.
+<p>Common options include:</p>
+<ul>
+<li>How many iterations to run</li>
+<li>When to stop (convergence threshold)</li>
+<li>Random seed for reproducibility</li>
+<li>Which distance metric to use</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_DistanceMetric_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.DistanceMetric*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_DistanceMetric" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.DistanceMetric">
+  DistanceMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distance metric to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDistanceMetric&lt;T&gt;? DistanceMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Clustering.Interfaces.IDistanceMetric-1.html">IDistanceMetric</a>&lt;T&gt;</dt>
+    <dd><p>The distance metric, or null to use algorithm default (typically Euclidean).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_ClusteringOptions_1_DistanceMetric_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Different distance metrics are better for different
+types of data. Euclidean is the most common, but Cosine is better for text,
+and Manhattan can be better for high-dimensional data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum iterations. Default is 300.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_ClusteringOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Clustering algorithms iterate (repeat steps) until they
+find a good solution or reach this limit. Higher values allow more refinement
+but take longer to run.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.NumInitializations*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.NumInitializations">
+  NumInitializations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of times to run with different random initializations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumInitializations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of initializations. Default is 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_ClusteringOptions_1_NumInitializations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Since random starting points can lead to different
+results, running multiple times and keeping the best result helps find
+a better solution. Higher values improve quality but take longer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.RandomState*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.RandomState">
+  RandomState
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomState { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The random seed, or null for non-deterministic behavior.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_ClusteringOptions_1_RandomState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Many clustering algorithms involve randomness
+(like choosing initial centers). Setting this ensures you get the same
+results every time you run with the same data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The tolerance for declaring convergence. Default is 1e-4.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Clustering_Options_ClusteringOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When changes between iterations become smaller than
+this value, the algorithm stops. Smaller values mean more precise results
+but potentially more iterations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Clustering_Options_ClusteringOptions_1_Verbose_" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.Verbose*"></a>
+
+  <h3 id="AiDotNet_Clustering_Options_ClusteringOptions_1_Verbose" data-uid="AiDotNet.Clustering.Options.ClusteringOptions`1.Verbose">
+  Verbose
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the verbosity level for logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Verbose { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>0 for silent, 1 for progress, 2 for detailed. Default is 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Clustering/Options/ClusteringOptions.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

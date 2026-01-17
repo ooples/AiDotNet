@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ShardedOptimizerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ShardedOptimizerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides base implementation for distributed optimizers with parameter sharding.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_ShardedOptimizerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.ShardedOptimizerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3" class="text-break">
+Class ShardedOptimizerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides base implementation for distributed optimizers with parameter sharding.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ShardedOptimizerBase&lt;T, TInput, TOutput&gt; : IShardedOptimizer&lt;T, TInput, TOutput&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for operations</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.IShardedOptimizer-3.html">IShardedOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.AsyncSGDOptimizer-3.html">AsyncSGDOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.DDPOptimizer-3.html">DDPOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ElasticOptimizer-3.html">ElasticOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.FSDPOptimizer-3.html">FSDPOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.GradientCompressionOptimizer-3.html">GradientCompressionOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.HybridShardedOptimizer-3.html">HybridShardedOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.LocalSGDOptimizer-3.html">LocalSGDOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.PipelineParallelOptimizer-3.html">PipelineParallelOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.TensorParallelOptimizer-3.html">TensorParallelOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ZeRO1Optimizer-3.html">ZeRO1Optimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ZeRO2Optimizer-3.html">ZeRO2Optimizer&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class implements common functionality for all sharded optimizers,
+including optimizer wrapping, parameter synchronization, consensus-based early stopping,
+and serialization. Derived classes can customize the optimization strategy, implement
+different sharding approaches (FSDP, ZeRO, etc.), or add optimizer-specific features.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all distributed optimizers build upon.
+<p>Think of this as a template for coordinating optimization across multiple computers or GPUs.
+It handles common tasks like:</p>
+<ul>
+<li>Wrapping regular optimizers to work in distributed mode</li>
+<li>Syncing parameters across all processes after updates</li>
+<li>Making sure all processes agree on when to stop training</li>
+<li>Saving and loading distributed optimizer state</li>
+</ul>
+<p>Specific types of distributed optimizers (like data-parallel or ZeRO) inherit from
+this and add their own strategies. This prevents code duplication and ensures all
+distributed optimizers work consistently.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3__ctor_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3__ctor_AiDotNet_Interfaces_IOptimizer__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0__" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.#ctor(AiDotNet.Interfaces.IOptimizer{`0,`1,`2},AiDotNet.DistributedTraining.IShardingConfiguration{`0})">
+  ShardedOptimizerBase(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ShardedOptimizerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ShardedOptimizerBase(IOptimizer&lt;T, TInput, TOutput&gt; wrappedOptimizer, IShardingConfiguration&lt;T&gt; config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>wrappedOptimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer to wrap with distributed capabilities</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for sharding and communication</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3__ctor_AiDotNet_Interfaces_IOptimizer__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor wraps an existing optimizer with distributed training capabilities.
+It initializes the communication backend if needed and prepares for distributed optimization.
+</p>
+<p><b>For Beginners:</b> This constructor takes your regular optimizer and makes it distributed.
+<p>You provide:</p>
+<ol>
+<li>The optimizer you want to distribute (like Adam, SGD, etc.)</li>
+<li>Configuration that tells us how to distribute it</li>
+</ol>
+<p>The constructor automatically:</p>
+<ul>
+<li>Sets up communication if not already done</li>
+<li>Prepares the optimizer for coordinated training</li>
+<li>Ensures all processes can work together</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if optimizer or config is null</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Config" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Config">
+  Config
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The sharding configuration containing communication backend and settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IShardingConfiguration&lt;T&gt; Config</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_NumOps" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LastComputedGradients_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.LastComputedGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LastComputedGradients" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.LastComputedGradients">
+  LastComputedGradients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the gradients computed during the last optimization step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; LastComputedGradients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LastComputedGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sharded optimizers delegate gradient access to the wrapped optimizer.
+If the wrapped optimizer is gradient-based, this will return the actual computed gradients.
+Otherwise, it returns an empty vector.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Rank_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Rank*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Rank" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Rank">
+  Rank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank of this process in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Rank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Each process has a unique ID (rank). This tells you which process you are.
+Rank 0 is typically the "coordinator" process.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShardingConfiguration_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ShardingConfiguration*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShardingConfiguration" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ShardingConfiguration">
+  ShardingConfiguration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the sharding configuration for this optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IShardingConfiguration&lt;T&gt; ShardingConfiguration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WorldSize_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WorldSize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WorldSize" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WorldSize">
+  WorldSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of processes in the distributed group.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WorldSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WorldSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is how many processes are working together to optimize the model.
+For example, if you have 4 GPUs, WorldSize would be 4.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizer_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WrappedOptimizer*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizer" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WrappedOptimizer">
+  WrappedOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying wrapped optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, TInput, TOutput&gt; WrappedOptimizer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the original optimizer (like Adam, SGD, etc.) that we're adding
+distributed training capabilities to. Think of it as the "core brain" that
+we're helping to work across multiple processes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizerInternal_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WrappedOptimizerInternal*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizerInternal" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.WrappedOptimizerInternal">
+  WrappedOptimizerInternal
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Protected access to wrapped optimizer for derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IOptimizer&lt;T, TInput, TOutput&gt; WrappedOptimizerInternal { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ApplyGradients_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ApplyGradients(Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to a model's parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IFullModel&lt;T, TInput, TOutput&gt; ApplyGradients(Vector&lt;T&gt; gradients, IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients to apply</p>
+</dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to update</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The updated model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sharded optimizers delegate gradient application to the wrapped optimizer.
+If the wrapped optimizer is gradient-based, this will apply the gradients.
+Otherwise, throws NotSupportedException.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>If the wrapped optimizer is not gradient-based</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Deserialize_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_GetOptions_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_GetOptions" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration options for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The configuration options for the optimization algorithm.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>These options control how the optimization algorithm behaves, including
+parameters like learning rate, maximum iterations, and convergence criteria.</p>
+<p><b>For Beginners:</b> This provides the &quot;settings&quot; or &quot;rules&quot; that the optimizer follows.
+Just like a recipe has instructions (bake at 350°F for 30 minutes), an optimizer
+has settings (learn at rate 0.01, stop after 1000 tries).</p>
+<p>Common optimization options include:</p>
+<ul>
+<li>Learning rate: How big of adjustments to make (step size)</li>
+<li>Maximum iterations: How many attempts to make before giving up</li>
+<li>Tolerance: How small an improvement is considered &quot;good enough&quot; to stop</li>
+<li>Regularization: Settings that prevent the model from becoming too complex</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LoadModel_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LoadModel_System_String_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Optimize_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Optimize(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the optimization process to find the best parameters for a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract OptimizationResult&lt;T, TInput, TOutput&gt; Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The data needed for optimization, including the objective function,
+initial parameters, and any constraints.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The result of the optimization process, including the optimized parameters
+and performance metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes input data and attempts to find the optimal parameters
+that minimize or maximize the objective function.</p>
+<p><b>For Beginners:</b> This is where the actual &quot;learning&quot; happens. The optimizer looks at your data
+and tries different parameter values to find the ones that make your model perform best.</p>
+<p>The process typically involves:</p>
+<ol>
+<li>Evaluating how well the current parameters perform</li>
+<li>Calculating how to change the parameters to improve performance</li>
+<li>Updating the parameters</li>
+<li>Repeating until the model performs well enough or reaches a maximum number of attempts</li>
+</ol>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Reset_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Reset*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Reset" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the optimizer state to prepare for a fresh optimization run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method clears accumulated state including:</p>
+<ul>
+<li>Model cache (prevents retrieving solutions from previous runs)</li>
+<li>Fitness history (accumulated scores from previous optimizations)</li>
+<li>Iteration history (logs from previous runs)</li>
+<li>Adaptive parameters (learning rate, momentum reset to initial values)</li>
+</ul>
+<p><b>For Beginners:</b> Think of this like &quot;clearing the whiteboard&quot; before starting a new problem.
+When you run optimization multiple times (like during cross-validation), you want each run
+to start fresh without being influenced by previous runs. This method ensures that.</p>
+<p>When to call Reset():</p>
+<ul>
+<li>Before each cross-validation fold (ensures independent fold evaluations)</li>
+<li>Before training the final model after cross-validation</li>
+<li>Any time you want to reuse an optimizer for a completely new optimization task</li>
+</ul>
+<p>Why this matters:</p>
+<ul>
+<li>Prevents state contamination between independent training runs</li>
+<li>Ensures reproducible results regardless of how many times you've used the optimizer</li>
+<li>Avoids memory leaks from accumulated history</li>
+<li>Maintains correct adaptive learning rate dynamics</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SaveModel_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SaveModel_System_String_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Serialize_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Serialize" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShouldEarlyStop_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ShouldEarlyStop*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShouldEarlyStop" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.ShouldEarlyStop">
+  ShouldEarlyStop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the optimization process should stop early.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool ShouldEarlyStop()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the optimization process should stop early; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShouldEarlyStop_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Early stopping is a technique to prevent overfitting by stopping the optimization
+process before it completes all iterations if certain conditions are met.</p>
+<p><b>For Beginners:</b> This is like knowing when to stop cooking - if the model is &quot;done&quot;
+(trained well enough), this method says &quot;stop now&quot; instead of continuing unnecessarily.</p>
+<p>Common reasons for early stopping include:</p>
+<ul>
+<li>The model's performance isn't improving anymore</li>
+<li>The model's performance on validation data is getting worse (overfitting)</li>
+<li>The changes in parameters are becoming very small (convergence)</li>
+</ul>
+<p>Early stopping helps:</p>
+<ul>
+<li>Save computation time</li>
+<li>Prevent the model from becoming too specialized to the training data</li>
+<li>Produce models that generalize better to new data</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeOptimizerState_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SynchronizeOptimizerState*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeOptimizerState" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SynchronizeOptimizerState">
+  SynchronizeOptimizerState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes optimizer state (like momentum buffers) across all processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void SynchronizeOptimizerState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeOptimizerState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Some optimizers (like Adam) keep track of past gradients to make smarter updates.
+This method makes sure all processes have the same optimizer state, so they stay
+coordinated. It's like making sure all team members are reading from the same playbook.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeParameters_" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SynchronizeParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeParameters_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.DistributedTraining.ShardedOptimizerBase`3.SynchronizeParameters(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  SynchronizeParameters(IFullModel&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes model parameters across all processes using AllReduce with averaging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void SynchronizeParameters(IFullModel&lt;T, TInput, TOutput&gt;? model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model whose parameters to synchronize</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeParameters_AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method averages parameters across all processes, ensuring consistency.
+It's called after optimization steps to keep all processes synchronized.
+</p>
+<p><b>For Beginners:</b> After each process updates its model, we need to
+make sure everyone has the same parameters.
+<p>This method averages the parameters from all processes. For example, if GPU 0
+calculated parameter value 1.0 and GPU 1 calculated 1.2, after sync both will
+have 1.1 (the average).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ShardedOptimizerBase.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

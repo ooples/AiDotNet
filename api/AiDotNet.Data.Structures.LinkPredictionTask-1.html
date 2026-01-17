@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LinkPredictionTask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LinkPredictionTask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a link prediction task where the goal is to predict missing or future edges.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Structures_LinkPredictionTask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Structures.LinkPredictionTask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1">
+
+
+
+  <h1 id="AiDotNet_Data_Structures_LinkPredictionTask_1" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1" class="text-break">
+Class LinkPredictionTask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Structures.html">Structures</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a link prediction task where the goal is to predict missing or future edges.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LinkPredictionTask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LinkPredictionTask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Structures_LinkPredictionTask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Link prediction aims to predict whether an edge should exist between two nodes based on:
+- Node features
+- Graph structure
+- Edge patterns in the existing graph
+</p>
+<p><b>For Beginners:</b> Link prediction is like recommending friendships or connections.
+<p><strong>Real-world examples:</strong></p>
+<p><strong>Social Networks:</strong></p>
+<ul>
+<li>Task: Friend recommendation</li>
+<li>Question: &quot;Will these two users become friends?&quot;</li>
+<li>How: Analyze mutual friends, shared interests, interaction patterns</li>
+<li>Example: &quot;You may know...&quot; suggestions on Facebook/LinkedIn</li>
+</ul>
+<p><strong>E-commerce:</strong></p>
+<ul>
+<li>Task: Product recommendation</li>
+<li>Question: &quot;Will this user purchase this product?&quot;</li>
+<li>Graph: Users and products as nodes, purchases as edges</li>
+<li>How: Users with similar purchase history likely buy similar products</li>
+</ul>
+<p><strong>Citation Networks:</strong></p>
+<ul>
+<li>Task: Predict future citations</li>
+<li>Question: &quot;Will paper A cite paper B?&quot;</li>
+<li>How: Analyze topic similarity, author connections, citation patterns</li>
+</ul>
+<p><strong>Drug Discovery:</strong></p>
+<ul>
+<li>Task: Predict drug-target interactions</li>
+<li>Question: &quot;Will this drug bind to this protein?&quot;</li>
+<li>Graph: Drugs and proteins as nodes, known interactions as edges</li>
+</ul>
+<p><strong>Key Techniques:</strong></p>
+<ul>
+<li><strong>Negative sampling</strong>: Create non-existent edges as negative examples</li>
+<li><strong>Edge splitting</strong>: Hide some edges during training, predict them at test time</li>
+<li><strong>Node pair scoring</strong>: Learn to score how likely two nodes should connect</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_Graph_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.Graph*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_Graph" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.Graph">
+  Graph
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The graph data with edges potentially removed for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GraphData&lt;T&gt; Graph { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_LinkPredictionTask_1_Graph_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>In link prediction, we typically remove a portion of edges from the graph and try
+to predict them. The graph here contains the training edges only.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_IsDirected_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.IsDirected*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_IsDirected" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.IsDirected">
+  IsDirected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the graph is directed (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDirected { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_LinkPredictionTask_1_IsDirected_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><ul>
+<li>Directed: Edge from A to B doesn't imply edge from B to A (e.g., Twitter follows)</li>
+<li>Undirected: Edge is bidirectional (e.g., Facebook friendships)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_NegativeSamplingRatio_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.NegativeSamplingRatio*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_NegativeSamplingRatio" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.NegativeSamplingRatio">
+  NegativeSamplingRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ratio of negative to positive edges for sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double NegativeSamplingRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_LinkPredictionTask_1_NegativeSamplingRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typically 1.0 (balanced) but can be adjusted. Higher ratios make the task harder
+but can improve model robustness.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_TestNegEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TestNegEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_TestNegEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TestNegEdges">
+  TestNegEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negative edge examples for testing.
+Shape: [num_test_neg_edges, 2].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TestNegEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_TestPosEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TestPosEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_TestPosEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TestPosEdges">
+  TestPosEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Positive edge examples for testing.
+Shape: [num_test_edges, 2].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TestPosEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainNegEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TrainNegEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainNegEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TrainNegEdges">
+  TrainNegEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negative edge examples (edges that don't exist) for training.
+Shape: [num_train_neg_edges, 2].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TrainNegEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainNegEdges_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These are sampled node pairs that don't have edges. They serve as negative examples
+to teach the model what connections are unlikely.
+</p>
+<p><b>For Beginners:</b> Why do we need negative examples?
+<p>Imagine teaching someone to recognize friends vs strangers:</p>
+<ul>
+<li>Positive examples: &quot;These people ARE friends&quot; (existing edges)</li>
+<li>Negative examples: &quot;These people are NOT friends&quot; (non-existing edges)</li>
+</ul>
+<p>Without negatives, the model might predict everyone is friends with everyone!
+Negative sampling creates a balanced training set.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainPosEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TrainPosEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainPosEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.TrainPosEdges">
+  TrainPosEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Positive edge examples (edges that exist) for training.
+Shape: [num_train_edges, 2] where each row is [source_node, target_node].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TrainPosEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_LinkPredictionTask_1_TrainPosEdges_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>These are edges that exist in the original graph and should be predicted as positive.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_ValNegEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.ValNegEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_ValNegEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.ValNegEdges">
+  ValNegEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negative edge examples for validation.
+Shape: [num_val_neg_edges, 2].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ValNegEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_LinkPredictionTask_1_ValPosEdges_" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.ValPosEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_LinkPredictionTask_1_ValPosEdges" data-uid="AiDotNet.Data.Structures.LinkPredictionTask`1.ValPosEdges">
+  ValPosEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Positive edge examples for validation.
+Shape: [num_val_edges, 2].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ValPosEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/LinkPredictionTask.cs/#L48" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

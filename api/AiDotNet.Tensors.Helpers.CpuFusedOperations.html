@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CpuFusedOperations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CpuFusedOperations | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides SIMD-optimized fused CPU operations that combine multiple operations into single-pass algorithms for better cache efficiency and reduced memory allocation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Helpers_CpuFusedOperations.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Helpers.CpuFusedOperations%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations">
+
+
+
+  <h1 id="AiDotNet_Tensors_Helpers_CpuFusedOperations" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations" class="text-break">
+Class CpuFusedOperations  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides SIMD-optimized fused CPU operations that combine multiple operations
+into single-pass algorithms for better cache efficiency and reduced memory allocation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class CpuFusedOperations</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CpuFusedOperations</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Unlike GPU fused operations which primarily eliminate kernel launch overhead, CPU fused
+operations provide performance benefits through:
+<ul><li>Cache locality: Processing data in a single pass keeps it in L1/L2 cache</li><li>Reduced allocations: No intermediate tensors needed between operations</li><li>SIMD vectorization: Uses TensorPrimitives for hardware-accelerated operations</li><li>Tiling: Cache-efficient blocking for large matrix operations</li></ul>
+
+<p>
+<b>Performance Characteristics:</b>
+<ul><li>FusedGemmBiasActivation: 20-40% faster than separate operations</li><li>FusedLayerNorm: 30-50% faster due to single-pass mean/variance calculation</li><li>FusedResidualLayerNorm: 40-60% faster for Transformer blocks</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedBiasDropout_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedBiasDropout*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedBiasDropout_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Single_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedBiasDropout(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Single)">
+  FusedBiasDropout(float[], float[], float[], float[], int, int, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L455"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused Bias + Dropout for training.
+Combines bias addition and dropout in single pass.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedBiasDropout(float[] input, float[] bias, float[] output, float[] dropoutMask, int batchSize, int featureSize, float dropoutScale)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input tensor.</p>
+</dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Bias vector (per feature).</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output tensor.</p>
+</dd>
+    <dt><code>dropoutMask</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Pre-generated dropout mask (0 or 1).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch size.</p>
+</dd>
+    <dt><code>featureSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Feature size.</p>
+</dd>
+    <dt><code>dropoutScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scale factor (1 / (1 - dropout_rate)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasActivation_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasActivation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasActivation_System_Double___System_Double___System_Double___System_Double___System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasActivation(System.Double[],System.Double[],System.Double[],System.Double[],System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.FusedActivationType)">
+  FusedGemmBiasActivation(double[], double[], double[]?, double[], int, int, int, FusedActivationType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L539"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + Activation for double precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasActivation(double[] A, double[] B, double[]? bias, double[] output, int M, int N, int K, FusedActivationType activation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.FusedActivationType.html">FusedActivationType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasActivation_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasActivation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasActivation_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasActivation(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.FusedActivationType)">
+  FusedGemmBiasActivation(float[], float[], float[]?, float[], int, int, int, FusedActivationType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + Activation with configurable activation function.
+Uses cache-efficient tiling for large matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasActivation(float[] A, float[] B, float[]? bias, float[] output, int M, int N, int K, FusedActivationType activation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input matrix (M x K), row-major.</p>
+</dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Weight matrix (K x N), row-major.</p>
+</dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Bias vector (N elements), or null for no bias.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output matrix (M x N), row-major.</p>
+</dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows in A (batch size).</p>
+</dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns in B (output features).</p>
+</dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Shared dimension (input features).</p>
+</dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.FusedActivationType.html">FusedActivationType</a></dt>
+    <dd><p>Activation function to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasGelu_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasGelu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasGelu_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasGelu(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Int32)">
+  FusedGemmBiasGelu(float[], float[], float[]?, float[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + GELU: output = GELU(A * B + bias).
+Uses the fast tanh approximation for GELU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasGelu(float[] A, float[] B, float[]? bias, float[] output, int M, int N, int K)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasRelu_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasRelu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasRelu_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasRelu(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Int32)">
+  FusedGemmBiasRelu(float[], float[], float[]?, float[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + ReLU: output = ReLU(A * B + bias).
+Single-pass operation with cache-efficient processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasRelu(float[] A, float[] B, float[]? bias, float[] output, int M, int N, int K)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input matrix (M x K), row-major.</p>
+</dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Weight matrix (K x N), row-major.</p>
+</dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Bias vector (N elements), or null.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output matrix (M x N), row-major.</p>
+</dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows in A.</p>
+</dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns in B.</p>
+</dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Shared dimension (columns of A, rows of B).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasSigmoid_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasSigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasSigmoid_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasSigmoid(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Int32)">
+  FusedGemmBiasSigmoid(float[], float[], float[]?, float[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + Sigmoid: output = Sigmoid(A * B + bias).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasSigmoid(float[] A, float[] B, float[]? bias, float[] output, int M, int N, int K)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasTanh_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasTanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedGemmBiasTanh_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedGemmBiasTanh(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Int32)">
+  FusedGemmBiasTanh(float[], float[], float[]?, float[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused GEMM + Bias + Tanh: output = Tanh(A * B + bias).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedGemmBiasTanh(float[] A, float[] B, float[]? bias, float[] output, int M, int N, int K)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedLayerNormActivation_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedLayerNormActivation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedLayerNormActivation_System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Single_AiDotNet_Tensors_Engines_FusedActivationType_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedLayerNormActivation(System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Single,AiDotNet.Tensors.Engines.FusedActivationType)">
+  FusedLayerNormActivation(float[], float[], float[], float[], int, int, float, FusedActivationType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused LayerNorm + Activation in a single pass.
+Computes mean and variance in first pass, then normalizes and applies activation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedLayerNormActivation(float[] input, float[] gamma, float[] beta, float[] output, int batchSize, int featureSize, float epsilon, FusedActivationType activation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input tensor data (flattened).</p>
+</dd>
+    <dt><code>gamma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Scale parameter (per feature).</p>
+</dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Shift parameter (per feature).</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output tensor data (flattened).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples in batch.</p>
+</dd>
+    <dt><code>featureSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of features per sample.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Small constant for numerical stability.</p>
+</dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.FusedActivationType.html">FusedActivationType</a></dt>
+    <dd><p>Activation function to apply after normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedResidualLayerNorm_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedResidualLayerNorm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedResidualLayerNorm_System_Single___System_Single___System_Single___System_Single___System_Single___System_Int32_System_Int32_System_Single_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedResidualLayerNorm(System.Single[],System.Single[],System.Single[],System.Single[],System.Single[],System.Int32,System.Int32,System.Single)">
+  FusedResidualLayerNorm(float[], float[], float[], float[], float[], int, int, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused Residual + LayerNorm: output = LayerNorm(input + residual).
+Critical optimization for Transformer blocks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedResidualLayerNorm(float[] input, float[] residual, float[] gamma, float[] beta, float[] output, int batchSize, int featureSize, float epsilon)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input tensor data.</p>
+</dd>
+    <dt><code>residual</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Residual connection data.</p>
+</dd>
+    <dt><code>gamma</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>LayerNorm scale parameter.</p>
+</dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>LayerNorm shift parameter.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output tensor data.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples.</p>
+</dd>
+    <dt><code>featureSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Features per sample.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Numerical stability constant.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedScaledSoftmax_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedScaledSoftmax*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_CpuFusedOperations_FusedScaledSoftmax_System_Single___System_Single___System_Int32_System_Int32_System_Single_" data-uid="AiDotNet.Tensors.Helpers.CpuFusedOperations.FusedScaledSoftmax(System.Single[],System.Single[],System.Int32,System.Int32,System.Single)">
+  FusedScaledSoftmax(float[], float[], int, int, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs fused scaled softmax for attention: softmax(x / sqrt(d)).
+Single pass with numerical stability (max subtraction).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void FusedScaledSoftmax(float[] input, float[] output, int batchSize, int seqLen, float scale)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Input logits (batch_size x seq_len).</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Output probabilities.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows.</p>
+</dd>
+    <dt><code>seqLen</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Sequence length (number of columns).</p>
+</dd>
+    <dt><code>scale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Scale factor (typically 1/sqrt(d_k)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/CpuFusedOperations.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

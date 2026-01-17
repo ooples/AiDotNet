@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GpuStreamPool | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GpuStreamPool | AiDotNet Documentation ">
+      
+      <meta name="description" content="Manages a pool of GPU streams for efficient compute/transfer overlap. Streams are created lazily and reused to minimize creation overhead.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Gpu_GpuStreamPool.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Gpu.GpuStreamPool%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool" class="text-break">
+Class GpuStreamPool  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.html">Gpu</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Manages a pool of GPU streams for efficient compute/transfer overlap.
+Streams are created lazily and reused to minimize creation overhead.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class GpuStreamPool : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GpuStreamPool</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamPoolExtensions.html#AiDotNet_Tensors_Engines_Gpu_GpuStreamPoolExtensions_WithStream_AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_AiDotNet_Tensors_Engines_Gpu_GpuStreamType_System_Action_AiDotNet_Tensors_Engines_Gpu_IGpuStream__">GpuStreamPoolExtensions.WithStream(GpuStreamPool, GpuStreamType, Action&lt;IGpuStream&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamPoolExtensions.html#AiDotNet_Tensors_Engines_Gpu_GpuStreamPoolExtensions_WithStream__1_AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_AiDotNet_Tensors_Engines_Gpu_GpuStreamType_System_Func_AiDotNet_Tensors_Engines_Gpu_IGpuStream___0__">GpuStreamPoolExtensions.WithStream&lt;T&gt;(GpuStreamPool, GpuStreamType, Func&lt;IGpuStream, T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Usage Pattern:</b></p>
+<pre><code class="lang-csharp">using var streamPool = new GpuStreamPool(backend, options);
+
+// Acquire a compute stream
+var computeStream = streamPool.AcquireStream(GpuStreamType.Compute);
+try
+{
+    backend.GemmAsync(a, b, c, m, n, k, 1f, 0f, computeStream);
+}
+finally
+{
+    streamPool.ReleaseStream(computeStream);
+}</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool__ctor_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool__ctor_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.#ctor(AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend,AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions)">
+  GpuStreamPool(IAsyncGpuBackend, GpuExecutionOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new stream pool for the given backend.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GpuStreamPool(IAsyncGpuBackend backend, GpuExecutionOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.html">IAsyncGpuBackend</a></dt>
+    <dd><p>The async GPU backend.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+    <dd><p>Execution options controlling stream behavior.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_Backend_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.Backend*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_Backend" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.Backend">
+  Backend
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the backend associated with this pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IAsyncGpuBackend Backend { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.html">IAsyncGpuBackend</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultComputeStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultComputeStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultComputeStream" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultComputeStream">
+  DefaultComputeStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default compute stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuStream DefaultComputeStream { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultD2HStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultD2HStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultD2HStream" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultD2HStream">
+  DefaultD2HStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default device-to-host transfer stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuStream DefaultD2HStream { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultH2DStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultH2DStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_DefaultH2DStream" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.DefaultH2DStream">
+  DefaultH2DStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default host-to-device transfer stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuStream DefaultH2DStream { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_TotalStreamsCreated_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.TotalStreamsCreated*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_TotalStreamsCreated" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.TotalStreamsCreated">
+  TotalStreamsCreated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of streams created.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalStreamsCreated { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_AcquireStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.AcquireStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_AcquireStream_AiDotNet_Tensors_Engines_Gpu_GpuStreamType_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.AcquireStream(AiDotNet.Tensors.Engines.Gpu.GpuStreamType)">
+  AcquireStream(GpuStreamType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Acquires a stream of the specified type from the pool.
+Creates a new stream if none are available and limits haven't been reached.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuStream AcquireStream(GpuStreamType streamType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>streamType</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamType.html">GpuStreamType</a></dt>
+    <dd><p>The type of stream to acquire.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>A GPU stream ready for use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if max streams reached and none available.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_Dispose_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.Dispose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_Dispose" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes all streams in the pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_GetStreamForOperation_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.GetStreamForOperation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_GetStreamForOperation_System_Boolean_System_Boolean_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.GetStreamForOperation(System.Boolean,System.Boolean)">
+  GetStreamForOperation(bool, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a stream appropriate for the given operation.
+For compute operations, returns the default compute stream.
+For transfers, returns the appropriate default transfer stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuStream GetStreamForOperation(bool isH2DTransfer = false, bool isD2HTransfer = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isH2DTransfer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True for host-to-device transfer.</p>
+</dd>
+    <dt><code>isD2HTransfer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True for device-to-host transfer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>An appropriate stream for the operation. Callers do NOT need to release these streams.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_GetStreamForOperation_System_Boolean_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method returns default streams which don't need to be released.
+For explicit stream acquisition with release semantics, use AcquireStream/ReleaseStream.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_ReleaseStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.ReleaseStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_ReleaseStream_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.ReleaseStream(AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  ReleaseStream(IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases a stream back to the pool for reuse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReleaseStream(IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream to release.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_SynchronizeAll_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.SynchronizeAll*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_SynchronizeAll" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.SynchronizeAll">
+  SynchronizeAll()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes all streams in the pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SynchronizeAll()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_WaitAllComplete_" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.WaitAllComplete*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_WaitAllComplete" data-uid="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.WaitAllComplete">
+  WaitAllComplete()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Waits for all streams to complete their current operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void WaitAllComplete()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/GpuStreamPool.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

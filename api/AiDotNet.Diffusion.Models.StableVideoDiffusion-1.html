@@ -1,0 +1,1515 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StableVideoDiffusion&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StableVideoDiffusion&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Stable Video Diffusion (SVD) model for image-to-video generation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Models_StableVideoDiffusion_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Models.StableVideoDiffusion%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1" class="text-break">
+Class StableVideoDiffusion&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Stable Video Diffusion (SVD) model for image-to-video generation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StableVideoDiffusion&lt;T&gt; : VideoDiffusionModelBase&lt;T&gt;, ILatentDiffusionModel&lt;T&gt;, IVideoDiffusionModel&lt;T&gt;, IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html">DiffusionModelBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html">LatentDiffusionModelBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html">VideoDiffusionModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">StableVideoDiffusion&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILatentDiffusionModel-1.html">ILatentDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVideoDiffusionModel-1.html">IVideoDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_DefaultNumFrames">VideoDiffusionModelBase&lt;T&gt;.DefaultNumFrames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_DefaultFPS">VideoDiffusionModelBase&lt;T&gt;.DefaultFPS</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_MotionBucketId">VideoDiffusionModelBase&lt;T&gt;.MotionBucketId</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_NoiseAugStrength">VideoDiffusionModelBase&lt;T&gt;.NoiseAugStrength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__System_Int32_System_Double_System_Nullable_System_Int32__">VideoDiffusionModelBase&lt;T&gt;.GenerateFromText(string, string, int, int, int?, int?, int, double, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_VideoToVideo_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Double_System_Nullable_System_Int32__">VideoDiffusionModelBase&lt;T&gt;.VideoToVideo(Tensor&lt;T&gt;, string, string, double, int, double, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InterpolateFrames_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Interfaces_FrameInterpolationMethod_">VideoDiffusionModelBase&lt;T&gt;.InterpolateFrames(Tensor&lt;T&gt;, int, FrameInterpolationMethod)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_SetMotionBucketId_System_Int32_">VideoDiffusionModelBase&lt;T&gt;.SetMotionBucketId(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_ExtractFrame_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.ExtractFrame(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_FramesToVideo_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">VideoDiffusionModelBase&lt;T&gt;.FramesToVideo(Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_PredictVideoNoiseWithText_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VideoDiffusionModelBase&lt;T&gt;.PredictVideoNoiseWithText(Tensor&lt;T&gt;, int, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_EncodeVideoToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VideoDiffusionModelBase&lt;T&gt;.EncodeVideoToLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_AddNoiseToVideoLatents_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Random_">VideoDiffusionModelBase&lt;T&gt;.AddNoiseToVideoLatents(Tensor&lt;T&gt;, int, Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_SchedulerStepVideo_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.SchedulerStepVideo(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_ApplyGuidanceVideo_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_">VideoDiffusionModelBase&lt;T&gt;.ApplyGuidanceVideo(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_ExtractFrameLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.ExtractFrameLatent(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InsertFrameLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.InsertFrameLatent(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InterpolateFramesDiffusion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.InterpolateFramesDiffusion(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InterpolateFramesOpticalFlow_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.InterpolateFramesOpticalFlow(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InterpolateFramesLinear_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.InterpolateFramesLinear(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_InterpolateFramesBlend_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">VideoDiffusionModelBase&lt;T&gt;.InterpolateFramesBlend(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VideoDiffusionModelBase-1.html#AiDotNet_Diffusion_VideoDiffusionModelBase_1_LinearBlend_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_">VideoDiffusionModelBase&lt;T&gt;.LinearBlend(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GuidanceScale">LatentDiffusionModelBase&lt;T&gt;.GuidanceScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsNegativePrompt">LatentDiffusionModelBase&lt;T&gt;.SupportsNegativePrompt</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsInpainting">LatentDiffusionModelBase&lt;T&gt;.SupportsInpainting</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_EncodeToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_">LatentDiffusionModelBase&lt;T&gt;.EncodeToLatent(Tensor&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_DecodeFromLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LatentDiffusionModelBase&lt;T&gt;.DecodeFromLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.GenerateFromText(string, string, int, int, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ImageToImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.ImageToImage(Tensor&lt;T&gt;, string, string, double, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Inpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Inpaint(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, string, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SetGuidanceScale_System_Double_">LatentDiffusionModelBase&lt;T&gt;.SetGuidanceScale(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ApplyGuidance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_">LatentDiffusionModelBase&lt;T&gt;.ApplyGuidance(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SampleNoiseTensor_System_Int32___System_Random_">LatentDiffusionModelBase&lt;T&gt;.SampleNoiseTensor(int[], Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ResizeMaskToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">LatentDiffusionModelBase&lt;T&gt;.ResizeMaskToLatent(Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_BlendLatentsWithMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.BlendLatentsWithMask(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_NumOps">DiffusionModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_RandomGenerator">DiffusionModelBase&lt;T&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LossFunction">DiffusionModelBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LearningRate">DiffusionModelBase&lt;T&gt;.LearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Scheduler">DiffusionModelBase&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_DefaultLossFunction">DiffusionModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SupportsJitCompilation">DiffusionModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">DiffusionModelBase&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetModelMetadata">DiffusionModelBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DiffusionModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Serialize">DiffusionModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Deserialize_System_Byte___">DiffusionModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveModel_System_String_">DiffusionModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadModel_System_String_">DiffusionModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetActiveFeatureIndices">DiffusionModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">DiffusionModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_IsFeatureUsed_System_Int32_">DiffusionModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetFeatureImportance">DiffusionModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">DiffusionModelBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">DiffusionModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">DiffusionModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SampleNoise_System_Int32_System_Random_">DiffusionModelBase&lt;T&gt;.SampleNoise(int, Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+  <h2 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_examples">Examples</h2>
+  <pre><code class="lang-csharp">// Create a Stable Video Diffusion model
+var svd = new StableVideoDiffusion&lt;float&gt;();
+
+// Load your image (batch=1, channels=3, height=576, width=1024)
+var inputImage = LoadImage("landscape.jpg");
+
+// Generate video with default settings
+var video = svd.GenerateFromImage(inputImage);
+
+// Generate with custom motion (more movement)
+var dynamicVideo = svd.GenerateFromImage(
+    inputImage,
+    numFrames: 25,
+    fps: 7,
+    motionBucketId: 200,  // Higher = more motion
+    numInferenceSteps: 25,
+    seed: 42);
+
+// Output shape: [1, 25, 3, 576, 1024] (batch, frames, channels, height, width)
+SaveVideo(dynamicVideo, "output.mp4");</code></pre>
+
+
+  <h2 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Stable Video Diffusion generates short video clips from a single input image.
+It extends the Stable Diffusion architecture with temporal awareness, using
+a 3D U-Net for noise prediction and a temporal VAE for encoding/decoding.
+</p>
+<p>
+<b>For Beginners:</b> Think of SVD as "making a picture come to life."
+You give it a single image, and it generates a short video showing
+how that scene might animate:
+<p>Example workflow:</p>
+<ol>
+<li>Input: Photo of a waterfall</li>
+<li>SVD analyzes the scene and understands what should move</li>
+<li>Output: 4-second video showing water flowing, mist rising</li>
+</ol>
+<p>Key features:</p>
+<ul>
+<li>Image-to-video: Primary use case, animate still images</li>
+<li>Motion control: Adjust how much motion to add (motion bucket)</li>
+<li>Configurable length: Generate different numbers of frames</li>
+<li>High quality: Based on Stable Diffusion's proven architecture</li>
+</ul>
+<p>Compared to text-to-video:</p>
+<ul>
+<li>More predictable results (scene is defined by input image)</li>
+<li>Better quality (less ambiguity than text prompts)</li>
+<li>Faster generation (can use fewer denoising steps)</li>
+</ul>
+
+<p>
+Technical specifications:
+- Default resolution: 576x1024 or 1024x576
+- Default frames: 25 frames at 7 FPS (~3.5 seconds)
+- Motion bucket ID: 1-255 (127 = moderate motion)
+- Noise augmentation: 0.02 default for conditioning image
+- Latent space: 4 channels, 8x spatial downsampling
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1__ctor_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1__ctor" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.#ctor">
+  StableVideoDiffusion()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of StableVideoDiffusion with default parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StableVideoDiffusion()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Creates an SVD model with standard parameters:</p>
+<ul>
+<li>25 frames at 7 FPS</li>
+<li>320 base channels</li>
+<li>DDPM scheduler with 1000 training steps</li>
+<li>Image conditioning enabled</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1__ctor_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1__ctor_AiDotNet_Models_Options_DiffusionModelOptions__0__AiDotNet_Interfaces_INoiseScheduler__0__AiDotNet_Diffusion_NoisePredictors_VideoUNetPredictor__0__AiDotNet_Diffusion_VAE_TemporalVAE__0__AiDotNet_Interfaces_IConditioningModule__0__System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.#ctor(AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Diffusion.NoisePredictors.VideoUNetPredictor{`0},AiDotNet.Diffusion.VAE.TemporalVAE{`0},AiDotNet.Interfaces.IConditioningModule{`0},System.Int32,System.Int32,System.Double)">
+  StableVideoDiffusion(DiffusionModelOptions&lt;T&gt;?, INoiseScheduler&lt;T&gt;?, VideoUNetPredictor&lt;T&gt;?, TemporalVAE&lt;T&gt;?, IConditioningModule&lt;T&gt;?, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of StableVideoDiffusion with custom parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StableVideoDiffusion(DiffusionModelOptions&lt;T&gt;? options = null, INoiseScheduler&lt;T&gt;? scheduler = null, VideoUNetPredictor&lt;T&gt;? videoUNet = null, TemporalVAE&lt;T&gt;? temporalVAE = null, IConditioningModule&lt;T&gt;? conditioner = null, int defaultNumFrames = 25, int defaultFPS = 7, double noiseAugmentStrength = 0.02)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DiffusionModelOptions-1.html">DiffusionModelOptions</a>&lt;T&gt;</dt>
+    <dd><p>Configuration options for the diffusion model.</p>
+</dd>
+    <dt><code>scheduler</code> <a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom scheduler. Defaults to DDPM with 1000 steps.</p>
+</dd>
+    <dt><code>videoUNet</code> <a class="xref" href="AiDotNet.Diffusion.NoisePredictors.VideoUNetPredictor-1.html">VideoUNetPredictor</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom VideoUNet predictor.</p>
+</dd>
+    <dt><code>temporalVAE</code> <a class="xref" href="AiDotNet.Diffusion.VAE.TemporalVAE-1.html">TemporalVAE</a>&lt;T&gt;</dt>
+    <dd><p>Optional custom temporal VAE.</p>
+</dd>
+    <dt><code>conditioner</code> <a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd><p>Optional conditioning module for text guidance.</p>
+</dd>
+    <dt><code>defaultNumFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default number of frames to generate.</p>
+</dd>
+    <dt><code>defaultFPS</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default frames per second.</p>
+</dd>
+    <dt><code>noiseAugmentStrength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DefaultHeight" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DefaultHeight">
+  DefaultHeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Default height for SVD generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int DefaultHeight = 576</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DefaultWidth" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DefaultWidth">
+  DefaultWidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Default width for SVD generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int DefaultWidth = 1024</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_Conditioner_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.Conditioner*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_Conditioner" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.Conditioner">
+  Conditioner
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the conditioning module if available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IConditioningModule&lt;T&gt;? Conditioner { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_Conditioner_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>SVD primarily uses image conditioning rather than text conditioning.
+The conditioner is optional and typically used for additional guidance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_LatentChannels_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_LatentChannels" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels (4 for SVD).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_NoisePredictor_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.NoisePredictor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_NoisePredictor" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.NoisePredictor">
+  NoisePredictor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the noise predictor used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override INoisePredictor&lt;T&gt; NoisePredictor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INoisePredictor-1.html">INoisePredictor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_ParameterCount_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_ParameterCount" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L750"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsImageToVideo_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsImageToVideo*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsImageToVideo" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsImageToVideo">
+  SupportsImageToVideo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports image-to-video generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsImageToVideo { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsImageToVideo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Always true for SVD - this is the primary use case.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsTextToVideo_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsTextToVideo*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsTextToVideo" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsTextToVideo">
+  SupportsTextToVideo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports text-to-video generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTextToVideo { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsTextToVideo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Returns true only if a conditioning module is provided.
+SVD's primary mode is image-to-video, but text guidance can be added.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsVideoToVideo_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsVideoToVideo*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsVideoToVideo" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SupportsVideoToVideo">
+  SupportsVideoToVideo
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this model supports video-to-video transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsVideoToVideo { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SupportsVideoToVideo_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Partially supported through the VideoToVideo method inherited from base class.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_TemporalVAE_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.TemporalVAE*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_TemporalVAE" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.TemporalVAE">
+  TemporalVAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the temporal VAE specifically for video operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IVAEModel&lt;T&gt;? TemporalVAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_VAE_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.VAE*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_VAE" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.VAE">
+  VAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the VAE used by this model for image encoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IVAEModel&lt;T&gt; VAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_VAE_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Returns the temporal VAE for both single image and video operations.
+The temporal VAE can handle both 4D (image) and 5D (video) tensors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_VideoUNet_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.VideoUNet*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_VideoUNet" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.VideoUNet">
+  VideoUNet
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the video U-Net predictor with image conditioning support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public VideoUNetPredictor&lt;T&gt; VideoUNet { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.NoisePredictors.VideoUNetPredictor-1.html">VideoUNetPredictor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_Clone_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_Clone" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L852"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a clone of this StableVideoDiffusion model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDiffusionModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_CreateMotionEmbedding_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.CreateMotionEmbedding*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_CreateMotionEmbedding_System_Int32_System_Int32_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.CreateMotionEmbedding(System.Int32,System.Int32)">
+  CreateMotionEmbedding(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L454"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates SVD-specific motion embedding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Tensor&lt;T&gt; CreateMotionEmbedding(int motionBucketId, int fps)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>motionBucketId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Motion intensity (1-255).</p>
+</dd>
+    <dt><code>fps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frames per second.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Motion embedding tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DecodeVideoLatents_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DecodeVideoLatents*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DecodeVideoLatents_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DecodeVideoLatents(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DecodeVideoLatents(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L514"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes video latents using the temporal VAE.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Tensor&lt;T&gt; DecodeVideoLatents(Tensor&lt;T&gt; latents)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latents</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Video latents [batch, frames, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Decoded video [batch, frames, channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DeepCopy_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_DeepCopy" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L873"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance with copied parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_EncodeConditioningImage_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.EncodeConditioningImage*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_EncodeConditioningImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.EncodeConditioningImage(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Nullable{System.Int32})">
+  EncodeConditioningImage(Tensor&lt;T&gt;, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes a conditioning image with SVD-specific processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Tensor&lt;T&gt; EncodeConditioningImage(Tensor&lt;T&gt; image, double noiseAugStrength, int? seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor.</p>
+</dd>
+    <dt><code>noiseAugStrength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Noise augmentation strength.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Encoded image embedding for conditioning.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateFromImage_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateFromImage*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateFromImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__System_Nullable_System_Int32__System_Int32_System_Nullable_System_Int32__System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateFromImage(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32},System.Nullable{System.Int32},System.Int32,System.Nullable{System.Int32},System.Double,System.Nullable{System.Int32})">
+  GenerateFromImage(Tensor&lt;T&gt;, int?, int?, int, int?, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a video from an input image using image-to-video diffusion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; GenerateFromImage(Tensor&lt;T&gt; inputImage, int? numFrames = null, int? fps = null, int numInferenceSteps = 25, int? motionBucketId = null, double noiseAugStrength = 0.02, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The conditioning image tensor [batch, channels, height, width].
+Should be normalized to [-1, 1] range.</p>
+</dd>
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of frames to generate. Default: 25.</p>
+</dd>
+    <dt><code>fps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Frames per second. Default: 7.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps. Default: 25.</p>
+</dd>
+    <dt><code>motionBucketId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Motion intensity control (1-255). Higher values = more motion.
+Default: 127 (moderate motion).</p>
+</dd>
+    <dt><code>noiseAugStrength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Noise augmentation for conditioning image.
+Higher values encourage more deviation from input. Default: 0.02.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated video tensor [batch, numFrames, channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateFromImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__System_Nullable_System_Int32__System_Int32_System_Nullable_System_Int32__System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates a video sequence from a single input image.
+The first frame will closely match the input image, while subsequent
+frames show natural motion based on the scene content.
+</p>
+<p>
+Tips for best results:
+- Use high-quality, sharp input images
+- Adjust motion bucket for scene type (lower for static scenes, higher for action)
+- Use more inference steps for higher quality (25-50 steps)
+- Lower noise augmentation keeps output closer to input
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithEndImageGuidance_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateWithEndImageGuidance*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithEndImageGuidance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateWithEndImageGuidance(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32,System.Nullable{System.Int32})">
+  GenerateWithEndImageGuidance(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L582"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates video with motion guidance from a secondary image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWithEndImageGuidance(Tensor&lt;T&gt; startImage, Tensor&lt;T&gt; endImage, int numFrames = 25, int numInferenceSteps = 25, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The starting image for the video.</p>
+</dd>
+    <dt><code>endImage</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Target image suggesting where motion should lead.</p>
+</dd>
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of frames to generate.</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated video transitioning from start to end image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithEndImageGuidance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses the latent space interpolation technique to guide the video
+generation toward the target end image. Not exact morphing, but
+provides directional guidance for the motion.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithFirstFrame_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateWithFirstFrame*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithFirstFrame_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GenerateWithFirstFrame(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})">
+  GenerateWithFirstFrame(Tensor&lt;T&gt;, int, int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L534"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates video with explicit first frame control.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWithFirstFrame(Tensor&lt;T&gt; firstFrame, int numFrames = 25, int motionBucketId = 127, int numInferenceSteps = 25, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>firstFrame</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The exact first frame to use.</p>
+</dd>
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of frames to generate.</p>
+</dd>
+    <dt><code>motionBucketId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Motion intensity (1-255).</p>
+</dd>
+    <dt><code>numInferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated video with specified first frame.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GenerateWithFirstFrame_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method ensures the first frame exactly matches the input,
+while subsequent frames are generated through diffusion.
+Useful when you want precise control over the starting frame.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GetParameters_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GetParameters" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L775"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the flattened parameters of all components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all model parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GetRecommendedResolution_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GetRecommendedResolution*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GetRecommendedResolution_System_Double_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.GetRecommendedResolution(System.Double)">
+  GetRecommendedResolution(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L715"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the recommended resolution for SVD generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (int width, int height) GetRecommendedResolution(double aspectRatio = 1.7777777777777777)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>aspectRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Desired aspect ratio (width/height).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.min">min</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32,system.int32-.max">max</a>)</dt>
+    <dd><p>Tuple of (width, height) optimized for SVD.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_GetRecommendedResolution_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>SVD works best at specific resolutions. This method returns
+the closest supported resolution for the given aspect ratio.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_PredictVideoNoise_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.PredictVideoNoise*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_PredictVideoNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.PredictVideoNoise(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  PredictVideoNoise(Tensor&lt;T&gt;, int, Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts noise for video frames conditioned on image and motion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Tensor&lt;T&gt; PredictVideoNoise(Tensor&lt;T&gt; latents, int timestep, Tensor&lt;T&gt; imageEmbedding, Tensor&lt;T&gt; motionEmbedding)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latents</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Current video latents [batch, channels, frames, height, width].</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current diffusion timestep.</p>
+</dd>
+    <dt><code>imageEmbedding</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Encoded conditioning image.</p>
+</dd>
+    <dt><code>motionEmbedding</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Motion embedding for motion intensity control.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Predicted noise tensor with same shape as latents.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_PredictVideoNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method uses the VideoUNet with image conditioning to predict
+noise for all frames simultaneously. The image embedding provides
+scene context while motion embedding controls animation intensity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SetParameters_" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_StableVideoDiffusion_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.Models.StableVideoDiffusion`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L808"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters for all components.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to distribute across components.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/StableVideoDiffusion.cs/#L76" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Distributed Training Concrete Implementations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Distributed Training Concrete Implementations | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/DistributedTrainingImplementations.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="distributed-training-concrete-implementations">Distributed Training Concrete Implementations</h1>
+
+<p>This document outlines all concrete implementations that should be created for the distributed training framework, based on industry standards and real-world scenarios.</p>
+<h2 id="architecture-overview">Architecture Overview</h2>
+<pre><code>ICommunicationBackend&lt;T&gt;
+    ↓
+CommunicationBackendBase&lt;T&gt; (abstract)
+    ↓
+├── InMemoryCommunicationBackend&lt;T&gt; (for testing)
+├── MPICommunicationBackend&lt;T&gt; (MPI.NET for production)
+├── NCCLCommunicationBackend&lt;T&gt; (NVIDIA GPUs)
+└── GlooCommunicationBackend&lt;T&gt; (CPU-based)
+
+IShardedModel&lt;T, TInput, TOutput&gt;
+    ↓
+ShardedModelBase&lt;T, TInput, TOutput&gt; (abstract)
+    ↓
+├── FSDPModel&lt;T, TInput, TOutput&gt; (Fully Sharded Data Parallel - PyTorch style)
+├── ZeRO1Model&lt;T, TInput, TOutput&gt; (ZeRO Stage 1 - optimizer state sharding only)
+├── ZeRO2Model&lt;T, TInput, TOutput&gt; (ZeRO Stage 2 - optimizer + gradient sharding)
+├── ZeRO3Model&lt;T, TInput, TOutput&gt; (ZeRO Stage 3 - full parameter sharding)
+├── DDPModel&lt;T, TInput, TOutput&gt; (Distributed Data Parallel - parameter replication)
+├── PipelineParallelModel&lt;T, TInput, TOutput&gt; (GPipe-style pipeline parallelism)
+├── TensorParallelModel&lt;T, TInput, TOutput&gt; (Megatron-LM style tensor parallelism)
+└── HybridShardedModel&lt;T, TInput, TOutput&gt; (3D parallelism: data + tensor + pipeline)
+
+IShardedOptimizer&lt;T, TInput, TOutput&gt;
+    ↓
+ShardedOptimizerBase&lt;T, TInput, TOutput&gt; (abstract)
+    ↓
+├── ZeRO1Optimizer&lt;T, TInput, TOutput&gt; (Shards optimizer state only)
+├── ZeRO2Optimizer&lt;T, TInput, TOutput&gt; (Shards optimizer state + gradients)
+├── ZeRO3Optimizer&lt;T, TInput, TOutput&gt; (Full sharding with parameter partitioning)
+├── DDPOptimizer&lt;T, TInput, TOutput&gt; (Standard data parallel - AllReduce gradients)
+├── GradientCompressionOptimizer&lt;T, TInput, TOutput&gt; (Compressed gradient communication)
+├── AsyncSGDOptimizer&lt;T, TInput, TOutput&gt; (Asynchronous parameter updates)
+└── ElasticOptimizer&lt;T, TInput, TOutput&gt; (Supports dynamic scaling of workers)
+</code></pre>
+<hr>
+<h2 id="model-implementations">Model Implementations</h2>
+<h3 id="1-fsdpmodelt-tinput-toutput---fully-sharded-data-parallel">1. <strong>FSDPModel&lt;T, TInput, TOutput&gt;</strong> - Fully Sharded Data Parallel</h3>
+<p><strong>Status</strong>: ✅ Currently implemented as <code>ShardedModel</code></p>
+<p><strong>Description</strong>: PyTorch FSDP-inspired implementation that shards model parameters, gradients, and optimizer states across all processes.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Full parameter sharding across all ranks</li>
+<li>AllGather parameters before forward/backward pass</li>
+<li>AllReduce gradients after backward pass</li>
+<li>Minimal memory footprint per GPU</li>
+<li>Best for training very large models (billions of parameters)</li>
+</ul>
+<p><strong>Use Case</strong>: Training models that don't fit on a single GPU (e.g., LLMs with 7B+ parameters)</p>
+<hr>
+<h3 id="2-zero1modelt-tinput-toutput---zero-stage-1">2. <strong>ZeRO1Model&lt;T, TInput, TOutput&gt;</strong> - ZeRO Stage 1</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: DeepSpeed ZeRO Stage 1 - only shards optimizer states, keeps parameters and gradients replicated.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Parameters: Replicated across all ranks (like DDP)</li>
+<li>Gradients: Replicated across all ranks</li>
+<li>Optimizer states: Sharded across ranks (4-8x memory reduction for optimizer state)</li>
+<li>AllReduce for gradient synchronization</li>
+<li>Lower communication overhead than full sharding</li>
+</ul>
+<p><strong>Use Case</strong>: Medium-sized models where optimizer state is the memory bottleneck (e.g., Adam with 2x model size overhead)</p>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class ZeRO1Model&lt;T, TInput, TOutput&gt; : ShardedModelBase&lt;T, TInput, TOutput&gt;
+{
+    // Keep full parameters locally
+    private Vector&lt;T&gt; _fullParameters;
+
+    protected override void InitializeSharding()
+    {
+        // Don't shard parameters, keep full copy
+        _fullParameters = WrappedModel.GetParameters();
+        LocalShard = _fullParameters; // No actual sharding
+    }
+
+    public override void SynchronizeGradients()
+    {
+        // Standard AllReduce for gradient averaging
+        // Optimizer state sharding handled by ZeRO1Optimizer
+    }
+}
+</code></pre>
+<hr>
+<h3 id="3-zero2modelt-tinput-toutput---zero-stage-2">3. <strong>ZeRO2Model&lt;T, TInput, TOutput&gt;</strong> - ZeRO Stage 2</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: DeepSpeed ZeRO Stage 2 - shards optimizer states AND gradients, keeps parameters replicated.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Parameters: Replicated across all ranks</li>
+<li>Gradients: Sharded across ranks (additional memory savings)</li>
+<li>Optimizer states: Sharded across ranks</li>
+<li>ReduceScatter for gradient sharding</li>
+<li>AllGather for parameter updates</li>
+<li>4-8x memory reduction vs DDP</li>
+</ul>
+<p><strong>Use Case</strong>: Large models where gradient + optimizer memory is significant (e.g., models with 1B-10B parameters)</p>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class ZeRO2Model&lt;T, TInput, TOutput&gt; : ShardedModelBase&lt;T, TInput, TOutput&gt;
+{
+    private Dictionary&lt;int, Vector&lt;T&gt;&gt; _shardedGradients;
+
+    public override void SynchronizeGradients()
+    {
+        // Use ReduceScatter to shard gradients across ranks
+        // Each rank only keeps its shard of gradients
+        var fullGradients = GetGradients();
+        LocalShard = Config.CommunicationBackend.ReduceScatter(
+            fullGradients,
+            ReductionOperation.Average);
+    }
+}
+</code></pre>
+<hr>
+<h3 id="4-zero3modelt-tinput-toutput---zero-stage-3">4. <strong>ZeRO3Model&lt;T, TInput, TOutput&gt;</strong> - ZeRO Stage 3</h3>
+<p><strong>Status</strong>: ❌ To be implemented (similar to current FSDP)</p>
+<p><strong>Description</strong>: DeepSpeed ZeRO Stage 3 - full sharding of parameters, gradients, and optimizer states.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Parameters: Sharded across ranks, AllGather on-demand</li>
+<li>Gradients: Sharded across ranks</li>
+<li>Optimizer states: Sharded across ranks</li>
+<li>Maximum memory efficiency (up to 64x reduction)</li>
+<li>Higher communication overhead</li>
+</ul>
+<p><strong>Use Case</strong>: Extremely large models (10B-175B+ parameters) that require multi-GPU/multi-node training</p>
+<hr>
+<h3 id="5-ddpmodelt-tinput-toutput---distributed-data-parallel">5. <strong>DDPModel&lt;T, TInput, TOutput&gt;</strong> - Distributed Data Parallel</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Traditional DDP like PyTorch DDP - parameters replicated, gradients synchronized.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Parameters: Fully replicated on each rank</li>
+<li>Gradients: Synchronized via AllReduce after backward pass</li>
+<li>Optimizer states: Fully replicated on each rank</li>
+<li>Lowest communication overhead</li>
+<li>Simple and robust</li>
+<li>Best for models that fit comfortably on a single GPU</li>
+</ul>
+<p><strong>Use Case</strong>: Training medium-sized models (&lt; 1B parameters) across multiple GPUs for faster training</p>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class DDPModel&lt;T, TInput, TOutput&gt; : ShardedModelBase&lt;T, TInput, TOutput&gt;
+{
+    protected override void InitializeSharding()
+    {
+        // No sharding - each rank has full parameters
+        var fullParams = WrappedModel.GetParameters();
+        LocalShard = fullParams;
+        CachedFullParameters = fullParams;
+    }
+
+    public override Vector&lt;T&gt; GatherFullParameters()
+    {
+        // Already have full parameters, no gather needed
+        return LocalShard;
+    }
+
+    public override void SynchronizeGradients()
+    {
+        // AllReduce gradients to average across all ranks
+        var gradients = GetGradients();
+        Config.CommunicationBackend.AllReduce(gradients, ReductionOperation.Average);
+        SetGradients(gradients);
+    }
+}
+</code></pre>
+<hr>
+<h3 id="6-pipelineparallelmodelt-tinput-toutput---pipeline-parallelism">6. <strong>PipelineParallelModel&lt;T, TInput, TOutput&gt;</strong> - Pipeline Parallelism</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: GPipe-style pipeline parallelism - splits model into stages across ranks.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Model layers divided into pipeline stages</li>
+<li>Each rank owns different layers</li>
+<li>Forward pass flows through pipeline</li>
+<li>Backward pass flows in reverse</li>
+<li>Micro-batching to keep all ranks busy</li>
+<li>Reduces memory per GPU by splitting model vertically</li>
+</ul>
+<p><strong>Use Case</strong>: Very deep models (transformers with 100+ layers) or when model architecture is easily divisible</p>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class PipelineParallelModel&lt;T, TInput, TOutput&gt; : ShardedModelBase&lt;T, TInput, TOutput&gt;
+{
+    private int _pipelineStage;
+    private IFullModel&lt;T, TInput, TOutput&gt;[] _stageModels;
+
+    public override void Train(TInput input, TOutput expectedOutput)
+    {
+        // Forward pass: send activations to next stage
+        // Backward pass: send gradients to previous stage
+        // Use micro-batching to overlap computation
+    }
+}
+</code></pre>
+<hr>
+<h3 id="7-tensorparallelmodelt-tinput-toutput---tensor-parallelism">7. <strong>TensorParallelModel&lt;T, TInput, TOutput&gt;</strong> - Tensor Parallelism</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Megatron-LM style tensor parallelism - splits individual layers across ranks.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Each layer's tensors split across ranks</li>
+<li>Column-wise or row-wise partitioning</li>
+<li>AllReduce within each layer</li>
+<li>Reduces memory per GPU by splitting model horizontally</li>
+<li>High communication overhead</li>
+</ul>
+<p><strong>Use Case</strong>: Very wide models (large transformers with huge hidden dimensions) or when activation memory is the bottleneck</p>
+<hr>
+<h3 id="8-hybridshardedmodelt-tinput-toutput---3d-parallelism">8. <strong>HybridShardedModel&lt;T, TInput, TOutput&gt;</strong> - 3D Parallelism</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Combines data parallelism, tensor parallelism, and pipeline parallelism.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Data parallelism across data parallel ranks</li>
+<li>Tensor parallelism within each data parallel group</li>
+<li>Pipeline parallelism for model depth</li>
+<li>Maximum scalability for trillion-parameter models</li>
+<li>Complex but most memory efficient for extreme scale</li>
+</ul>
+<p><strong>Use Case</strong>: Training models with 100B-1T+ parameters across hundreds/thousands of GPUs</p>
+<hr>
+<h2 id="optimizer-implementations">Optimizer Implementations</h2>
+<h3 id="1-zero1optimizert-tinput-toutput---optimizer-state-sharding">1. <strong>ZeRO1Optimizer&lt;T, TInput, TOutput&gt;</strong> - Optimizer State Sharding</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Shards optimizer states (momentum, variance buffers) across ranks.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Each rank stores 1/N of optimizer states</li>
+<li>AllGather optimizer states when needed for updates</li>
+<li>4-8x memory reduction for optimizer (especially Adam)</li>
+<li>Works with DDPModel or ZeRO1Model</li>
+</ul>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class ZeRO1Optimizer&lt;T, TInput, TOutput&gt; : ShardedOptimizerBase&lt;T, TInput, TOutput&gt;
+{
+    private Dictionary&lt;string, Vector&lt;T&gt;&gt; _shardedOptimizerStates;
+
+    protected override void UpdateOptimizerState(Vector&lt;T&gt; gradients)
+    {
+        // Only update my shard of optimizer state
+        // AllGather when needed for full parameter update
+    }
+}
+</code></pre>
+<hr>
+<h3 id="2-zero2optimizert-tinput-toutput---gradient--state-sharding">2. <strong>ZeRO2Optimizer&lt;T, TInput, TOutput&gt;</strong> - Gradient + State Sharding</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Shards both gradients and optimizer states.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>ReduceScatter gradients to shard them</li>
+<li>Each rank computes optimizer update for its shard</li>
+<li>AllGather updated parameters</li>
+<li>Works with ZeRO2Model</li>
+</ul>
+<hr>
+<h3 id="3-zero3optimizert-tinput-toutput---full-sharding">3. <strong>ZeRO3Optimizer&lt;T, TInput, TOutput&gt;</strong> - Full Sharding</h3>
+<p><strong>Status</strong>: ✅ Currently implemented as <code>ShardedOptimizer</code></p>
+<p><strong>Description</strong>: Full parameter, gradient, and optimizer state sharding.</p>
+<hr>
+<h3 id="4-ddpoptimizert-tinput-toutput---standard-data-parallel">4. <strong>DDPOptimizer&lt;T, TInput, TOutput&gt;</strong> - Standard Data Parallel</h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Standard AllReduce-based gradient synchronization.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>AllReduce gradients after backward pass</li>
+<li>Each rank does identical optimizer update</li>
+<li>Simple and robust</li>
+<li>Works with DDPModel</li>
+</ul>
+<hr>
+<h3 id="5-gradientcompressionoptimizert-tinput-toutput">5. <strong>GradientCompressionOptimizer&lt;T, TInput, TOutput&gt;</strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Compresses gradients before communication.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Gradient compression (quantization, sparsification, low-rank)</li>
+<li>Reduced communication bandwidth</li>
+<li>Trade-off between accuracy and speed</li>
+<li>Works with any distributed model</li>
+</ul>
+<p><strong>Implementation Notes</strong>:</p>
+<pre><code class="lang-csharp">public class GradientCompressionOptimizer&lt;T, TInput, TOutput&gt; : ShardedOptimizerBase&lt;T, TInput, TOutput&gt;
+{
+    private IGradientCompressor&lt;T&gt; _compressor;
+
+    protected override void SynchronizeParameters(IFullModel&lt;T, TInput, TOutput&gt; model)
+    {
+        var gradients = model.GetGradients();
+        var compressed = _compressor.Compress(gradients);
+        Config.CommunicationBackend.AllReduce(compressed, ReductionOperation.Sum);
+        var decompressed = _compressor.Decompress(compressed);
+        model.SetGradients(decompressed);
+    }
+}
+</code></pre>
+<hr>
+<h3 id="6-asyncsgdoptimizert-tinput-toutput">6. <strong>AsyncSGDOptimizer&lt;T, TInput, TOutput&gt;</strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Asynchronous parameter updates without strict synchronization.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>No barriers - ranks update asynchronously</li>
+<li>Parameter server or peer-to-peer architecture</li>
+<li>Faster iteration time, but may affect convergence</li>
+<li>Works for large-scale training with many workers</li>
+</ul>
+<hr>
+<h3 id="7-elasticoptimizert-tinput-toutput">7. <strong>ElasticOptimizer&lt;T, TInput, TOutput&gt;</strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Supports dynamic addition/removal of workers during training.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Handles rank changes gracefully</li>
+<li>Re-shards parameters when workers join/leave</li>
+<li>Fault tolerance for long-running jobs</li>
+<li>Works with elastic training frameworks</li>
+</ul>
+<hr>
+<h2 id="communication-backend-implementations">Communication Backend Implementations</h2>
+<h3 id="1-inmemorycommunicationbackend">1. <strong>InMemoryCommunicationBackend<t></t></strong></h3>
+<p><strong>Status</strong>: ✅ Implemented</p>
+<p><strong>Use Case</strong>: Testing and development without MPI</p>
+<hr>
+<h3 id="2-mpicommunicationbackend">2. <strong>MPICommunicationBackend<t></t></strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Production MPI.NET backend for CPU/GPU clusters.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>MPI_AllReduce, MPI_AllGather, etc.</li>
+<li>Works across machines (multi-node)</li>
+<li>Supports InfiniBand, RoCE networks</li>
+<li>Industry standard for HPC</li>
+</ul>
+<hr>
+<h3 id="3-ncclcommunicationbackend">3. <strong>NCCLCommunicationBackend<t></t></strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: NVIDIA NCCL backend for GPU-to-GPU communication.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>Optimized for NVIDIA GPUs</li>
+<li>NVLink support for intra-node</li>
+<li>InfiniBand/RoCE for inter-node</li>
+<li>Fastest for NVIDIA hardware</li>
+</ul>
+<hr>
+<h3 id="4-gloocommunicationbackend">4. <strong>GlooCommunicationBackend<t></t></strong></h3>
+<p><strong>Status</strong>: ❌ To be implemented</p>
+<p><strong>Description</strong>: Facebook Gloo backend for CPU clusters.</p>
+<p><strong>Key Features</strong>:</p>
+<ul>
+<li>CPU-based collective operations</li>
+<li>TCP/IP networking</li>
+<li>Good for heterogeneous environments</li>
+<li>No MPI dependency</li>
+</ul>
+<hr>
+<h2 id="priority-implementation-order">Priority Implementation Order</h2>
+<h3 id="phase-1-core-ddp-most-common-use-case">Phase 1: Core DDP (Most Common Use Case)</h3>
+<ol>
+<li>✅ InMemoryCommunicationBackend (done)</li>
+<li>❌ DDPModel - Standard data parallel</li>
+<li>❌ DDPOptimizer - AllReduce gradients</li>
+<li>❌ MPICommunicationBackend - Production backend</li>
+</ol>
+<h3 id="phase-2-memory-efficient-zero">Phase 2: Memory-Efficient ZeRO</h3>
+<ol start="5">
+<li>❌ ZeRO1Model + ZeRO1Optimizer - Optimizer state sharding</li>
+<li>❌ ZeRO2Model + ZeRO2Optimizer - Gradient + state sharding</li>
+<li>✅ ZeRO3 (rename current ShardedModel/Optimizer to FSDPModel/FSDPOptimizer)</li>
+</ol>
+<h3 id="phase-3-advanced-parallelism">Phase 3: Advanced Parallelism</h3>
+<ol start="8">
+<li>❌ PipelineParallelModel - Layer-wise parallelism</li>
+<li>❌ TensorParallelModel - Tensor-wise parallelism</li>
+<li>❌ HybridShardedModel - 3D parallelism</li>
+</ol>
+<h3 id="phase-4-optimizations">Phase 4: Optimizations</h3>
+<ol start="11">
+<li>❌ GradientCompressionOptimizer - Reduce communication</li>
+<li>❌ NCCLCommunicationBackend - GPU optimization</li>
+<li>❌ AsyncSGDOptimizer - Async updates</li>
+<li>❌ ElasticOptimizer - Dynamic scaling</li>
+</ol>
+<hr>
+<h2 id="implementation-guidelines">Implementation Guidelines</h2>
+<h3 id="for-each-model-implementation">For Each Model Implementation</h3>
+<ol>
+<li><p><strong>Inherit from ShardedModelBase&lt;T, TInput, TOutput&gt;</strong></p>
+</li>
+<li><p><strong>Override required methods</strong>:</p>
+<ul>
+<li><code>InitializeSharding()</code> - How to shard/replicate parameters</li>
+<li><code>Train()</code> - Forward/backward with appropriate sync</li>
+<li><code>GatherFullParameters()</code> - How to reconstruct full parameters</li>
+<li><code>SynchronizeGradients()</code> - Gradient communication pattern</li>
+<li><code>Serialize()</code>/<code>Deserialize()</code> - Save/load with strategy metadata</li>
+</ul>
+</li>
+<li><p><strong>Follow naming convention</strong>: <code>[Strategy]Model&lt;T, TInput, TOutput&gt;</code></p>
+</li>
+<li><p><strong>Add comprehensive documentation</strong> with use cases and memory/communication trade-offs</p>
+</li>
+<li><p><strong>Include example usage</strong> in XML docs</p>
+</li>
+</ol>
+<h3 id="for-each-optimizer-implementation">For Each Optimizer Implementation</h3>
+<ol>
+<li><p><strong>Inherit from ShardedOptimizerBase&lt;T, TInput, TOutput&gt;</strong></p>
+</li>
+<li><p><strong>Override required methods</strong>:</p>
+<ul>
+<li><code>Optimize()</code> - Coordinate distributed optimization</li>
+<li><code>SynchronizeOptimizerState()</code> - Sync momentum/variance buffers</li>
+<li><code>SynchronizeParameters()</code> - Gradient/parameter communication</li>
+<li><code>ShouldEarlyStop()</code> - Consensus across ranks</li>
+</ul>
+</li>
+<li><p><strong>Follow naming convention</strong>: <code>[Strategy]Optimizer&lt;T, TInput, TOutput&gt;</code></p>
+</li>
+<li><p><strong>Match with corresponding model</strong> (e.g., DDPOptimizer works with DDPModel)</p>
+</li>
+</ol>
+<hr>
+<h2 id="testing-strategy">Testing Strategy</h2>
+<p>For each implementation:</p>
+<ol>
+<li>Unit tests with InMemoryCommunicationBackend (2-4 ranks)</li>
+<li>Integration tests with small models</li>
+<li>Performance benchmarks comparing strategies</li>
+<li>Memory usage profiling</li>
+<li>Communication overhead measurements</li>
+</ol>
+<hr>
+<h2 id="documentation-deliverables">Documentation Deliverables</h2>
+<p>For each implementation:</p>
+<ol>
+<li><strong>Class documentation</strong> following project standards</li>
+<li><strong>Usage examples</strong> in code examples</li>
+<li><strong>Performance characteristics</strong> (memory, communication, computation)</li>
+<li><strong>When to use</strong> decision guide</li>
+<li><strong>Limitations and caveats</strong></li>
+</ol>
+<hr>
+<h2 id="references">References</h2>
+<ul>
+<li><strong>PyTorch FSDP</strong>: <a href="https://pytorch.org/docs/stable/fsdp.html">https://pytorch.org/docs/stable/fsdp.html</a></li>
+<li><strong>DeepSpeed ZeRO</strong>: <a href="https://www.deepspeed.ai/tutorials/zero/">https://www.deepspeed.ai/tutorials/zero/</a></li>
+<li><strong>PyTorch DDP</strong>: <a href="https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html">https://pytorch.org/docs/stable/generated/torch.nn.parallel.DistributedDataParallel.html</a></li>
+<li><strong>GPipe</strong>: <a href="https://arxiv.org/abs/1811.06965">https://arxiv.org/abs/1811.06965</a></li>
+<li><strong>Megatron-LM</strong>: <a href="https://github.com/NVIDIA/Megatron-LM">https://github.com/NVIDIA/Megatron-LM</a></li>
+<li><strong>3D Parallelism</strong>: <a href="https://arxiv.org/abs/2104.04473">https://arxiv.org/abs/2104.04473</a></li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/DistributedTrainingImplementations.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

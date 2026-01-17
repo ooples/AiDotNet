@@ -1,0 +1,3818 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FloatOperations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FloatOperations | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides operations for floating-point numbers in neural network computations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_NumericOperations_FloatOperations.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.NumericOperations.FloatOperations%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations">
+
+
+
+  <h1 id="AiDotNet_Tensors_NumericOperations_FloatOperations" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations" class="text-break">
+Class FloatOperations  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.NumericOperations.html">NumericOperations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides operations for floating-point numbers in neural network computations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FloatOperations : INumericOperations&lt;float&gt;, IVectorizedOperations&lt;float&gt;</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FloatOperations</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</div>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_NumericOperations_FloatOperations_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The FloatOperations class implements the INumericOperations interface for the float data type.
+It provides essential mathematical operations needed for neural network computations, including
+basic arithmetic, comparison, and mathematical functions like square roots and exponentials.
+</p>
+<p><b>For Beginners:</b> This class handles math operations for decimal numbers (like 3.14).
+<p>Think of it as a calculator specifically designed for neural networks that:</p>
+<ul>
+<li>Performs basic operations like addition and multiplication</li>
+<li>Handles special math functions like square roots and exponents</li>
+<li>Manages number conversions and comparisons</li>
+</ul>
+<p>For example, when a neural network needs to multiply two numbers or calculate the square root
+of a value, it uses the methods in this class. This approach allows the neural network to work
+with different number types (like float or double) without changing its core logic.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_MaxValue_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_MaxValue" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L652"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum possible value for a float.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The maximum value of float, approximately 3.4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10^38.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the largest possible value for a single-precision floating-point number.
+This value represents the upper bound of the range of representable values for the float type.
+</p>
+<p><b>For Beginners:</b> This property gives you the largest possible value that a float can store.
+<p>The maximum value for a float is approximately 3.4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10^38, which is an extremely large positive number
+(about 340,000,000,000,000,000,000,000,000,000,000,000,000).</p>
+<p>In neural networks, knowing the maximum value can be important for:</p>
+<ul>
+<li>Preventing overflow (when values become too large for the computer to represent)</li>
+<li>Setting bounds for certain algorithms</li>
+<li>Implementing special case handling for extreme values</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_MinValue_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_MinValue" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L630"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum possible value for a float.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The minimum value of float, approximately -3.4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10^38.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the smallest possible value for a single-precision floating-point number.
+This value represents the lower bound of the range of representable values for the float type.
+</p>
+<p><b>For Beginners:</b> This property gives you the smallest possible value that a float can store.
+<p>The minimum value for a float is approximately -3.4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 10^38, which is an extremely large negative number
+(about -340,000,000,000,000,000,000,000,000,000,000,000,000).</p>
+<p>In neural networks, knowing the minimum value can be important for:</p>
+<ul>
+<li>Preventing underflow (when values become too small for the computer to represent)</li>
+<li>Setting bounds for certain algorithms</li>
+<li>Implementing special case handling for extreme values</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_One_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_One" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the one value for the float type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value 1.0f.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the one value for the float type, which is 1.0f.
+One is used in neural networks for initialization, identity operations, and normalization.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number one (1.0) as a float.
+<p>In neural networks, one is commonly used for:</p>
+<ul>
+<li>Identity operations (multiplying by 1 leaves a value unchanged)</li>
+<li>Initializing certain weights or biases</li>
+<li>Creating certain probability distributions</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_PrecisionBits_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_PrecisionBits" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L780"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in float (32 bits).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L861"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates that float supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L866"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates that float supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Zero_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Zero" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the zero value for the float type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value 0.0f.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the zero value for the float type, which is 0.0f.
+Zero is an important value in neural networks for initialization, comparison, and accumulation.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number zero (0.0) as a float.
+<p>In neural networks, zero is commonly used for:</p>
+<ul>
+<li>Initializing accumulators before adding values to them</li>
+<li>Checking if a value is exactly zero (although this is rare with floating-point due to precision issues)</li>
+<li>As a default or baseline value in many calculations</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Abs_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Abs(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Abs(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes absolute value using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Abs(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Abs_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Abs(System.Single)">
+  Abs(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the absolute value of a floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Abs(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to find the absolute value of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The absolute value of the input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Abs_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the absolute value of the input, which is its distance from zero
+regardless of sign. For positive numbers, the absolute value is the number itself;
+for negative numbers, it is the negation of the number.
+</p>
+<p><b>For Beginners:</b> This method gives you the positive version of any number.
+<p>The absolute value is the distance from zero, ignoring the direction (sign):</p>
+<ul>
+<li>Abs(5.0) returns 5.0 (already positive)</li>
+<li>Abs(-3.2) returns 3.2 (converts negative to positive)</li>
+<li>Abs(0.0) returns 0.0</li>
+</ul>
+<p>In neural networks, absolute values are used for:</p>
+<ul>
+<li>Measuring error magnitudes (how far predictions are from actual values)</li>
+<li>Implementing certain activation functions</li>
+<li>Checking if values are within certain tolerances, regardless of sign</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Add_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Add(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Add(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L875"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise addition using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Add_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Add(System.Single,System.Single)">
+  Add(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two floating-point numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Add(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The sum of the two numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Add_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs simple addition of two floating-point values and returns their sum.
+It is a fundamental operation used throughout neural network computations.
+</p>
+<p><b>For Beginners:</b> This method adds two numbers together, like 2.5 + 3.7 = 6.2.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_AddScalar_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_AddScalar_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.AddScalar(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  AddScalar(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1087"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar to each element using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(ReadOnlySpan&lt;float&gt; x, float scalar, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Ceiling_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Ceiling(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Ceiling(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ceiling of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Ceiling(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Ceiling_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Ceiling(System.Single)">
+  Ceiling(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L581"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integer greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Ceiling(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The smallest integer greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Ceiling_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) returns 4.0, Ceiling(-2.7) returns -2.0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Clip_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Clip*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Clip_System_ReadOnlySpan_System_Single__System_Single_System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Clip(System.ReadOnlySpan{System.Single},System.Single,System.Single,System.Span{System.Single})">
+  Clip(ReadOnlySpan&lt;float&gt;, float, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips each element to a range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clip(ReadOnlySpan&lt;float&gt; x, float min, float max, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Compare_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Compare_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Compare(System.Single,System.Single)">
+  Compare(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L394"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Compare(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Compare_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comparing two numbers to determine their ordering:</p>
+<ul>
+<li>If a is less than b, returns a negative number (-1)</li>
+<li>If a equals b, returns zero (0)</li>
+<li>If a is greater than b, returns a positive number (1)</li>
+</ul>
+<p>This is commonly used for sorting or determining relative positions of values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Copy_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Copy*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Copy_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Copy(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Copy(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies elements from source to destination.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Copy(ReadOnlySpan&lt;float&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Cos_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Cos(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Cos(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Cos(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Cos_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Cos(System.Single)">
+  Cos(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L608"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cosine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Cos(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The cosine of value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_CosineSimilarity_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_CosineSimilarity_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.CosineSimilarity(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single})">
+  CosineSimilarity(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1043"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine similarity using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float CosineSimilarity(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Divide_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Divide(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Divide(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L911"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Divide(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Divide_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Divide(System.Single,System.Single)">
+  Divide(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides one floating-point number by another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Divide(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The dividend (number being divided).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The divisor (number to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The quotient of the division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Divide_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs division of two floating-point values, computing a / b.
+Care should be taken to ensure the divisor is not zero to avoid runtime exceptions.
+</p>
+<p><b>For Beginners:</b> This method divides the first number by the second, like 10.0 / 2.0 = 5.0.
+<p>In neural networks, division is commonly used for:</p>
+<ul>
+<li>Normalizing values (making numbers fall within a certain range)</li>
+<li>Computing averages</li>
+<li>Applying certain learning rate adjustments</li>
+</ul>
+<p>Note: This method doesn't check if the second number is zero, which would cause an error
+(you can't divide by zero). Make sure the second number is not zero before using this method.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_DivideScalar_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.DivideScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_DivideScalar_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.DivideScalar(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  DivideScalar(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1075"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element by a scalar using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideScalar(ReadOnlySpan&lt;float&gt; x, float scalar, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Dot_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Dot_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Dot(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single})">
+  Dot(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L923"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes dot product using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Dot(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ELU_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ELU_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ELU(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  ELU(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise using SIMD-optimized SimdKernels.
+x if x &gt; 0, alpha * (exp(x) - 1) otherwise</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ELU(ReadOnlySpan&lt;float&gt; x, float alpha, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Equals_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Equals_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Equals(System.Single,System.Single)">
+  Equals(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if two floating-point numbers are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the numbers are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Equals_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two floating-point values for equality. Due to the nature of floating-point
+representation, exact equality comparisons should be used with caution. For approximate equality,
+consider using a small epsilon value.
+</p>
+<p><b>For Beginners:</b> This method checks if two numbers are exactly the same.
+<p>For example:</p>
+<ul>
+<li>Equals(5.0, 5.0) returns true</li>
+<li>Equals(3.1, 3.2) returns false</li>
+</ul>
+<p>Important note about floating-point numbers: Because of how computers store decimal numbers,
+sometimes numbers that should be equal might not be exactly equal. For example:</p>
+<ul>
+<li>0.1 + 0.2 might not be exactly equal to 0.3 in a computer</li>
+</ul>
+<p>For this reason, when working with float values in neural networks,
+it's often better to check if two numbers are &quot;close enough&quot; rather than exactly equal.
+This method checks for exact equality, which may not always be what you want.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Exp_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Exp(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Exp(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L971"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes exponential using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Exp(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Exp_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Exp(System.Single)">
+  Exp(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the exponential function (e raised to the power of the specified value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Exp(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value of e raised to the specified power.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Exp_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates e (approximately 2.71828) raised to the power of the input value
+using the Math.Exp function and converts the result to a float. The exponential function
+is widely used in neural networks, particularly in activation functions like softmax.
+</p>
+<p><b>For Beginners:</b> This method calculates "e" raised to a power.
+<p>In mathematics, &quot;e&quot; is a special number (approximately 2.71828) that appears naturally in many calculations.
+This method computes e^value:</p>
+<ul>
+<li>Exp(1.0) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2.71828 (e^1)</li>
+<li>Exp(2.0) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  7.38906 (e^2)</li>
+<li>Exp(0.0) = 1.0 (e^0)</li>
+<li>Exp(-1.0) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  0.36788 (e^-1)</li>
+</ul>
+<p>The exponential function is fundamental in neural networks for:</p>
+<ul>
+<li>Activation functions like sigmoid and softmax</li>
+<li>Calculating probabilities in certain models</li>
+<li>Transforming values in a way that emphasizes differences</li>
+</ul>
+<p>It's especially useful because its derivative has a simple form, which makes
+training neural networks more efficient.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Fill_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Fill_System_Span_System_Single__System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Fill(System.Span{System.Single},System.Single)">
+  Fill(Span&lt;float&gt;, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1055"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the destination span with a constant value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(Span&lt;float&gt; destination, float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Floor_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Floor(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Floor(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes floor of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Floor(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Floor_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Floor(System.Single)">
+  Floor(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L569"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integer less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Floor(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The largest integer less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Floor_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) returns 3.0, Floor(-2.3) returns -3.0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Frac_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Frac(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Frac(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fractional part of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Frac(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Frac_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Frac(System.Single)">
+  Frac(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L594"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Frac(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The fractional part (value - floor(value)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Frac_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Frac returns the portion after the decimal point.
+For example, Frac(3.7) returns 0.7. Note that Frac(-2.3) returns 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromDouble_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double-precision floating-point number to a single-precision floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double-precision value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The equivalent single-precision value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a double-precision floating-point value (double) to a single-precision
+floating-point value (float). This conversion may result in a loss of precision.
+</p>
+<p><b>For Beginners:</b> This method converts a more precise decimal number (double) to a less precise decimal number (float).
+<p>In programming:</p>
+<ul>
+<li>A &quot;double&quot; can store more decimal places than a &quot;float&quot;</li>
+<li>When you convert from double to float, you might lose some precision</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>The double 3.141592653589793 might become the float 3.1415927</li>
+</ul>
+<p>This conversion is used when:</p>
+<ul>
+<li>You need to save memory (floats use less memory than doubles)</li>
+<li>You're working with functions that use doubles but your neural network uses floats</li>
+<li>Precision beyond 6-7 decimal places isn't needed for your calculations</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromFloat_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L804"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float value to float (identity operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The same float value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromFloat_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method returns the same value since it's already a float.
+It's here for consistency with the interface, allowing generic code to work with multiple numeric types.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromFloatSpan(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts float span to float span (identity operation - just copy).
+Uses SIMD-optimized copy for maximum performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromHalf_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L839"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half (FP16) value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The Half value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value converted to float precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromHalf_System_Half__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a 16-bit half-precision float to a standard 32-bit float.
+<p>This conversion:</p>
+<ul>
+<li>Is lossless (no precision is lost)</li>
+<li>Allows using the wider range of float</li>
+<li>Used when accumulating gradients in mixed-precision training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.FromHalfSpan(System.ReadOnlySpan{System.Half},System.Span{System.Single})">
+  FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts Half (FP16) span to float span.
+SIMD-optimized on .NET 8+ using TensorPrimitives.ConvertToSingle.
+Used when retrieving results from GPU operations using half precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromHalfSpan(ReadOnlySpan&lt;Half&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_GELU_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_GELU_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GELU(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  GELU(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise using SIMD-optimized SimdKernels.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void GELU(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThan_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GreaterThan(System.Single,System.Single)">
+  GreaterThan(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one floating-point number is greater than another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThan(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is greater than the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThan_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two floating-point values and returns true if the first value is greater than the second.
+Comparison operations are commonly used in neural networks for conditional logic and optimizations.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThan(5.0, 3.0) returns true because 5.0 is greater than 3.0</li>
+<li>GreaterThan(2.0, 7.0) returns false because 2.0 is not greater than 7.0</li>
+<li>GreaterThan(4.0, 4.0) returns false because the numbers are equal</li>
+</ul>
+<p>In neural networks, comparisons like this are used for:</p>
+<ul>
+<li>Finding maximum values (for example, in certain activation functions)</li>
+<li>Implementing decision logic in algorithms</li>
+<li>Detecting specific conditions during training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThanOrEquals_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.GreaterThanOrEquals(System.Single,System.Single)">
+  GreaterThanOrEquals(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L477"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one floating-point number is greater than or equal to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThanOrEquals(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is greater than or equal to the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_GreaterThanOrEquals_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two floating-point values and returns true if the first value is greater than or equal to the second.
+This comparison combines the functionality of GreaterThan and Equals methods.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThanOrEquals(5.0, 3.0) returns true because 5.0 is greater than 3.0</li>
+<li>GreaterThanOrEquals(4.0, 4.0) returns true because the numbers are equal</li>
+<li>GreaterThanOrEquals(2.0, 7.0) returns false because 2.0 is less than 7.0</li>
+</ul>
+<p>In neural networks, this type of comparison is used for:</p>
+<ul>
+<li>Implementing thresholds with inclusive boundaries</li>
+<li>Checking if values have reached or exceeded certain levels</li>
+<li>Decision logic in various algorithms</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsInfinity_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsInfinity_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.IsInfinity(System.Single)">
+  IsInfinity(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L735"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified floating-point number is positive or negative infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsInfinity(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The floating-point number to test.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is positive or negative infinity; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsInfinity_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks if the input value is positive infinity or negative infinity, which are special
+floating-point values that represent values too large (in magnitude) to be represented by the float type.
+Infinity can result from operations such as dividing a non-zero number by zero.
+</p>
+<p><b>For Beginners:</b> This method checks if a number is infinity (either positive or negative).
+<p>Infinity represents a value that's too large to be stored as a normal float:</p>
+<ul>
+<li>IsInfinity(1.0 / 0.0) returns true (dividing by zero gives positive infinity)</li>
+<li>IsInfinity(-1.0 / 0.0) returns true (dividing a negative number by zero gives negative infinity)</li>
+<li>IsInfinity(1000000.0) returns false (even large normal numbers are not infinity)</li>
+</ul>
+<p>In neural networks, checking for infinity is important for:</p>
+<ul>
+<li>Detecting overflow errors (when calculations produce values too large to represent)</li>
+<li>Preventing further calculations with infinite values, which could lead to more errors</li>
+<li>Debugging numerical stability issues during training</li>
+</ul>
+<p>Like NaN, if your neural network produces infinity values, it typically indicates a problem that needs to be addressed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsNaN_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsNaN_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.IsNaN(System.Single)">
+  IsNaN(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L707"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified floating-point number is not a number (NaN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsNaN(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The floating-point number to test.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is NaN; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_IsNaN_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks if the input value is NaN (Not a Number), which is a special floating-point value
+that represents an undefined or unrepresentable value. NaN can result from operations such as dividing
+zero by zero or taking the square root of a negative number.
+</p>
+<p><b>For Beginners:</b> This method checks if a number is "Not a Number" (NaN).
+<p>NaN is a special value that represents an undefined or impossible result:</p>
+<ul>
+<li>IsNaN(0.0 / 0.0) returns true (dividing zero by zero is undefined)</li>
+<li>IsNaN(Math.Sqrt(-1.0)) returns true (square root of a negative number is not a real number)</li>
+<li>IsNaN(3.14) returns false (normal numbers are not NaN)</li>
+</ul>
+<p>In neural networks, checking for NaN is important for:</p>
+<ul>
+<li>Detecting calculation errors or numerical instability</li>
+<li>Implementing &quot;guard rails&quot; to prevent propagating invalid values</li>
+<li>Debugging training problems like exploding gradients</li>
+</ul>
+<p>If your neural network produces NaN values, it typically indicates a problem that needs to be fixed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_LeakyReLU_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_LeakyReLU_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LeakyReLU(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  LeakyReLU(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LeakyReLU(ReadOnlySpan&lt;float&gt; x, float alpha, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThan_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LessThan(System.Single,System.Single)">
+  LessThan(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one floating-point number is less than another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThan(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is less than the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThan_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two floating-point values and returns true if the first value is less than the second.
+Like the GreaterThan method, this comparison is used in various conditional operations in neural networks.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than the second.
+<p>For example:</p>
+<ul>
+<li>LessThan(3.0, 5.0) returns true because 3.0 is less than 5.0</li>
+<li>LessThan(7.0, 2.0) returns false because 7.0 is not less than 2.0</li>
+<li>LessThan(4.0, 4.0) returns false because the numbers are equal</li>
+</ul>
+<p>In neural networks, this comparison is commonly used for:</p>
+<ul>
+<li>Finding minimum values</li>
+<li>Implementing thresholds in algorithms</li>
+<li>Checking if values have fallen below certain limits during training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThanOrEquals_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.LessThanOrEquals(System.Single,System.Single)">
+  LessThanOrEquals(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L503"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one floating-point number is less than or equal to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThanOrEquals(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is less than or equal to the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_LessThanOrEquals_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two floating-point values and returns true if the first value is less than or equal to the second.
+This comparison combines the functionality of LessThan and Equals methods.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>LessThanOrEquals(3.0, 5.0) returns true because 3.0 is less than 5.0</li>
+<li>LessThanOrEquals(4.0, 4.0) returns true because the numbers are equal</li>
+<li>LessThanOrEquals(7.0, 2.0) returns false because 7.0 is greater than 2.0</li>
+</ul>
+<p>In neural networks, this type of comparison is used for:</p>
+<ul>
+<li>Implementing thresholds with inclusive lower boundaries</li>
+<li>Checking if values have reached or fallen below certain levels</li>
+<li>Decision logic in various algorithms</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Log(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L983"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes natural logarithm using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log(System.Single)">
+  Log(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L451"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm (base e) of a floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Log(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to calculate the logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The natural logarithm of the input value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the natural logarithm (base e) of the input value using the Math.Log function
+and converts the result to a float. The input should be positive; otherwise, the result will be NaN.
+Logarithms are used in various loss functions and information-theoretic calculations.
+</p>
+<p><b>For Beginners:</b> This method calculates the natural logarithm of a number.
+<p>The natural logarithm (log base e) is the inverse of the exponential function:</p>
+<ul>
+<li>Log(2.71828) returns about 1.0 (because e^ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2.71828)</li>
+<li>Log(7.38906) returns about 2.0 (because e^ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  7.38906)</li>
+<li>Log(1.0) returns exactly 0.0 (because e^ = 1)</li>
+</ul>
+<p>In neural networks, logarithms are commonly used for:</p>
+<ul>
+<li>Cross-entropy loss functions (used in classification problems)</li>
+<li>Information theory calculations</li>
+<li>Converting multiplicative relationships to additive ones</li>
+</ul>
+<p>Note: You should only use this with positive numbers. If you try to calculate the logarithm
+of zero or a negative number, you'll get a special value (NaN or negative infinity).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log2_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Log2_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Log2(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Log2(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1019"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes base-2 logarithm using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log2(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Max_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Max_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Max(System.ReadOnlySpan{System.Single})">
+  Max(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L947"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds maximum using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Max(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Min_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Min_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Min(System.ReadOnlySpan{System.Single})">
+  Min(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L959"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds minimum using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Min(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Mish_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Mish_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Mish(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Mish(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1312"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise using SIMD-optimized SimdKernels.
+x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Mish(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Multiply_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Multiply(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Multiply(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L899"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Multiply(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Multiply_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Multiply(System.Single,System.Single)">
+  Multiply(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two floating-point numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Multiply(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The first number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The second number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The product of the two numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Multiply_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs multiplication of two floating-point values and returns their product.
+Multiplication is used extensively in neural networks, particularly for weight applications.
+</p>
+<p><b>For Beginners:</b> This method multiplies two numbers together, like 2.5 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 4.0 = 10.0.
+<p>In neural networks, multiplication is often used when:</p>
+<ul>
+<li>Applying weights to inputs</li>
+<li>Scaling values during training</li>
+<li>Computing gradients for learning</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_MultiplyAdd_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_MultiplyAdd_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MultiplyAdd(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  MultiplyAdd(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+Uses SIMD with FMA intrinsics when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyAdd(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, float scalar, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_MultiplyScalar_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MultiplyScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_MultiplyScalar_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.MultiplyScalar(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  MultiplyScalar(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1063"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element by a scalar using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyScalar(ReadOnlySpan&lt;float&gt; x, float scalar, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Negate_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Negate(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Negate(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates each element using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Negate(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Negate_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Negate(System.Single)">
+  Negate(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates a floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Negate(float a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The negated value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Negate_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the negative of the input value. If the input is positive, the output is negative,
+and vice versa. Zero remains unchanged in terms of its absolute value but may change sign.
+</p>
+<p><b>For Beginners:</b> This method flips the sign of a number.
+<p>Examples:</p>
+<ul>
+<li>Negate(5.0) returns -5.0</li>
+<li>Negate(-3.2) returns 3.2</li>
+<li>Negate(0.0) returns -0.0 (although this is functionally equivalent to 0.0)</li>
+</ul>
+<p>In neural networks, negation is often used when:</p>
+<ul>
+<li>Computing negative gradients for gradient descent</li>
+<li>Implementing certain activation functions</li>
+<li>Reversing values for specific calculations</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Pow_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Pow*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Pow_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Pow(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  Pow(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of each element.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Pow(ReadOnlySpan&lt;float&gt; x, float power, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>power</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Power_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Power_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Power(System.Single,System.Single)">
+  Power(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raises a floating-point number to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Power(float baseValue, float exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The base number.</p>
+</dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The base raised to the power of the exponent.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Power_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates baseValue raised to the power of exponent using the Math.Pow function
+and converts the result to a float. Power operations are useful for implementing various
+mathematical transformations in neural networks.
+</p>
+<p><b>For Beginners:</b> This method raises a number to a power.
+<p>For example:</p>
+<ul>
+<li>Power(2.0, 3.0) returns 8.0 (2ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â³ = 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2 = 8)</li>
+<li>Power(4.0, 0.5) returns 2.0 (4^(1/2) = v4 = 2)</li>
+<li>Power(5.0, 0.0) returns 1.0 (any number raised to the power of 0 is 1)</li>
+<li>Power(2.0, -1.0) returns 0.5 (2^-1 = 1/2 = 0.5)</li>
+</ul>
+<p>In neural networks, power functions are used for:</p>
+<ul>
+<li>Implementing certain activation functions</li>
+<li>Applying specific mathematical transformations</li>
+<li>Scaling values in a non-linear way</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ReLU_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ReLU_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ReLU(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  ReLU(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU (Rectified Linear Unit) element-wise using SIMD-optimized SimdKernels.
+max(0, x)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReLU(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Round_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Round_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Round(System.Single)">
+  Round(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L557"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rounds a floating-point number to the nearest integer value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Round(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to round.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The nearest integer value as a float.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Round_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method rounds the input value to the nearest integer using the Math.Round function,
+but returns the result as a float rather than an integer type. This preserves the data type
+while eliminating the fractional part.
+</p>
+<p><b>For Beginners:</b> This method rounds a decimal number to the nearest whole number, but keeps it as a float.
+<p>Unlike ToInt32 which changes the type to integer, this method keeps the result as a float:</p>
+<ul>
+<li>Round(3.2) returns 3.0 (not 3)</li>
+<li>Round(3.7) returns 4.0 (not 4)</li>
+<li>Round(3.5) returns 4.0 (rounds to the nearest even number when exactly halfway)</li>
+</ul>
+<p>In neural networks, rounding might be used for:</p>
+<ul>
+<li>Simplifying values while maintaining the float data type</li>
+<li>Preparing outputs for certain types of processing</li>
+<li>Creating &quot;stepped&quot; or discretized activation functions</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sigmoid_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sigmoid_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sigmoid(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Sigmoid(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1007"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sigmoid using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sigmoid(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_SignOrZero_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_SignOrZero_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SignOrZero(System.Single)">
+  SignOrZero(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L769"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of a floating-point number, or zero if the number is zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float SignOrZero(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The floating-point number to get the sign of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>1.0f if the number is positive, -1.0f if the number is negative, or 0.0f if the number is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_SignOrZero_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method determines the sign of the input value and returns 1.0f for positive numbers,
+-1.0f for negative numbers, and 0.0f for zero. This is similar to the Math.Sign function,
+but it returns a float value rather than an integer.
+</p>
+<p><b>For Beginners:</b> This method tells you if a number is positive, negative, or zero.
+<p>It returns:</p>
+<ul>
+<li>1.0 if the number is positive (greater than zero)</li>
+<li>-1.0 if the number is negative (less than zero)</li>
+<li>0.0 if the number is exactly zero</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>SignOrZero(42.5) returns 1.0</li>
+<li>SignOrZero(-3.7) returns -1.0</li>
+<li>SignOrZero(0.0) returns 0.0</li>
+</ul>
+<p>In neural networks, this function might be used for:</p>
+<ul>
+<li>Implementing custom activation functions (like the sign function)</li>
+<li>Thresholding operations that depend only on the sign of a value</li>
+<li>Converting continuous values to discrete categories (-1, 0, +1)</li>
+</ul>
+<p>Unlike some sign functions that return either -1 or 1, this method treats zero as its own category,
+which can be useful in certain neural network applications.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sin_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sin(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Sin(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sine of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sin(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sin_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sin(System.Single)">
+  Sin(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L601"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Sin(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The sine of value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_SoftMax_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SoftMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_SoftMax_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SoftMax(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  SoftMax(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1031"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes softmax using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SoftMax(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sqrt_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sqrt(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Sqrt(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes square root using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sqrt(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sqrt_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sqrt(System.Single)">
+  Sqrt(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Sqrt(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The square root of the input value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sqrt_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square root of the input value using the Math.Sqrt function
+and converts the result to a float. The input should be non-negative; otherwise, the result will be NaN.
+</p>
+<p><b>For Beginners:</b> This method calculates the square root of a number.
+<p>The square root of a number is a value that, when multiplied by itself, gives the original number.
+For example:</p>
+<ul>
+<li>The square root of 9 is 3 (because 3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 = 9)</li>
+<li>The square root of 2 is approximately 1.414</li>
+</ul>
+<p>Square roots are used in neural networks for:</p>
+<ul>
+<li>Normalizing vectors in certain algorithms</li>
+<li>Implementing certain optimization techniques</li>
+<li>Calculating distances or magnitudes</li>
+</ul>
+<p>Note: You should only use this with positive numbers. If you try to calculate the square root
+of a negative number, you'll get a special value called NaN (Not a Number).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Square_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Square_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Square(System.Single)">
+  Square(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Squares a floating-point number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Square(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The square of the input value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Square_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square of the input value by multiplying it by itself.
+Squaring is a common operation in neural networks, particularly in error calculations and regularization.
+</p>
+<p><b>For Beginners:</b> This method multiplies a number by itself.
+<p>For example:</p>
+<ul>
+<li>Square(4.0) returns 16.0 (4.0 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 4.0 = 16.0)</li>
+<li>Square(-3.0) returns 9.0 (-3.0 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â -3.0 = 9.0)</li>
+<li>Square(0.5) returns 0.25 (0.5 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 0.5 = 0.25)</li>
+</ul>
+<p>In neural networks, squaring is commonly used for:</p>
+<ul>
+<li>Calculating squared errors (a measure of how far predictions are from actual values)</li>
+<li>L2 regularization (a technique to prevent overfitting)</li>
+<li>Computing variances and standard deviations</li>
+</ul>
+<p>Note that squaring always produces a non-negative result, even when the input is negative.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Subtract_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Subtract(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Subtract(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L887"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Subtract(ReadOnlySpan&lt;float&gt; x, ReadOnlySpan&lt;float&gt; y, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Subtract_System_Single_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Subtract(System.Single,System.Single)">
+  Subtract(float, float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts one floating-point number from another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Subtract(float a, float b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The number to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The difference between the two numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_Subtract_System_Single_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs subtraction of two floating-point values, computing a - b.
+Subtraction is essential for calculating errors and gradients during neural network training.
+</p>
+<p><b>For Beginners:</b> This method subtracts the second number from the first, like 5.0 - 2.3 = 2.7.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_SubtractScalar_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SubtractScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_SubtractScalar_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.SubtractScalar(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  SubtractScalar(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1099"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar from each element using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractScalar(ReadOnlySpan&lt;float&gt; x, float scalar, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sum_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Sum_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Sum(System.ReadOnlySpan{System.Single})">
+  Sum(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L935"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sum using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float Sum(ReadOnlySpan&lt;float&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Swish_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Swish_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Swish(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Swish(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise using SIMD-optimized SimdKernels.
+x * sigmoid(x) = x / (1 + exp(-x))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Swish(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_Tanh_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_Tanh_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.Tanh(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Tanh(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L995"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes hyperbolic tangent using SIMD-optimized TensorPrimitives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Tanh(ReadOnlySpan&lt;float&gt; x, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToDouble_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToDouble_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToDouble(System.Single)">
+  ToDouble(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L856"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float (FP32) value to double (FP64) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ToDouble(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value converted to double precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToDouble_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a 32-bit float to a 64-bit double.
+<p>This conversion:</p>
+<ul>
+<li>Is lossless (no precision is lost)</li>
+<li>Provides more decimal digits of precision</li>
+<li>Uses twice as much memory</li>
+<li>Can represent much larger and smaller numbers</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToFloat_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToFloat(System.Single)">
+  ToFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L792"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float value to float (identity operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float ToFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The same float value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToFloat_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method returns the same value since it's already a float.
+It's here for consistency with the interface, allowing generic code to work with multiple numeric types.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToFloatSpan(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  ToFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts float span to float span (identity operation - just copy).
+Uses SIMD-optimized copy for maximum performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToHalf_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToHalf_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToHalf(System.Single)">
+  ToHalf(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L823"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float (FP32) value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Half ToHalf(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The value converted to Half precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToHalf_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a standard 32-bit float to a smaller 16-bit half-precision float.
+<p>This conversion:</p>
+<ul>
+<li>Reduces memory usage by 50%</li>
+<li>Can be faster on modern GPUs with Tensor Cores</li>
+<li>May lose precision (fewer decimal digits)</li>
+<li>May overflow if value is outside Half's range [-65504, 65504]</li>
+</ul>
+<p>Used in mixed-precision training to reduce memory usage while maintaining acceptable accuracy.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToHalfSpan_System_ReadOnlySpan_System_Single__System_Span_System_Half__" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToHalfSpan(System.ReadOnlySpan{System.Single},System.Span{System.Half})">
+  ToHalfSpan(ReadOnlySpan&lt;float&gt;, Span&lt;Half&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L1250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts float span to Half (FP16) span.
+SIMD-optimized on .NET 8+ using TensorPrimitives.ConvertToHalf.
+Critical for mixed-precision GPU operations (FP16 loads with FP32 accumulation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToHalfSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;Half&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToInt32_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToInt32_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.FloatOperations.ToInt32(System.Single)">
+  ToInt32(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L531"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a floating-point number to a 32-bit integer by rounding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToInt32(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The floating-point value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rounded integer value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_FloatOperations_ToInt32_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a floating-point value to a 32-bit integer by rounding to the nearest integer.
+It uses Math.Round to ensure proper rounding behavior rather than truncation.
+</p>
+<p><b>For Beginners:</b> This method converts a decimal number to a whole number by rounding.
+<p>For example:</p>
+<ul>
+<li>ToInt32(3.2) returns 3 (rounds down because 3.2 is closer to 3 than to 4)</li>
+<li>ToInt32(3.7) returns 4 (rounds up because 3.7 is closer to 4 than to 3)</li>
+<li>ToInt32(3.5) returns 4 (rounds to the nearest even number when exactly halfway)</li>
+</ul>
+<p>In neural networks, this conversion might be used for:</p>
+<ul>
+<li>Converting probabilities to binary decisions</li>
+<li>Discretizing continuous values</li>
+<li>Index calculations</li>
+</ul>
+<p>Note that this uses proper rounding (to the nearest integer), not just cutting off
+the decimal part (truncation).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/FloatOperations.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

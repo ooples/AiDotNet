@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PolyharmonicSplineRBF&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PolyharmonicSplineRBF&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements a Polyharmonic Spline Radial Basis Function (RBF) with different forms based on a parameter k.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1.md&amp;value=---%0Auid%3A%20AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1">
+
+
+
+  <h1 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1" class="text-break">
+Class PolyharmonicSplineRBF&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RadialBasisFunctions.html">RadialBasisFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements a Polyharmonic Spline Radial Basis Function (RBF) with different forms based on a parameter k.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PolyharmonicSplineRBF&lt;T&gt; : IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PolyharmonicSplineRBF&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRadialBasisFunction-1.html">IRadialBasisFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides an implementation of Polyharmonic Spline Radial Basis Functions, which are defined as:
+f(r) = r^k for odd k
+f(r) = r^k * log(r) for even k
+where r is the radial distance and k is an integer parameter (typically k = 1).
+</p>
+<p>
+Polyharmonic splines are used in scattered data interpolation, numerical solutions of partial differential
+equations, and image processing. They are particularly useful for problems in multiple dimensions
+due to their theoretical properties. Unlike many other RBFs, polyharmonic splines do not have a width
+parameter, making them scale-invariant. The parameter k controls the smoothness of the resulting
+interpolation, with higher values of k producing smoother functions.
+</p>
+<p><b>For Beginners:</b> A Radial Basis Function (RBF) is a special type of mathematical function
+that depends only on the distance from a center point.
+<p>The Polyharmonic Spline RBF is used to create smooth curves or surfaces that pass through a set of points.
+Think of it like drawing a smooth line through dots on a page, but it works in any number of dimensions.</p>
+<p>This particular RBF comes in different &quot;flavors&quot; depending on the value of parameter k:</p>
+<ul>
+<li>When k is odd (1, 3, 5, etc.): The function is simply the distance raised to the power of k</li>
+<li>When k is even (2, 4, 6, etc.): The function is the distance raised to the power of k, multiplied by the logarithm of the distance</li>
+</ul>
+<p>A unique property of polyharmonic splines is that they don't have a width parameter like most other RBFs.
+This makes them &quot;scale-invariant&quot; - scaling all your input distances by the same factor only changes
+the output by a constant factor, which doesn't affect the shape of the resulting interpolation.</p>
+<p>Common choices for k include:</p>
+<ul>
+<li>k = 1: &quot;Linear&quot; (r)</li>
+<li>k = 2: &quot;Thin plate spline&quot; (r² log r)</li>
+<li>k = 3: &quot;Cubic&quot; (r³)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1__ctor_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1__ctor_System_Int32_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.#ctor(System.Int32)">
+  PolyharmonicSplineRBF(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF-1.html">PolyharmonicSplineRBF&lt;T&gt;</a> class with a specified k parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PolyharmonicSplineRBF(int k = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The order parameter for the polyharmonic spline, defaults to 2.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the Polyharmonic Spline RBF with a specified k parameter. The value of k
+determines the form and smoothness of the function. For odd k, the function is r^k, and for even k,
+the function is r^k * log(r). Commonly used values are k = 1 (linear), k = 2 (thin plate spline),
+and k = 3 (cubic).
+</p>
+<p><b>For Beginners:</b> This creates a new Polyharmonic Spline RBF with a specific order setting.
+<p>The k parameter controls the &quot;order&quot; or &quot;smoothness&quot; of the function:</p>
+<ul>
+<li>k = 1: Creates a linear function (r)</li>
+<li>k = 2: Creates a thin plate spline (r² log r), which is the default and commonly used</li>
+<li>k = 3: Creates a cubic function (r³)</li>
+<li>Higher values of k create even smoother functions</li>
+</ul>
+<p>Higher values of k produce smoother interpolations, but can sometimes lead to numerical issues.
+If you're not sure what value to use, the default (k = 2) is a good starting point
+that works well for many applications.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_Compute_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.Compute*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_Compute__0_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the value of the Polyharmonic Spline Radial Basis Function for a given radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed function value based on the k parameter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the value of the Polyharmonic Spline RBF for a given radius r.
+For odd values of k, the formula used is r^k.
+For even values of k, the formula used is r^k * log(r).
+For r = 0, the function returns 0 to avoid numerical issues with logarithms.
+</p>
+<p><b>For Beginners:</b> This method computes the function's value at a specific distance (r) from the center.
+<p>The calculation depends on whether k is an odd or even number:</p>
+<ul>
+<li>For odd k (1, 3, 5, ...): The result is simply r raised to the power of k (r^k)</li>
+<li>For even k (2, 4, 6, ...): The result is r raised to power k, multiplied by the natural logarithm of r (r^k * log(r))</li>
+</ul>
+<p>At the center point (r = 0), the function always returns 0.</p>
+<p>For example, with the default k = 2:</p>
+<ul>
+<li>At r = 0, the value is 0</li>
+<li>At r = 1, the value is 0 (since log(1) = 0)</li>
+<li>At r = 2, the value is 2² * log(2) ˜ 4 * 0.693 ˜ 2.77</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeDerivative_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Polyharmonic Spline RBF with respect to the radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value of the function with respect to r.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the derivative of the Polyharmonic Spline RBF with respect to the radius r.
+For odd values of k, the derivative is k * r^(k-1).
+For even values of k, the derivative is r^(k-1) * (k * log(r) + 1).
+Special cases are handled for r = 0 depending on the value of k.
+</p>
+<p><b>For Beginners:</b> This method computes how fast the function's value changes
+as you move away from the center point.
+<p>The derivative tells you the &quot;slope&quot; or &quot;rate of change&quot; of the function at a specific distance.
+The calculation again depends on whether k is odd or even:</p>
+<ul>
+<li>For odd k (1, 3, 5, ...): The derivative is k * r^(k-1)</li>
+<li>For even k (2, 4, 6, ...): The derivative is r^(k-1) * (k * log(r) + 1)</li>
+</ul>
+<p>At the center point (r = 0), special handling is needed:</p>
+<ul>
+<li>For k = 1, the derivative is 1</li>
+<li>For k &gt; 1, the derivative is 0</li>
+</ul>
+<p>For example, with k = 2:</p>
+<ul>
+<li>At r = 1, the derivative is 1^1 * (2 * log(1) + 1) = 1 * (0 + 1) = 1</li>
+<li>At r = 2, the derivative is 2^1 * (2 * log(2) + 1) = 2 * (2 * 0.693 + 1) ˜ 2 * 2.386 ˜ 4.77</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeWidthDerivative_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.RadialBasisFunctions.PolyharmonicSplineRBF`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the Polyharmonic Spline RBF with respect to a width parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The radius or distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Always zero since polyharmonic splines don't have a width parameter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RadialBasisFunctions_PolyharmonicSplineRBF_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns zero because polyharmonic spline RBFs do not have a width parameter.
+Unlike many other RBFs, polyharmonic splines are scale-invariant, so they don't need a parameter
+to control their width. The method is implemented only to satisfy the interface requirements.
+</p>
+<p><b>For Beginners:</b> This method would normally tell you how the function's value
+would change if you adjusted the width parameter.
+<p>However, the Polyharmonic Spline RBF doesn't have a width parameter to adjust - its behavior
+is controlled only by the k parameter, which determines the order of the function.</p>
+<p>Since there's no width parameter to vary, changing a non-existent parameter has no effect,
+so the derivative is zero.</p>
+<p>This method only exists because all RBFs in this library are required to have it,
+but for the Polyharmonic Spline RBF, it will always return zero.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RadialBasisFunctions/PolyharmonicSplineRBF.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

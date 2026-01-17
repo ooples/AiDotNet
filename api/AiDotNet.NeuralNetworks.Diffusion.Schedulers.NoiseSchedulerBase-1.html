@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NoiseSchedulerBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NoiseSchedulerBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for diffusion model noise schedulers providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1" class="text-break">
+Class NoiseSchedulerBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.html">Schedulers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for diffusion model noise schedulers providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class NoiseSchedulerBase&lt;T&gt; : INoiseScheduler&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NoiseSchedulerBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.DDIMScheduler-1.html">DDIMScheduler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.PNDMScheduler-1.html">PNDMScheduler&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract base class implements the common behavior for all noise schedulers,
+including beta schedule computation, alpha cumulative product calculation, noise addition,
+and state management for checkpointing.
+</p>
+<p>
+<b>Note:</b> This class was renamed from StepSchedulerBase to NoiseSchedulerBase to avoid
+confusion with learning rate schedulers. Noise schedulers are specific to diffusion models.
+</p>
+<p>
+<b>For Beginners:</b> This is the foundation that all noise schedulers build upon.
+It handles the common math and state management that every scheduler needs:
+- Computing the noise schedule (how much noise at each step)
+- Tracking the current state for saving/loading
+- Adding noise during training
+<p>Specific schedulers like DDIM, PNDM, and DPM-Solver extend this base to implement
+their unique denoising strategies.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1__ctor_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1__ctor_AiDotNet_NeuralNetworks_Diffusion_Schedulers_SchedulerConfig__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.#ctor(AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig{`0})">
+  NoiseSchedulerBase(SchedulerConfig&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NoiseSchedulerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected NoiseSchedulerBase(SchedulerConfig&lt;T&gt; config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html">SchedulerConfig</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for the scheduler including beta schedule parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when config is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when an unsupported beta schedule is specified.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Alphas" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Alphas">
+  Alphas
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Alpha values (1 - beta) representing signal retention at each timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; Alphas</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AlphasCumulativeProduct" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.AlphasCumulativeProduct">
+  AlphasCumulativeProduct
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Cumulative product of alphas representing total signal retention at each timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; AlphasCumulativeProduct</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AlphasCumulativeProduct_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the key value for diffusion: alpha_cumprod[t] tells you what fraction
+of the original signal remains at timestep t. At t=0 it's ~1, at t=T it's ~0.
+</p>
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Betas" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Betas">
+  Betas
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Beta values (noise variance) at each training timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; Betas</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Betas_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Beta represents how much noise is added at each step. Higher beta = more noise.
+These values typically increase from a small start value to a larger end value.
+</p>
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_NumOps" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for the specific type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a helper that knows how to do math with your
+specific number type, whether that's float, double, or decimal.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Config_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Config*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Config" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Config">
+  Config
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration options for the scheduler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SchedulerConfig&lt;T&gt; Config { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.Schedulers.SchedulerConfig-1.html">SchedulerConfig</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Config_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The configuration contains the parameters used to create and initialize the scheduler,
+such as the beta schedule, prediction type, and training timesteps.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Engine_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Engine" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the compute engine for GPU-accelerated vectorized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Timesteps_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Timesteps*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Timesteps" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Timesteps">
+  Timesteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the timesteps for the current inference schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] Timesteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Timesteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These are the discrete time indices at which denoising steps will be performed.
+The array is typically in descending order (from highest noise to lowest).
+</p>
+<p>
+<b>For Beginners:</b> This is like a list of checkpoints. If you have 50 inference
+steps, this array tells you exactly which of the original 1000 training timesteps
+to use for denoising.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_TrainTimesteps_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.TrainTimesteps*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_TrainTimesteps" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.TrainTimesteps">
+  TrainTimesteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of training timesteps this scheduler was configured with.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrainTimesteps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_TrainTimesteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the total number of timesteps used during training, typically 1000.
+The scheduler interpolates between these for inference.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AddNoise_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.AddNoise*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AddNoise_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.AddNoise(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  AddNoise(Vector&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds noise to a clean sample according to the noise schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; AddNoise(Vector&lt;T&gt; originalSample, Vector&lt;T&gt; noise, int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>originalSample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The clean sample to add noise to.</p>
+</dd>
+    <dt><code>noise</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The noise to add.</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The timestep determining how much noise to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The noisy sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_AddNoise_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This implements the forward diffusion process: q(x_t | x_0) = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
+</p>
+<p>
+<b>For Beginners:</b> This is like adding a specific amount of static to a clear image.
+Higher timesteps add more noise. This is used during training to create noisy samples
+for the model to learn from.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_ClipSampleIfNeeded_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.ClipSampleIfNeeded*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_ClipSampleIfNeeded_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.ClipSampleIfNeeded(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ClipSampleIfNeeded(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L343"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips sample values to [-1, 1] if configured.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; ClipSampleIfNeeded(Vector&lt;T&gt; sample)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sample to potentially clip.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The clipped sample if ClipSample is true, otherwise the original sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetAlphaCumulativeProduct_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.GetAlphaCumulativeProduct*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetAlphaCumulativeProduct_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.GetAlphaCumulativeProduct(System.Int32)">
+  GetAlphaCumulativeProduct(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cumulative product of alphas (signal retention) at a given timestep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual T GetAlphaCumulativeProduct(int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The timestep to query.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The cumulative alpha value at that timestep.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetAlphaCumulativeProduct_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Alpha cumulative product represents how much of the original signal is retained
+at each timestep. At t=0, it's close to 1 (mostly signal). At t=T, it's close
+to 0 (mostly noise).
+</p>
+<p>
+<b>For Beginners:</b> This tells you "how clear" the image is at each step.
+At the start (t=0), the image is clear (alpha near 1). At the end (t=T),
+it's pure noise (alpha near 0).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetState_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.GetState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_GetState" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.GetState">
+  GetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current scheduler state for checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, object&gt; GetState()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary containing the scheduler's state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_LoadState_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_LoadState_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.LoadState(System.Collections.Generic.Dictionary{System.String,System.Object})">
+  LoadState(Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads scheduler state from a checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Dictionary&lt;string, object&gt; state)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>state</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The state dictionary to load from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_SetTimesteps_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.SetTimesteps*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_SetTimesteps_System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.SetTimesteps(System.Int32)">
+  SetTimesteps(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets up the inference timesteps based on the number of steps desired.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetTimesteps(int inferenceSteps)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inferenceSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of denoising steps to use during inference.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_SetTimesteps_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates which timesteps from the training schedule should be used
+for the given number of inference steps. Using fewer steps is faster but may
+reduce quality.
+</p>
+<p>
+<b>For Beginners:</b> This is like choosing how many steps to take when walking
+from point A to point B. More steps (50-100) give smoother results, fewer steps
+(10-20) are faster but may miss details.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when inferenceSteps is less than 1 or greater than TrainTimesteps.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Step_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Step*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.Step(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Step(Vector&lt;T&gt;, int, Vector&lt;T&gt;, T, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one denoising step using the model output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;T&gt; Step(Vector&lt;T&gt; modelOutput, int timestep, Vector&lt;T&gt; sample, T eta, Vector&lt;T&gt;? noise = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model's prediction (typically noise prediction).</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current timestep in the diffusion process.</p>
+</dd>
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current noisy sample.</p>
+</dd>
+    <dt><code>eta</code> <span class="xref">T</span></dt>
+    <dd><p>Stochasticity parameter: 0 = deterministic (DDIM), 1 = fully stochastic (DDPM).
+Values between 0 and 1 interpolate between these behaviors.</p>
+</dd>
+    <dt><code>noise</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional noise for stochastic sampling. If null and eta &gt; 0, uses zero noise (deterministic fallback).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The denoised sample for the previous timestep.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the core denoising operation. Given the current noisy sample and the model's
+prediction of what noise was added, it computes a slightly less noisy version.
+</p>
+<p>
+<b>For Beginners:</b> This is one step of "un-blurring" the image. The model
+looks at the current noisy image and guesses what noise is there. This method
+then removes that estimated noise to get a cleaner image.
+<p>The eta parameter controls randomness:</p>
+<ul>
+<li>eta=0: Always produces the same output for the same input (deterministic)</li>
+<li>eta=1: Adds randomness, making each generation unique (stochastic)</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when modelOutput or sample is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when modelOutput and sample have different lengths.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when timestep is negative or greater than TrainTimesteps.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_ValidateStepParameters_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.ValidateStepParameters*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Diffusion_Schedulers_NoiseSchedulerBase_1_ValidateStepParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.NeuralNetworks.Diffusion.Schedulers.NoiseSchedulerBase`1.ValidateStepParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  ValidateStepParameters(Vector&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates common step parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateStepParameters(Vector&lt;T&gt; modelOutput, Vector&lt;T&gt; sample, int timestep)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model output to validate.</p>
+</dd>
+    <dt><code>sample</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The sample to validate.</p>
+</dd>
+    <dt><code>timestep</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The timestep to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when modelOutput or sample is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when lengths don't match.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when timestep is out of range.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Diffusion/Schedulers/NoiseSchedulerBase.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

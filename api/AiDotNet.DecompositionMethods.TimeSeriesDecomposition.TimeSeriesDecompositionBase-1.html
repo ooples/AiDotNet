@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TimeSeriesDecompositionBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TimeSeriesDecompositionBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for time series decomposition algorithms that break down time series data into component parts.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1" class="text-break">
+Class TimeSeriesDecompositionBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.html">TimeSeriesDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for time series decomposition algorithms that break down time series data into component parts.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class TimeSeriesDecompositionBase&lt;T&gt; : ITimeSeriesDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TimeSeriesDecompositionBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesDecomposition-1.html">ITimeSeriesDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.AdditiveDecomposition-1.html">AdditiveDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.BeveridgeNelsonDecomposition-1.html">BeveridgeNelsonDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.EMDDecomposition-1.html">EMDDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.HodrickPrescottDecomposition-1.html">HodrickPrescottDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.MultiplicativeDecomposition-1.html">MultiplicativeDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.SEATSDecomposition-1.html">SEATSDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.SSADecomposition-1.html">SSADecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.STLTimeSeriesDecomposition-1.html">STLTimeSeriesDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.WaveletDecomposition-1.html">WaveletDecomposition&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.X11Decomposition-1.html">X11Decomposition&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Time series decomposition is like taking apart a complex toy to see its individual pieces.
+It breaks down a sequence of data points (like daily sales, monthly temperatures, etc.) into simpler
+components that are easier to understand. Common components include:
+- Trend: The long-term direction (going up, down, or staying flat)
+- Seasonal: Regular patterns that repeat (like higher sales during holidays)
+- Residual: The leftover "noise" after removing trend and seasonal patterns
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1__ctor_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TimeSeriesDecompositionBase(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the time series decomposition class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TimeSeriesDecompositionBase(Vector&lt;T&gt; timeSeries)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>timeSeries</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The time series data to decompose.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_NumOps" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Components_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Components*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Components" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Components">
+  Components
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Dictionary storing the different components extracted from the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;DecompositionComponentType, object&gt; Components { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Components_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Think of this as a container that holds all the separate pieces
+after we've taken apart our time series. Each piece (trend, seasonal pattern, etc.)
+is stored with a label so we can easily retrieve it later.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Engine_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Engine" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_TimeSeries_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.TimeSeries*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_TimeSeries" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.TimeSeries">
+  TimeSeries
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The original time series data to be decomposed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; TimeSeries { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_AddComponent_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.AddComponent*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_AddComponent_AiDotNet_Enums_DecompositionComponentType_System_Object_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.AddComponent(AiDotNet.Enums.DecompositionComponentType,System.Object)">
+  AddComponent(DecompositionComponentType, object)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a component to the decomposition results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void AddComponent(DecompositionComponentType componentType, object component)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component (e.g., Trend, Seasonal).</p>
+</dd>
+    <dt><code>component</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The component data as either a vector or matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the component is not a Vector or Matrix.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_CalculateResidual_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.CalculateResidual*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_CalculateResidual_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.CalculateResidual(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateResidual(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the residual component by subtracting trend and seasonal components from the original time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; CalculateResidual(Vector&lt;T&gt; trend, Vector&lt;T&gt; seasonal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trend</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The trend component.</p>
+</dd>
+    <dt><code>seasonal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The seasonal component.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The residual component as a vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_CalculateResidual_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The residual is what's left over after we remove the main patterns from our data.
+Think of it like this:
+Original data = Trend + Seasonal pattern + Residual
+<p>So: Residual = Original data - (Trend + Seasonal pattern)</p>
+<p>Ideally, the residual should look like random noise with no obvious patterns.
+If patterns remain in the residual, it suggests our decomposition missed something important.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_Decompose" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the decomposition of the time series into its components.
+This method must be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponent_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponent*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponent_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponent(AiDotNet.Enums.DecompositionComponentType)">
+  GetComponent(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific component from the decomposition results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public object? GetComponent(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The requested component, or null if it doesn't exist.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsMatrix_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponentAsMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsMatrix_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponentAsMatrix(AiDotNet.Enums.DecompositionComponentType)">
+  GetComponentAsMatrix(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific component as a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; GetComponentAsMatrix(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The component as a matrix, or an empty matrix if the component doesn't exist or isn't a matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsMatrix_AiDotNet_Enums_DecompositionComponentType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A matrix is like a table or grid of numbers with rows and columns.
+In time series analysis, a matrix might store multiple related series or different 
+versions of the same series (e.g., seasonal patterns for different years).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsVector_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponentAsVector*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsVector_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponentAsVector(AiDotNet.Enums.DecompositionComponentType)">
+  GetComponentAsVector(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific component as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetComponentAsVector(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The component as a vector, or an empty vector if the component doesn't exist or isn't a vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponentAsVector_AiDotNet_Enums_DecompositionComponentType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A vector is simply a list of numbers in a specific order.
+For time series data, each number typically represents a value at a specific point in time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponents_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponents*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_GetComponents" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.GetComponents">
+  GetComponents()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns all components extracted from the time series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;DecompositionComponentType, object&gt; GetComponents()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary containing all decomposed components.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_HasComponent_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.HasComponent*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_TimeSeriesDecomposition_TimeSeriesDecompositionBase_1_HasComponent_AiDotNet_Enums_DecompositionComponentType_" data-uid="AiDotNet.DecompositionMethods.TimeSeriesDecomposition.TimeSeriesDecompositionBase`1.HasComponent(AiDotNet.Enums.DecompositionComponentType)">
+  HasComponent(DecompositionComponentType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific component exists in the decomposition results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasComponent(DecompositionComponentType componentType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>componentType</code> <a class="xref" href="AiDotNet.Enums.DecompositionComponentType.html">DecompositionComponentType</a></dt>
+    <dd><p>The type of component to check for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the component exists; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/TimeSeriesDecomposition/TimeSeriesDecompositionBase.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

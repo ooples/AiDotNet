@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Levenberg-Marquardt optimization algorithm, which is used for non-linear least squares optimization in machine learning and AI models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3" class="text-break">
+Class LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Levenberg-Marquardt optimization algorithm, which is used
+for non-linear least squares optimization in machine learning and AI models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">LevenbergMarquardtOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Levenberg-Marquardt algorithm combines the Gauss-Newton method and gradient descent
+to efficiently solve non-linear least squares problems. It adaptively switches between the two
+approaches depending on how well the optimization is progressing, offering both stability and speed.
+The damping factor controls this adaptation by determining whether the algorithm behaves more like
+gradient descent (higher damping) or more like Gauss-Newton (lower damping).
+</p>
+<p><b>For Beginners:</b> The Levenberg-Marquardt algorithm is a powerful technique for training
+AI models that need to make accurate predictions. It works by repeatedly adjusting the model's
+internal settings (parameters) to reduce prediction errors.
+<p>Think of it like tuning a musical instrument:</p>
+<ul>
+<li>You listen to how &quot;off&quot; the sound is (the error)</li>
+<li>You make small adjustments to the tuning pegs</li>
+<li>You check if the sound improved or got worse</li>
+<li>You keep adjusting until the instrument sounds right</li>
+</ul>
+<p>The &quot;damping factor&quot; controls how boldly or cautiously the algorithm makes adjustments:</p>
+<ul>
+<li>Higher damping = smaller, more careful adjustments (slower but more stable)</li>
+<li>Lower damping = larger, more aggressive adjustments (faster but potentially unstable)</li>
+</ul>
+<p>The algorithm automatically adjusts this damping factor as it progresses, becoming more
+aggressive when things are going well and more cautious when improvements are hard to find.
+This class allows you to configure how this damping behaves during training.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to -1 (full batch).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+Levenberg-Marquardt uses full-batch gradients (batch size -1) because it requires computing the
+Jacobian matrix across the entire dataset to properly construct the normal equations.
+Using mini-batches would introduce noise that makes the Jacobian approximation unreliable
+and would compromise the algorithm's ability to balance between Gauss-Newton and gradient descent.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_CustomDecomposition_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.CustomDecomposition*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_CustomDecomposition" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.CustomDecomposition">
+  CustomDecomposition
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a custom matrix decomposition method for solving the linear system in each Levenberg-Marquardt iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMatrixDecomposition&lt;T&gt;? CustomDecomposition { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>The custom matrix decomposition to use, or null to use the default method.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_CustomDecomposition_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each iteration of the Levenberg-Marquardt algorithm requires solving a linear system of equations
+involving the Jacobian matrix. By default, the algorithm chooses an appropriate decomposition method
+based on the problem characteristics, but this property allows you to specify a custom decomposition
+method if desired. This is an advanced option that can improve performance or numerical stability
+for specific types of problems.
+</p>
+<p><b>For Beginners:</b> This is an advanced setting that most users don't need to change.
+<p>The Levenberg-Marquardt algorithm needs to solve complex math equations at each step. This
+setting allows experts to specify exactly how those equations should be solved.</p>
+<p>The default value (null) means the algorithm will automatically choose an appropriate method
+for solving these equations. This automatic choice works well for the vast majority of problems.</p>
+<p>You would only need to change this if you have a specialized problem with unique numerical
+characteristics and understand the mathematical details of different matrix decomposition methods.
+If you're just getting started with AI and optimization, you can safely ignore this setting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorDecreaseFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.DampingFactorDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorDecreaseFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.DampingFactorDecreaseFactor">
+  DampingFactorDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the damping factor is decreased when an iteration successfully improves the solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DampingFactorDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The damping factor decrease multiplier, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When an optimization step successfully reduces the error, the algorithm decreases the damping factor
+by multiplying it by this value. This makes subsequent steps more aggressive, allowing the
+algorithm to converge faster when progress is being made. Lower values cause more dramatic shifts
+toward Gauss-Newton behavior when the optimization is going well.
+</p>
+<p><b>For Beginners:</b> This setting controls how much more confident the algorithm becomes
+when it makes successful adjustments.
+<p>When the algorithm makes an adjustment that improves the model:</p>
+<ul>
+<li>It decreases the damping factor to take larger, bolder steps</li>
+<li>This decrease is determined by multiplying the current damping by this value</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>If the current damping is 1.0 and an adjustment succeeds</li>
+<li>The new damping becomes 1.0 × 0.1 = 0.1</li>
+<li>The next adjustment will be about 10 times more aggressive</li>
+</ul>
+<p>This helps the algorithm learn faster when it's on the right track, speeding up training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorIncreaseFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.DampingFactorIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorIncreaseFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.DampingFactorIncreaseFactor">
+  DampingFactorIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the damping factor is increased when an iteration fails to improve the solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DampingFactorIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The damping factor increase multiplier, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_DampingFactorIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When an optimization step fails to reduce the error, the algorithm increases the damping factor
+by multiplying it by this value. This makes subsequent steps more conservative, helping the
+algorithm recover from unsuccessful attempts. Higher values cause more dramatic shifts toward
+gradient descent behavior when progress stalls.
+</p>
+<p><b>For Beginners:</b> This setting controls how much more cautious the algorithm becomes
+when it makes a mistake.
+<p>When the algorithm tries an adjustment that makes things worse instead of better:</p>
+<ul>
+<li>It increases the damping factor to take more careful steps</li>
+<li>This increase is determined by multiplying the current damping by this value</li>
+</ul>
+<p>The default value of 10.0 means:</p>
+<ul>
+<li>If the current damping is 0.1 and an adjustment fails</li>
+<li>The new damping becomes 0.1 × 10.0 = 1.0</li>
+<li>The next adjustment will be about 10 times more cautious</li>
+</ul>
+<p>This helps the algorithm recover quickly from poor steps without getting completely stuck.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_InitialDampingFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.InitialDampingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_InitialDampingFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.InitialDampingFactor">
+  InitialDampingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the starting value for the damping factor used in the algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialDampingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial damping factor, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_InitialDampingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The damping factor (µ) controls the balance between the Gauss-Newton method and gradient descent.
+Higher values make the algorithm behave more like gradient descent (more stable but slower),
+while lower values make it behave more like Gauss-Newton (faster but potentially unstable).
+This parameter sets the initial value used when optimization begins.
+</p>
+<p><b>For Beginners:</b> This setting determines how cautiously the algorithm starts.
+<p>Think of it like learning to drive:</p>
+<ul>
+<li>A higher value (like 1.0) means starting very carefully, making small adjustments</li>
+<li>A lower value (like 0.01) means starting more confidently, making larger adjustments</li>
+</ul>
+<p>The default value of 0.1 provides a good balance for most problems. If your training seems
+unstable at the beginning, try increasing this value. If it's progressing too slowly, try
+decreasing it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MaxDampingFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.MaxDampingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MaxDampingFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.MaxDampingFactor">
+  MaxDampingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the damping factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxDampingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum damping factor, defaulting to 1e8 (100,000,000).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MaxDampingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes an upper bound for the damping factor to prevent the algorithm from becoming
+too conservative. If repeated failed iterations would increase the damping factor above this value,
+it will be clamped to this maximum. Very high damping factors can cause the algorithm to take
+extremely small steps, essentially stalling progress.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from becoming too cautious,
+even after many failed steps.
+<p>If the algorithm repeatedly makes adjustments that don't improve the model, it might keep
+increasing the damping factor to take smaller steps. This setting puts a limit on how high
+the damping can go, preventing the algorithm from practically freezing.</p>
+<p>The default value of 100,000,000 (1e8) is very large, allowing the algorithm to become quite
+cautious when necessary, but still ensuring it will make some progress.</p>
+<p>Most users won't need to change this setting. If your training seems to get stuck making almost
+no progress, you might try decreasing this value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MinDampingFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.MinDampingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MinDampingFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.MinDampingFactor">
+  MinDampingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the damping factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinDampingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum damping factor, defaulting to 1e-8 (0.00000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_MinDampingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter establishes a lower bound for the damping factor to prevent numerical instability.
+If repeated successful iterations would decrease the damping factor below this value, it will be
+clamped to this minimum. Very low damping factors can lead to the algorithm behaving too aggressively,
+potentially causing divergence or numerical issues in the matrix operations.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from becoming too aggressive,
+even after many successful steps.
+<p>As the algorithm makes more and more successful adjustments, it might keep reducing the
+damping factor to take bigger steps. This setting puts a limit on how low the damping can go,
+preventing the algorithm from becoming unstable.</p>
+<p>The default value of 0.00000001 (1e-8) is very small, allowing the algorithm to become quite
+aggressive when things are going well, but still providing some stability protection.</p>
+<p>Most users won't need to change this setting. If you experience numerical errors during training,
+you might try increasing this value slightly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_UseAdaptiveDampingFactor_" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.UseAdaptiveDampingFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_UseAdaptiveDampingFactor" data-uid="AiDotNet.Models.Options.LevenbergMarquardtOptimizerOptions`3.UseAdaptiveDampingFactor">
+  UseAdaptiveDampingFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the damping factor should be adaptively updated based on the success or failure of each iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseAdaptiveDampingFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Flag indicating whether to use adaptive damping, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LevenbergMarquardtOptimizerOptions_3_UseAdaptiveDampingFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When set to true, the algorithm will automatically adjust the damping factor after each iteration
+based on whether the error increased or decreased. When set to false, the damping factor remains
+fixed at the initial value throughout the optimization process. Adaptive damping is one of the key
+features of the Levenberg-Marquardt algorithm that makes it efficient for many problems.
+</p>
+<p><b>For Beginners:</b> This setting determines whether the algorithm automatically
+adjusts how cautiously it makes changes.
+<p>When enabled (the default setting):</p>
+<ul>
+<li>The algorithm becomes more aggressive (lower damping) after successful steps</li>
+<li>The algorithm becomes more cautious (higher damping) after unsuccessful steps</li>
+<li>This adaptive behavior helps it find the right balance between speed and stability</li>
+</ul>
+<p>When disabled:</p>
+<ul>
+<li>The algorithm always uses the same damping factor (set by InitialDampingFactor)</li>
+<li>It doesn't become more aggressive or cautious based on its progress</li>
+</ul>
+<p>For most problems, you should leave this enabled (true). Disabling it is rarely needed and
+mainly useful for certain specialized problems or for educational purposes to understand
+how adaptive behavior affects the optimization.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LevenbergMarquardtOptimizerOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SpectralAnalysisOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SpectralAnalysisOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for spectral analysis of time series data, which transforms time-domain signals into the frequency domain to identify periodic components and patterns.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SpectralAnalysisOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SpectralAnalysisOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1" class="text-break">
+Class SpectralAnalysisOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for spectral analysis of time series data, which transforms time-domain signals
+into the frequency domain to identify periodic components and patterns.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SpectralAnalysisOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the spectral analysis.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">SpectralAnalysisOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Spectral analysis is a technique used to decompose a time series signal into its constituent frequency 
+components, revealing periodic patterns that might not be apparent in the original time domain representation. 
+This is typically accomplished using the Fast Fourier Transform (FFT) algorithm, which efficiently computes 
+the Discrete Fourier Transform of a signal. The resulting frequency spectrum shows the amplitude and phase 
+of different frequency components present in the signal. This class provides configuration options for 
+spectral analysis, including the FFT size, window function selection, and overlap settings for spectrograms 
+or short-time Fourier transforms. These options allow fine-tuning of the spectral analysis to balance 
+frequency resolution, time resolution, and spectral leakage based on the specific characteristics of the 
+time series being analyzed.
+</p>
+<p><b>For Beginners:</b> Spectral analysis helps identify repeating patterns in your time series data.
+<p>Time series data shows how values change over time, but sometimes it's hard to see patterns:</p>
+<ul>
+<li>A stock price might fluctuate in ways that look random</li>
+<li>Sensor readings might contain multiple overlapping cycles</li>
+<li>Audio signals contain many frequencies mixed together</li>
+</ul>
+<p>Spectral analysis transforms this data from the time domain to the frequency domain:</p>
+<ul>
+<li>Instead of seeing &quot;what happened when&quot;</li>
+<li>You see &quot;which cycles/frequencies are present and how strong they are&quot;</li>
+</ul>
+<p>This is like:</p>
+<ul>
+<li>Breaking down a musical chord into individual notes</li>
+<li>Identifying that a stock has both weekly and quarterly patterns</li>
+<li>Finding that a machine vibrates at specific frequencies when it's about to fail</li>
+</ul>
+<p>This class lets you configure how this transformation happens, controlling the
+trade-offs between frequency precision, time precision, and other factors.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_NFFT_" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.NFFT*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_NFFT" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.NFFT">
+  NFFT
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of points used in the Fast Fourier Transform (FFT).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NFFT { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, typically a power of 2, defaulting to 512.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_NFFT_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of points used in the Fast Fourier Transform (FFT) computation. The FFT 
+is most efficient when the number of points is a power of 2, which is why the default value is 512 (2^9). 
+If the input signal has fewer points than this value, it is typically zero-padded to reach this length. 
+If it has more points, it may be segmented or truncated. A larger FFT size provides better frequency 
+resolution (the ability to distinguish between closely spaced frequency components) but requires more 
+computational resources. A smaller FFT size reduces computational requirements but provides coarser 
+frequency resolution. The appropriate value depends on the specific application requirements, the length 
+of the input signal, and the desired balance between frequency resolution and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting controls the precision of frequency detection and computational efficiency.
+<p>The NFFT value determines:</p>
+<ul>
+<li>How many frequency bins the analysis will produce</li>
+<li>The resolution or precision of frequency detection</li>
+<li>How computationally intensive the calculation will be</li>
+</ul>
+<p>The default value of 512 means:</p>
+<ul>
+<li>The FFT will use 512 points (ideally a power of 2 for efficiency)</li>
+<li>This provides a good balance between precision and computational cost</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 1024, 2048): More precise frequency detection, but more computation</li>
+<li>Lower values (e.g., 256, 128): Faster computation, but less precise frequency detection</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you need to distinguish between very similar frequencies</li>
+<li>Decrease it when processing speed is more important than frequency precision</li>
+</ul>
+<p>For example, in audio processing, higher NFFT values help distinguish between notes that
+are very close in pitch, while lower values might be sufficient for detecting broader
+frequency bands like bass vs. treble.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_OverlapPercentage_" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.OverlapPercentage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_OverlapPercentage" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.OverlapPercentage">
+  OverlapPercentage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the percentage of overlap between adjacent segments in spectrograms or short-time Fourier transforms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OverlapPercentage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer between 0 and 99, defaulting to 50 (50% overlap).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_OverlapPercentage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the percentage of overlap between adjacent segments when performing spectral analysis 
+on consecutive portions of a signal, as in spectrograms or short-time Fourier transforms. Overlapping segments 
+helps mitigate the effects of windowing, which reduces the amplitude of the signal at the edges of each segment. 
+The default value of 50 (representing 50% overlap) is a common choice that provides a good balance between 
+computational efficiency and accurate representation of the signal. Higher overlap percentages provide smoother 
+time-frequency representations and better capture transient events but require more computational resources. 
+Lower overlap percentages reduce computational requirements but may miss short-duration events and produce 
+less smooth spectrograms. The appropriate value depends on the specific application requirements and the 
+characteristics of the signal being analyzed.
+</p>
+<p><b>For Beginners:</b> This setting controls how much consecutive analysis windows overlap when analyzing how a signal changes over time.
+<p>When analyzing how frequencies change over time (like in a spectrogram):</p>
+<ul>
+<li>The signal is divided into multiple segments</li>
+<li>Each segment is analyzed separately</li>
+<li>Overlapping these segments improves accuracy and smoothness</li>
+</ul>
+<p>The default value of 50 means:</p>
+<ul>
+<li>Each segment shares 50% of its data with the next segment</li>
+<li>This provides a good balance between time resolution and computational efficiency</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 75%): Smoother results, better detection of short events, more computation</li>
+<li>Lower values (e.g., 25%): Less computation, but potentially missing short events</li>
+<li>0%: No overlap, most efficient but lowest quality</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when analyzing signals with rapid changes or short events</li>
+<li>Decrease it when computational efficiency is more important than capturing every detail</li>
+</ul>
+<p>For example, in speech analysis, higher overlap percentages help capture the rapid
+transitions between phonemes, while in long-term climate data analysis, lower
+overlap might be sufficient.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_SamplingRate_" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.SamplingRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_SamplingRate" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.SamplingRate">
+  SamplingRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sampling rate of the time series data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SamplingRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_SamplingRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The sampling rate is the number of samples per unit time (typically seconds).
+For example, a sampling rate of 1000 means 1000 samples per second (1 kHz).
+This is used to convert normalized frequencies to actual frequencies in the original units.
+</p>
+<p>
+<b>For Beginners:</b>
+The sampling rate tells the model how frequently your data was collected. For example:
+- For hourly temperature data, the sampling rate would be 1/3600 (one sample per 3600 seconds)
+- For audio data, common sampling rates are 44100 Hz (CD quality) or 48000 Hz (DVD quality)
+- For ECG data, sampling rates might be around 250 Hz or 500 Hz
+<p>When you provide the sampling rate, the model can express frequencies in real-world units
+(like Hz or cycles per day) rather than just normalized values between 0 and 0.5.</p>
+<p>If you don't specify a sampling rate, the default value of 1.0 is used, meaning frequencies
+will be expressed as cycles per sample. To get frequencies in Hz, set this to your actual
+sampling rate in Hz.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_UseWindowFunction_" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.UseWindowFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_UseWindowFunction" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.UseWindowFunction">
+  UseWindowFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to apply a window function to the signal before spectral analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseWindowFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>A boolean value, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_UseWindowFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property determines whether a window function is applied to the signal before performing spectral 
+analysis. Window functions help reduce spectral leakage, which occurs when the signal being analyzed is 
+not perfectly periodic within the observation interval. Spectral leakage causes energy from a single 
+frequency component to spread across multiple frequency bins, potentially obscuring weaker components. 
+The default value of true enables windowing, which is recommended for most applications to improve the 
+accuracy of the spectral analysis. However, windowing also modifies the signal, potentially affecting 
+amplitude measurements and time-domain characteristics. In some specialized applications where preserving 
+the original signal characteristics is more important than reducing spectral leakage, windowing might be 
+disabled by setting this property to false.
+</p>
+<p><b>For Beginners:</b> This setting determines whether to use a special technique to improve frequency analysis accuracy.
+<p>When analyzing a signal:</p>
+<ul>
+<li>The FFT assumes the signal repeats perfectly (is periodic)</li>
+<li>Real-world signals rarely meet this assumption</li>
+<li>This mismatch causes &quot;spectral leakage&quot; - frequencies bleeding into neighboring bins</li>
+</ul>
+<p>Window functions solve this problem by:</p>
+<ul>
+<li>Gradually tapering the signal at the edges of each analysis segment</li>
+<li>Reducing the artificial discontinuities that cause leakage</li>
+<li>Improving the accuracy of frequency detection</li>
+</ul>
+<p>The default value of true means:</p>
+<ul>
+<li>Window functions will be applied before spectral analysis</li>
+<li>This provides more accurate frequency information for most applications</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Keep it true (default) for most applications</li>
+<li>Set it to false only in specialized cases where preserving the original signal amplitude
+is more important than frequency precision</li>
+</ul>
+<p>For example, in audio spectrum analyzers, window functions are almost always used to
+provide cleaner, more accurate frequency displays.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_WindowFunction_" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.WindowFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_WindowFunction" data-uid="AiDotNet.Models.Options.SpectralAnalysisOptions`1.WindowFunction">
+  WindowFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the window function to apply to the signal before spectral analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IWindowFunction&lt;T&gt; WindowFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IWindowFunction-1.html">IWindowFunction</a>&lt;T&gt;</dt>
+    <dd><p>An implementation of IWindowFunction&lt;T&gt;, defaulting to a Hanning window.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SpectralAnalysisOptions_1_WindowFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies which window function is applied to the signal before spectral analysis, if 
+UseWindowFunction is set to true. Different window functions have different characteristics in terms of 
+main lobe width, side lobe height, and spectral leakage. The Hanning window (the default) provides a good 
+balance between frequency resolution and amplitude accuracy for many applications. Other common options 
+include the Hamming window (similar to Hanning but with different coefficients), the Blackman window 
+(better side lobe suppression but wider main lobe), and the rectangular window (no windowing, preserves 
+signal amplitude but has poor spectral leakage properties). The choice of window function should be based 
+on the specific requirements of the application, particularly the relative importance of frequency resolution, 
+amplitude accuracy, and side lobe suppression. [0]
+</p>
+<p><b>For Beginners:</b> This setting selects which specific window function to use for improving spectral analysis.
+<p>Different window functions have different trade-offs:</p>
+<ul>
+<li>They all reduce spectral leakage, but in different ways</li>
+<li>Some preserve amplitude better, others provide better frequency separation</li>
+<li>The choice depends on what aspects of the signal you care most about</li>
+</ul>
+<p>The default Hanning window:</p>
+<ul>
+<li>Provides excellent frequency resolution</li>
+<li>Has good reduction of spectral leakage</li>
+<li>Works well for a wide range of applications</li>
+<li>Is one of the most commonly used window functions</li>
+</ul>
+<p>Other common window functions include:</p>
+<ul>
+<li>Hamming: Similar to Hanning, slightly different trade-offs</li>
+<li>Blackman: Better at suppressing distant frequency leakage</li>
+<li>Rectangular: No windowing (preserves amplitude but poor leakage properties)</li>
+</ul>
+<p>When to change this value:</p>
+<ul>
+<li>For most applications, the default Hanning window works well</li>
+<li>Change it only if you have specific requirements or are familiar with the
+trade-offs between different window functions</li>
+</ul>
+<p>For example, in audio analysis, the Hanning window is often used for general spectral
+analysis, while Blackman might be preferred when trying to detect very quiet sounds
+in the presence of loud ones. [0]</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SpectralAnalysisOptions.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

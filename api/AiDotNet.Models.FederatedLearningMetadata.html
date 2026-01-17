@@ -1,0 +1,1746 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FederatedLearningMetadata | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FederatedLearningMetadata | AiDotNet Documentation ">
+      
+      <meta name="description" content="Contains metadata and metrics about federated learning training progress and results.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_FederatedLearningMetadata.md&amp;value=---%0Auid%3A%20AiDotNet.Models.FederatedLearningMetadata%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.FederatedLearningMetadata">
+
+
+
+  <h1 id="AiDotNet_Models_FederatedLearningMetadata" data-uid="AiDotNet.Models.FederatedLearningMetadata" class="text-break">
+Class FederatedLearningMetadata  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Contains metadata and metrics about federated learning training progress and results.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FederatedLearningMetadata</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FederatedLearningMetadata</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_FederatedLearningMetadata_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>This class tracks various metrics throughout the federated learning process to help
+monitor training progress, diagnose issues, and evaluate model quality.</p>
+<p><b>For Beginners:</b> Metadata is like a training diary that records what happened
+during federated learning - how long it took, how accurate the model became, which
+clients participated, etc.</p>
+<p>Think of this as a comprehensive training report containing:</p>
+<ul>
+<li>Performance metrics: Accuracy, loss, convergence</li>
+<li>Resource usage: Time, communication costs</li>
+<li>Participation: Which clients contributed</li>
+<li>Privacy tracking: Privacy budget consumption</li>
+</ul>
+<p>For example, after training you might see:</p>
+<ul>
+<li>Total rounds: 50 (out of max 100)</li>
+<li>Final accuracy: 92.5%</li>
+<li>Training time: 2 hours</li>
+<li>Total clients participated: 100</li>
+<li>Privacy budget used: ε=5.0 (out of 10.0 total)</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_MetadataKey" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetadataKey">
+  MetadataKey
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The recommended key for storing federated learning metadata inside <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html#AiDotNet_Models_ModelMetadata_1_Properties">Properties</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const string MetadataKey = &quot;FederatedLearning&quot;</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_AccuracyHistory_" data-uid="AiDotNet.Models.FederatedLearningMetadata.AccuracyHistory*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_AccuracyHistory" data-uid="AiDotNet.Models.FederatedLearningMetadata.AccuracyHistory">
+  AccuracyHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the history of accuracy values across all rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;double&gt; AccuracyHistory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_AccuracyHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A list showing how accuracy improved after each round.</p>
+<p>For example: [0.60, 0.70, 0.78, 0.84, 0.88, 0.91, 0.93, 0.94, 0.945, 0.95]
+Shows accuracy improving from 60% to 95%</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_AggregationStrategyUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.AggregationStrategyUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_AggregationStrategyUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.AggregationStrategyUsed">
+  AggregationStrategyUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the aggregation strategy used during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string AggregationStrategyUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_AggregationStrategyUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records which aggregation algorithm was used (FedAvg, FedProx, etc.).
+Important for reproducibility and understanding results.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_AsyncModeUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.AsyncModeUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_AsyncModeUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.AsyncModeUsed">
+  AsyncModeUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the asynchronous federated learning mode used (if any).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string AsyncModeUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_AsyncModeUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If async FL is enabled, this records which mode was used (FedAsync or FedBuff).
+If training was synchronous, this is &quot;None&quot;.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_AverageClientsPerRound_" data-uid="AiDotNet.Models.FederatedLearningMetadata.AverageClientsPerRound*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_AverageClientsPerRound" data-uid="AiDotNet.Models.FederatedLearningMetadata.AverageClientsPerRound">
+  AverageClientsPerRound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the average number of clients selected per round.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AverageClientsPerRound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_AverageClientsPerRound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many clients were active in each round on average.</p>
+<p>For example:</p>
+<ul>
+<li>Round 1: 10 clients</li>
+<li>Round 2: 8 clients (some unavailable)</li>
+<li>Round 3: 10 clients</li>
+<li>Average: 9.3 clients per round</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_AverageRoundTimeSeconds_" data-uid="AiDotNet.Models.FederatedLearningMetadata.AverageRoundTimeSeconds*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_AverageRoundTimeSeconds" data-uid="AiDotNet.Models.FederatedLearningMetadata.AverageRoundTimeSeconds">
+  AverageRoundTimeSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the average time per round in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AverageRoundTimeSeconds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_AverageRoundTimeSeconds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How long each round takes on average. Useful for estimating
+how long future training runs will take.</p>
+<p>For example:</p>
+<ul>
+<li>50 rounds completed in 5000 seconds</li>
+<li>Average: 100 seconds per round</li>
+<li>Next training with 100 rounds will take ~10,000 seconds</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_CompressionEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.CompressionEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_CompressionEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.CompressionEnabled">
+  CompressionEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether compression was enabled for client updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CompressionEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_CompressionStrategyUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.CompressionStrategyUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_CompressionStrategyUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.CompressionStrategyUsed">
+  CompressionStrategyUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the compression strategy used for client updates (if enabled).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CompressionStrategyUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_Converged_" data-uid="AiDotNet.Models.FederatedLearningMetadata.Converged*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_Converged" data-uid="AiDotNet.Models.FederatedLearningMetadata.Converged">
+  Converged
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether training converged before reaching maximum rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Converged { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_Converged_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Convergence means the model stopped improving significantly.
+If true, training ended early because the model reached a good solution.</p>
+<p>For example:</p>
+<ul>
+<li>Max rounds: 100</li>
+<li>Converged at round 50</li>
+<li>Converged = true</li>
+<li>Saved time by stopping early</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_ConvergenceRound_" data-uid="AiDotNet.Models.FederatedLearningMetadata.ConvergenceRound*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_ConvergenceRound" data-uid="AiDotNet.Models.FederatedLearningMetadata.ConvergenceRound">
+  ConvergenceRound
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the round at which convergence was detected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ConvergenceRound { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_ConvergenceRound_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Which round did the model stop improving significantly?</p>
+<p>Useful for:</p>
+<ul>
+<li>Setting better MaxRounds for future training</li>
+<li>Understanding training dynamics</li>
+<li>Comparing different algorithms</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_DifferentialPrivacyEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.DifferentialPrivacyEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_DifferentialPrivacyEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.DifferentialPrivacyEnabled">
+  DifferentialPrivacyEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether differential privacy was enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DifferentialPrivacyEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_DifferentialPrivacyEnabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records whether privacy mechanisms were active during training.
+Important for understanding any accuracy trade-offs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_FinalAccuracy_" data-uid="AiDotNet.Models.FederatedLearningMetadata.FinalAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_FinalAccuracy" data-uid="AiDotNet.Models.FederatedLearningMetadata.FinalAccuracy">
+  FinalAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final global model accuracy on validation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FinalAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_FinalAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Accuracy measures how often the model makes correct predictions.
+For example, 0.95 means the model is correct 95% of the time.</p>
+<p>This is measured on validation data that wasn't used for training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_FinalLoss_" data-uid="AiDotNet.Models.FederatedLearningMetadata.FinalLoss*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_FinalLoss" data-uid="AiDotNet.Models.FederatedLearningMetadata.FinalLoss">
+  FinalLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final global model loss value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FinalLoss { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_FinalLoss_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Loss measures how far the model's predictions are from the
+true values. Lower loss indicates better performance.</p>
+<p>For example:</p>
+<ul>
+<li>Initial loss: 2.5</li>
+<li>Final loss: 0.3</li>
+<li>The model has improved significantly</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_HeterogeneityCorrectionUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.HeterogeneityCorrectionUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_HeterogeneityCorrectionUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.HeterogeneityCorrectionUsed">
+  HeterogeneityCorrectionUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the heterogeneity correction method used (if any).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string HeterogeneityCorrectionUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionEnabled">
+  HomomorphicEncryptionEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether homomorphic encryption was enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HomomorphicEncryptionEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionModeUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionModeUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionModeUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionModeUsed">
+  HomomorphicEncryptionModeUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the HE mode used (HEOnly or Hybrid).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string HomomorphicEncryptionModeUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionProviderUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionProviderUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionProviderUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionProviderUsed">
+  HomomorphicEncryptionProviderUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the HE provider used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string HomomorphicEncryptionProviderUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionSchemeUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionSchemeUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_HomomorphicEncryptionSchemeUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.HomomorphicEncryptionSchemeUsed">
+  HomomorphicEncryptionSchemeUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L278"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the HE scheme used (CKKS or BFV).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string HomomorphicEncryptionSchemeUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_LossHistory_" data-uid="AiDotNet.Models.FederatedLearningMetadata.LossHistory*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_LossHistory" data-uid="AiDotNet.Models.FederatedLearningMetadata.LossHistory">
+  LossHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the history of loss values across all rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;double&gt; LossHistory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_LossHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A list showing how loss changed after each round.
+Useful for plotting learning curves and diagnosing training issues.</p>
+<p>For example: [2.5, 1.8, 1.2, 0.9, 0.7, 0.5, 0.4, 0.35, 0.32, 0.3]
+Shows steady improvement from 2.5 to 0.3</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningEnabled">
+  MetaLearningEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether federated meta-learning was enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MetaLearningEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningEnabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Meta-learning in federated settings learns a global initialization that adapts quickly to each client.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningInnerEpochsUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningInnerEpochsUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningInnerEpochsUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningInnerEpochsUsed">
+  MetaLearningInnerEpochsUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the inner (client) adaptation epochs used for meta-learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaLearningInnerEpochsUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningRateUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningRateUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningRateUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningRateUsed">
+  MetaLearningRateUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta learning rate used by the server update rule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MetaLearningRateUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningStrategyUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningStrategyUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_MetaLearningStrategyUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.MetaLearningStrategyUsed">
+  MetaLearningStrategyUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the federated meta-learning strategy used (Reptile/PerFedAvg/FedMAML).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string MetaLearningStrategyUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_Notes_" data-uid="AiDotNet.Models.FederatedLearningMetadata.Notes*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_Notes" data-uid="AiDotNet.Models.FederatedLearningMetadata.Notes">
+  Notes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets additional notes or observations about the training run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Notes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_Notes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A freeform field for recording anything unusual or noteworthy
+that happened during training.</p>
+<p>For example:</p>
+<ul>
+<li>&quot;Client 5 dropped out after round 30&quot;</li>
+<li>&quot;Convergence was slower than expected&quot;</li>
+<li>&quot;High variance in client update quality&quot;</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationEnabled">
+  PersonalizationEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether personalization was enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool PersonalizationEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationEnabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Personalization means some parameters can remain client-specific (or cluster-specific),
+improving accuracy on non-IID client data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationLocalAdaptationEpochs_" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationLocalAdaptationEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationLocalAdaptationEpochs" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationLocalAdaptationEpochs">
+  PersonalizationLocalAdaptationEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L312"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of post-aggregation local adaptation epochs (if configured).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PersonalizationLocalAdaptationEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationStrategyUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationStrategyUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_PersonalizationStrategyUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizationStrategyUsed">
+  PersonalizationStrategyUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the personalization strategy used (FedPer, FedRep, Ditto, pFedMe, Clustered).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string PersonalizationStrategyUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_PersonalizedParameterFraction_" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizedParameterFraction*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_PersonalizedParameterFraction" data-uid="AiDotNet.Models.FederatedLearningMetadata.PersonalizedParameterFraction">
+  PersonalizedParameterFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fraction of parameters treated as personalized for head-split strategies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PersonalizedParameterFraction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_PrivacyAccountantUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.PrivacyAccountantUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_PrivacyAccountantUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.PrivacyAccountantUsed">
+  PrivacyAccountantUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets which privacy accountant was used for reporting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string PrivacyAccountantUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_ReportedDelta_" data-uid="AiDotNet.Models.FederatedLearningMetadata.ReportedDelta*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_ReportedDelta" data-uid="AiDotNet.Models.FederatedLearningMetadata.ReportedDelta">
+  ReportedDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the delta used when reporting <a class="xref" href="AiDotNet.Models.FederatedLearningMetadata.html#AiDotNet_Models_FederatedLearningMetadata_ReportedEpsilonAtDelta">ReportedEpsilonAtDelta</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ReportedDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_ReportedEpsilonAtDelta_" data-uid="AiDotNet.Models.FederatedLearningMetadata.ReportedEpsilonAtDelta*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_ReportedEpsilonAtDelta" data-uid="AiDotNet.Models.FederatedLearningMetadata.ReportedEpsilonAtDelta">
+  ReportedEpsilonAtDelta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reported epsilon at the reported delta (when supported by the accountant).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ReportedEpsilonAtDelta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_ReportedEpsilonAtDelta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some accountants (like RDP) can report a tighter epsilon for a given delta.
+This value is intended for reporting; it does not change how noise was applied.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_RoundMetrics_" data-uid="AiDotNet.Models.FederatedLearningMetadata.RoundMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_RoundMetrics" data-uid="AiDotNet.Models.FederatedLearningMetadata.RoundMetrics">
+  RoundMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the per-round detailed metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;RoundMetadata&gt; RoundMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.RoundMetadata.html">RoundMetadata</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_RoundMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Detailed information about each individual round, including
+which clients participated, their individual losses, communication costs, etc.</p>
+<p>Useful for:</p>
+<ul>
+<li>Detailed analysis of training dynamics</li>
+<li>Identifying problematic clients</li>
+<li>Understanding convergence patterns</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_RoundsCompleted_" data-uid="AiDotNet.Models.FederatedLearningMetadata.RoundsCompleted*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_RoundsCompleted" data-uid="AiDotNet.Models.FederatedLearningMetadata.RoundsCompleted">
+  RoundsCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of federated learning rounds completed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RoundsCompleted { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_RoundsCompleted_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A round is one complete cycle where clients train and the
+server aggregates updates. This counts how many such cycles were completed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationEnabled_" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationEnabled*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationEnabled" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationEnabled">
+  SecureAggregationEnabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L352"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether secure aggregation was enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SecureAggregationEnabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationEnabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records whether client updates were encrypted during aggregation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationMinimumUploaderCountUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationMinimumUploaderCountUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationMinimumUploaderCountUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationMinimumUploaderCountUsed">
+  SecureAggregationMinimumUploaderCountUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L366"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum uploader count used by secure aggregation (dropout-resilient modes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SecureAggregationMinimumUploaderCountUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationModeUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationModeUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationModeUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationModeUsed">
+  SecureAggregationModeUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets which secure aggregation mode was used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string SecureAggregationModeUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationModeUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Different secure aggregation modes provide different drop-out tolerance.
+This value is &quot;None&quot; when secure aggregation is disabled.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationReconstructionThresholdUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationReconstructionThresholdUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_SecureAggregationReconstructionThresholdUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.SecureAggregationReconstructionThresholdUsed">
+  SecureAggregationReconstructionThresholdUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reconstruction threshold used by secure aggregation (dropout-resilient modes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SecureAggregationReconstructionThresholdUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_ServerOptimizerUsed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.ServerOptimizerUsed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_ServerOptimizerUsed" data-uid="AiDotNet.Models.FederatedLearningMetadata.ServerOptimizerUsed">
+  ServerOptimizerUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the server-side federated optimizer used (FedOpt family).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ServerOptimizerUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_ServerOptimizerUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some federated learning variants apply an optimizer on the server after aggregation
+(for example, FedAvgM, FedAdam, FedYogi). If no server optimizer is used, this is &quot;None&quot;.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_TotalClientsParticipated_" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalClientsParticipated*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_TotalClientsParticipated" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalClientsParticipated">
+  TotalClientsParticipated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of clients that participated across all rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalClientsParticipated { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_TotalClientsParticipated_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many different clients contributed to the model.</p>
+<p>For example:</p>
+<ul>
+<li>100 clients available</li>
+<li>10 clients selected per round</li>
+<li>Over 50 rounds, might have 80 unique participants</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_TotalCommunicationMB_" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalCommunicationMB*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_TotalCommunicationMB" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalCommunicationMB">
+  TotalCommunicationMB
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total communication cost in megabytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TotalCommunicationMB { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_TotalCommunicationMB_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The total amount of data transferred between clients and server
+throughout training. Important for understanding bandwidth requirements.</p>
+<p>For example:</p>
+<ul>
+<li>Each model update: 10 MB</li>
+<li>10 clients per round</li>
+<li>50 rounds</li>
+<li>Total: 10 MB × 10 × 50 × 2 (up and down) = 10,000 MB = 10 GB</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyBudgetConsumed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalPrivacyBudgetConsumed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyBudgetConsumed" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalPrivacyBudgetConsumed">
+  TotalPrivacyBudgetConsumed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total privacy budget (epsilon) consumed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TotalPrivacyBudgetConsumed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyBudgetConsumed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If differential privacy is used, this tracks how much privacy
+budget has been spent. Privacy budget is finite - once exhausted, no more privacy
+guarantees.</p>
+<p>For example:</p>
+<ul>
+<li>ε per round: 0.1</li>
+<li>50 rounds completed</li>
+<li>Total consumed: 5.0</li>
+<li>If total budget is 10.0, have 5.0 remaining</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyDeltaConsumed_" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalPrivacyDeltaConsumed*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyDeltaConsumed" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalPrivacyDeltaConsumed">
+  TotalPrivacyDeltaConsumed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total privacy delta consumed (basic composition reporting).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TotalPrivacyDeltaConsumed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_TotalPrivacyDeltaConsumed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Delta (δ) is the probability that the privacy guarantee fails.
+When using simple accounting, deltas add up across rounds.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_FederatedLearningMetadata_TotalTrainingTimeSeconds_" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalTrainingTimeSeconds*"></a>
+
+  <h3 id="AiDotNet_Models_FederatedLearningMetadata_TotalTrainingTimeSeconds" data-uid="AiDotNet.Models.FederatedLearningMetadata.TotalTrainingTimeSeconds">
+  TotalTrainingTimeSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total training time in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TotalTrainingTimeSeconds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_FederatedLearningMetadata_TotalTrainingTimeSeconds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The total wall-clock time from start to finish of federated
+learning, including all rounds, communication, and aggregation.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/FederatedLearningMetadata.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

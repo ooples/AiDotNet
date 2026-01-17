@@ -1,0 +1,1183 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LiveDashboard | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LiveDashboard | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a real-time training dashboard via embedded web server.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard.md&amp;value=---%0Auid%3A%20AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard">
+
+
+
+  <h1 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard" class="text-break">
+Class LiveDashboard  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.html">TrainingMonitoring</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.Dashboard.html">Dashboard</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a real-time training dashboard via embedded web server.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LiveDashboard : ITrainingDashboard, IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LiveDashboard</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.TrainingMonitoring.Dashboard.ITrainingDashboard.html">ITrainingDashboard</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> LiveDashboard is like running TensorBoard - it starts
+a local web server that you can open in your browser to see real-time
+training progress. The charts update automatically as training progresses.</p>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">using var dashboard = new LiveDashboard(port: 6006);
+dashboard.Start();
+Console.WriteLine($"Dashboard running at: {dashboard.Url}");
+
+// During training
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    var (loss, accuracy) = TrainEpoch();
+    dashboard.LogScalar("loss", epoch, loss);
+    dashboard.LogScalar("accuracy", epoch, accuracy);
+    // Dashboard updates in real-time!
+}
+
+Console.WriteLine("Press Enter to stop...");
+Console.ReadLine();
+dashboard.Stop();</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard__ctor_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.#ctor*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard__ctor_System_String_System_String_System_Int32_System_Boolean_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.#ctor(System.String,System.String,System.Int32,System.Boolean)">
+  LiveDashboard(string?, string?, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new live dashboard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LiveDashboard(string? logDirectory = null, string? name = null, int port = 6006, bool allowExternalConnections = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>logDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to save logs.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of this training run.</p>
+</dd>
+    <dt><code>port</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Port to listen on (default: 6006, same as TensorBoard).</p>
+</dd>
+    <dt><code>allowExternalConnections</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to allow connections from other machines (default: false for security).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard__ctor_System_String_System_String_System_Int32_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Security Note:</b> This dashboard uses HTTP (not HTTPS) for simplicity in local development.
+By default, it only accepts connections from localhost. If you enable external connections,
+be aware that data is transmitted unencrypted. For production use or sensitive data,
+consider running behind a reverse proxy with TLS.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_AllowExternalConnections_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.AllowExternalConnections*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_AllowExternalConnections" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.AllowExternalConnections">
+  AllowExternalConnections
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to allow external connections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AllowExternalConnections { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_AllowExternalConnections_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When false (default), only connections from localhost are accepted.
+Set to true to allow connections from other machines on the network.
+Note: Binding to all interfaces may require administrator privileges.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_IsRunning_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.IsRunning*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_IsRunning" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.IsRunning">
+  IsRunning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the dashboard is running.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsRunning { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogDirectory_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogDirectory*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogDirectory" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogDirectory">
+  LogDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the log directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string LogDirectory { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Name_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Name*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Name" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dashboard name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Port_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Port*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Port" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Port">
+  Port
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the port the server is listening on.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Port { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_RefreshIntervalMs_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.RefreshIntervalMs*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_RefreshIntervalMs" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.RefreshIntervalMs">
+  RefreshIntervalMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the refresh interval in milliseconds for auto-updating clients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RefreshIntervalMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Url_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Url*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Url" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Url">
+  Url
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the URL to access the dashboard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Url { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Clear_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Clear*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Clear" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L563"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all logged data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Dispose_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Dispose*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Dispose" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L575"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the live dashboard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_ExportTensorBoardFormat_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.ExportTensorBoardFormat*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_ExportTensorBoardFormat_System_String_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.ExportTensorBoardFormat(System.String)">
+  ExportTensorBoardFormat(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L551"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports data in TensorBoard-compatible format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ExportTensorBoardFormat(string outputDirectory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to write TFEvents files.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Flush_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Flush*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Flush" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Flush">
+  Flush()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L567"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Flushes any buffered data to storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Flush()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GenerateReport_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GenerateReport*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GenerateReport_System_String_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GenerateReport(System.String)">
+  GenerateReport(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L547"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an HTML report of all logged data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateReport(string? outputPath = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to save the HTML report.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the generated report.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GetHistogramData_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GetHistogramData*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GetHistogramData" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GetHistogramData">
+  GetHistogramData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L559"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all logged histogram series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, List&lt;HistogramDataPoint&gt;&gt; GetHistogramData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.Dashboard.HistogramDataPoint.html">HistogramDataPoint</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GetScalarData_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GetScalarData*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_GetScalarData" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.GetScalarData">
+  GetScalarData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L555"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all logged scalar series.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, List&lt;ScalarDataPoint&gt;&gt; GetScalarData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.Dashboard.ScalarDataPoint.html">ScalarDataPoint</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogConfusionMatrix_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogConfusionMatrix*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogConfusionMatrix_System_String_System_Int64_System_Int32_0__0___System_String___System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogConfusionMatrix(System.String,System.Int64,System.Int32[0:,0:],System.String[],System.Nullable{System.DateTime})">
+  LogConfusionMatrix(string, long, int[,], string[], DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L531"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a confusion matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogConfusionMatrix(string name, long step, int[,] matrix, string[] labels, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Matrix name.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step.</p>
+</dd>
+    <dt><code>matrix</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[,]</dt>
+    <dd><p>2D confusion matrix values.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Class labels.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogHistogram_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogHistogram*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogHistogram_System_String_System_Int64_System_Double___System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogHistogram(System.String,System.Int64,System.Double[],System.Nullable{System.DateTime})">
+  LogHistogram(string, long, double[], DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a histogram (distribution) of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogHistogram(string name, long step, double[] values, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Histogram name (e.g., &quot;weights&quot;, &quot;gradients&quot;).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step or epoch.</p>
+</dd>
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The values to create a histogram from.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogHyperparameters_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogHyperparameters*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogHyperparameters_System_Collections_Generic_Dictionary_System_String_System_Object__System_Collections_Generic_Dictionary_System_String_System_Double__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogHyperparameters(System.Collections.Generic.Dictionary{System.String,System.Object},System.Collections.Generic.Dictionary{System.String,System.Double})">
+  LogHyperparameters(Dictionary&lt;string, object&gt;, Dictionary&lt;string, double&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L527"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs hyperparameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogHyperparameters(Dictionary&lt;string, object&gt; hyperparams, Dictionary&lt;string, double&gt;? metrics = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hyperparams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Dictionary of hyperparameter names to values.</p>
+</dd>
+    <dt><code>metrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Optional final metrics to associate with these hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogImage_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogImage*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogImage_System_String_System_Int64_System_Byte___System_Int32_System_Int32_System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogImage(System.String,System.Int64,System.Byte[],System.Int32,System.Int32,System.Nullable{System.DateTime})">
+  LogImage(string, long, byte[], int, int, DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L519"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogImage(string name, long step, byte[] imageData, int width, int height, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Image name/tag.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step.</p>
+</dd>
+    <dt><code>imageData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>Image data as PNG bytes.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogModelGraph_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogModelGraph*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogModelGraph_System_String_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogModelGraph(System.String)">
+  LogModelGraph(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L543"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs the model graph/architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogModelGraph(string modelDescription)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelDescription</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of the model architecture.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogPRCurve_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogPRCurve*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogPRCurve_System_String_System_Int64_System_Double___System_Int32___System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogPRCurve(System.String,System.Int64,System.Double[],System.Int32[],System.Nullable{System.DateTime})">
+  LogPRCurve(string, long, double[], int[], DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L535"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a precision-recall curve.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogPRCurve(string name, long step, double[] predictions, int[] labels, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Curve name.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step.</p>
+</dd>
+    <dt><code>predictions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Predicted probabilities.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>True binary labels (0 or 1).</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogROCCurve_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogROCCurve*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogROCCurve_System_String_System_Int64_System_Double___System_Int32___System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogROCCurve(System.String,System.Int64,System.Double[],System.Int32[],System.Nullable{System.DateTime})">
+  LogROCCurve(string, long, double[], int[], DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L539"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs an ROC curve.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogROCCurve(string name, long step, double[] predictions, int[] labels, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Curve name.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step.</p>
+</dd>
+    <dt><code>predictions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Predicted probabilities.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>True binary labels (0 or 1).</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogScalar_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogScalar*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogScalar_System_String_System_Int64_System_Double_System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogScalar(System.String,System.Int64,System.Double,System.Nullable{System.DateTime})">
+  LogScalar(string, long, double, DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L507"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a scalar metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogScalar(string name, long step, double value, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Metric name (e.g., &quot;loss&quot;, &quot;accuracy&quot;).</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step or epoch.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Metric value.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogScalars_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogScalars*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogScalars_System_Collections_Generic_Dictionary_System_String_System_Double__System_Int64_System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogScalars(System.Collections.Generic.Dictionary{System.String,System.Double},System.Int64,System.Nullable{System.DateTime})">
+  LogScalars(Dictionary&lt;string, double&gt;, long, DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L511"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs multiple scalars at once.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogScalars(Dictionary&lt;string, double&gt; scalars, long step, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalars</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary of metric names to values.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step or epoch.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogText_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogText*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_LogText_System_String_System_Int64_System_String_System_Nullable_System_DateTime__" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.LogText(System.String,System.Int64,System.String,System.Nullable{System.DateTime})">
+  LogText(string, long, string, DateTime?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L523"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LogText(string name, long step, string text, DateTime? wallTime = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text tag.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Training step.</p>
+</dd>
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text content.</p>
+</dd>
+    <dt><code>wallTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a>?</dt>
+    <dd><p>Optional wall clock time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Start_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Start*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Start" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Start">
+  Start()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Starts the dashboard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Start()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Stop_" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Stop*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_Dashboard_LiveDashboard_Stop" data-uid="AiDotNet.TrainingMonitoring.Dashboard.LiveDashboard.Stop">
+  Stop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stops the dashboard.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Stop()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/Dashboard/LiveDashboard.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

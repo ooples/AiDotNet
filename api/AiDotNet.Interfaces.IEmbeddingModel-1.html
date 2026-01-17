@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IEmbeddingModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IEmbeddingModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for embedding models that convert text into vector representations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IEmbeddingModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IEmbeddingModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IEmbeddingModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IEmbeddingModel_1" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1" class="text-break">
+Interface IEmbeddingModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for embedding models that convert text into vector representations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IEmbeddingModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for vector calculations (typically float or double).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IEmbeddingModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+An embedding model transforms text into dense numerical vectors that capture semantic meaning.
+These vectors enable similarity comparisons and are fundamental to retrieval-augmented generation.
+The interface supports both single and batch embeddings with configurable dimensions.
+</p>
+<p><b>For Beginners:</b> An embedding model is like a translator that converts words into numbers.
+<p>Think of it like a coordinate system for meaning:</p>
+<ul>
+<li>Each word or sentence becomes a point in high-dimensional space</li>
+<li>Similar meanings end up close together (like &quot;happy&quot; near &quot;joyful&quot;)</li>
+<li>Different meanings are far apart (like &quot;happy&quot; far from &quot;sad&quot;)</li>
+<li>This lets computers understand and compare text by measuring distances</li>
+</ul>
+<p>For example, the embedding for &quot;cat&quot; might be close to &quot;kitten&quot; and &quot;feline&quot;,
+but far from &quot;democracy&quot; or &quot;algorithm&quot;.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbeddingDimension_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbeddingDimension*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbeddingDimension" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbeddingDimension">
+  EmbeddingDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of the embedding vectors produced by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EmbeddingDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbeddingDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The embedding dimension determines the size of the vector representation.
+Common dimensions range from 128 to 1536, with larger dimensions typically
+capturing more nuanced semantic relationships at the cost of memory and computation.
+</p>
+<p><b>For Beginners:</b> This is how many numbers represent each piece of text.
+<p>Think of it like describing a person:</p>
+<ul>
+<li>Low dimension (128): Basic traits like height, weight, age</li>
+<li>High dimension (768): Detailed description including personality, preferences, habits</li>
+<li>Very high dimension (1536): Extremely detailed profile</li>
+</ul>
+<p>More dimensions = more detailed understanding, but also more storage space needed.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_MaxTokens_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.MaxTokens*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_MaxTokens" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.MaxTokens">
+  MaxTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum length of text (in tokens) that this model can process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IEmbeddingModel_1_MaxTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Most embedding models have a maximum context length beyond which text must be truncated.
+Common limits range from 512 to 8192 tokens. Implementations should handle text exceeding
+this limit gracefully, either by truncation or raising an exception.
+</p>
+<p><b>For Beginners:</b> This is the maximum amount of text the model can understand at once.
+<p>Think of it like a reader's attention span:</p>
+<ul>
+<li>Short span (512 tokens): Can read about a paragraph</li>
+<li>Medium span (2048 tokens): Can read a few pages</li>
+<li>Long span (8192 tokens): Can read a short chapter</li>
+</ul>
+<p>If your text is longer, it needs to be split into chunks.
+(A token is roughly a word, so 512 tokens ≈ 1-2 paragraphs)</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_Embed_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.Embed*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_Embed_System_String_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.Embed(System.String)">
+  Embed(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Embeds a single text string into a vector representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Embed(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to embed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector representing the semantic meaning of the input text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IEmbeddingModel_1_Embed_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a text string into a dense vector that captures its semantic meaning.
+The resulting vector can be used for similarity comparisons, clustering, or as input to
+downstream models. Implementations should return normalized vectors for consistent similarity calculations.
+</p>
+<p><b>For Beginners:</b> This converts one piece of text into a list of numbers.
+<p>For example:</p>
+<ul>
+<li>Input: &quot;The weather is beautiful today&quot;</li>
+<li>Output: A vector like [0.23, -0.45, 0.78, ..., 0.12] with EmbeddingDimension numbers</li>
+</ul>
+<p>These numbers capture the meaning so similar sentences get similar number patterns.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedAsync_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedAsync_System_String_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedAsync(System.String)">
+  EmbedAsync(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously embeds a single text string into a vector representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;Vector&lt;T&gt;&gt; EmbedAsync(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to embed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task representing the async operation, with the resulting vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedBatch_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedBatch*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedBatch_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedBatch(System.Collections.Generic.IEnumerable{System.String})">
+  EmbedBatch(IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Embeds multiple text strings into vector representations in a single batch operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; EmbedBatch(IEnumerable&lt;string&gt; texts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The collection of texts to embed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents the embedding of the corresponding input text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedBatch_System_Collections_Generic_IEnumerable_System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Batch embedding is more efficient than embedding texts individually, as it allows
+the model to process multiple inputs simultaneously. The returned matrix has dimensions
+[textCount, EmbeddingDimension], where each row corresponds to one input text.
+</p>
+<p><b>For Beginners:</b> This converts many pieces of text into numbers all at once.
+<p>Think of it like processing a batch of photos:</p>
+<ul>
+<li>Instead of converting one photo at a time (slow)</li>
+<li>You process the entire album together (fast)</li>
+</ul>
+<p>For example, embedding 100 sentences together is much faster than
+calling Embed() 100 separate times.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedBatchAsync_" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedBatchAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IEmbeddingModel_1_EmbedBatchAsync_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.IEmbeddingModel`1.EmbedBatchAsync(System.Collections.Generic.IEnumerable{System.String})">
+  EmbedBatchAsync(IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously embeds multiple text strings into vector representations in a single batch operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;Matrix&lt;T&gt;&gt; EmbedBatchAsync(IEnumerable&lt;string&gt; texts)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>texts</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>The collection of texts to embed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task representing the async operation, with the resulting matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IEmbeddingModel.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

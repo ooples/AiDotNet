@@ -1,0 +1,1508 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IContinualLearnerConfig&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IContinualLearnerConfig&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration interface for continual learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1" class="text-break">
+Interface IContinualLearnerConfig&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration interface for continual learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IContinualLearnerConfig&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This interface defines the settings needed for continual learning,
+such as learning rates, memory constraints, and regularization parameters.</p>
+<p><b>Continual Learning</b> is the ability to learn new tasks sequentially without
+forgetting previously learned knowledge. This is challenging because neural networks
+tend to suffer from "catastrophic forgetting" - learning new information overwrites
+old knowledge.</p>
+<p><b>Common Strategies Include:</b>
+<ul><li><b>EWC (Elastic Weight Consolidation):</b> Protects important weights from changing</li><li><b>LwF (Learning without Forgetting):</b> Uses knowledge distillation from teacher model</li><li><b>GEM (Gradient Episodic Memory):</b> Projects gradients to prevent forgetting</li><li><b>SI (Synaptic Intelligence):</b> Tracks online importance of weights</li><li><b>Experience Replay:</b> Stores and replays examples from previous tasks</li></ul>
+
+<p><b>Reference:</b> Parisi et al. "Continual Lifelong Learning with Neural Networks: A Review" (2019)</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_AGemMargin_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.AGemMargin*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_AGemMargin" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.AGemMargin">
+  AGemMargin
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Margin for A-GEM (Averaged GEM). Default: 0.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T AGemMargin { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_AGemMargin_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Chaudhry et al. "Efficient Lifelong Learning with A-GEM" (2019)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_AGemReferenceGradients_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.AGemReferenceGradients*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_AGemReferenceGradients" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.AGemReferenceGradients">
+  AGemReferenceGradients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of reference gradients for A-GEM. Default: 256.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int AGemReferenceGradients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BatchSize_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BatchSize" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch size for training. Default: 32.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int BatchSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Number of samples processed together before updating weights.
+Larger batches are more stable but use more memory. Common values: 16, 32, 64, 128.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BiCValidationFraction_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.BiCValidationFraction*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BiCValidationFraction" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.BiCValidationFraction">
+  BiCValidationFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validation set fraction for BiC bias correction. Default: 0.1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T BiCValidationFraction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_BiCValidationFraction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Wu et al. "Large Scale Incremental Learning" (2019)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ComputeBackwardTransfer_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ComputeBackwardTransfer*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ComputeBackwardTransfer" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ComputeBackwardTransfer">
+  ComputeBackwardTransfer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compute backward transfer metric. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ComputeBackwardTransfer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ComputeForwardTransfer_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ComputeForwardTransfer*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ComputeForwardTransfer" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ComputeForwardTransfer">
+  ComputeForwardTransfer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compute forward transfer metric. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ComputeForwardTransfer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_DistillationTemperature_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.DistillationTemperature*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_DistillationTemperature" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.DistillationTemperature">
+  DistillationTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Temperature for knowledge distillation softmax. Default: 2.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T DistillationTemperature { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_DistillationTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Higher temperature makes probability distributions softer,
+capturing more information about relative class similarities.</p>
+<p><b>Reference:</b> Li and Hoiem "Learning without Forgetting" (2017)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_DistillationWeight_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.DistillationWeight*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_DistillationWeight" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.DistillationWeight">
+  DistillationWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Weight for distillation loss vs task loss. Default: 1.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T DistillationWeight { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EpochsPerTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EpochsPerTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EpochsPerTask" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EpochsPerTask">
+  EpochsPerTask
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of training epochs per task. Default: 10.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EpochsPerTask { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EpochsPerTask_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> One epoch means the model sees all training data once.
+More epochs can improve learning but may also cause overfitting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EvaluationFrequency_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EvaluationFrequency" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L309"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluation frequency (every N epochs). Default: 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int EvaluationFrequency { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EwcLambda_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EwcLambda*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EwcLambda" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.EwcLambda">
+  EwcLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>EWC regularization strength (lambda). Default: 1000.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T EwcLambda { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_EwcLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Controls how strongly to protect important weights.
+Higher values (e.g., 5000) prevent more forgetting but may reduce plasticity.</p>
+<p><b>Reference:</b> Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks" (2017)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_FisherSamples_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.FisherSamples*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_FisherSamples" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.FisherSamples">
+  FisherSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of samples for Fisher Information computation. Default: 200.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int FisherSamples { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_GemMemoryStrength_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.GemMemoryStrength*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_GemMemoryStrength" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.GemMemoryStrength">
+  GemMemoryStrength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Memory strength for GEM constraint. Default: 0.5.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T GemMemoryStrength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_GemMemoryStrength_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Controls how strictly to enforce the non-forgetting constraint.
+Higher values more strictly prevent any increase in loss on old tasks.</p>
+<p><b>Reference:</b> Lopez-Paz and Ranzato "Gradient Episodic Memory for Continual Learning" (2017)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_GradientClipNorm_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.GradientClipNorm*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_GradientClipNorm" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.GradientClipNorm">
+  GradientClipNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gradient clipping max norm. Default: 1.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T GradientClipNorm { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_HatSmax_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.HatSmax*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_HatSmax" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.HatSmax">
+  HatSmax
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Smax value for gradient-based attention. Default: 400.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T HatSmax { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_HatSparsity_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.HatSparsity*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_HatSparsity" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.HatSparsity">
+  HatSparsity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sparsity coefficient for HAT. Default: 0.01.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T HatSparsity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_HatSparsity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Serra et al. "Overcoming Catastrophic Forgetting with Hard Attention to the Task" (2018)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ICarlExemplarsPerClass_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ICarlExemplarsPerClass*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ICarlExemplarsPerClass" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ICarlExemplarsPerClass">
+  ICarlExemplarsPerClass
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of exemplars per class for iCaRL. Default: 20.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ICarlExemplarsPerClass { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ICarlExemplarsPerClass_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Rebuffi et al. "iCaRL: Incremental Classifier and Representation Learning" (2017)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ICarlUseHerding_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ICarlUseHerding*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_ICarlUseHerding" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.ICarlUseHerding">
+  ICarlUseHerding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use herding for exemplar selection. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ICarlUseHerding { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_LearningRate_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_LearningRate" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for training. Default: 0.001.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T LearningRate { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Controls how much to update the model in each step.
+Lower values (e.g., 0.0001) mean slower but more stable learning.
+Higher values (e.g., 0.01) mean faster but potentially unstable learning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MasLambda_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MasLambda*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MasLambda" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MasLambda">
+  MasLambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>MAS regularization coefficient (lambda). Default: 1.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T MasLambda { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MasLambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Aljundi et al. "Memory Aware Synapses" (2018)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MaxTasks_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MaxTasks*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MaxTasks" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MaxTasks">
+  MaxTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum number of tasks to support. Default: 100.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxTasks { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MemorySize_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MemorySize*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MemorySize" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MemorySize">
+  MemorySize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum number of examples to store from previous tasks. Default: 1000.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MemorySize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MemorySize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many old examples to keep for experience replay.
+More examples reduce forgetting but use more memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MemoryStrategy_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MemoryStrategy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_MemoryStrategy" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.MemoryStrategy">
+  MemoryStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Memory sampling strategy. Default: Reservoir.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">MemorySamplingStrategy MemoryStrategy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Interfaces.MemorySamplingStrategy.html">MemorySamplingStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_NormalizeFisher_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.NormalizeFisher*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_NormalizeFisher" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.NormalizeFisher">
+  NormalizeFisher
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalize Fisher Information matrix. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool NormalizeFisher { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_OnlineEwcGamma_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.OnlineEwcGamma*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_OnlineEwcGamma" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.OnlineEwcGamma">
+  OnlineEwcGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T OnlineEwcGamma { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PackNetPruneRatio_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PackNetPruneRatio*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PackNetPruneRatio" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PackNetPruneRatio">
+  PackNetPruneRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pruning ratio for PackNet. Default: 0.75.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T PackNetPruneRatio { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PackNetPruneRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Fraction of weights to prune after each task, freeing capacity for new tasks.</p>
+<p><b>Reference:</b> Mallya and Lazebnik "PackNet" (2018)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PackNetRetrainEpochs_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PackNetRetrainEpochs*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PackNetRetrainEpochs" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PackNetRetrainEpochs">
+  PackNetRetrainEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrain epochs after pruning. Default: 5.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int PackNetRetrainEpochs { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PnnLateralScaling_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PnnLateralScaling*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PnnLateralScaling" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PnnLateralScaling">
+  PnnLateralScaling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lateral connection scaling factor. Default: 1.0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T PnnLateralScaling { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PnnUseLateralConnections_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PnnUseLateralConnections*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PnnUseLateralConnections" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.PnnUseLateralConnections">
+  PnnUseLateralConnections
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use lateral connections in progressive networks. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool PnnUseLateralConnections { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_PnnUseLateralConnections_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Rusu et al. "Progressive Neural Networks" (2016)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_RandomSeed_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_RandomSeed" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random seed for reproducibility. Default: null (random).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int? RandomSeed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SamplesPerTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SamplesPerTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SamplesPerTask" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SamplesPerTask">
+  SamplesPerTask
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of samples per task to store in memory. Default: auto-calculated based on MemorySize.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int SamplesPerTask { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SiC_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SiC*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SiC" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SiC">
+  SiC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>SI regularization coefficient (c). Default: 0.1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T SiC { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SiC_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Reference:</b> Zenke et al. "Continual Learning Through Synaptic Intelligence" (2017)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SiXi_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SiXi*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_SiXi" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.SiXi">
+  SiXi
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>SI dampening factor (xi). Default: 0.1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T SiXi { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseEmpiricalFisher_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseEmpiricalFisher*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseEmpiricalFisher" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseEmpiricalFisher">
+  UseEmpiricalFisher
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use empirical Fisher (gradient squared) vs true Fisher. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseEmpiricalFisher { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseGradientClipping_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseGradientClipping*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseGradientClipping" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseGradientClipping">
+  UseGradientClipping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enable gradient clipping. Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseGradientClipping { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UsePrioritizedReplay_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UsePrioritizedReplay*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UsePrioritizedReplay" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UsePrioritizedReplay">
+  UsePrioritizedReplay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use prioritized experience replay based on sample importance. Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UsePrioritizedReplay { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseSoftTargets_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseSoftTargets*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseSoftTargets" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseSoftTargets">
+  UseSoftTargets
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Use soft targets from teacher model. Default: true.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseSoftTargets { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseWeightDecay_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseWeightDecay*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_UseWeightDecay" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.UseWeightDecay">
+  UseWeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enable weight decay regularization. Default: false.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool UseWeightDecay { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_WeightDecay_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.WeightDecay*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_WeightDecay" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.WeightDecay">
+  WeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L343"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Weight decay coefficient. Default: 0.0001.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T WeightDecay { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_IsValid_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.IsValid*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig_1_IsValid" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig`1.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearnerConfig.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

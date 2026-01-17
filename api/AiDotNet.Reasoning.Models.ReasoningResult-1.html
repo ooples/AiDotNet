@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ReasoningResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ReasoningResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the complete result of a reasoning process, including the answer, reasoning chain, and performance metrics.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Models_ReasoningResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Models.ReasoningResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Models_ReasoningResult_1" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1" class="text-break">
+Class ReasoningResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the complete result of a reasoning process, including the answer, reasoning chain, and performance metrics.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ReasoningResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring and calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ReasoningResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Models_ReasoningResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Think of ReasoningResult as the complete package you get back after the AI
+solves a problem. It's like when you finish a homework problem and you have:
+- The final answer
+- All your work showing how you got there
+- Notes about which parts you checked or corrected
+- How long it took you
+- How confident you are about the answer
+<p>This class bundles all of that information together in one place, making it easy to work with
+the results of reasoning.</p>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// After reasoning completes
+ReasoningResult&lt;double&gt; result = await strategy.ReasonAsync("What is 15% of 240?");
+
+// Access the answer
+Console.WriteLine($"Answer: {result.FinalAnswer}");  // "36"
+
+// Check confidence
+Console.WriteLine($"Confidence: {result.OverallConfidence}");  // 0.95
+
+// See how long it took
+Console.WriteLine($"Took {result.TotalDuration.TotalSeconds} seconds");
+
+// Review the reasoning steps
+foreach (var step in result.ReasoningChain.Steps)
+{
+    Console.WriteLine($"  - {step.Content}");
+}
+
+// Get performance metrics
+Console.WriteLine($"Used {result.Metrics["llm_calls"]} AI model calls");</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1__ctor_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1__ctor" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.#ctor">
+  ReasoningResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Reasoning.Models.ReasoningResult-1.html">ReasoningResult&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReasoningResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_AlternativeChains_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.AlternativeChains*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_AlternativeChains" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.AlternativeChains">
+  AlternativeChains
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Alternative reasoning chains that were explored (for strategies like Tree-of-Thoughts).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ReasoningChain&lt;T&gt;&gt; AlternativeChains { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Models.ReasoningChain-1.html">ReasoningChain</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_AlternativeChains_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some reasoning strategies explore multiple different approaches
+to solving a problem. This stores all the alternative solution paths that were considered,
+not just the one that was ultimately chosen.
+<p>Think of it like showing multiple ways to solve a math problem - even if you pick one
+as your final answer, it's useful to see the other approaches you considered.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_ConfidenceScores_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ConfidenceScores*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_ConfidenceScores" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ConfidenceScores">
+  ConfidenceScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Vector of confidence scores across all attempted reasoning paths.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt;? ConfidenceScores { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_ConfidenceScores_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If multiple reasoning chains were explored, this Vector contains
+the confidence score for each one. It's useful for:
+- Comparing different approaches
+- Calculating statistics (mean, variance of confidence)
+- Understanding the distribution of solution quality
+<p>For example, if you tried 5 different approaches and got confidence scores of
+[0.9, 0.85, 0.92, 0.75, 0.88], this vector would contain those values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_ErrorMessage_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ErrorMessage*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_ErrorMessage" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ErrorMessage">
+  ErrorMessage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Error message if the reasoning failed (null if successful).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ErrorMessage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_ErrorMessage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If Success is false, this explains what went wrong.
+For example:
+- "Reasoning timeout after 60 seconds"
+- "Unable to find a valid solution path"
+- "Verification failed for all reasoning attempts"
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_FinalAnswer_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.FinalAnswer*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_FinalAnswer" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.FinalAnswer">
+  FinalAnswer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The final answer or solution from the reasoning process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string FinalAnswer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_FinalAnswer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the bottom-line answer to the question.
+For "What is 15% of 240?", this would be "36".
+For "How can we reduce emissions?", this might be a detailed explanation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metadata_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Metadata*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metadata" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Additional metadata or context about this reasoning result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A flexible storage area for any extra information that might
+be useful, such as:
+- Problem domain (math, code, science, etc.)
+- User preferences or constraints
+- Session or request IDs
+- Custom application-specific data
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metrics_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Metrics*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metrics" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Metrics">
+  Metrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performance metrics and statistics about the reasoning process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_Metrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This dictionary stores various measurements about how the
+reasoning process performed, such as:
+- "llm_calls": Number of times the AI model was queried
+- "tokens_used": Total tokens consumed
+- "verification_checks": Number of verification steps
+- "refinement_count": Total refinements made
+- "nodes_explored": For tree-based strategies
+<p>Useful for analyzing performance, cost, and optimization opportunities.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_OverallConfidence_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.OverallConfidence*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_OverallConfidence" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.OverallConfidence">
+  OverallConfidence
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Overall confidence score for the final answer (0.0 to 1.0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T OverallConfidence { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_OverallConfidence_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a single number that represents how confident the AI
+is about the final answer, considering everything:
+- Confidence in each reasoning step
+- Verification results
+- Whether multiple approaches agreed
+<p>Think of it as a percentage: 0.95 = 95% confident, 0.50 = 50% confident (uncertain).
+Higher values mean you can trust the answer more.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_ReasoningChain_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ReasoningChain*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_ReasoningChain" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ReasoningChain">
+  ReasoningChain
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The complete chain of reasoning steps that led to the final answer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReasoningChain&lt;T&gt; ReasoningChain { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Reasoning.Models.ReasoningChain-1.html">ReasoningChain</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_ReasoningChain_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This contains all the "showing your work" - every step
+the AI took to reach the final answer. It's important for:
+- Understanding how the answer was derived
+- Identifying any logical errors
+- Building trust in the result
+- Learning from the reasoning process
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_StrategyUsed_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.StrategyUsed*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_StrategyUsed" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.StrategyUsed">
+  StrategyUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The strategy that was used for reasoning (e.g., &quot;Chain-of-Thought&quot;, &quot;Tree-of-Thoughts&quot;).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string StrategyUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_StrategyUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This records which reasoning approach was used to solve the problem.
+It's useful for:
+- Understanding how the solution was generated
+- Comparing results from different strategies
+- Debugging or analyzing performance
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_Success_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Success*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_Success" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.Success">
+  Success
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether the reasoning process completed successfully.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Success { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_Success_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you if the reasoning finished properly or if something
+went wrong. Reasons for failure might include:
+- Timeout (took too long)
+- No valid reasoning path found
+- Critical error during processing
+<p>Always check this before trusting the FinalAnswer!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_ToolsUsed_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ToolsUsed*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_ToolsUsed" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ToolsUsed">
+  ToolsUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tools or external resources that were used during reasoning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; ToolsUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_ToolsUsed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records which external tools were called during reasoning,
+such as:
+- "Calculator" - For mathematical calculations
+- "PythonInterpreter" - For running code
+- "WebSearch" - For looking up information
+<p>Helps track what resources were needed to solve the problem.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_TotalDuration_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.TotalDuration*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_TotalDuration" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.TotalDuration">
+  TotalDuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Total time spent on the reasoning process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TotalDuration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_TotalDuration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How long it took from start to finish, including:
+- Generating reasoning steps
+- Verifying steps
+- Refining incorrect steps
+- Exploring alternative paths
+<p>Useful for performance monitoring and optimization.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_VerificationFeedback_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.VerificationFeedback*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_VerificationFeedback" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.VerificationFeedback">
+  VerificationFeedback
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verification results and feedback from critic models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; VerificationFeedback { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_VerificationFeedback_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If steps were verified by "critic" models (AI reviewers),
+this contains their feedback. Each entry might say things like:
+- "Step 2: Logic is sound, calculation verified"
+- "Step 4: Needs more justification for this claim"
+<p>It's like teacher comments on your homework.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_GetSummary_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.GetSummary*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_GetSummary" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.GetSummary">
+  GetSummary()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a summary string of the reasoning result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetSummary()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted string with key information about the result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Models_ReasoningResult_1_GetSummary_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a human-readable summary of the result,
+useful for logging, debugging, or displaying to users.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Models_ReasoningResult_1_ToString_" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Models_ReasoningResult_1_ToString" data-uid="AiDotNet.Reasoning.Models.ReasoningResult`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string representation of this reasoning result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted summary string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Models/ReasoningResult.cs/#L48" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

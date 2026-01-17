@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ElasticsearchDocumentStore&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ElasticsearchDocumentStore&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Elasticsearch-based document store providing hybrid search capabilities (BM25 + dense vectors).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1" class="text-break">
+Class ElasticsearchDocumentStore&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.html">DocumentStores</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Elasticsearch-based document store providing hybrid search capabilities (BM25 + dense vectors).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ElasticsearchDocumentStore&lt;T&gt; : DocumentStoreBase&lt;T&gt;, IDocumentStore&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for vector operations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html">DocumentStoreBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ElasticsearchDocumentStore&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDocumentStore-1.html">IDocumentStore</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_NumOps">DocumentStoreBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_Add_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0__">DocumentStoreBase&lt;T&gt;.Add(VectorDocument&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_AddBatch_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0___">DocumentStoreBase&lt;T&gt;.AddBatch(IEnumerable&lt;VectorDocument&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_GetSimilar_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_">DocumentStoreBase&lt;T&gt;.GetSimilar(Vector&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_GetSimilarWithFilters_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__">DocumentStoreBase&lt;T&gt;.GetSimilarWithFilters(Vector&lt;T&gt;, int, Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_GetById_System_String_">DocumentStoreBase&lt;T&gt;.GetById(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_Remove_System_String_">DocumentStoreBase&lt;T&gt;.Remove(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_GetAll">DocumentStoreBase&lt;T&gt;.GetAll()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_ValidateVectorDocument_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0__">DocumentStoreBase&lt;T&gt;.ValidateVectorDocument(VectorDocument&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_ValidateQueryVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DocumentStoreBase&lt;T&gt;.ValidateQueryVector(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_ValidateDocumentId_System_String_">DocumentStoreBase&lt;T&gt;.ValidateDocumentId(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_ValidateTopK_System_Int32_">DocumentStoreBase&lt;T&gt;.ValidateTopK(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_ValidateMetadataFilters_System_Collections_Generic_Dictionary_System_String_System_Object__">DocumentStoreBase&lt;T&gt;.ValidateMetadataFilters(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.DocumentStoreBase-1.html#AiDotNet_RetrievalAugmentedGeneration_DocumentStores_DocumentStoreBase_1_MatchesFilters_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0__System_Collections_Generic_Dictionary_System_String_System_Object__">DocumentStoreBase&lt;T&gt;.MatchesFilters(Document&lt;T&gt;, Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Elasticsearch combines traditional full-text search (BM25) with vector similarity search,
+making it ideal for hybrid retrieval scenarios where both keyword matching and semantic
+similarity are important.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1__ctor_System_String_System_String_System_String_System_String_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.#ctor(System.String,System.String,System.String,System.String,System.String,System.Int32)">
+  ElasticsearchDocumentStore(string, string, string, string, string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ElasticsearchDocumentStore(string endpoint, string indexName, string apiKey, string username, string password, int vectorDimension = 1536)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>endpoint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>indexName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>username</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>password</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>vectorDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_DocumentCount_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.DocumentCount*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_DocumentCount" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.DocumentCount">
+  DocumentCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of documents currently stored in the document store.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int DocumentCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_VectorDimension_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.VectorDimension*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_VectorDimension" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.VectorDimension">
+  VectorDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimensionality of the vectors stored in this document store.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int VectorDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddBatchCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.AddBatchCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddBatchCore_System_Collections_Generic_IList_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0___" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.AddBatchCore(System.Collections.Generic.IList{AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument{`0}})">
+  AddBatchCore(IList&lt;VectorDocument&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for adding multiple vector documents in a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void AddBatchCore(IList&lt;VectorDocument&lt;T&gt;&gt; vectorDocuments)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectorDocuments</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument-1.html">VectorDocument</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The validated list of vector documents to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddBatchCore_System_Collections_Generic_IList_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The default implementation calls AddCore for each document. Override this to provide
+more efficient batch insertion if your storage backend supports it.
+</p>
+<p><b>For Beginners:</b> Derived classes override this to add many documents efficiently at once.
+<p>For example:</p>
+<ul>
+<li>Database stores can use bulk insert</li>
+<li>In-memory stores can preallocate arrays</li>
+<li>Network stores can batch API calls</li>
+</ul>
+<p>If you don't override, documents are added one at a time (slower but works).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.AddCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddCore_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0__" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.AddCore(AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument{`0})">
+  AddCore(VectorDocument&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for adding a single vector document.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void AddCore(VectorDocument&lt;T&gt; vectorDocument)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectorDocument</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.VectorDocument-1.html">VectorDocument</a>&lt;T&gt;</dt>
+    <dd><p>The validated vector document to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_AddCore_AiDotNet_RetrievalAugmentedGeneration_Models_VectorDocument__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is where derived classes implement their specific storage logic.
+<p>You don't need to:</p>
+<ul>
+<li>Validate the vector document (already done)</li>
+<li>Check vector dimensions (already validated)</li>
+<li>Handle null inputs (already validated)</li>
+</ul>
+<p>Just focus on: Storing the document and its embedding in your storage system.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_Clear_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.Clear*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_Clear" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L565"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all documents from the Elasticsearch index and recreates it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_Clear_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Clears the cache, deletes the Elasticsearch index, resets counters, and recreates the index
+with the same mapping. The index name remains unchanged and is ready to accept new documents.
+</p>
+<p><b>For Beginners:</b> Completely empties the Elasticsearch index and recreates it.
+<p>After calling Clear():</p>
+<ul>
+<li>Index is deleted from Elasticsearch</li>
+<li>Cache is cleared</li>
+<li>Document count resets to 0</li>
+<li>Index is recreated with fresh mapping</li>
+<li>Ready for new documents</li>
+</ul>
+<p>Use with caution - this cannot be undone!</p>
+<p>In Elasticsearch terms, this is like:</p>
+<pre><code class="lang-csharp">DELETE /index_name
+PUT /index_name with mappings</code></pre>
+<p>Example:</p>
+<pre><code class="lang-csharp">store.Clear();
+Console.WriteLine($"Documents in index: {store.DocumentCount}"); // 0</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetAllCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetAllCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetAllCore" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetAllCore">
+  GetAllCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L408"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for retrieving all documents from the Elasticsearch index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IEnumerable&lt;Document&lt;T&gt;&gt; GetAllCore()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An enumerable of all documents without their vector embeddings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetAllCore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses the Elasticsearch scroll API to efficiently retrieve all documents from the index
+in batches, avoiding memory issues with large result sets. The scroll API maintains a
+search context and streams results in manageable batches.
+</p>
+<p><b>For Beginners:</b> Retrieves all documents using Elasticsearch's scroll API.
+<p>The scroll API is the recommended way to retrieve large numbers of documents because:</p>
+<ul>
+<li>Processes results in batches (default: 1000 documents per batch)</li>
+<li>Maintains a search context between requests</li>
+<li>Much more memory-efficient than large &quot;from/size&quot; pagination</li>
+<li>Automatically expires after timeout (default: 1 minute)</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Initial scroll request creates search context, returns first batch</li>
+<li>Subsequent requests using scroll_id return next batches</li>
+<li>Continues until all documents retrieved</li>
+<li>Context automatically cleaned up after timeout</li>
+</ol>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Efficiently retrieve all documents
+var allDocs = store.GetAll().ToList();
+Console.WriteLine($"Total documents: {allDocs.Count}");
+
+// Export to JSON
+var json = JsonConvert.SerializeObject(allDocs);
+File.WriteAllText("elasticsearch_export.json", json);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetByIdCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetByIdCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetByIdCore_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetByIdCore(System.String)">
+  GetByIdCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for retrieving a document by ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Document&lt;T&gt;? GetByIdCore(string documentId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>documentId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated document ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;</dt>
+    <dd><p>The document if found; otherwise, null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetByIdCore_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Derived classes implement how to find a document by its ID.
+Simple dictionary lookup for in-memory stores, database query for persistent stores.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetSimilarCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetSimilarCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetSimilarCore_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.GetSimilarCore(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  GetSimilarCore(Vector&lt;T&gt;, int, Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for similarity search with optional filtering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IEnumerable&lt;Document&lt;T&gt;&gt; GetSimilarCore(Vector&lt;T&gt; queryVector, int topK, Dictionary&lt;string, object&gt; metadataFilters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>queryVector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The validated query vector.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The validated number of documents to return.</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The validated metadata filters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Top-k similar documents ordered by similarity score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_GetSimilarCore_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Derived classes implement their specific similarity search algorithms here.
+<p>You should:</p>
+<ul>
+<li>Calculate similarity between queryVector and all stored embeddings</li>
+<li>Apply metadata filters if provided</li>
+<li>Return top K most similar documents</li>
+<li>Set RelevanceScore on each returned document</li>
+<li>Order results by similarity (highest first)</li>
+</ul>
+<p>Common similarity metrics:</p>
+<ul>
+<li>Cosine similarity: Use StatisticsHelper&lt;T&gt;.CosineSimilarity(vector1, vector2)</li>
+<li>Euclidean distance: Use StatisticsHelper&lt;T&gt;.EuclideanDistance(vector1, vector2)</li>
+<li>Jaccard similarity: Use StatisticsHelper&lt;T&gt;.JaccardSimilarity(vector1, vector2)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_RemoveCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.RemoveCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_RemoveCore_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.DocumentStores.ElasticsearchDocumentStore`1.RemoveCore(System.String)">
+  RemoveCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core logic for removing a document from the Elasticsearch index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool RemoveCore(string documentId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>documentId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated document ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the document was found and removed; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_DocumentStores_ElasticsearchDocumentStore_1_RemoveCore_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Removes the document from both the cache and the Elasticsearch index via DELETE API.
+If successful, decrements the document count.
+</p>
+<p><b>For Beginners:</b> Deletes a document from Elasticsearch.
+<p>In Elasticsearch terms, this is like:</p>
+<pre><code class="lang-csharp">DELETE /index/_doc/document_id</code></pre>
+<p>Example:</p>
+<pre><code class="lang-csharp">if (store.Remove("doc-123"))
+    Console.WriteLine("Document removed from Elasticsearch");</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/DocumentStores/ElasticsearchDocumentStore.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

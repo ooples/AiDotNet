@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ABTestingConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ABTestingConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for A/B testing - comparing multiple model versions by splitting traffic.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Deployment_Configuration_ABTestingConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Deployment.Configuration.ABTestingConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig">
+
+
+
+  <h1 id="AiDotNet_Deployment_Configuration_ABTestingConfig" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig" class="text-break">
+Class ABTestingConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Deployment.html">Deployment</a>.<a class="xref" href="AiDotNet.Deployment.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for A/B testing - comparing multiple model versions by splitting traffic.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ABTestingConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ABTestingConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Deployment_Configuration_ABTestingConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A/B testing lets you try out a new model version on a small percentage
+of users before fully deploying it. This helps you:
+- Test new models in production safely
+- Compare performance between versions with real users
+- Gradually roll out changes to minimize risk
+- Make data-driven decisions about which model is better
+<p>How it works:
+You specify how to split traffic between versions. For example:</p>
+<ul>
+<li>Version 1.0: 80% of traffic (current stable version)</li>
+<li>Version 2.0: 20% of traffic (new experimental version)</li>
+</ul>
+<p>Then you monitor metrics like accuracy, latency, and user satisfaction to decide
+which version is better.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">var abConfig = new ABTestingConfig
+{
+    Enabled = true,
+    TrafficSplit = new Dictionary&lt;string, double&gt;
+    {
+        { "1.0.0", 0.9 },
+        { "2.0.0", 0.1 }
+    },
+    ControlVersion = "1.0.0",
+    AssignmentStrategy = AssignmentStrategy.Sticky
+};</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_AssignmentStrategy_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.AssignmentStrategy*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_AssignmentStrategy" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.AssignmentStrategy">
+  AssignmentStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the strategy for assigning users to versions (default: Random).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AssignmentStrategy AssignmentStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AssignmentStrategy.html">AssignmentStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_AssignmentStrategy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How to assign requests to versions:
+- Random: Each request randomly assigned based on traffic split
+- Sticky: Users consistently get the same version (based on user ID hash)
+- Gradual: Gradually shift traffic from old to new version over time
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_ControlVersion_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.ControlVersion*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_ControlVersion" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.ControlVersion">
+  ControlVersion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the control group version (baseline for comparison).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ControlVersion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_ControlVersion_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The current production version to compare against.
+Typically your stable version. New versions are compared to this baseline.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_Enabled_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.Enabled*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_Enabled" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether A/B testing is enabled (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_Enabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Set to true to enable traffic splitting between model versions.
+False means all traffic goes to the default version.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_MinSampleSize_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.MinSampleSize*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_MinSampleSize" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.MinSampleSize">
+  MinSampleSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum sample size per version before comparing results (default: 1000).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MinSampleSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_MinSampleSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Need at least this many samples before results are statistically significant.
+1000 is a good minimum. Don't make decisions with fewer samples.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_TestDurationDays_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TestDurationDays*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_TestDurationDays" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TestDurationDays">
+  TestDurationDays
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the duration in days for the A/B test (default: 7).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TestDurationDays { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_TestDurationDays_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How long to run the test before analyzing results.
+7 days is typical for gathering meaningful data. After this, choose a winner.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrackAssignments_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TrackAssignments*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrackAssignments" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TrackAssignments">
+  TrackAssignments
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track experiment assignment for each request (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackAssignments { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrackAssignments_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records which version was used for each request.
+Useful for analysis but adds slight overhead. Recommended for A/B testing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrafficSplit_" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TrafficSplit*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrafficSplit" data-uid="AiDotNet.Deployment.Configuration.ABTestingConfig.TrafficSplit">
+  TrafficSplit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the traffic split configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; TrafficSplit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ABTestingConfig_TrafficSplit_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Dictionary mapping version name to traffic percentage (0.0 to 1.0).
+Example: { "1.0": 0.8, "2.0": 0.2 } means 80% on v1.0, 20% on v2.0.
+Percentages must sum to 1.0.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ABTestingConfig.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

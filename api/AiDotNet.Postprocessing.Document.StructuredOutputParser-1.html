@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StructuredOutputParser&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StructuredOutputParser&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="StructuredOutputParser - Parses document AI outputs into structured data formats.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Postprocessing_Document_StructuredOutputParser_1.md&amp;value=---%0Auid%3A%20AiDotNet.Postprocessing.Document.StructuredOutputParser%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1">
+
+
+
+  <h1 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1" class="text-break">
+Class StructuredOutputParser&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Postprocessing.html">Postprocessing</a>.<a class="xref" href="AiDotNet.Postprocessing.Document.html">Document</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>StructuredOutputParser - Parses document AI outputs into structured data formats.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StructuredOutputParser&lt;T&gt; : PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;, IPostprocessor&lt;T, string, Dictionary&lt;string, string&gt;&gt;, IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html">PostprocessorBase</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</div>
+      <div><span class="xref">StructuredOutputParser&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPostprocessor-3.html">IPostprocessor</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_NumOps">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_IsConfigured">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.IsConfigured</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_SupportsInverse">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.SupportsInverse</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_Settings">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.Settings</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_Configure_System_Collections_Generic_Dictionary_System_String_System_Object__">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.Configure(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_Process__1_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.Process(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_ProcessBatch_System_Collections_Generic_IEnumerable__1__">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.ProcessBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_Inverse__2_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.Inverse(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_ConfigureCore_System_Collections_Generic_Dictionary_System_String_System_Object__">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.ConfigureCore(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_ProcessCore__1_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.ProcessCore(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_InverseCore__2_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.InverseCore(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_ValidateInput__1_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.ValidateInput(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_EnsureConfigured">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.EnsureConfigured()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Postprocessing.PostprocessorBase-3.html#AiDotNet_Postprocessing_PostprocessorBase_3_GetSetting__1_System_String___0_">PostprocessorBase&lt;T, string, Dictionary&lt;string, string&gt;&gt;.GetSetting&lt;TSetting&gt;(string, TSetting)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+StructuredOutputParser converts raw model outputs and OCR results into
+structured formats like JSON, tables, key-value pairs, and custom schemas.
+</p>
+<p>
+<b>For Beginners:</b> AI models output text, but applications need structured data.
+This tool bridges that gap:
+<ul>
+<li>Convert OCR text to JSON</li>
+<li>Extract key-value pairs</li>
+<li>Build tabular data</li>
+<li>Validate against schemas</li>
+</ul>
+<p>Key features:</p>
+<ul>
+<li>Multiple output formats</li>
+<li>Schema validation</li>
+<li>Custom parsing rules</li>
+<li>Error handling</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var parser = new StructuredOutputParser&lt;float&gt;();
+var kvPairs = parser.Process(documentText);</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1__ctor_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1__ctor" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.#ctor">
+  StructuredOutputParser()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new StructuredOutputParser with default settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StructuredOutputParser()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_SupportsInverse_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.SupportsInverse*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_SupportsInverse" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.SupportsInverse">
+  SupportsInverse
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Structured output parser does not support inverse transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsInverse { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_Dispose_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_Dispose" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L461"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_Dispose_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_Dispose_System_Boolean_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L470"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources used by the parser.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseForm_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseForm*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseForm_System_String_System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseForm(System.String,System.Collections.Generic.IEnumerable{System.String})">
+  ParseForm(string, IEnumerable&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses a form into a structured object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, string&gt; ParseForm(string text, IEnumerable&lt;string&gt; fieldLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The form text.</p>
+</dd>
+    <dt><code>fieldLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Labels to look for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of field labels to values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseInvoice_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseInvoice*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseInvoice_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseInvoice(System.String)">
+  ParseInvoice(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses an invoice into a structured format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InvoiceData ParseInvoice(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Postprocessing.Document.InvoiceData.html">InvoiceData</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseKeyValuePairs_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseKeyValuePairs*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseKeyValuePairs_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseKeyValuePairs(System.String)">
+  ParseKeyValuePairs(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses text into key-value pairs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, string&gt; ParseKeyValuePairs(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to parse.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of extracted key-value pairs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseReceipt_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseReceipt*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseReceipt_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseReceipt(System.String)">
+  ParseReceipt(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses a receipt into a structured format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReceiptData ParseReceipt(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Postprocessing.Document.ReceiptData.html">ReceiptData</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseTable_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseTable*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseTable_System_String_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseTable(System.String,System.String)">
+  ParseTable(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses tabular text into a list of rows.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IList&lt;IList&lt;string&gt;&gt; ParseTable(string text, string delimiter = &quot;\t&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text containing tabular data.</p>
+</dd>
+    <dt><code>delimiter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The column delimiter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd><p>List of rows, each row being a list of cell values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseTableWithHeaders_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseTableWithHeaders*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseTableWithHeaders_System_String_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseTableWithHeaders(System.String,System.String)">
+  ParseTableWithHeaders(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses tabular text into a list of dictionaries using the first row as headers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IList&lt;Dictionary&lt;string, string&gt;&gt; ParseTableWithHeaders(string text, string delimiter = &quot;\t&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>delimiter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseToJson_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseToJson*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ParseToJson_System_String_System_Collections_Generic_IEnumerable_AiDotNet_Postprocessing_Document_FieldExtractionRule__" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ParseToJson(System.String,System.Collections.Generic.IEnumerable{AiDotNet.Postprocessing.Document.FieldExtractionRule})">
+  ParseToJson(string, IEnumerable&lt;FieldExtractionRule&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses text into a JSON object based on extraction rules.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ParseToJson(string text, IEnumerable&lt;FieldExtractionRule&gt; fieldRules)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to parse.</p>
+</dd>
+    <dt><code>fieldRules</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Postprocessing.Document.FieldExtractionRule.html">FieldExtractionRule</a>&gt;</dt>
+    <dd><p>Rules for extracting fields.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>JSON string representation of extracted data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ProcessCore_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ProcessCore*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ProcessCore_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ProcessCore(System.String)">
+  ProcessCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Parses text into key-value pairs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Dictionary&lt;string, string&gt; ProcessCore(string input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to parse.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of extracted key-value pairs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ValidateAgainstSchema_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ValidateAgainstSchema*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ValidateAgainstSchema_System_Collections_Generic_Dictionary_System_String_System_Object__AiDotNet_Postprocessing_Document_DocumentSchema_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ValidateAgainstSchema(System.Collections.Generic.Dictionary{System.String,System.Object},AiDotNet.Postprocessing.Document.DocumentSchema)">
+  ValidateAgainstSchema(Dictionary&lt;string, object?&gt;, DocumentSchema)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates parsed data against a schema.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ValidationResult ValidateAgainstSchema(Dictionary&lt;string, object?&gt; data, DocumentSchema schema)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>schema</code> <a class="xref" href="AiDotNet.Postprocessing.Document.DocumentSchema.html">DocumentSchema</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Postprocessing.Document.ValidationResult.html">ValidationResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ValidateInput_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ValidateInput*"></a>
+
+  <h3 id="AiDotNet_Postprocessing_Document_StructuredOutputParser_1_ValidateInput_System_String_" data-uid="AiDotNet.Postprocessing.Document.StructuredOutputParser`1.ValidateInput(System.String)">
+  ValidateInput(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the input text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void ValidateInput(string input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Postprocessing/Document/StructuredOutputParser.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

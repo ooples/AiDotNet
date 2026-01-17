@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KochanekBartelsSplineInterpolation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KochanekBartelsSplineInterpolation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Kochanek-Bartels spline interpolation for one-dimensional data points.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interpolation.KochanekBartelsSplineInterpolation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1">
+
+
+
+  <h1 id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1" data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1" class="text-break">
+Class KochanekBartelsSplineInterpolation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/KochanekBartelsSplineInterpolation.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interpolation.html">Interpolation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Kochanek-Bartels spline interpolation for one-dimensional data points.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KochanekBartelsSplineInterpolation&lt;T&gt; : IInterpolation&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">KochanekBartelsSplineInterpolation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInterpolation-1.html">IInterpolation</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Kochanek-Bartels splines (also known as TCB splines) provide control over the shape of the curve
+through three parameters: tension, continuity, and bias. This allows for more flexible and
+customizable interpolation compared to simpler methods.</p>
+<p><b>For Beginners:</b> This interpolation method creates smooth curves between data points with
+special controls that let you adjust how the curve looks. Imagine drawing a line through
+dots on a graph, but being able to control how &quot;tight&quot; the curve is, how smoothly it
+transitions between segments, and whether it tends to overshoot or undershoot. This is
+particularly useful for animation paths or when you need precise control over the shape
+of a curve.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1__ctor_" data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_System_Double_System_Double_" data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double,System.Double,System.Double)">
+  KochanekBartelsSplineInterpolation(Vector&lt;T&gt;, Vector&lt;T&gt;, double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/KochanekBartelsSplineInterpolation.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new Kochanek-Bartels spline interpolation from the given data points and parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KochanekBartelsSplineInterpolation(Vector&lt;T&gt; x, Vector&lt;T&gt; y, double tension = 0, double bias = 0, double continuity = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The x-coordinates of the data points.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The y-coordinates of the data points.</p>
+</dd>
+    <dt><code>tension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls the &quot;tightness&quot; of the curve. Default is 0.</p>
+</dd>
+    <dt><code>bias</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls whether the curve favors the previous or next point. Default is 0.</p>
+</dd>
+    <dt><code>continuity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls the smoothness of transitions at data points. Default is 0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The constructor initializes the interpolation with the provided data points and shape parameters.</p>
+<p><b>For Beginners:</b> When you create a new KochanekBartelsSplineInterpolation object, you provide
+your data points (x and y values) and can optionally adjust three special parameters:</p>
+<ul>
+<li><p>Tension (default 0): Controls how &quot;tight&quot; the curve is. Think of it like a rubber band:</p>
+<ul>
+<li>Positive values (0 to 1): Makes the curve tighter, with less overshoot</li>
+<li>Negative values (-1 to 0): Makes the curve looser, with more overshoot</li>
+<li>Zero: Natural curve, balanced between tight and loose</li>
+</ul>
+</li>
+<li><p>Bias (default 0): Controls whether the curve tends to lean toward the previous point or the next point:</p>
+<ul>
+<li>Positive values (0 to 1): Curve leans toward the previous point</li>
+<li>Negative values (-1 to 0): Curve leans toward the next point</li>
+<li>Zero: Balanced curve, doesn't favor either direction</li>
+</ul>
+</li>
+<li><p>Continuity (default 0): Controls how smoothly the curve transitions at each point:</p>
+<ul>
+<li>Positive values (0 to 1): Creates sharper corners at data points</li>
+<li>Negative values (-1 to 0): Creates rounder transitions at data points</li>
+<li>Zero: Smooth transitions at data points</li>
+</ul>
+</li>
+</ul>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input vectors have different lengths or fewer than 4 points.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1_Interpolate_" data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1.Interpolate*"></a>
+
+  <h3 id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1_Interpolate__0_" data-uid="AiDotNet.Interpolation.KochanekBartelsSplineInterpolation`1.Interpolate(`0)">
+  Interpolate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/KochanekBartelsSplineInterpolation.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the interpolated y-value for a given x-value using Kochanek-Bartels spline interpolation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Interpolate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The x-value at which to interpolate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The interpolated y-value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interpolation_KochanekBartelsSplineInterpolation_1_Interpolate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method finds the interval containing the x-value and evaluates the spline at that point.</p>
+<p><b>For Beginners:</b> This is the main method you'll use after creating the interpolation.
+Give it any x-value within your data range, and it will return the estimated y-value
+using the Kochanek-Bartels spline curve that passes through your data points.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interpolation/KochanekBartelsSplineInterpolation.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

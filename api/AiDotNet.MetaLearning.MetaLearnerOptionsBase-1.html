@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaLearnerOptionsBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaLearnerOptionsBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base implementation of IMetaLearnerOptions with industry-standard defaults.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_MetaLearnerOptionsBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.MetaLearnerOptionsBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1" class="text-break">
+Class MetaLearnerOptionsBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base implementation of IMetaLearnerOptions with industry-standard defaults.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MetaLearnerOptionsBase&lt;T&gt; : IMetaLearnerOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaLearnerOptionsBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides sensible defaults for meta-learning configurations based on
+established practices from the meta-learning literature (MAML, Reptile, etc.).
+</p>
+<p><b>For Beginners:</b> You can use this class directly or extend it to create
+algorithm-specific options classes. The defaults work well for most scenarios.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1__ctor_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1__ctor" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.#ctor">
+  MetaLearnerOptionsBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaLearnerOptionsBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1__ctor_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1__ctor_AiDotNet_Interfaces_IMetaLearnerOptions__0__" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.#ctor(AiDotNet.Interfaces.IMetaLearnerOptions{`0})">
+  MetaLearnerOptionsBase(IMetaLearnerOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance by copying values from another options instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected MetaLearnerOptionsBase(IMetaLearnerOptions&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>The options instance to copy from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_AdaptationSteps" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of gradient descent steps for inner loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many times to update parameters on each task's support set.
+Typical values: 1 to 10. Default: 5</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_AdaptationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 5 (balanced between 1-step and 10-step adaptation)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_CheckpointFrequency_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_CheckpointFrequency" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the checkpoint save frequency in meta-iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Save checkpoint every N meta-iterations. Only used if EnableCheckpointing is true.
+Default: 500</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_CheckpointFrequency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 500 (save every 500 iterations)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EnableCheckpointing_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EnableCheckpointing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EnableCheckpointing" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EnableCheckpointing">
+  EnableCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to save checkpoints during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to save model checkpoints periodically.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EnableCheckpointing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: true (save progress during training)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationFrequency_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationFrequency" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the evaluation frequency in meta-iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Run evaluation every N meta-iterations. Set to 0 to disable periodic evaluation.
+Default: 100</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationFrequency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 100 (evaluate every 100 iterations)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationTasks_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EvaluationTasks*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationTasks" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.EvaluationTasks">
+  EvaluationTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of evaluation tasks for periodic validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationTasks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many tasks to use when evaluating model performance.
+Typical values: 100 to 1000. Default: 100</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_EvaluationTasks_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 100 (quick evaluation during training)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_GradientClipThreshold_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.GradientClipThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_GradientClipThreshold" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.GradientClipThreshold">
+  GradientClipThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the gradient clipping threshold to prevent exploding gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? GradientClipThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Maximum gradient norm. Set to null or 0 to disable clipping.
+Typical values: 1.0 to 10.0. Default: 10.0</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_GradientClipThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 10.0 (prevents gradient explosion)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_InnerLearningRate" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the inner loop learning rate for task-specific adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate used during task adaptation on support sets.
+Typical values: 0.001 to 0.1. Default: 0.01</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_InnerLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.01 (standard for MAML-like algorithms)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_MetaBatchSize_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.MetaBatchSize*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_MetaBatchSize" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.MetaBatchSize">
+  MetaBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of tasks to sample per meta-update (meta-batch size).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many tasks to average over for each outer loop update.
+Typical values: 1 (online) to 32 (batch). Default: 4</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_MetaBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This controls how many tasks you learn from before updating
+your meta-parameters:
+- MetaBatchSize = 1: Update after every task (more noisy, faster iteration)
+- MetaBatchSize = 16: Update after 16 tasks (more stable, slower iteration)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_NumMetaIterations_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.NumMetaIterations*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_NumMetaIterations" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.NumMetaIterations">
+  NumMetaIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of meta-training iterations to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMetaIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many times to perform the outer loop meta-update.
+Typical values: 100 to 10,000. Default: 1000</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_NumMetaIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 1000 (reasonable for initial training runs)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_OuterLearningRate" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the outer loop learning rate for meta-optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate for updating meta-parameters.
+Typically 10x smaller than InnerLearningRate.
+Typical values: 0.0001 to 0.01. Default: 0.001</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_OuterLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: 0.001 (typically 10x smaller than inner rate)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_RandomSeed_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_RandomSeed" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the random seed for reproducible task sampling and initialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Random seed value. Set to null for non-deterministic behavior.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default: null (non-deterministic for variety in training)</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_UseFirstOrder_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.UseFirstOrder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_UseFirstOrder" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.UseFirstOrder">
+  UseFirstOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether to use first-order approximation (e.g., FOMAML, Reptile).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to ignore second-order gradients, which is faster but may be less accurate.
+Default: false for MAML-based algorithms.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_UseFirstOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> First-order approximation:
+- True: Faster training, simpler gradients, works well in practice
+- False: More accurate gradients, slower, may be unstable with many inner steps
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_Clone_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.Clone*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_Clone" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this options instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual IMetaLearnerOptions&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>A new options instance with the same values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_CreateBuilder_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.CreateBuilder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_CreateBuilder" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.CreateBuilder">
+  CreateBuilder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a builder for fluent configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static MetaLearnerOptionsBuilder&lt;T&gt; CreateBuilder()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.MetaLearnerOptionsBuilder-1.html">MetaLearnerOptionsBuilder</a>&lt;T&gt;</dt>
+    <dd><p>A new builder instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_IsValid_" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.IsValid*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_MetaLearnerOptionsBase_1_IsValid" data-uid="AiDotNet.MetaLearning.MetaLearnerOptionsBase`1.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the configuration is valid and sensible.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid; false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/MetaLearnerOptionsBase.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

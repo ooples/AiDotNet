@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DirectGpuEngine | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DirectGpuEngine | AiDotNet Documentation ">
+      
+      <meta name="description" content="High-performance GPU engine that talks directly to hardware via P/Invoke. Supports any generic type T by converting to float at the GPU boundary.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine" class="text-break">
+Class DirectGpuEngine  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.html">DirectGpu</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>High-performance GPU engine that talks directly to hardware via P/Invoke.
+Supports any generic type T by converting to float at the GPU boundary.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class DirectGpuEngine : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DirectGpuEngine</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Design Philosophy:</b></p>
+<p>
+This engine provides the fastest GPU path by using specialized math kernels 
+that run directly on your graphics card.
+</p>
+<p><b>For Beginners:</b> Think of this as a high-speed lane for math. 
+It bypasses the normal slow ways computers do math and uses the massive 
+parallel power of your graphics card to speed up AI calculations.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine__ctor_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine__ctor" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.#ctor">
+  DirectGpuEngine()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.html">DirectGpuEngine</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DirectGpuEngine()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Backend selection order:</p>
+<ol>
+<li>CUDA (NVIDIA GPUs with NVRTC available)</li>
+<li>OpenCL (works on AMD, Intel, and NVIDIA)</li>
+<li>HIP (AMD GPUs with MFMA support - MI100/200/300, RDNA3)</li>
+</ol>
+<p><b>For Beginners:</b> This method searches your computer for a
+graphics card it can use. It tries CUDA first (NVIDIA), then OpenCL (standard),
+then HIP (AMD) until it finds a way to run fast math.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Backend_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Backend*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Backend" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Backend">
+  Backend
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying backend for direct GPU operations.
+Use this for GPU-resident operations to avoid CPU-GPU transfer overhead.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IDirectGpuBackend? Backend { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_BackendName_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.BackendName*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_BackendName" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.BackendName">
+  BackendName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the backend name (OpenCL, CUDA, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string BackendName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ComputeUnits_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ComputeUnits*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ComputeUnits" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ComputeUnits">
+  ComputeUnits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of compute units.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ComputeUnits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DeviceName_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DeviceName*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DeviceName" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DeviceName">
+  DeviceName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the GPU device name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string DeviceName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DeviceVendor_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DeviceVendor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DeviceVendor" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DeviceVendor">
+  DeviceVendor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the GPU vendor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string DeviceVendor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_FusionManager_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.FusionManager*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_FusionManager" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.FusionManager">
+  FusionManager
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the kernel fusion manager for tracking and fusing operation sequences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KernelFusionManager FusionManager { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.KernelFusionManager.html">KernelFusionManager</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GlobalMemoryBytes_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GlobalMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GlobalMemoryBytes" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GlobalMemoryBytes">
+  GlobalMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets global memory in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long GlobalMemoryBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GlobalMemoryGB_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GlobalMemoryGB*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GlobalMemoryGB" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GlobalMemoryGB">
+  GlobalMemoryGB
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets global memory in GB.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GlobalMemoryGB { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_IsAvailable_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.IsAvailable*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_IsAvailable" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.IsAvailable">
+  IsAvailable
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the direct GPU engine is available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsAvailable { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_LocalMemoryBytes_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.LocalMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_LocalMemoryBytes" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.LocalMemoryBytes">
+  LocalMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets local (shared) memory per workgroup in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long LocalMemoryBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_AllocatePersistentBuffer_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.AllocatePersistentBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_AllocatePersistentBuffer__1___0___" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.AllocatePersistentBuffer``1(``0[])">
+  AllocatePersistentBuffer&lt;T&gt;(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1053"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates a persistent GPU buffer for cached weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGpuBuffer? AllocatePersistentBuffer&lt;T&gt;(T[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[]</dt>
+    <dd><p>Data to upload.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>GPU buffer handle, or null if unavailable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DenseForwardFused_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DenseForwardFused*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_DenseForwardFused__1___0_____0_____0___System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_ActivationType_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.DenseForwardFused``1(``0[],``0[],``0[],System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.ActivationType)">
+  DenseForwardFused&lt;T&gt;(T[], T[], T[], int, int, int, ActivationType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L511"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fused Dense layer forward: output = Activation(input * weights + bias)
+Uses the kernel fusion manager to select the optimal fused kernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? DenseForwardFused&lt;T&gt;(T[] input, T[] weights, T[] bias, int batchSize, int inputFeatures, int outputFeatures, ActivationType activation = ActivationType.None)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> T[]</dt>
+    <dd><p>Input data (batchSize x inputFeatures).</p>
+</dd>
+    <dt><code>weights</code> T[]</dt>
+    <dd><p>Weight matrix (inputFeatures x outputFeatures).</p>
+</dd>
+    <dt><code>bias</code> T[]</dt>
+    <dd><p>Bias vector (outputFeatures).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch size.</p>
+</dd>
+    <dt><code>inputFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Input feature count.</p>
+</dd>
+    <dt><code>outputFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output feature count.</p>
+</dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.ActivationType.html">ActivationType</a></dt>
+    <dd><p>Activation function type for fused kernel selection.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Output data (batchSize x outputFeatures), or null if GPU unavailable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Dispose_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Dispose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Dispose" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1096"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ExecuteWithFusion_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ExecuteWithFusion*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ExecuteWithFusion__1_System_Collections_Generic_IReadOnlyList_AiDotNet_Tensors_Engines_DirectGpu_FusableOperation____0___System_Collections_Generic_IReadOnlyDictionary_System_String___0____System_Collections_Generic_IReadOnlyDictionary_System_String_System_Int32__" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ExecuteWithFusion``1(System.Collections.Generic.IReadOnlyList{AiDotNet.Tensors.Engines.DirectGpu.FusableOperation},``0[],System.Collections.Generic.IReadOnlyDictionary{System.String,``0[]},System.Collections.Generic.IReadOnlyDictionary{System.String,System.Int32})">
+  ExecuteWithFusion&lt;T&gt;(IReadOnlyList&lt;FusableOperation&gt;, T[], IReadOnlyDictionary&lt;string, T[]&gt;?, IReadOnlyDictionary&lt;string, int&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L623"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes a sequence of operations, automatically fusing where possible.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? ExecuteWithFusion&lt;T&gt;(IReadOnlyList&lt;FusableOperation&gt; operations, T[] input, IReadOnlyDictionary&lt;string, T[]&gt;? additionalBuffers = null, IReadOnlyDictionary&lt;string, int&gt;? dimensions = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>operations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.FusableOperation.html">FusableOperation</a>&gt;</dt>
+    <dd><p>The operations to execute.</p>
+</dd>
+    <dt><code>input</code> T[]</dt>
+    <dd><p>Initial input data.</p>
+</dd>
+    <dt><code>additionalBuffers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T[]&gt;</dt>
+    <dd><p>Additional buffers needed for the operations (e.g., weights, bias).</p>
+</dd>
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>Dimension parameters (M, K, N, etc.).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>The result, or null if GPU unavailable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_FromFloatArray_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.FromFloatArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_FromFloatArray__1_System_Single___" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.FromFloatArray``1(System.Single[])">
+  FromFloatArray&lt;T&gt;(float[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float array back to the generic type.
+Uses vectorized span-based conversion via IVectorizedOperations.FromFloatSpan.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T[] FromFloatArray&lt;T&gt;(float[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GetDiagnostics_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GetDiagnostics*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GetDiagnostics" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GetDiagnostics">
+  GetDiagnostics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1069"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a diagnostic string with GPU information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetDiagnostics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GetFusionStatistics_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GetFusionStatistics*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_GetFusionStatistics" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.GetFusionStatistics">
+  GetFusionStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1089"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets detailed fusion statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetFusionStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_MatMulWithCachedWeights_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.MatMulWithCachedWeights*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_MatMulWithCachedWeights__1___0___AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.MatMulWithCachedWeights``1(``0[],AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,System.Int32,System.Int32)">
+  MatMulWithCachedWeights&lt;T&gt;(T[], IGpuBuffer, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L480"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Matrix multiplication with pre-allocated GPU weight buffer (for cached weights).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? MatMulWithCachedWeights&lt;T&gt;(T[] input, IGpuBuffer cachedWeights, int M, int K, int N)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> T[]</dt>
+    <dd></dd>
+    <dt><code>cachedWeights</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_MatMul_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.MatMul*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_MatMul__1___0_____0___System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.MatMul``1(``0[],``0[],System.Int32,System.Int32,System.Int32)">
+  MatMul&lt;T&gt;(T[], T[], int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L432"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Matrix multiplication: C = A * B</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? MatMul&lt;T&gt;(T[] A, T[] B, int M, int K, int N)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> T[]</dt>
+    <dd><p>Matrix A data (M x K, row-major).</p>
+</dd>
+    <dt><code>B</code> T[]</dt>
+    <dd><p>Matrix B data (K x N, row-major).</p>
+</dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Rows of A.</p>
+</dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Columns of A / Rows of B.</p>
+</dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Columns of B.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Result matrix C (M x N), or null if GPU unavailable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Element type (will be converted to float for GPU).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Relu_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Relu*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Relu__1___0___" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Relu``1(``0[])">
+  Relu&lt;T&gt;(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L992"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>ReLU activation: output = max(0, input)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? Relu&lt;T&gt;(T[] input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Sigmoid_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Sigmoid__1___0___" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Sigmoid``1(``0[])">
+  Sigmoid&lt;T&gt;(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1010"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sigmoid activation: output = 1 / (1 + exp(-input))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? Sigmoid&lt;T&gt;(T[] input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Softmax_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Softmax*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_Softmax__1___0___System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.Softmax``1(``0[],System.Int32,System.Int32)">
+  Softmax&lt;T&gt;(T[], int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L1028"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Softmax activation along last dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[]? Softmax&lt;T&gt;(T[] input, int batchSize, int features)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> T[]</dt>
+    <dd></dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>features</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray__1_System_Memory___0__" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray``1(System.Memory{``0})">
+  ToFloatArray&lt;T&gt;(Memory&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L358"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Memory&lt;T&gt; to a float array for GPU operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float[] ToFloatArray&lt;T&gt;(Memory&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.memory-1">Memory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray__1_System_ReadOnlyMemory___0__" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray``1(System.ReadOnlyMemory{``0})">
+  ToFloatArray&lt;T&gt;(ReadOnlyMemory&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L382"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a ReadOnlyMemory&lt;T&gt; to a float array for GPU operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float[] ToFloatArray&lt;T&gt;(ReadOnlyMemory&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlymemory-1">ReadOnlyMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_DirectGpuEngine_ToFloatArray__1___0___" data-uid="AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine.ToFloatArray``1(``0[])">
+  ToFloatArray&lt;T&gt;(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a generic array to float array for GPU processing.
+Uses vectorized span-based conversion via IVectorizedOperations.ToFloatSpan.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float[] ToFloatArray&lt;T&gt;(T[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/DirectGpuEngine.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

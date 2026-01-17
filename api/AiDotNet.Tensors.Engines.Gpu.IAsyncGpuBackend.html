@@ -1,0 +1,2029 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAsyncGpuBackend | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAsyncGpuBackend | AiDotNet Documentation ">
+      
+      <meta name="description" content="Extended GPU backend interface with async operations, streams, and events. Backends that support async execution implement this interface for improved performance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend" class="text-break">
+Interface IAsyncGpuBackend  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.html">Gpu</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Extended GPU backend interface with async operations, streams, and events.
+Backends that support async execution implement this interface for improved performance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAsyncGpuBackend : IDirectGpuBackend, IDisposable</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_IsAvailable">IDirectGpuBackend.IsAvailable</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BackendName">IDirectGpuBackend.BackendName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeviceName">IDirectGpuBackend.DeviceName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeviceVendor">IDirectGpuBackend.DeviceVendor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ComputeUnits">IDirectGpuBackend.ComputeUnits</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalMemoryBytes">IDirectGpuBackend.GlobalMemoryBytes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LocalMemoryBytes">IDirectGpuBackend.LocalMemoryBytes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AllocateBuffer_System_Single___">IDirectGpuBackend.AllocateBuffer(float[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AllocateBuffer_System_Int32_">IDirectGpuBackend.AllocateBuffer(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DownloadBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_">IDirectGpuBackend.DownloadBuffer(IGpuBuffer)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DownloadBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single___">IDirectGpuBackend.DownloadBuffer(IGpuBuffer, float[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Copy_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Copy(IGpuBuffer, int, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Gemm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_System_Single_">IDirectGpuBackend.Gemm(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MatMul_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.MatMul(IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BatchedGemm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Single_">IDirectGpuBackend.BatchedGemm(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GemmBiasRelu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GemmBiasRelu(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GemmBiasGelu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GemmBiasGelu(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GemmBiasSigmoid_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GemmBiasSigmoid(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GemmBiasTanh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GemmBiasTanh(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GemmBias_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GemmBias(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BiasAdd_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.BiasAdd(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Conv2DBiasAdd_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Conv2DBiasAdd(IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BroadcastMultiplyLastAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.BroadcastMultiplyLastAxis(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BroadcastMultiplyFirstAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.BroadcastMultiplyFirstAxis(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Add_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Add(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Subtract_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Subtract(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Multiply_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Multiply(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Divide_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Divide(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Min_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Min(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Max_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Max(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Scale_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.Scale(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Power_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.Power(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Abs_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Abs(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Exp_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Exp(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Exp2_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Exp2(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Exp10_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Exp10(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ExpM1_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ExpM1(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Log_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Log(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Log2_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Log2(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Log1P_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Log1P(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sqrt_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sqrt(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sign_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sign(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Relu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Relu(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sigmoid_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sigmoid(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Tanh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Tanh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Gelu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Gelu(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Softmax_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Softmax(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Squash_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.Squash(IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SquashBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.SquashBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CapsulePredictions_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CapsulePredictions(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CapsuleTransform_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CapsuleTransform(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CapsuleWeightedSum_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CapsuleWeightedSum(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CapsuleAgreement_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CapsuleAgreement(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TileBatch_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.TileBatch(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TileAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.TileAxis(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sin_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sin(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Cos_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Cos(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Tan_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Tan(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Asin_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Asin(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Acos_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Acos(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Atan_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Atan(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sinh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sinh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Cosh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Cosh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Asinh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Asinh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Acosh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Acosh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Atanh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Atanh(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Reciprocal_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Reciprocal(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Cbrt_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Cbrt(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Log10_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Log10(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Negate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Negate(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Floor_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Floor(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Ceiling_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Ceiling(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Round_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Round(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Truncate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Truncate(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Enforce2x4Sparsity_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Enforce2x4Sparsity(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Decompress2x4Sparse_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Decompress2x4Sparse(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SparseGemm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_System_Single_">IDirectGpuBackend.SparseGemm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SparseGemmBiasRelu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.SparseGemmBiasRelu(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AllocateByteBuffer_System_Int32_">IDirectGpuBackend.AllocateByteBuffer(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CsrSpMM_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CsrSpMM(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CsrSpMMBias_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CsrSpMMBias(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ScatterAddEdges_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.ScatterAddEdges(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CsrSegmentedMax_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CsrSegmentedMax(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CsrSegmentedMin_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.CsrSegmentedMin(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CsrSegmentedStdDev_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.CsrSegmentedStdDev(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Sum_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Sum(IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Max_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Max(IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SumAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.SumAxis(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Synchronize">IDirectGpuBackend.Synchronize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Conv2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Conv2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Conv2DBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Conv2DBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Conv2DBackwardKernel_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Conv2DBackwardKernel(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Conv3D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Conv3D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DepthwiseConv2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DepthwiseConv2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ConvTranspose2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.ConvTranspose2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ConvTranspose2DBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.ConvTranspose2DBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ConvTranspose2DBackwardKernel_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.ConvTranspose2DBackwardKernel(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LocallyConnectedConv2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LocallyConnectedConv2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LocallyConnectedConv2DBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LocallyConnectedConv2DBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LocallyConnectedConv2DBackwardWeights_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LocallyConnectedConv2DBackwardWeights(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LocallyConnectedConv2DBackwardBias_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LocallyConnectedConv2DBackwardBias(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeformableConv2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DeformableConv2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeformableConv2DBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DeformableConv2DBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeformableConv2DBackwardWeights_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DeformableConv2DBackwardWeights(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeformableConv2DBackwardOffset_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DeformableConv2DBackwardOffset(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DeformableConv2DBackwardMask_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.DeformableConv2DBackwardMask(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaxPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.MaxPool2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaxPool2DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.MaxPool2DBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AvgPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.AvgPool2D(IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AvgPool2DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.AvgPool2DBackward(IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalAvgPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GlobalAvgPool2D(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalMaxPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GlobalMaxPool2D(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalMaxPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GlobalMaxPool2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalAvgPool2DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GlobalAvgPool2DBackward(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GlobalMaxPool2DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GlobalMaxPool2DBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdaptiveAvgPool2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.AdaptiveAvgPool2D(IGpuBuffer, IGpuBuffer, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaxPool3D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.MaxPool3D(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaxPool3DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.MaxPool3DBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AffineGrid_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.AffineGrid(IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GridSample_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.GridSample(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GridSampleBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.GridSampleBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BatchNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_System_Single_System_Boolean_">IDirectGpuBackend.BatchNorm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BatchNormBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.BatchNormBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LayerNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.LayerNorm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LayerNormBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.LayerNormBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GroupNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.GroupNorm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_InstanceNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.InstanceNorm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_InstanceNormBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.InstanceNormBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_RmsNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.RmsNorm(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_RmsNormBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.RmsNormBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Dropout_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_UInt64_System_Boolean_">IDirectGpuBackend.Dropout(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float, ulong, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DropoutBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.DropoutBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Embedding_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Embedding(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_EmbeddingBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.EmbeddingBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AllocateIntBuffer_System_Int32_">IDirectGpuBackend.AllocateIntBuffer(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AllocateIntBuffer_System_Int32___">IDirectGpuBackend.AllocateIntBuffer(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ScaledDotProductAttention_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.ScaledDotProductAttention(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ScaledDotProductAttentionBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.ScaledDotProductAttentionBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FlashAttention_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.FlashAttention(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FlashAttentionV2_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.FlashAttentionV2(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FlashAttentionBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.FlashAttentionBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GroupedQueryAttention_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_System_Boolean_">IDirectGpuBackend.GroupedQueryAttention(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, float, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GroupedQueryAttentionBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.GroupedQueryAttentionBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Transpose_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Transpose(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BatchedTranspose_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.BatchedTranspose(IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Permute_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32___System_Int32___">IDirectGpuBackend.Permute(IGpuBuffer, IGpuBuffer, int[], int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Copy_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Copy(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Fill_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.Fill(IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Copy2DStrided_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.Copy2DStrided(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NearestNeighborUpsample_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.NearestNeighborUpsample(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NearestNeighborUpsampleBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.NearestNeighborUpsampleBackward(IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NearestNeighborUpsample3D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.NearestNeighborUpsample3D(IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NearestNeighborUpsample3DBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.NearestNeighborUpsample3DBackward(IGpuBuffer, IGpuBuffer, int, int, int, int, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ReluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ReluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SigmoidBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SigmoidBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TanhBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.TanhBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GeluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.GeluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SoftmaxBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.SoftmaxBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LeakyRelu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.LeakyRelu(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LeakyReluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.LeakyReluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Elu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.Elu(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_EluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.EluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Swish_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Swish(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SwishBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SwishBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Silu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Silu(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SiluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SiluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Mish_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Mish(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MishBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.MishBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Softplus_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Softplus(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SoftplusBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SoftplusBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Hardswish_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Hardswish(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HardswishBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.HardswishBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Selu_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.Selu(IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SeluBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.SeluBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Hardsigmoid_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Hardsigmoid(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HardsigmoidBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.HardsigmoidBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Hardtanh_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.Hardtanh(IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HardtanhBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.HardtanhBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CrossEntropyLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.CrossEntropyLoss(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CrossEntropyBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.CrossEntropyBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BinaryCrossEntropyLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.BinaryCrossEntropyLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BinaryCrossEntropyBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.BinaryCrossEntropyBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MseLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.MseLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MseBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.MseBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SmoothL1Loss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.SmoothL1Loss(IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SmoothL1Backward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.SmoothL1Backward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TripletLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.TripletLoss(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TripletLossBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.TripletLossBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HuberLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.HuberLoss(IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HuberBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.HuberBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FocalLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_">IDirectGpuBackend.FocalLoss(IGpuBuffer, IGpuBuffer, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FocalBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_">IDirectGpuBackend.FocalBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaeLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.MaeLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaeBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.MaeBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LogCoshLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.LogCoshLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LogCoshBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.LogCoshBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_QuantileLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.QuantileLoss(IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_QuantileBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.QuantileBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HingeLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.HingeLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HingeBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.HingeBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SquaredHingeLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SquaredHingeLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SquaredHingeBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.SquaredHingeBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PoissonLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.PoissonLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PoissonBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.PoissonBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ExponentialLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ExponentialLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ExponentialBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ExponentialBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ModifiedHuberLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ModifiedHuberLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ModifiedHuberBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ModifiedHuberBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CategoricalCrossEntropyLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.CategoricalCrossEntropyLoss(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CategoricalCrossEntropyBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.CategoricalCrossEntropyBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CharbonnierLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.CharbonnierLoss(IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_CharbonnierBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.CharbonnierBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ElasticNetLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_">IDirectGpuBackend.ElasticNetLoss(IGpuBuffer, IGpuBuffer, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ElasticNetBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_">IDirectGpuBackend.ElasticNetBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ContrastiveLoss_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.ContrastiveLoss(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ContrastiveBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.ContrastiveBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Clamp_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.Clamp(IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_L2Norm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.L2Norm(IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ClipByValue_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.ClipByValue(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ClipByNorm_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.ClipByNorm(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Fma_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Fma(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ScatterAdd_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ScatterAdd(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ConvertToFp16_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ConvertToFp16(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ConvertToFp32_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ConvertToFp32(IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ScatterAddBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ScatterAddBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Gather_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.Gather(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GreaterThan_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.GreaterThan(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LessThan_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.LessThan(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Equal_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Equal(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_Where_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.Where(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NotEqualScalar_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Int32_">IDirectGpuBackend.NotEqualScalar(IGpuBuffer, IGpuBuffer, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MeanAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.MeanAxis(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_VarAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.VarAxis(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ArgMax_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ArgMax(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ArgMin_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ArgMin(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_TopK_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.TopK(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MaxAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.MaxAxis(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ArgMaxAxis_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ArgMaxAxis(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SgdMomentumUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.SgdMomentumUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdamUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.AdamUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdamWUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.AdamWUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_RmspropUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.RmspropUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdagradUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.AdagradUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NagUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.NagUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LarsUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.LarsUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LambUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.LambUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_SgdUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.SgdUpdate(IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdadeltaUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.AdadeltaUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AmsgradUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.AmsgradUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AdamaxUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.AdamaxUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LionUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.LionUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NadamUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.NadamUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FtrlUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Int32_">IDirectGpuBackend.FtrlUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FFT_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Boolean_">IDirectGpuBackend.FFT(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_RFFT_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.RFFT(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_IRFFT_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.IRFFT(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_BatchedFFT_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.BatchedFFT(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_FFT2D_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Boolean_">IDirectGpuBackend.FFT2D(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ApplyWindow_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ApplyWindow(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ComplexMagnitude_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ComplexMagnitude(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ComplexPhase_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.ComplexPhase(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PolarToComplex_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.PolarToComplex(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ApplyMelFilterbank_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.ApplyMelFilterbank(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PowerToDb_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_">IDirectGpuBackend.PowerToDb(IGpuBuffer, IGpuBuffer, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_DbToPower_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_">IDirectGpuBackend.DbToPower(IGpuBuffer, IGpuBuffer, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GenerateRandomUniform_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_System_UInt64_">IDirectGpuBackend.GenerateRandomUniform(IGpuBuffer, int, float, float, ulong)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GenerateRandomNormal_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Single_System_Single_System_UInt64_">IDirectGpuBackend.GenerateRandomNormal(IGpuBuffer, int, float, float, ulong)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_RbfForward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.RbfForward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_StdpUpdate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Single_System_Single_System_Single_System_Int32_System_Int32_">IDirectGpuBackend.StdpUpdate(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, float, float, float, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_UpdateTraces_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single_System_Single_System_Int32_">IDirectGpuBackend.UpdateTraces(IGpuBuffer, IGpuBuffer, IGpuBuffer, float, float, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PoincareProject_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_System_Single_">IDirectGpuBackend.PoincareProject(IGpuBuffer, IGpuBuffer, int, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MobiusAdd_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.MobiusAdd(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PoincareExpMap_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.PoincareExpMap(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_PoincareDistance_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.PoincareDistance(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HyperbolicLinearForward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_System_Single_">IDirectGpuBackend.HyperbolicLinearForward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HyperbolicLinearBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.HyperbolicLinearBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HyperbolicLinearBackwardWeights_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.HyperbolicLinearBackwardWeights(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_HyperbolicLinearBackwardBiases_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_">IDirectGpuBackend.HyperbolicLinearBackwardBiases(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionMultiply_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.OctonionMultiply(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionAdd_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">IDirectGpuBackend.OctonionAdd(IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionLinearForward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.OctonionLinearForward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionLinearBackwardInput_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.OctonionLinearBackwardInput(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionLinearBackwardWeights_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.OctonionLinearBackwardWeights(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_OctonionLinearBackwardBiases_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.OctonionLinearBackwardBiases(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_QuantumMeasurement_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.QuantumMeasurement(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_NormalizeProbabilities_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.NormalizeProbabilities(IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_ComplexMatVec_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.ComplexMatVec(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_QuantumRotation_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.QuantumRotation(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_MeasurementForward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.MeasurementForward(IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LstmForwardSequence_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LstmForwardSequence(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_LstmBackwardSequence_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.LstmBackwardSequence(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GruForwardSequence_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GruForwardSequence(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GruBackwardSequence_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Int32_">IDirectGpuBackend.GruBackwardSequence(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html#AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_GruCellBackward_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_">IDirectGpuBackend.GruCellBackward(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable.dispose">IDisposable.Dispose()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionContextExtensions.html#AiDotNet_Tensors_Engines_Gpu_GpuExecutionContextExtensions_WithGpuContext_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_System_Action_AiDotNet_Tensors_Engines_Gpu_GpuExecutionContext__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">GpuExecutionContextExtensions.WithGpuContext(IDirectGpuBackend, Action&lt;GpuExecutionContext&gt;, GpuExecutionOptions?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionContextExtensions.html#AiDotNet_Tensors_Engines_Gpu_GpuExecutionContextExtensions_WithGpuContext__1_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_System_Func_AiDotNet_Tensors_Engines_Gpu_GpuExecutionContext___0__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">GpuExecutionContextExtensions.WithGpuContext&lt;T&gt;(IDirectGpuBackend, Func&lt;GpuExecutionContext, T&gt;, GpuExecutionOptions?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html#AiDotNet_Tensors_Engines_Gpu_DeferredScopeExtensions_BeginDeferredScope_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_AiDotNet_Tensors_Engines_Gpu_GpuStreamPool_">DeferredScopeExtensions.BeginDeferredScope(IAsyncGpuBackend, GpuExecutionOptions?, GpuStreamPool?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html#AiDotNet_Tensors_Engines_Gpu_DeferredScopeExtensions_ExecuteDeferred_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_System_Action_AiDotNet_Tensors_Engines_Gpu_IDeferredScope__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">DeferredScopeExtensions.ExecuteDeferred(IAsyncGpuBackend, Action&lt;IDeferredScope&gt;, GpuExecutionOptions?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html#AiDotNet_Tensors_Engines_Gpu_DeferredScopeExtensions_ExecuteDeferredAsync_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_System_Action_AiDotNet_Tensors_Engines_Gpu_IDeferredScope__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_System_Threading_CancellationToken_">DeferredScopeExtensions.ExecuteDeferredAsync(IAsyncGpuBackend, Action&lt;IDeferredScope&gt;, GpuExecutionOptions?, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html#AiDotNet_Tensors_Engines_Gpu_DeferredScopeExtensions_ExecuteDeferredAsync__1_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_System_Func_AiDotNet_Tensors_Engines_Gpu_IDeferredScope___0__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_System_Threading_CancellationToken_">DeferredScopeExtensions.ExecuteDeferredAsync&lt;TResult&gt;(IAsyncGpuBackend, Func&lt;IDeferredScope, TResult&gt;, GpuExecutionOptions?, CancellationToken)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html#AiDotNet_Tensors_Engines_Gpu_DeferredScopeExtensions_ExecuteDeferred__1_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_System_Func_AiDotNet_Tensors_Engines_Gpu_IDeferredScope___0__AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_">DeferredScopeExtensions.ExecuteDeferred&lt;TResult&gt;(IAsyncGpuBackend, Func&lt;IDeferredScope, TResult&gt;, GpuExecutionOptions?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Design Philosophy:</b></p>
+<p>
+This interface extends <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a> with capabilities for:
+- Multi-stream execution (compute/transfer overlap)
+- GPU events for inter-stream synchronization
+- Async memory transfers (non-blocking H2D/D2H)
+- Sync points for deferred synchronization
+</p>
+<p><b>Performance Benefits:</b></p>
+<ul><li>Overlap compute and memory transfer operations</li><li>Reduce CPU blocking with async APIs</li><li>Enable execution graph optimization</li><li>Support GPU-resident tensors with lazy sync</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_DefaultStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.DefaultStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_DefaultStream" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.DefaultStream">
+  DefaultStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default stream for this backend.
+Operations on the default stream synchronize with all other streams.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuStream DefaultStream { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_MaxConcurrentStreams_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.MaxConcurrentStreams*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_MaxConcurrentStreams" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.MaxConcurrentStreams">
+  MaxConcurrentStreams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of concurrent streams supported.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxConcurrentStreams { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsAsyncTransfer_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsAsyncTransfer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsAsyncTransfer" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsAsyncTransfer">
+  SupportsAsyncTransfer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this backend supports async memory transfers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsAsyncTransfer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsEvents_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsEvents*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsEvents" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsEvents">
+  SupportsEvents
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this backend supports GPU events for synchronization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsEvents { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsGraphCapture_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsGraphCapture*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsGraphCapture" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsGraphCapture">
+  SupportsGraphCapture
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this backend supports execution graph capture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsGraphCapture { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsMultiStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsMultiStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SupportsMultiStream" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SupportsMultiStream">
+  SupportsMultiStream
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this backend supports multiple concurrent streams.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsMultiStream { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_AllocateBufferAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.AllocateBufferAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_AllocateBufferAsync_System_Single___AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.AllocateBufferAsync(System.Single[],AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  AllocateBufferAsync(float[], IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously allocates a buffer and uploads data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuBuffer AllocateBufferAsync(float[] data, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Source CPU data.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute the transfer on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>A new GPU buffer with the data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CopyBufferAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CopyBufferAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CopyBufferAsync_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CopyBufferAsync(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  CopyBufferAsync(IGpuBuffer, IGpuBuffer, int, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously copies data between GPU buffers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void CopyBufferAsync(IGpuBuffer source, IGpuBuffer destination, int size, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Source GPU buffer.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Destination GPU buffer.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of elements to copy.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute the copy on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateEvent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateEvent" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateEvent">
+  CreateEvent()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new GPU event for synchronization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuEvent CreateEvent()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>A new GPU event.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateEvent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateEvent_System_Boolean_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateEvent(System.Boolean)">
+  CreateEvent(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an event with timing capability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuEvent CreateEvent(bool enableTiming)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enableTiming</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, the event can be used for timing measurements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>A new GPU event.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateStream_AiDotNet_Tensors_Engines_Gpu_GpuStreamType_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateStream(AiDotNet.Tensors.Engines.Gpu.GpuStreamType)">
+  CreateStream(GpuStreamType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new GPU stream with the specified type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuStream CreateStream(GpuStreamType streamType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>streamType</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamType.html">GpuStreamType</a></dt>
+    <dd><p>The type of stream to create.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>A new GPU stream.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateStream_AiDotNet_Tensors_Engines_Gpu_GpuStreamType_System_Int32_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateStream(AiDotNet.Tensors.Engines.Gpu.GpuStreamType,System.Int32)">
+  CreateStream(GpuStreamType, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new GPU stream with priority.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuStream CreateStream(GpuStreamType streamType, int priority)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>streamType</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamType.html">GpuStreamType</a></dt>
+    <dd><p>The type of stream to create.</p>
+</dd>
+    <dt><code>priority</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Priority level (lower = higher priority).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>A new GPU stream with the specified priority.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateSyncPoint_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateSyncPoint*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateSyncPoint" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateSyncPoint">
+  CreateSyncPoint()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sync point on the default stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">GpuSyncPoint CreateSyncPoint()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint.html">GpuSyncPoint</a></dt>
+    <dd><p>A sync point for the default stream.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateSyncPoint_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateSyncPoint*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_CreateSyncPoint_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.CreateSyncPoint(AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  CreateSyncPoint(IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a sync point at the current position in a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">GpuSyncPoint CreateSyncPoint(IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream to create a sync point on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint.html">GpuSyncPoint</a></dt>
+    <dd><p>A sync point that completes when all prior operations on the stream complete.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_DownloadBufferAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.DownloadBufferAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_DownloadBufferAsync_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Single___AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.DownloadBufferAsync(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Single[],AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  DownloadBufferAsync(IGpuBuffer, float[], IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously downloads data from GPU to CPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void DownloadBufferAsync(IGpuBuffer buffer, float[] destination, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>buffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Source GPU buffer.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Destination CPU array.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute the transfer on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_FusedGemmBiasActivationAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.FusedGemmBiasActivationAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_FusedGemmBiasActivationAsync_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.FusedGemmBiasActivationAsync(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.FusedActivationType,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  FusedGemmBiasActivationAsync(IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, FusedActivationType, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes fused GEMM+Bias+Activation on a specific stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void FusedGemmBiasActivationAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer bias, IGpuBuffer output, int M, int N, int K, FusedActivationType activation, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Input matrix.</p>
+</dd>
+    <dt><code>B</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Weight matrix.</p>
+</dd>
+    <dt><code>bias</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Bias vector.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Output buffer.</p>
+</dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Batch size.</p>
+</dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Output features.</p>
+</dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Input features.</p>
+</dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.FusedActivationType.html">FusedActivationType</a></dt>
+    <dd><p>Activation type to apply.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_GemmAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.GemmAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_GemmAsync_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_System_Int32_System_Int32_System_Single_System_Single_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.GemmAsync(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32,System.Int32,System.Int32,System.Single,System.Single,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  GemmAsync(IGpuBuffer, IGpuBuffer, IGpuBuffer, int, int, int, float, float, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes GEMM on a specific stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void GemmAsync(IGpuBuffer A, IGpuBuffer B, IGpuBuffer C, int M, int N, int K, float alpha, float beta, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>A</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_GetEventElapsedTime_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.GetEventElapsedTime*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_GetEventElapsedTime_AiDotNet_Tensors_Engines_Gpu_IGpuEvent_AiDotNet_Tensors_Engines_Gpu_IGpuEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.GetEventElapsedTime(AiDotNet.Tensors.Engines.Gpu.IGpuEvent,AiDotNet.Tensors.Engines.Gpu.IGpuEvent)">
+  GetEventElapsedTime(IGpuEvent, IGpuEvent)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the elapsed time between two events in milliseconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">float GetEventElapsedTime(IGpuEvent start, IGpuEvent end)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>Start event.</p>
+</dd>
+    <dt><code>end</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>End event.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>Elapsed time in milliseconds.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_QueryEventComplete_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.QueryEventComplete*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_QueryEventComplete_AiDotNet_Tensors_Engines_Gpu_IGpuEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.QueryEventComplete(AiDotNet.Tensors.Engines.Gpu.IGpuEvent)">
+  QueryEventComplete(IGpuEvent)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Queries whether an event has been reached without blocking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool QueryEventComplete(IGpuEvent gpuEvent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gpuEvent</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>The event to query.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the event has been reached.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_QueryStreamComplete_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.QueryStreamComplete*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_QueryStreamComplete_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.QueryStreamComplete(AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  QueryStreamComplete(IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Queries whether all operations on a stream have completed without blocking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool QueryStreamComplete(IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream to query.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if all operations are complete.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_RecordEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.RecordEvent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_RecordEvent_AiDotNet_Tensors_Engines_Gpu_IGpuEvent_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.RecordEvent(AiDotNet.Tensors.Engines.Gpu.IGpuEvent,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  RecordEvent(IGpuEvent, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records an event on the specified stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void RecordEvent(IGpuEvent gpuEvent, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gpuEvent</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>The event to record.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream to record on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_StreamWaitEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.StreamWaitEvent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_StreamWaitEvent_AiDotNet_Tensors_Engines_Gpu_IGpuStream_AiDotNet_Tensors_Engines_Gpu_IGpuEvent_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.StreamWaitEvent(AiDotNet.Tensors.Engines.Gpu.IGpuStream,AiDotNet.Tensors.Engines.Gpu.IGpuEvent)">
+  StreamWaitEvent(IGpuStream, IGpuEvent)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a stream wait for an event.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void StreamWaitEvent(IGpuStream stream, IGpuEvent gpuEvent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream that should wait.</p>
+</dd>
+    <dt><code>gpuEvent</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+    <dd><p>The event to wait for.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SynchronizeStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SynchronizeStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_SynchronizeStream_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.SynchronizeStream(AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  SynchronizeStream(IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes a specific stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SynchronizeStream(IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>The stream to synchronize.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_UploadBufferAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.UploadBufferAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_UploadBufferAsync_System_ReadOnlySpan_System_Single__AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.UploadBufferAsync(System.ReadOnlySpan{System.Single},AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  UploadBufferAsync(ReadOnlySpan&lt;float&gt;, IGpuBuffer, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously uploads data from a span to GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UploadBufferAsync(ReadOnlySpan&lt;float&gt; data, IGpuBuffer buffer, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source CPU data span.</p>
+</dd>
+    <dt><code>buffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Destination GPU buffer.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute the transfer on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_UploadBufferAsync_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.UploadBufferAsync*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_UploadBufferAsync_System_Single___AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_Gpu_IGpuStream_" data-uid="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.UploadBufferAsync(System.Single[],AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.Gpu.IGpuStream)">
+  UploadBufferAsync(float[], IGpuBuffer, IGpuStream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously uploads data from CPU to GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UploadBufferAsync(float[] data, IGpuBuffer buffer, IGpuStream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd><p>Source CPU data.</p>
+</dd>
+    <dt><code>buffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Destination GPU buffer.</p>
+</dd>
+    <dt><code>stream</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+    <dd><p>Stream to execute the transfer on.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/IAsyncGpuBackend.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

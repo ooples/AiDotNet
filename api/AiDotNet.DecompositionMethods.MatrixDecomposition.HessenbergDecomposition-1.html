@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HessenbergDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HessenbergDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Hessenberg decomposition, which transforms a matrix into a form that is almost triangular.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1" class="text-break">
+Class HessenbergDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Hessenberg decomposition, which transforms a matrix into a form that is almost triangular.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HessenbergDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;T&gt;, IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the matrix (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">HessenbergDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;T&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;T&gt;.ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;T&gt;.FrobeniusNorm(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;T&gt;.ApproximatelyEqual(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A Hessenberg matrix has zeros below the first subdiagonal, making it easier to work with for
+many numerical algorithms. This decomposition is often used as a preprocessing step for
+eigenvalue calculations and solving linear systems.
+</p>
+<p>
+<b>For Beginners:</b> Think of Hessenberg decomposition as a way to simplify a matrix by making
+most elements below the diagonal equal to zero, which makes further calculations much faster.
+It's like organizing a messy room by putting everything in its place - the matrix becomes
+easier to work with even though it's not completely triangular.
+</p>
+<p>
+Real-world applications:
+- Preprocessing for eigenvalue computation
+- Accelerating iterative methods for solving linear systems
+- Control theory and system analysis
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_HessenbergAlgorithmType_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Enums.AlgorithmTypes.HessenbergAlgorithmType)">
+  HessenbergDecomposition(Matrix&lt;T&gt;, HessenbergAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Hessenberg decomposition for the specified matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HessenbergDecomposition(Matrix&lt;T&gt; matrix, HessenbergAlgorithmType algorithm = HessenbergAlgorithmType.Householder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose.</p>
+</dd>
+    <dt><code>algorithm</code> <a class="xref" href="AiDotNet.Enums.AlgorithmTypes.HessenbergAlgorithmType.html">HessenbergAlgorithmType</a></dt>
+    <dd><p>The algorithm to use for the decomposition (default is Householder).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_HessenbergAlgorithmType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Different algorithms have different performance characteristics:</p>
+<ul>
+<li>Householder: Generally the most stable and efficient for dense matrices</li>
+<li>Givens: Good for sparse matrices or when only a few elements need to be zeroed</li>
+<li>ElementaryTransformations: Simpler to understand but less numerically stable</li>
+<li>ImplicitQR: Combines Hessenberg reduction with QR iteration</li>
+<li>Lanczos: Efficient for large, sparse matrices</li>
+</ul>
+<p>For beginners, the default Householder algorithm is recommended as it provides
+a good balance of stability and performance.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_HessenbergMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.HessenbergMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_HessenbergMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.HessenbergMatrix">
+  HessenbergMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the resulting Hessenberg matrix after decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; HessenbergMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_HessenbergMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A Hessenberg matrix has zeros in all positions below the first subdiagonal.
+This simplified form makes many matrix operations more efficient.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_OrthogonalMatrix_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.OrthogonalMatrix*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_OrthogonalMatrix" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.OrthogonalMatrix">
+  OrthogonalMatrix
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the orthogonal transformation matrix Q from the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; OrthogonalMatrix { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_OrthogonalMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The orthogonal matrix Q satisfies A = Q * H * Q^T, where A is the original matrix
+and H is the Hessenberg matrix. Q is orthogonal, meaning Q^T * Q = Q * Q^T = I.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the Hessenberg decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L776"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the inverse of the original matrix using the Hessenberg decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse of the original matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Matrix inversion finds a matrix A⁻¹ such that A * A⁻¹ = I (identity matrix).</p>
+<p><b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
+Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.</p>
+<p>This method uses the MatrixHelper class to efficiently compute the inverse
+based on the Hessenberg decomposition, which is generally faster than
+directly inverting the original matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.HessenbergDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L681"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves a linear system Ax = b using the Hessenberg decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation Ax = b.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_HessenbergDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method solves the linear system by using the Hessenberg decomposition A = Q<em>H</em>Q^T.</p>
+<p><b>For Beginners:</b> Solving a linear system means finding values for x that satisfy the equation Ax = b.
+This method:</p>
+<ol>
+<li>Transforms b into Hessenberg coordinates: b' = Q^T * b</li>
+<li>Solves the Hessenberg system H*y = b' using Gaussian elimination</li>
+<li>Transforms back to original coordinates: x = Q * y</li>
+</ol>
+<p>The Hessenberg form makes step 2 more efficient because H is almost triangular.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/HessenbergDecomposition.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

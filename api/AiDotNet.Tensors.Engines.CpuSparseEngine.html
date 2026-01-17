@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CpuSparseEngine | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CpuSparseEngine | AiDotNet Documentation ">
+      
+      <meta name="description" content="CPU implementation of sparse tensor operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CpuSparseEngine.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CpuSparseEngine%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CpuSparseEngine" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine" class="text-break">
+Class CpuSparseEngine  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>CPU implementation of sparse tensor operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CpuSparseEngine : ISparseEngine</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CpuSparseEngine</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Engines.ISparseEngine.html">ISparseEngine</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_CpuSparseEngine_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CpuSparseEngine provides efficient sparse matrix operations using standard algorithms
+optimized for CPU execution. All operations work with the SparseTensor type which
+supports COO, CSR, and CSC storage formats.
+</p>
+<p><b>For Beginners:</b> This class does the actual work for sparse operations on the CPU.
+It's used when you don't have a GPU or when working with custom numeric types.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_Instance_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.Instance*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_Instance" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.Instance">
+  Instance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Singleton instance for convenience.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CpuSparseEngine Instance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CpuSparseEngine.html">CpuSparseEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_AddSparseDense_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.AddSparseDense*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_AddSparseDense__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.AddSparseDense``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0})">
+  AddSparseDense&lt;T&gt;(SparseTensor&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L260"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Element-wise addition of sparse and dense matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; AddSparseDense&lt;T&gt;(SparseTensor&lt;T&gt; sparse, Matrix&lt;T&gt; dense)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix.</p>
+</dd>
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A dense matrix containing the sum.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_Coalesce_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.Coalesce*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_Coalesce__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.Coalesce``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0})">
+  Coalesce&lt;T&gt;(SparseTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L491"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Coalesces a sparse tensor by combining duplicate indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseTensor&lt;T&gt; Coalesce&lt;T&gt;(SparseTensor&lt;T&gt; sparse)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse tensor (may have duplicate indices).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>A coalesced sparse tensor with unique indices.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_Coalesce__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sometimes sparse tensors accumulate duplicate
+entries during operations. Coalesce combines them by summing values at the same position.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_DenseToSparse_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.DenseToSparse*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_DenseToSparse__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.DenseToSparse``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},``0)">
+  DenseToSparse&lt;T&gt;(Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L455"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a dense matrix to sparse format using a threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseTensor&lt;T&gt; DenseToSparse&lt;T&gt;(Matrix&lt;T&gt; dense, T threshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense matrix.</p>
+</dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd><p>Values with absolute value below this are treated as zero.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>A sparse tensor in CSR format.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_MultiplySparseDense_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.MultiplySparseDense*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_MultiplySparseDense__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.MultiplySparseDense``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0})">
+  MultiplySparseDense&lt;T&gt;(SparseTensor&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Element-wise multiplication of sparse and dense matrices (Hadamard product).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseTensor&lt;T&gt; MultiplySparseDense&lt;T&gt;(SparseTensor&lt;T&gt; sparse, Matrix&lt;T&gt; dense)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix.</p>
+</dd>
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>A sparse matrix (zeros in sparse remain zero).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_MultiplySparseDense__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The result is sparse because any position where the sparse matrix has 0
+will remain 0 in the output.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMM_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMM*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMM__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMM``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0})">
+  SpMM&lt;T&gt;(SparseTensor&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sparse matrix-dense matrix multiplication (SpMM): C = A * B</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; SpMM&lt;T&gt;(SparseTensor&lt;T&gt; sparse, Matrix&lt;T&gt; dense)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix A.</p>
+</dd>
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense matrix B.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense result matrix C.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMM__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Multiplies a sparse matrix by a dense matrix.
+Common in graph neural networks where the adjacency matrix is sparse
+but feature matrices are dense.
+</p>
+<p>
+Time complexity: O(nnz * K) where K is the number of columns in B.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are incompatible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMVTranspose_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMVTranspose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMVTranspose__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMVTranspose``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  SpMVTranspose&lt;T&gt;(SparseTensor&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sparse matrix-vector multiplication with transpose: y = A^T * x</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; SpMVTranspose&lt;T&gt;(SparseTensor&lt;T&gt; sparse, Vector&lt;T&gt; dense)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix A in CSR format.</p>
+</dd>
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The dense vector x.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The result vector y = A^T * x.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMV_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMV*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMV__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpMV``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  SpMV&lt;T&gt;(SparseTensor&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sparse matrix-vector multiplication (SpMV): y = A * x</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; SpMV&lt;T&gt;(SparseTensor&lt;T&gt; sparse, Vector&lt;T&gt; dense)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix A in CSR format.</p>
+</dd>
+    <dt><code>dense</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The dense vector x.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The result vector y.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpMV__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This multiplies a sparse matrix by a dense vector.
+Only non-zero elements of the sparse matrix contribute to the computation,
+making this much faster than dense matrix-vector multiplication for sparse matrices.
+</p>
+<p>
+Time complexity: O(nnz) where nnz is the number of non-zeros in the sparse matrix.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are incompatible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpSpMM_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpSpMM*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpSpMM__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SpSpMM``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0})">
+  SpSpMM&lt;T&gt;(SparseTensor&lt;T&gt;, SparseTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sparse matrix-sparse matrix multiplication: C = A * B (both sparse)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseTensor&lt;T&gt; SpSpMM&lt;T&gt;(SparseTensor&lt;T&gt; a, SparseTensor&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The first sparse matrix.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The second sparse matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse result matrix C.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SpSpMM__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Result sparsity depends on the structure of inputs. May produce a denser result.
+Uses hash-based accumulation for efficient computation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseGather_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseGather*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseGather__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseGather``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0})">
+  SparseGather&lt;T&gt;(Matrix&lt;T&gt;, SparseTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gathers elements from a dense tensor using sparse indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; SparseGather&lt;T&gt;(Matrix&lt;T&gt; source, SparseTensor&lt;T&gt; indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The dense source tensor.</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The indices to gather (as sparse tensor with 1s at gather positions).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of gathered values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseGather__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> "Gather" selects specific elements from a tensor.
+Like picking specific items from a list using their positions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatterAdd_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseScatterAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatterAdd__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_ValueTuple_System_Int32___System_Int32____AiDotNet_Tensors_LinearAlgebra_Matrix___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseScatterAdd``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},System.ValueTuple{System.Int32[],System.Int32[]},AiDotNet.Tensors.LinearAlgebra.Matrix{``0})">
+  SparseScatterAdd&lt;T&gt;(Vector&lt;T&gt;, (int[] rows, int[] cols), Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L401"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scatter-add: Adds values into a matrix at sparse positions (accumulating duplicates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SparseScatterAdd&lt;T&gt;(Vector&lt;T&gt; values, (int[] rows, int[] cols) indices, Matrix&lt;T&gt; target)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The values to scatter.</p>
+</dd>
+    <dt><code>indices</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32[],system.int32[]-.rows">rows</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.int32[],system.int32[]-.cols">cols</a>)</dt>
+    <dd><p>Row and column indices for each value.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The target matrix (modified in place).</p>
+</dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatterAdd__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_ValueTuple_System_Int32___System_Int32____AiDotNet_Tensors_LinearAlgebra_Matrix___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Unlike regular scatter, scatter-add accumulates when multiple values
+target the same position. Essential for gradient computation in sparse operations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatter_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseScatter*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseScatter``1(AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0},System.Int32,System.Int32)">
+  SparseScatter&lt;T&gt;(Vector&lt;T&gt;, SparseTensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L367"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scatters values from a vector into a dense matrix at sparse positions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; SparseScatter&lt;T&gt;(Vector&lt;T&gt; values, SparseTensor&lt;T&gt; indices, int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The values to scatter.</p>
+</dd>
+    <dt><code>indices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse tensor indicating target positions.</p>
+</dd>
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of rows in the output matrix.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of columns in the output matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix with values scattered at the specified positions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseScatter__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> "Scatter" places values at specific positions.
+Like putting items back into a list at their original positions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseToDense_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseToDense*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseToDense__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseToDense``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0})">
+  SparseToDense&lt;T&gt;(SparseTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L434"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a sparse tensor to dense format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; SparseToDense&lt;T&gt;(SparseTensor&lt;T&gt; sparse)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A dense matrix with the same values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseToDense__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Warning: For very sparse, large tensors, this may consume significant memory.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseTranspose_" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseTranspose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuSparseEngine_SparseTranspose__1_AiDotNet_Tensors_LinearAlgebra_SparseTensor___0__" data-uid="AiDotNet.Tensors.Engines.CpuSparseEngine.SparseTranspose``1(AiDotNet.Tensors.LinearAlgebra.SparseTensor{``0})">
+  SparseTranspose&lt;T&gt;(SparseTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L500"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transposes a sparse matrix efficiently without densification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseTensor&lt;T&gt; SparseTranspose&lt;T&gt;(SparseTensor&lt;T&gt; sparse)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sparse</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The sparse matrix to transpose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.SparseTensor-1.html">SparseTensor</a>&lt;T&gt;</dt>
+    <dd><p>The transposed sparse matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuSparseEngine.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BidiagonalDecomposition&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BidiagonalDecomposition&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Bidiagonal Decomposition of a matrix, which factors a matrix into UBV^T, where U and V are orthogonal matrices and B is a bidiagonal matrix.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1.md&amp;value=---%0Auid%3A%20AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1">
+
+
+
+  <h1 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1" class="text-break">
+Class BidiagonalDecomposition&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DecompositionMethods.html">DecompositionMethods</a>.<a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.html">MatrixDecomposition</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Bidiagonal Decomposition of a matrix, which factors a matrix into U<em>B</em>V^T,
+where U and V are orthogonal matrices and B is a bidiagonal matrix.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BidiagonalDecomposition&lt;T&gt; : MatrixDecompositionBase&lt;T&gt;, IMatrixDecomposition&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the matrix (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html">MatrixDecompositionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">BidiagonalDecomposition&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_NumOps">MatrixDecompositionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_Engine">MatrixDecompositionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_A">MatrixDecompositionBase&lt;T&gt;.A</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ValidateMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Boolean_System_Boolean_System_Boolean_">MatrixDecompositionBase&lt;T&gt;.ValidateMatrix(Matrix&lt;T&gt;, bool, bool, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_FrobeniusNorm_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">MatrixDecompositionBase&lt;T&gt;.FrobeniusNorm(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DecompositionMethods.MatrixDecomposition.MatrixDecompositionBase-1.html#AiDotNet_DecompositionMethods_MatrixDecomposition_MatrixDecompositionBase_1_ApproximatelyEqual__0__0__0_">MatrixDecompositionBase&lt;T&gt;.ApproximatelyEqual(T, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixDecompositionExtensions.html#AiDotNet_Extensions_MatrixDecompositionExtensions_ToComplexDecomposition__1_AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixDecompositionExtensions.ToComplexDecomposition&lt;T&gt;(IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Bidiagonal decomposition transforms a matrix A into the form A = U*B*V^T, where:
+- U is an orthogonal matrix (left singular vectors)
+- B is a bidiagonal matrix (non-zero elements only on main diagonal and superdiagonal)
+- V^T is the transpose of an orthogonal matrix (right singular vectors)
+</p>
+<p>
+<b>For Beginners:</b> Bidiagonal decomposition is like organizing a complex matrix into a simpler form
+that's easier to work with. Think of it like arranging books on a shelf: instead of having them scattered,
+you organize them so most spaces are empty (zeros) and important information (non-zero values) is concentrated
+in just two lines. This makes many calculations much faster and more efficient, especially when computing
+singular values or solving systems of equations.
+</p>
+<p>
+Common applications include:
+<ul><li>Computing Singular Value Decomposition (SVD)</li><li>Solving least squares problems</li><li>Computing eigenvalues of symmetric matrices</li><li>Data compression and dimensionality reduction</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1__ctor_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_BidiagonalAlgorithmType_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Enums.AlgorithmTypes.BidiagonalAlgorithmType)">
+  BidiagonalDecomposition(Matrix&lt;T&gt;, BidiagonalAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new bidiagonal decomposition of the specified matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BidiagonalDecomposition(Matrix&lt;T&gt; matrix, BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to decompose.</p>
+</dd>
+    <dt><code>algorithm</code> <a class="xref" href="AiDotNet.Enums.AlgorithmTypes.BidiagonalAlgorithmType.html">BidiagonalAlgorithmType</a></dt>
+    <dd><p>The algorithm to use for decomposition (default is Householder).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1__ctor_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Enums_AlgorithmTypes_BidiagonalAlgorithmType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Bidiagonal decomposition breaks down a matrix A into three simpler matrices: U, B, and V,
+where A = U*B*V^T. This makes many matrix operations easier to perform.
+</p>
+<p>
+<b>For Beginners:</b> This constructor takes your original matrix and breaks it down into simpler
+components using the specified algorithm. The Householder algorithm (default) is generally the most
+stable and efficient method for most matrices.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_B_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.B*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_B" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.B">
+  B
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the bidiagonal matrix in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; B { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_B_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A bidiagonal matrix is a special matrix where non-zero values appear only
+on the main diagonal and the diagonal immediately above it (called the superdiagonal).
+All other elements are zero, making computations much more efficient.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_U_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.U*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_U" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.U">
+  U
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the left orthogonal matrix in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; U { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_U_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This matrix helps transform the original matrix's columns.
+It represents how the original data is rotated or reflected in the column space.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_V_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.V*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_V" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.V">
+  V
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the right orthogonal matrix in the decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; V { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_V_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This matrix helps transform the original matrix's rows.
+It represents how the original data is rotated or reflected in the row space.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Decompose" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Decompose">
+  Decompose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the bidiagonal decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void Decompose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Decompose_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Decompose_AiDotNet_Enums_AlgorithmTypes_BidiagonalAlgorithmType_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Decompose(AiDotNet.Enums.AlgorithmTypes.BidiagonalAlgorithmType)">
+  Decompose(BidiagonalAlgorithmType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the bidiagonal decomposition using the specified algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Decompose(BidiagonalAlgorithmType algorithm = BidiagonalAlgorithmType.Householder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algorithm</code> <a class="xref" href="AiDotNet.Enums.AlgorithmTypes.BidiagonalAlgorithmType.html">BidiagonalAlgorithmType</a></dt>
+    <dd><p>The algorithm to use for decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Decompose_AiDotNet_Enums_AlgorithmTypes_BidiagonalAlgorithmType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Different algorithms have different performance characteristics and numerical stability.
+Householder is generally the most stable and commonly used method.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an unsupported algorithm is specified.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_GetFactors_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.GetFactors*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_GetFactors" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.GetFactors">
+  GetFactors()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L497"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the three factor matrices of the bidiagonal decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Matrix&lt;T&gt; U, Matrix&lt;T&gt; B, Matrix&lt;T&gt; V) GetFactors()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0--.u">U</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0--.b">B</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.tensors.linearalgebra.matrix--0--.v">V</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>U: The left orthogonal matrix</li>
+<li>B: The bidiagonal matrix</li>
+<li>V: The right orthogonal matrix</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_GetFactors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The original matrix A can be reconstructed as A = U * B * V^T.
+This decomposition is useful for solving linear systems and computing singular values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Invert_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Invert*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Invert" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Invert">
+  Invert()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the inverse of the original matrix A using the bidiagonal decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Invert()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The inverse matrix of A.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Invert_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Matrix inversion is computationally expensive and can be numerically unstable.
+When possible, use the Solve method instead of explicitly computing the inverse.
+</p>
+<p>
+<b>For Beginners:</b> The inverse of a matrix is like the reciprocal of a number.
+Just as 5 * (1/5) = 1, a matrix multiplied by its inverse gives the identity matrix.
+However, computing the inverse is expensive, so it's usually better to use Solve() instead.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Solve_" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Solve*"></a>
+
+  <h3 id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DecompositionMethods.MatrixDecomposition.BidiagonalDecomposition`1.Solve(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Solve(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Solves the linear system Ax = b using the bidiagonal decomposition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Solve(Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The right-hand side vector of the equation Ax = b.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The solution vector x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DecompositionMethods_MatrixDecomposition_BidiagonalDecomposition_1_Solve_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method uses the decomposition to efficiently solve the system without
+directly inverting the matrix, which is more numerically stable.
+</p>
+<p>
+<b>For Beginners:</b> This finds the values of x that satisfy Ax = b. Using the bidiagonal
+decomposition makes this much faster than directly solving the original equation, especially
+for large matrices. It's like solving a puzzle by first organizing the pieces into groups.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of vector b doesn't match the number of rows in matrix A.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DecompositionMethods/MatrixDecomposition/BidiagonalDecomposition.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

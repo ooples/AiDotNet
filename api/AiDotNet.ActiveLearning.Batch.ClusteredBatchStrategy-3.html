@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClusteredBatchStrategy&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClusteredBatchStrategy&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Clustering-based batch selection strategy using k-means clustering.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3.md&amp;value=---%0Auid%3A%20AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3">
+
+
+
+  <h1 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3" class="text-break">
+Class ClusteredBatchStrategy&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActiveLearning.html">ActiveLearning</a>.<a class="xref" href="AiDotNet.ActiveLearning.Batch.html">Batch</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Clustering-based batch selection strategy using k-means clustering.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ClusteredBatchStrategy&lt;T, TInput, TOutput&gt; : IClusteringBatchStrategy&lt;T, TInput, TOutput&gt;, IBatchStrategy&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ClusteredBatchStrategy&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IClusteringBatchStrategy-3.html">IClusteringBatchStrategy</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.IBatchStrategy-3.html">IBatchStrategy</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This strategy first groups similar samples into clusters,
+then selects the most informative sample from each cluster. This ensures the batch
+covers different regions of the data space.</p>
+<p><b>How It Works:</b></p>
+<ol><li>Apply k-means clustering to group samples</li><li>For each cluster, find the most informative sample</li><li>Select samples round-robin from clusters until batch is full</li></ol>
+<p><b>Advantages:</b></p>
+<ul><li>Guarantees coverage of different data regions</li><li>Balances informativeness within diversity constraints</li><li>Interpretable cluster-based selection</li></ul>
+<p><b>Considerations:</b></p>
+<ul><li>Requires choosing number of clusters (usually = batch size)</li><li>K-means assumes Euclidean distances</li><li>May need many iterations for convergence</li></ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3__ctor_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3__ctor" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.#ctor">
+  ClusteredBatchStrategy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new ClusteredBatchStrategy with default settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteredBatchStrategy()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3__ctor_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3__ctor_System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.#ctor(System.Int32,System.Int32,System.Double)">
+  ClusteredBatchStrategy(int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new ClusteredBatchStrategy with specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClusteredBatchStrategy(int numClusters, int maxIterations = 100, double diversityTradeoff = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numClusters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of clusters to use (typically equals batch size).</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum k-means iterations.</p>
+</dd>
+    <dt><code>diversityTradeoff</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Trade-off between informativeness and diversity.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_DiversityTradeoff_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.DiversityTradeoff*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_DiversityTradeoff" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.DiversityTradeoff">
+  DiversityTradeoff
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the trade-off parameter between informativeness and diversity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DiversityTradeoff { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_DiversityTradeoff_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Higher values favor diversity over informativeness.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_Name_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.Name*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_Name" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the batch selection strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_NumClusters_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.NumClusters*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_NumClusters" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.NumClusters">
+  NumClusters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of clusters to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumClusters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_ClusterSamples_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.ClusterSamples*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_ClusterSamples_AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.ClusterSamples(AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  ClusterSamples(IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clusters the samples in the unlabeled pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] ClusterSamples(IDataset&lt;T, TInput, TOutput&gt; unlabeledPool)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>unlabeledPool</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The pool of unlabeled samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Cluster assignments for each sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_ComputeDiversity_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.ComputeDiversity*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_ComputeDiversity__1__1_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.ComputeDiversity(`1,`1)">
+  ComputeDiversity(TInput, TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes pairwise diversity between samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDiversity(TInput sample1, TInput sample2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sample1</code> <span class="xref">TInput</span></dt>
+    <dd><p>First sample.</p>
+</dd>
+    <dt><code>sample2</code> <span class="xref">TInput</span></dt>
+    <dd><p>Second sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Diversity score (higher = more diverse).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_SelectBatch_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.SelectBatch*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_SelectBatch_System_Int32___AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IDataset__0__1__2__System_Int32_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.SelectBatch(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IDataset{`0,`1,`2},System.Int32)">
+  SelectBatch(int[], Vector&lt;T&gt;, IDataset&lt;T, TInput, TOutput&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects a diverse batch of samples from candidates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] SelectBatch(int[] candidateIndices, Vector&lt;T&gt; scores, IDataset&lt;T, TInput, TOutput&gt; unlabeledPool, int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>candidateIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of candidate samples (pre-filtered by informativeness).</p>
+</dd>
+    <dt><code>scores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Informativeness scores for the candidates.</p>
+</dd>
+    <dt><code>unlabeledPool</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The full unlabeled pool for feature access.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of the selected samples from the original unlabeled pool.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_SelectBatch_System_Int32___AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IDataset__0__1__2__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes candidates that are already ranked by
+informativeness and selects a subset that is both informative AND diverse.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_SelectFromClusters_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.SelectFromClusters*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Batch_ClusteredBatchStrategy_3_SelectFromClusters_System_Int32___AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.ActiveLearning.Batch.ClusteredBatchStrategy`3.SelectFromClusters(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  SelectFromClusters(int[], Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects the most informative sample from each cluster.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] SelectFromClusters(int[] clusterAssignments, Vector&lt;T&gt; scores, int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clusterAssignments</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Cluster assignments for each sample.</p>
+</dd>
+    <dt><code>scores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Informativeness scores for each sample.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of selected samples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Batch/ClusteredBatchStrategy.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

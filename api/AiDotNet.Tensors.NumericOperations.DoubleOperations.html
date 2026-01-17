@@ -1,0 +1,3672 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DoubleOperations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DoubleOperations | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides mathematical operations for the double data type.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_NumericOperations_DoubleOperations.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.NumericOperations.DoubleOperations%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations">
+
+
+
+  <h1 id="AiDotNet_Tensors_NumericOperations_DoubleOperations" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations" class="text-break">
+Class DoubleOperations  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.NumericOperations.html">NumericOperations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides mathematical operations for the double data type.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DoubleOperations : INumericOperations&lt;double&gt;, IVectorizedOperations&lt;double&gt;</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DoubleOperations</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</div>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements the INumericOperations interface for the double data type, providing
+basic arithmetic operations, comparison methods, and mathematical functions. The double
+type is a 64-bit floating-point type that can represent a wide range of values with
+high precision, making it suitable for scientific and engineering calculations.
+</p>
+<p><b>For Beginners:</b> This class handles math operations for the double number type.
+<p>The double type in C# is designed for general-purpose calculations:</p>
+<ul>
+<li>It can represent very large numbers (up to approximately 1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308)</li>
+<li>It can represent very small numbers (down to approximately 5.0 ÃƒÆ’Ã¢â‚¬â€ 10^-324)</li>
+<li>It stores decimal numbers with about 15-17 significant digits of precision</li>
+<li>It can represent special values like infinity and NaN (Not a Number)</li>
+</ul>
+<p>However, doubles have some limitations:</p>
+<ul>
+<li>They can't represent all decimal fractions exactly (e.g., 0.1 + 0.2 doesn't equal exactly 0.3)</li>
+<li>They may introduce small rounding errors in calculations</li>
+</ul>
+<p>Doubles are best used for scientific, engineering, or graphics calculations where high range
+is more important than exact decimal representation.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MaxValue_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MaxValue" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L664"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum value that can be represented by a double.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum value of a double, which is approximately 1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the maximum value that can be represented by a double,
+which is 1.7976931348623157E+308. Values larger than this become positive infinity.
+</p>
+<p><b>For Beginners:</b> This property gives you the largest possible double value.
+<p>For doubles, the maximum value is approximately 1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308, which is a very large
+positive number (about 1 with 308 zeros after it).</p>
+<p>This is useful when you need to work with the full range of double values or
+need to check against the maximum possible value. Values larger than this
+become positive infinity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MinValue_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MinValue" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L643"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum value that can be represented by a double.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum value of a double, which is approximately -1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the minimum value that can be represented by a double,
+which is -1.7976931348623157E+308. Values smaller than this (more negative) become negative infinity.
+</p>
+<p><b>For Beginners:</b> This property gives you the smallest possible double value.
+<p>For doubles, the minimum value is approximately -1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308, which is a very large
+negative number (about 1 with 308 zeros after it, with a negative sign).</p>
+<p>This is useful when you need to work with the full range of double values or
+need to check against the minimum possible value. Values smaller than this
+become negative infinity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_One_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_One" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the double representation of one.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value 1 as a double.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the double representation of the value one, which is 1.0.
+It is often used as a neutral element for multiplication.
+</p>
+<p><b>For Beginners:</b> This property provides the value one as a double.
+<p>One is a special value in mathematics:</p>
+<ul>
+<li>Multiplying any number by one gives the same number</li>
+<li>It's useful as a starting point or increment value</li>
+</ul>
+<p>This property gives you the value 1.0 as a double.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_PrecisionBits_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_PrecisionBits" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L767"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in double (64 bits).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L799"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsCpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L802"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SupportsGpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float, double, int, and long are typically supported on GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Zero_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Zero" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the double representation of zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value 0 as a double.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the double representation of the value zero, which is 0.0.
+It is often used as a neutral element for addition.
+</p>
+<p><b>For Beginners:</b> This property provides the value zero as a double.
+<p>Zero is a special value in mathematics:</p>
+<ul>
+<li>Adding zero to any number gives the same number</li>
+<li>It's used as a starting point in many algorithms</li>
+</ul>
+<p>In doubles, there's technically a positive zero and a negative zero (0.0 and -0.0),
+though they behave the same in most operations.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Abs_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Abs(System.Double)">
+  Abs(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the absolute value of a double.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Abs(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The absolute value of the specified double.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Abs_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the absolute (positive) value of the specified double value.
+If the value is already positive or zero, it is returned unchanged. If the value is negative,
+its negation is returned. NaN values remain NaN.
+</p>
+<p><b>For Beginners:</b> This method provides the positive version of a number.
+<p>For example:</p>
+<ul>
+<li>Abs(5.25) = 5.25 (already positive, so unchanged)</li>
+<li>Abs(-5.25) = 5.25 (negative becomes positive)</li>
+<li>Abs(0.0) = 0.0 (zero remains zero)</li>
+<li>Abs(NaN) = NaN (Not a Number remains Not a Number)</li>
+</ul>
+<p>The absolute value is the distance of a number from zero, ignoring the direction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Abs_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Abs(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Abs(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L966"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes absolute value using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Abs(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Add(System.Double,System.Double)">
+  Add(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two double values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Add(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sum of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs standard double addition. Due to the nature of floating-point representation,
+the result may include small rounding errors for certain values.
+</p>
+<p><b>For Beginners:</b> This method adds two double numbers together.
+<p>For example:</p>
+<ul>
+<li>5.25 + 3.75 = 9.0</li>
+<li>0.1 + 0.2 = 0.30000000000000004 (not exactly 0.3, due to how doubles represent numbers)</li>
+</ul>
+<p>Be aware that doubles can have small precision errors with certain decimal fractions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Add(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Add(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L812"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise addition using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Add_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses AVX-512/AVX2/SSE for hardware acceleration on .NET 5+, scalar fallback on .NET Framework.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_AddScalar_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_AddScalar_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.AddScalar(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  AddScalar(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L933"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar to each element using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(ReadOnlySpan&lt;double&gt; x, double scalar, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Ceiling_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Ceiling(System.Double)">
+  Ceiling(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L595"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integer greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Ceiling(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The number to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The smallest integer greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Ceiling_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) returns 4.0, Ceiling(-2.7) returns -2.0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Ceiling_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Ceiling(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Ceiling(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1026"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ceiling of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Ceiling(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Clip_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Clip*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Clip_System_ReadOnlySpan_System_Double__System_Double_System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Clip(System.ReadOnlySpan{System.Double},System.Double,System.Double,System.Span{System.Double})">
+  Clip(ReadOnlySpan&lt;double&gt;, double, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L987"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips each element to a range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clip(ReadOnlySpan&lt;double&gt; x, double min, double max, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Compare_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Compare_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Compare(System.Double,System.Double)">
+  Compare(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L523"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two double values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Compare(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Compare_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method compares two numbers and tells you their order:
+- Returns -1 if the first number is smaller
+- Returns 0 if both numbers are equal
+- Returns 1 if the first number is larger
+<p>This is commonly used for sorting or determining the relative position of values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Copy_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Copy*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Copy_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Copy(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Copy(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1010"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies elements from source to destination.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Copy(ReadOnlySpan&lt;double&gt; source, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Cos_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Cos(System.Double)">
+  Cos(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L622"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cosine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Cos(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The cosine of value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Cos_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Cos(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Cos(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1050"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Cos(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_CosineSimilarity_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_CosineSimilarity_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.CosineSimilarity(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double})">
+  CosineSimilarity(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L896"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine similarity using sequential loops (complex reduction).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CosineSimilarity(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Divide_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Divide(System.Double,System.Double)">
+  Divide(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides the first double value by the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Divide(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The dividend (value being divided).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The divisor (value to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The quotient of the division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Divide_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs double division. Division by zero results in either positive infinity,
+negative infinity, or NaN (Not a Number), depending on the sign of the dividend and whether
+it is zero.
+</p>
+<p><b>For Beginners:</b> This method divides one double number by another.
+<p>For example:</p>
+<ul>
+<li>10.0 / 2.0 = 5.0</li>
+<li>1.0 / 3.0 = 0.3333333333333333 (approximately 1/3)</li>
+</ul>
+<p>Special cases for division:</p>
+<ul>
+<li>Dividing a non-zero number by zero gives infinity (positive or negative, depending on signs)</li>
+<li>Dividing zero by zero gives NaN (Not a Number)</li>
+</ul>
+<p>Unlike integer division, double division never throws an exception for division by zero.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Divide_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Divide(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Divide(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L830"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Divide(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_DivideScalar_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.DivideScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_DivideScalar_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.DivideScalar(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  DivideScalar(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L922"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element by a scalar using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideScalar(ReadOnlySpan&lt;double&gt; x, double scalar, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Dot_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Dot_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Dot(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double})">
+  Dot(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L836"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes dot product using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Dot(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ELU_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ELU_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ELU(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  ELU(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ELU(ReadOnlySpan&lt;double&gt; x, double alpha, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Equals_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Equals_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Equals(System.Double,System.Double)">
+  Equals(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether two double values are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the values are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Equals_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two double values and returns true if they are exactly equal.
+Due to the nature of floating-point representation, comparing doubles for exact equality
+can be problematic. In many cases, it's better to check if the difference between two
+values is less than a small epsilon value.
+</p>
+<p><b>For Beginners:</b> This method checks if two numbers have exactly the same value.
+<p>For example:</p>
+<ul>
+<li>5.25 equals 5.25 returns true</li>
+<li>5.25 equals 5.250 returns true (same value, different representation)</li>
+<li>5.25 equals 5.24 returns false</li>
+</ul>
+<p>Special cases:</p>
+<ul>
+<li>NaN never equals anything, even itself</li>
+<li>Positive and negative zero are considered equal</li>
+</ul>
+<p>Be cautious when comparing doubles for equality, as rounding errors can make
+calculations that should be equal appear slightly different.
+For example, 0.1 + 0.2 does not exactly equal 0.3 in double arithmetic.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Exp_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Exp(System.Double)">
+  Exp(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates e raised to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Exp(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The power to raise e to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>e raised to the specified power.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Exp_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the exponential function (e^value) using Math.Exp.
+The constant e is approximately 2.71828. For large positive inputs, the result may become infinity.
+For large negative inputs, the result approaches zero.
+</p>
+<p><b>For Beginners:</b> This method calculates the mathematical constant e (ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€ 2.718) raised to a power.
+<p>For example:</p>
+<ul>
+<li>e^1 ÃƒÆ’Ã¢â‚¬â€ 2.718</li>
+<li>e^2 ÃƒÆ’Ã¢â‚¬â€ 7.389</li>
+<li>e^0 = 1.0 exactly</li>
+<li>e^-1 ÃƒÆ’Ã¢â‚¬â€ 0.368</li>
+</ul>
+<p>The exponential function is used in many fields including finance (compound interest),
+science, and engineering. It grows very rapidly as the input increases.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Exp_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Exp(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Exp(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L860"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes exponential using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Exp(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Fill_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Fill_System_Span_System_Double__System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Fill(System.Span{System.Double},System.Double)">
+  Fill(Span&lt;double&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L902"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the destination span with a constant value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(Span&lt;double&gt; destination, double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Floor_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Floor(System.Double)">
+  Floor(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L583"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integer less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Floor(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The number to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The largest integer less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Floor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) returns 3.0, Floor(-2.3) returns -3.0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Floor_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Floor(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Floor(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1018"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes floor of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Floor(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Frac_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Frac(System.Double)">
+  Frac(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L608"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Frac(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The number to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The fractional part (value - floor(value)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Frac_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Frac returns the portion after the decimal point.
+For example, Frac(3.7) returns 0.7. Note that Frac(-2.3) returns 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Frac_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Frac(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Frac(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1034"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fractional part of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Frac(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromDouble_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to a double.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The input value (unchanged).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Since the input is already a double, this method simply returns the input value unchanged.
+It exists to fulfill the interface contract.
+</p>
+<p><b>For Beginners:</b> This method converts a double to a double (no actual conversion happens).
+<p>Since the input is already a double, this method simply returns the same value.</p>
+<p>This method exists to comply with the INumericOperations interface, which requires
+a method to convert from double to the specific numeric type.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromFloat_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L777"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float value to double precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromFloatSpan(System.ReadOnlySpan{System.Single},System.Span{System.Double})">
+  FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1080"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts float span to double span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromHalf_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L791"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half value to double precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.FromHalfSpan(System.ReadOnlySpan{System.Half},System.Span{System.Double})">
+  FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1097"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts Half (FP16) span to double span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromHalfSpan(ReadOnlySpan&lt;Half&gt; source, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GELU_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GELU_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GELU(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  GELU(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void GELU(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThan_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GreaterThan(System.Double,System.Double)">
+  GreaterThan(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first double value is greater than the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThan(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the first value is greater than the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThan_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two double values and returns true if the first is greater than the second.
+Special values like NaN follow IEEE 754 comparison rules, where NaN is not greater than any value.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than the second.
+<p>For example:</p>
+<ul>
+<li>10.5 &gt; 5.2 returns true</li>
+<li>5.0 &gt; 10.0 returns false</li>
+<li>5.0 &gt; 5.0 returns false</li>
+</ul>
+<p>Special cases:</p>
+<ul>
+<li>Any comparison with NaN returns false, even NaN &gt; NaN</li>
+<li>Positive infinity is greater than any finite number</li>
+<li>Negative infinity is less than any finite number</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThanOrEquals_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.GreaterThanOrEquals(System.Double,System.Double)">
+  GreaterThanOrEquals(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L476"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first double value is greater than or equal to the second.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThanOrEquals(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the first value is greater than or equal to the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_GreaterThanOrEquals_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two double values and returns true if the first is greater than or equal to the second.
+Special values like NaN follow IEEE 754 comparison rules, where NaN is not comparable to any value.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>10.5 &gt;= 5.2 returns true</li>
+<li>5.0 &gt;= 10.0 returns false</li>
+<li>5.0 &gt;= 5.0 returns true</li>
+</ul>
+<p>Special cases:</p>
+<ul>
+<li>Any comparison with NaN returns false, even NaN &gt;= NaN</li>
+<li>Positive infinity is greater than any finite number</li>
+<li>Negative infinity is less than any finite number</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsInfinity_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsInfinity_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.IsInfinity(System.Double)">
+  IsInfinity(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L727"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified double value is infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsInfinity(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the value is positive or negative infinity; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsInfinity_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks whether a double value is either positive infinity or negative infinity.
+Infinity represents a value that exceeds the representable range of a double.
+</p>
+<p><b>For Beginners:</b> This method checks if a value is infinity.
+<p>Infinity is a special value that represents a result too large to be represented
+as a normal double. It can be positive or negative.</p>
+<p>Operations that can produce infinity include:</p>
+<ul>
+<li>Division by zero (1.0 / 0.0 = positive infinity)</li>
+<li>Very large calculations that exceed the double's range</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>IsInfinity(5.25) returns false</li>
+<li>IsInfinity(double.PositiveInfinity) returns true</li>
+<li>IsInfinity(double.NegativeInfinity) returns true</li>
+<li>IsInfinity(1.0 / 0.0) returns true</li>
+</ul>
+<p>Infinity has special behavior:</p>
+<ul>
+<li>It's larger than any finite number (for positive infinity)</li>
+<li>It's smaller than any finite number (for negative infinity)</li>
+<li>Arithmetic operations involving infinity usually result in infinity</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsNaN_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsNaN_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.IsNaN(System.Double)">
+  IsNaN(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L694"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified double value is NaN (Not a Number).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsNaN(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>true if the value is NaN; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_IsNaN_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks whether a double value is NaN (Not a Number). NaN is a special value that
+represents the result of an invalid mathematical operation, such as the square root of a negative number.
+</p>
+<p><b>For Beginners:</b> This method checks if a value is "Not a Number" (NaN).
+<p>NaN is a special value that represents an invalid result, such as:</p>
+<ul>
+<li>Square root of a negative number</li>
+<li>Division of zero by zero</li>
+<li>Logarithm of a negative number</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>IsNaN(5.25) returns false</li>
+<li>IsNaN(double.NaN) returns true</li>
+<li>IsNaN(0.0 / 0.0) returns true</li>
+</ul>
+<p>NaN has special behavior:</p>
+<ul>
+<li>It does not equal anything, even itself</li>
+<li>Any arithmetic operation involving NaN results in NaN</li>
+<li>Any comparison with NaN returns false</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LeakyReLU_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LeakyReLU_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LeakyReLU(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  LeakyReLU(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LeakyReLU(ReadOnlySpan&lt;double&gt; x, double alpha, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LessThan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LessThan_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LessThan(System.Double,System.Double)">
+  LessThan(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThan(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LessThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_LessThanOrEquals_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.LessThanOrEquals(System.Double,System.Double)">
+  LessThanOrEquals(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L502"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThanOrEquals(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log(System.Double)">
+  Log(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm of a double value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Log(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to calculate the natural logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The natural logarithm of the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the natural logarithm (base e) of the specified value using Math.Log.
+If the input is negative or zero, the result will be NaN or negative infinity, respectively.
+</p>
+<p><b>For Beginners:</b> This method calculates the natural logarithm of a number.
+<p>The natural logarithm answers the question: &quot;To what power must e be raised to get this number?&quot;</p>
+<p>For example:</p>
+<ul>
+<li>Log of 1.0 is 0.0 (e^0 = 1)</li>
+<li>Log of 2.718... is approximately 1.0 (e^1 ÃƒÆ’Ã¢â‚¬â€ 2.718)</li>
+<li>Log of 7.389... is approximately 2.0 (e^2 ÃƒÆ’Ã¢â‚¬â€ 7.389)</li>
+</ul>
+<p>Special cases:</p>
+<ul>
+<li>Log of a negative number gives NaN (Not a Number)</li>
+<li>Log of zero gives negative infinity</li>
+<li>Log of infinity gives positive infinity</li>
+</ul>
+<p>The logarithm function is the inverse of the exponential function.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Log(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L866"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes natural logarithm using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log2_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Log2_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Log2(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Log2(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L884"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes base-2 logarithm using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log2(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Max_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Max_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Max(System.ReadOnlySpan{System.Double})">
+  Max(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L848"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds maximum using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Max(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Min_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Min_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Min(System.ReadOnlySpan{System.Double})">
+  Min(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L854"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds minimum using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Min(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Mish_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Mish_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Mish(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Mish(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Mish(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Multiply_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Multiply(System.Double,System.Double)">
+  Multiply(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two double values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Multiply(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The product of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Multiply_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs standard double multiplication. Due to the nature of floating-point representation,
+the result may include small rounding errors for certain values.
+</p>
+<p><b>For Beginners:</b> This method multiplies two double numbers together.
+<p>For example:</p>
+<ul>
+<li>5.5 * 2.0 = 11.0</li>
+<li>0.1 * 0.1 = 0.010000000000000002 (not exactly 0.01)</li>
+</ul>
+<p>Double multiplication can handle a very wide range of values, from very small to very large.
+If the result is too large to represent, it will become positive or negative infinity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Multiply_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Multiply(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Multiply(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L824"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Multiply(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MultiplyAdd_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MultiplyAdd_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MultiplyAdd(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  MultiplyAdd(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1059"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.
+Uses SIMD with FMA intrinsics when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyAdd(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, double scalar, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MultiplyScalar_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MultiplyScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_MultiplyScalar_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.MultiplyScalar(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  MultiplyScalar(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L911"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element by a scalar using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyScalar(ReadOnlySpan&lt;double&gt; x, double scalar, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Negate_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Negate(System.Double)">
+  Negate(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates the specified double value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Negate(double a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The negated value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Negate_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the arithmetic negation of the input value, effectively changing its sign.
+If the input is positive, the result is negative, and vice versa. Zero remains zero when negated,
+though the distinction between positive and negative zero is preserved.
+</p>
+<p><b>For Beginners:</b> This method reverses the sign of a double number.
+<p>For example:</p>
+<ul>
+<li>Negate(5.25) = -5.25</li>
+<li>Negate(-10.5) = 10.5</li>
+<li>Negate(0.0) = -0.0 (negative zero, which behaves like zero in most contexts)</li>
+</ul>
+<p>This is the same as multiplying the number by -1.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Negate_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Negate(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Negate(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L977"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates each element using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Negate(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Pow_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Pow*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Pow_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Pow(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  Pow(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1000"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of each element using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Pow(ReadOnlySpan&lt;double&gt; x, double power, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>power</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Power_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Power_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Power(System.Double,System.Double)">
+  Power(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L421"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Power(double baseValue, double exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ReLU_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ReLU_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ReLU(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  ReLU(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReLU(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Round_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Round_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Round(System.Double)">
+  Round(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rounds a double value to the nearest integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Round(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to round.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value rounded to the nearest integer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Round_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method rounds the double value to the nearest integer, following the "banker's rounding" rules.
+If the fractional part is exactly 0.5, it rounds to the nearest even number.
+</p>
+<p><b>For Beginners:</b> This method rounds a double to the nearest whole number.
+<p>For example:</p>
+<ul>
+<li>Round(5.7) = 6.0</li>
+<li>Round(5.2) = 5.0</li>
+<li>Round(5.5) = 6.0</li>
+<li>Round(4.5) = 4.0 (note this &quot;banker's rounding&quot; - it rounds to the nearest even number when exactly halfway)</li>
+</ul>
+<p>Unlike ToInt32, this keeps the result as a double type, so it still has a decimal point.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sigmoid_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sigmoid_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sigmoid(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Sigmoid(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L878"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sigmoid using sequential loops (no SIMD operator yet).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sigmoid(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SignOrZero_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SignOrZero_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SignOrZero(System.Double)">
+  SignOrZero(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L756"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of the specified value as a double.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SignOrZero(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>1 if the value is positive; -1 if the value is negative; 0 if the value is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SignOrZero_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns 1 for any positive value, -1 for any negative value, and 0 for zero.
+It is used to determine the sign or direction of a value without considering its magnitude.
+</p>
+<p><b>For Beginners:</b> This method determines the sign of a number.
+<p>For example:</p>
+<ul>
+<li>SignOrZero(5.25) returns 1.0</li>
+<li>SignOrZero(-10.5) returns -1.0</li>
+<li>SignOrZero(0.0) returns 0.0</li>
+</ul>
+<p>This is useful in algorithms that need to know the direction or sign of a value
+without caring about its magnitude. Think of it as an indicator showing which
+direction the number points on the number line.</p>
+<p>Special cases:</p>
+<ul>
+<li>SignOrZero(NaN) returns 0.0 (because NaN isn't greater than or less than 0)</li>
+<li>SignOrZero(positive infinity) returns 1.0</li>
+<li>SignOrZero(negative infinity) returns -1.0</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sin_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sin(System.Double)">
+  Sin(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L615"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sine of the specified angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Sin(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>An angle, measured in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sine of value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sin_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sin(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Sin(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1042"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sine of each element using SIMD-optimized operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sin(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SoftMax_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SoftMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SoftMax_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SoftMax(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  SoftMax(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L890"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes softmax using sequential loops (reduction operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SoftMax(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sqrt_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sqrt(System.Double)">
+  Sqrt(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a double value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Sqrt(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The square root of the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sqrt_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square root using Math.Sqrt. If the input is negative,
+the result will be NaN (Not a Number).
+</p>
+<p><b>For Beginners:</b> This method calculates the square root of a double number.
+<p>For example:</p>
+<ul>
+<li>Square root of 9.0 is 3.0</li>
+<li>Square root of 2.0 is approximately 1.4142135623730951</li>
+</ul>
+<p>If you try to take the square root of a negative number, the result is NaN (Not a Number),
+which represents an invalid mathematical operation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sqrt_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sqrt(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Sqrt(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L955"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes square root using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sqrt(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Square_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Square_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Square(System.Double)">
+  Square(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L337"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Squares the specified double value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Square(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The square of the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Square_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method multiplies the value by itself to calculate its square.
+If the result is too large to represent as a double, it will become positive infinity.
+</p>
+<p><b>For Beginners:</b> This method multiplies a number by itself.
+<p>For example:</p>
+<ul>
+<li>Square of 4.0 is 16.0 (4.0 ÃƒÆ’Ã¢â‚¬â€ 4.0)</li>
+<li>Square of 0.5 is 0.25 (0.5 ÃƒÆ’Ã¢â‚¬â€ 0.5)</li>
+<li>Square of -3.0 is 9.0 (-3.0 ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  -3.0)</li>
+</ul>
+<p>Squaring always produces a non-negative result (except for NaN, which remains NaN).
+If the result is too large to represent (over 1.8 ÃƒÆ’Ã¢â‚¬â€ 10^308), it becomes positive infinity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Subtract_System_Double_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Subtract(System.Double,System.Double)">
+  Subtract(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts the second double value from the first.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Subtract(double a, double b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The difference between the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Subtract_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs standard double subtraction. Due to the nature of floating-point representation,
+the result may include small rounding errors for certain values.
+</p>
+<p><b>For Beginners:</b> This method subtracts one double number from another.
+<p>For example:</p>
+<ul>
+<li>10.0 - 3.25 = 6.75</li>
+<li>0.3 - 0.2 = 0.09999999999999998 (not exactly 0.1, due to how doubles represent numbers)</li>
+</ul>
+<p>The small imprecisions in double arithmetic are usually negligible for most applications,
+but can accumulate in complex calculations or when exact decimal representation is required.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Subtract_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Subtract(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Subtract(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L818"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Subtract(ReadOnlySpan&lt;double&gt; x, ReadOnlySpan&lt;double&gt; y, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SubtractScalar_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SubtractScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_SubtractScalar_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.SubtractScalar(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  SubtractScalar(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L944"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar from each element using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractScalar(ReadOnlySpan&lt;double&gt; x, double scalar, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sum_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Sum_System_ReadOnlySpan_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Sum(System.ReadOnlySpan{System.Double})">
+  Sum(ReadOnlySpan&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L842"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sum using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Sum(ReadOnlySpan&lt;double&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Swish_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Swish_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Swish(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Swish(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation using SIMD-optimized SimdKernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Swish(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Tanh_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_Tanh_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.Tanh(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Tanh(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L872"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes hyperbolic tangent using SIMD-optimized TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Tanh(ReadOnlySpan&lt;double&gt; x, Span&lt;double&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToDouble_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToDouble(System.Double)">
+  ToDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L796"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to double (identity operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ToDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToFloat_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToFloat_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToFloat(System.Double)">
+  ToFloat(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L772"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float ToFloat(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToFloatSpan_System_ReadOnlySpan_System_Double__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToFloatSpan(System.ReadOnlySpan{System.Double},System.Span{System.Single})">
+  ToFloatSpan(ReadOnlySpan&lt;double&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1068"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts double span to float span.
+Uses TensorPrimitives.ConvertTruncating on .NET 8+ for SIMD acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToFloatSpan(ReadOnlySpan&lt;double&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToHalf_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToHalf_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToHalf(System.Double)">
+  ToHalf(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L786"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Half ToHalf(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToHalf_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Warning: Double has a much larger range than Half. Values outside [-65504, 65504] will overflow to infinity.
+This conversion may also lose significant precision.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToHalfSpan_System_ReadOnlySpan_System_Double__System_Span_System_Half__" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToHalfSpan(System.ReadOnlySpan{System.Double},System.Span{System.Half})">
+  ToHalfSpan(ReadOnlySpan&lt;double&gt;, Span&lt;Half&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L1089"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts double span to Half (FP16) span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToHalfSpan(ReadOnlySpan&lt;double&gt; source, Span&lt;Half&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToInt32_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToInt32_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.DoubleOperations.ToInt32(System.Double)">
+  ToInt32(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L548"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to a 32-bit integer by rounding to the nearest integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToInt32(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The double rounded to the nearest integer and converted to an Int32.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_DoubleOperations_ToInt32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method rounds the double value to the nearest integer and then converts it to an Int32.
+If the result is outside the range of Int32, an OverflowException will be thrown.
+</p>
+<p><b>For Beginners:</b> This method converts a double to a regular integer.
+<p>For example:</p>
+<ul>
+<li>5.7 becomes 6</li>
+<li>5.2 becomes 5</li>
+<li>5.5 becomes 6 (rounds to the nearest even number when exactly halfway)</li>
+</ul>
+<p>This is useful when you need an integer result after performing floating-point calculations.</p>
+<p>Note: If the double value is too large or too small to fit in an integer
+(outside the range of approximately Ãƒâ€šÃ‚Â±2.1 billion), this will cause an error.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/DoubleOperations.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

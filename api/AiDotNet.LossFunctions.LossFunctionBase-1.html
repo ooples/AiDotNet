@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LossFunctionBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LossFunctionBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for loss function implementations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LossFunctions_LossFunctionBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.LossFunctions.LossFunctionBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LossFunctions.LossFunctionBase`1">
+
+
+
+  <h1 id="AiDotNet_LossFunctions_LossFunctionBase_1" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1" class="text-break">
+Class LossFunctionBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LossFunctions.html">LossFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for loss function implementations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class LossFunctionBase&lt;T&gt; : ILossFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LossFunctionBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Losses.CIoULoss-1.html">CIoULoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss-1.html">DETRSetLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Losses.DIoULoss-1.html">DIoULoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.Losses.GIoULoss-1.html">GIoULoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.BinaryCrossEntropyLoss-1.html">BinaryCrossEntropyLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.CTCLossAdapter-1.html">CTCLossAdapter&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.CategoricalCrossEntropyLoss-1.html">CategoricalCrossEntropyLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.CharbonnierLoss-1.html">CharbonnierLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.ContrastiveLoss-1.html">ContrastiveLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.CosineSimilarityLoss-1.html">CosineSimilarityLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.CrossEntropyLoss-1.html">CrossEntropyLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.DiceLoss-1.html">DiceLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.ElasticNetLoss-1.html">ElasticNetLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.ExponentialLoss-1.html">ExponentialLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.FocalLoss-1.html">FocalLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.HingeLoss-1.html">HingeLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.HuberLoss-1.html">HuberLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.JaccardLoss-1.html">JaccardLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.KullbackLeiblerDivergence-1.html">KullbackLeiblerDivergence&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.LogCoshLoss-1.html">LogCoshLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.MarginLoss-1.html">MarginLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.MeanAbsoluteErrorLoss-1.html">MeanAbsoluteErrorLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.MeanBiasErrorLoss-1.html">MeanBiasErrorLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.MeanSquaredErrorLoss-1.html">MeanSquaredErrorLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.ModifiedHuberLoss-1.html">ModifiedHuberLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.NoiseContrastiveEstimationLoss-1.html">NoiseContrastiveEstimationLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.OrdinalRegressionLoss-1.html">OrdinalRegressionLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.PerceptualLoss-1.html">PerceptualLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.PoissonLoss-1.html">PoissonLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.QuantileLoss-1.html">QuantileLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.QuantumLoss-1.html">QuantumLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.RealESRGANLoss-1.html">RealESRGANLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.RootMeanSquaredErrorLoss-1.html">RootMeanSquaredErrorLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.ScaleInvariantDepthLoss-1.html">ScaleInvariantDepthLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.SparseCategoricalCrossEntropyLoss-1.html">SparseCategoricalCrossEntropyLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.SquaredHingeLoss-1.html">SquaredHingeLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.TripletLoss-1.html">TripletLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.WassersteinLoss-1.html">WassersteinLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.WeightedCrossEntropyLoss-1.html">WeightedCrossEntropyLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PhysicsInformed.PhysicsInformedLoss-1.html">PhysicsInformedLoss&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeGradient__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeGradient&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeLoss__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeLoss&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1__ctor_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1__ctor" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.#ctor">
+  LossFunctionBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the LossFunctionBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected LossFunctionBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_NumOps" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1_Engine_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.Engine*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_Engine" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateDerivative_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateDerivative*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateDerivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative (gradient) of the loss function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;T&gt; CalculateDerivative(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values from the model.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the derivatives of the loss with respect to each prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLoss_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateLoss*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLoss_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateLoss(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateLoss(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the loss between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T CalculateLoss(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values from the model.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLossAndGradientGpu_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateLossAndGradientGpu*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLossAndGradientGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.CalculateLossAndGradientGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0},AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0})">
+  CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates both loss and gradient on GPU in a single pass.
+Default implementation falls back to separate calls.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual (T Loss, IGpuTensor&lt;T&gt; Gradient) CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt; predicted, IGpuTensor&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The predicted GPU tensor from the model.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) GPU tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,aidotnet.tensors.engines.gpu.igputensor--0--.loss">Loss</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,aidotnet.tensors.engines.gpu.igputensor--0--.gradient">Gradient</a>)</dt>
+    <dd><p>A tuple containing the loss value and gradient tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LossFunctions_LossFunctionBase_1_ValidateVectorLengths_" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.ValidateVectorLengths*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_LossFunctionBase_1_ValidateVectorLengths_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LossFunctions.LossFunctionBase`1.ValidateVectorLengths(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ValidateVectorLengths(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the predicted and actual vectors have the same length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateVectorLengths(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values vector.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual values vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/LossFunctionBase.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

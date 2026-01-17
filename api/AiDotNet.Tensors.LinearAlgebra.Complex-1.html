@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Struct Complex&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Struct Complex&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a complex number with real and imaginary parts.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Complex_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Complex%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Complex_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1" class="text-break">
+Struct Complex&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a complex number with real and imaginary parts.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public readonly struct Complex&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for the real and imaginary parts.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.NumericTypeExtensions.html#AiDotNet_Extensions_NumericTypeExtensions_ToRealOrComplex__1_AiDotNet_Tensors_LinearAlgebra_Complex___0__">NumericTypeExtensions.ToRealOrComplex&lt;T&gt;(Complex&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Complex numbers extend the concept of real numbers by adding an imaginary component.
+They are often used in advanced mathematical calculations, signal processing, and
+certain machine learning algorithms.
+</p>
+<p>
+<b>For Beginners:</b> A complex number has two parts - a real part and an imaginary part.
+The real part is just like a regular number you're familiar with. The imaginary part
+is multiplied by "i", which represents the square root of -1 (a number that doesn't
+exist in the real number system).
+</p>
+<p>
+For example, in the complex number "3 + 2i":
+- 3 is the real part
+- 2 is the imaginary part
+</p>
+<p>
+Complex numbers are useful in many areas of science and engineering, including:
+- Electrical engineering (analyzing circuits)
+- Signal processing (analyzing sound waves)
+- Quantum mechanics
+- Some machine learning algorithms
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1__ctor__0__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.#ctor(`0,`0)">
+  Complex(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Complex struct with specified real and imaginary parts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Complex(T real, T imaginary)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>real</code> <span class="xref">T</span></dt>
+    <dd><p>The real part of the complex number.</p>
+</dd>
+    <dt><code>imaginary</code> <span class="xref">T</span></dt>
+    <dd><p>The imaginary part of the complex number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1__ctor__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is how you create a new complex number. You provide the real part
+(a regular number) and the imaginary part (the coefficient of i).</p>
+<p>Example: To create the complex number 3 + 2i, you would write:</p>
+<pre><code class="lang-csharp">var myComplex = new Complex&lt;double&gt;(3.0, 2.0);</code></pre>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Imaginary_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Imaginary*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Imaginary" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Imaginary">
+  Imaginary
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the imaginary part of the complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Imaginary { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Imaginary_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the part that's multiplied by &quot;i&quot; in a complex number.
+For example, in &quot;3 + 2i&quot;, the imaginary part is 2.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Magnitude_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Magnitude*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Magnitude" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Magnitude">
+  Magnitude
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the magnitude (or absolute value) of the complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Magnitude { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Magnitude_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The magnitude represents the distance from the origin (0,0) to the complex number
+in the complex plane.
+</p>
+<p>
+<b>For Beginners:</b> The magnitude is like the "size" of the complex number. It's calculated
+using the Pythagorean theorem: sqrt(real² + imaginary²).
+</p>
+<p>
+Think of a complex number as a point on a 2D graph, where the real part is the x-coordinate
+and the imaginary part is the y-coordinate. The magnitude is the straight-line distance
+from the origin (0,0) to that point.
+</p>
+<p>
+For example, the magnitude of 3 + 4i is sqrt(3² + 4²) = sqrt(9 + 16) = sqrt(25) = 5.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Phase_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Phase*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Phase" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Phase">
+  Phase
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the phase (or argument) of the complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Phase { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Phase_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The phase represents the angle (in radians) between the positive real axis and the line
+connecting the origin to the complex number in the complex plane.
+</p>
+<p>
+<b>For Beginners:</b> The phase is the angle that the complex number makes with the positive
+x-axis when plotted on a 2D graph. It's measured in radians (a full circle is 2p radians
+or about 6.28 radians).
+</p>
+<p>
+If you think of a complex number as a point on a 2D graph:
+- The real part is the x-coordinate
+- The imaginary part is the y-coordinate
+- The phase is the angle between the positive x-axis and the line from (0,0) to your point
+</p>
+<p>
+For example:
+- The phase of 1 + 0i is 0 radians (0 degrees)
+- The phase of 0 + 1i is p/2 radians (90 degrees)
+- The phase of -1 + 0i is p radians (180 degrees)
+- The phase of 0 - 1i is -p/2 radians (-90 degrees)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Real_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Real*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Real" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Real">
+  Real
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the real part of the complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Real { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Real_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the regular number part of a complex number.
+For example, in &quot;3 + 2i&quot;, the real part is 3.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Conjugate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Conjugate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Conjugate" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Conjugate">
+  Conjugate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the complex conjugate of this complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Complex&lt;T&gt; Conjugate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number that is the conjugate of this complex number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Conjugate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The complex conjugate of a complex number (a + bi) is (a - bi).
+</p>
+<p>
+<b>For Beginners:</b> The conjugate of a complex number keeps the real part the same but changes
+the sign of the imaginary part. For example, the conjugate of (3 + 2i) is (3 - 2i).
+</p>
+<p>
+Complex conjugates are useful in many calculations, especially when dividing complex numbers
+or finding absolute values. When you multiply a complex number by its conjugate, you get
+a real number (with no imaginary part).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Equals(AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  Equals(Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether this complex number is equal to another complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(Complex&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex number to compare with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the complex numbers are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method checks if two complex numbers have the same real and imaginary parts.
+If both parts match exactly, the complex numbers are considered equal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_System_Object_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.Equals(System.Object)">
+  Equals(object?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether this complex number is equal to another object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool Equals(object? obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd><p>The object to compare with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the objects are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_Equals_System_Object__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method checks if this complex number equals another object.
+It first checks if the other object is a complex number, and if so, compares their values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_FromPolarCoordinates_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.FromPolarCoordinates*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_FromPolarCoordinates__0__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.FromPolarCoordinates(`0,`0)">
+  FromPolarCoordinates(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a complex number from polar coordinates (magnitude and phase).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; FromPolarCoordinates(T magnitude, T phase)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>magnitude</code> <span class="xref">T</span></dt>
+    <dd><p>The magnitude (or absolute value) of the complex number.</p>
+</dd>
+    <dt><code>phase</code> <span class="xref">T</span></dt>
+    <dd><p>The phase (or argument) of the complex number in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number with the specified magnitude and phase.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_FromPolarCoordinates__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Converts from polar form (magnitude and phase) to rectangular form (real and imaginary parts)
+using the formulas: real = magnitude * cos(phase) and imaginary = magnitude * sin(phase).
+</p>
+<p>
+<b>For Beginners:</b> There are two ways to represent complex numbers:
+</p>
+<p>
+1. Rectangular form: a + bi (using real and imaginary parts)
+2. Polar form: r?? (using magnitude and angle)
+</p>
+<p>
+This method converts from polar form to the standard rectangular form. The magnitude (r)
+represents the distance from the origin, and the phase (?) represents the angle from the
+positive x-axis (measured in radians).
+</p>
+<p>
+For example, to create the complex number 3 + 4i using polar coordinates:
+- First, calculate the magnitude: sqrt(3² + 4²) = 5
+- Then, calculate the phase: arctan(4/3) ≈ 0.9273 radians
+- Use FromPolarCoordinates(5, 0.9273)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_GetHashCode_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.GetHashCode*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_GetHashCode" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.GetHashCode">
+  GetHashCode()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a hash code for this complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int GetHashCode()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A hash code for the current object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_GetHashCode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A hash code is a numeric value that is used to identify an object in collections
+like dictionaries and hash sets. You don't need to call this method directly in most cases.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_ToString_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.ToString*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_ToString" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.ToString">
+  ToString()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a string representation of this complex number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string ToString()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string that represents the complex number in the format &quot;a + bi&quot; or &quot;a - bi&quot;.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_ToString_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts the complex number to a readable text format.
+For example, a complex number with Real = 3 and Imaginary = 2 would be displayed as &quot;3 + 2i&quot;,
+and a complex number with Real = 3 and Imaginary = -2 would be displayed as &quot;3 - 2i&quot;.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator +(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two complex numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; operator +(Complex&lt;T&gt; a, Complex&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The first complex number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The second complex number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number that is the sum of the two complex numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Addition of complex numbers is performed by adding their real parts together and
+adding their imaginary parts together.
+</p>
+<p>
+<b>For Beginners:</b> To add two complex numbers, you simply add their real parts together
+and their imaginary parts together.
+</p>
+<p>
+For example:
+(3 + 2i) + (4 + 5i) = (3 + 4) + (2 + 5)i = 7 + 7i
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator /(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides one complex number by another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; operator /(Complex&lt;T&gt; a, Complex&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex number to be divided (numerator).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex number to divide by (denominator).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number that is the quotient of the division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Division of complex numbers is performed by multiplying both numerator and denominator
+by the complex conjugate of the denominator, which converts the denominator to a real number.
+</p>
+<p>
+<b>For Beginners:</b> Dividing complex numbers is one of the more complicated operations.
+We can't directly divide complex numbers, so we use a special technique:
+</p>
+<p>
+1. We multiply both the top and bottom of the fraction by the conjugate of the denominator
+2. This makes the denominator a real number (no imaginary part)
+3. Then we can separate the real and imaginary parts of the result
+</p>
+<p>
+For example, to calculate (3 + 2i) / (1 + i):
+- First, we multiply both top and bottom by the conjugate of (1 + i), which is (1 - i)
+- This gives us: [(3 + 2i)(1 - i)] / [(1 + i)(1 - i)]
+- The denominator becomes (1² + 1²) = 2
+- The numerator becomes (3 + 2i)(1 - i) = 3 - 3i + 2i - 2i² = 3 - 3i + 2i + 2 = 5 - i
+- So the result is (5 - i) / 2 = 2.5 - 0.5i
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Equality_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Equality*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Equality_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Equality(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator ==(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether two complex numbers are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator ==(Complex&lt;T&gt; left, Complex&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The first complex number to compare.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The second complex number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the complex numbers are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Equality_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks if two complex numbers have the same real part and the same
+imaginary part. If both parts match, the complex numbers are considered equal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Inequality_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Inequality*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Inequality_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Inequality(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator !=(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether two complex numbers are not equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool operator !=(Complex&lt;T&gt; left, Complex&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The first complex number to compare.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The second complex number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the complex numbers are not equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Inequality_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks if two complex numbers are different. If either the real part
+or the imaginary part (or both) are different, the complex numbers are not equal.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator *(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two complex numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; operator *(Complex&lt;T&gt; a, Complex&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The first complex number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The second complex number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number that is the product of the two complex numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Multiplication of complex numbers follows the distributive property and the rule that i² = -1.
+</p>
+<p>
+<b>For Beginners:</b> Multiplying complex numbers is a bit more involved than addition or subtraction.
+The formula is:
+(a + bi) * (c + di) = (ac - bd) + (ad + bc)i
+</p>
+<p>
+For example:
+(3 + 2i) * (1 + 4i) = (3*1 - 2*4) + (3*4 + 2*1)i = (3 - 8) + (12 + 2)i = -5 + 14i
+</p>
+<p>
+This is similar to multiplying two binomials (a + b)(c + d), but with the special rule
+that i² = -1, which is why the term bd becomes negative.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Complex`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Complex{`0},AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  operator -(Complex&lt;T&gt;, Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts one complex number from another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; operator -(Complex&lt;T&gt; a, Complex&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex number to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex number to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>A new complex number that is the difference of the two complex numbers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Complex_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Complex__0__AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Subtraction of complex numbers is performed by subtracting their real parts and
+subtracting their imaginary parts.
+</p>
+<p>
+<b>For Beginners:</b> To subtract one complex number from another, you subtract the real parts
+and subtract the imaginary parts.
+</p>
+<p>
+For example:
+(7 + 3i) - (2 + 1i) = (7 - 2) + (3 - 1)i = 5 + 2i
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Complex.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DataPipelineExtensions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DataPipelineExtensions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Extension methods for creating data pipelines from various sources.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Pipeline_DataPipelineExtensions.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Pipeline.DataPipelineExtensions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions">
+
+
+
+  <h1 id="AiDotNet_Data_Pipeline_DataPipelineExtensions" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions" class="text-break">
+Class DataPipelineExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L890"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Pipeline.html">Pipeline</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Extension methods for creating data pipelines from various sources.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class DataPipelineExtensions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DataPipelineExtensions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_PaddedBatch_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.PaddedBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_PaddedBatch__1_AiDotNet_Data_Pipeline_DataPipeline___0__System_Int32___0_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.PaddedBatch``1(AiDotNet.Data.Pipeline.DataPipeline{``0},System.Int32,``0)">
+  PaddedBatch&lt;T&gt;(DataPipeline&lt;T&gt;, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L1037"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates batches with padding to ensure uniform batch sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;T[]&gt; PaddedBatch&lt;T&gt;(this DataPipeline&lt;T&gt; source, int batchSize, T padValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T&gt;</dt>
+    <dd><p>The source pipeline.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of elements per batch.</p>
+</dd>
+    <dt><code>padValue</code> <span class="xref">T</span></dt>
+    <dd><p>Value to use for padding.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T[]&gt;</dt>
+    <dd><p>A new DataPipeline with padded batches.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Pipeline_DataPipelineExtensions_PaddedBatch__1_AiDotNet_Data_Pipeline_DataPipeline___0__System_Int32___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> PaddedBatch ensures all batches have the same
+size by adding padding values to the last batch. This is useful when
+your model requires fixed batch sizes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_Sample_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.Sample*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_Sample__1_AiDotNet_Data_Pipeline_DataPipeline___0__System_Collections_Generic_IReadOnlyList_System_Double__System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.Sample``1(AiDotNet.Data.Pipeline.DataPipeline{``0},System.Collections.Generic.IReadOnlyList{System.Double},System.Int32,System.Nullable{System.Int32})">
+  Sample&lt;T&gt;(DataPipeline&lt;T&gt;, IReadOnlyList&lt;double&gt;, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L1135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples elements with replacement using the given weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;T&gt; Sample&lt;T&gt;(this DataPipeline&lt;T&gt; source, IReadOnlyList&lt;double&gt; weights, int numSamples, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T&gt;</dt>
+    <dd><p>The source pipeline.</p>
+</dd>
+    <dt><code>weights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Weight for each element.</p>
+</dd>
+    <dt><code>numSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples to draw.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T&gt;</dt>
+    <dd><p>A new DataPipeline with sampled elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToAsyncPipeline_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToAsyncPipeline*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToAsyncPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToAsyncPipeline``3(AiDotNet.Interfaces.IStreamingDataLoader{``0,``1,``2},System.Boolean,System.Nullable{System.Int32})">
+  ToAsyncPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L969"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an async DataPipeline from a streaming data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AsyncDataPipeline&lt;(TInput[] Inputs, TOutput[] Outputs)&gt; ToAsyncPipeline&lt;T, TInput, TOutput&gt;(this IStreamingDataLoader&lt;T, TInput, TOutput&gt; loader, bool shuffle = true, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loader</code> <a class="xref" href="AiDotNet.Interfaces.IStreamingDataLoader-3.html">IStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The streaming data loader.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle the data.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.AsyncDataPipeline-1.html">AsyncDataPipeline</a>&lt;(TInput[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1[],--2[]-.inputs">Inputs</a>, TOutput[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1[],--2[]-.outputs">Outputs</a>)&gt;</dt>
+    <dd><p>A new async DataPipeline of input/output tuples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToAsyncPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an async pipeline from a streaming data loader,
+enabling efficient prefetching and parallel processing.
+<p>Example:</p>
+<pre><code class="lang-csharp">await foreach (var batch in streamingLoader.ToAsyncPipeline().Prefetch(2))
+{
+    await model.TrainOnBatchAsync(batch);
+}</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline``1(AiDotNet.Interfaces.IBatchIterable{``0})">
+  ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L898"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DataPipeline from a batch iterable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;TBatch&gt; ToPipeline&lt;TBatch&gt;(this IBatchIterable&lt;TBatch&gt; source)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;TBatch&gt;</dt>
+    <dd><p>The batch iterable source.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;TBatch&gt;</dt>
+    <dd><p>A new DataPipeline.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TBatch</code></dt>
+    <dd><p>The batch type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_System_Collections_Generic_IEnumerable___0__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline``1(System.Collections.Generic.IEnumerable{``0})">
+  ToPipeline&lt;T&gt;(IEnumerable&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L909"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DataPipeline from an enumerable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;T&gt; ToPipeline&lt;T&gt;(this IEnumerable&lt;T&gt; source)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The enumerable source.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T&gt;</dt>
+    <dd><p>A new DataPipeline.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToPipeline``3(AiDotNet.Interfaces.IStreamingDataLoader{``0,``1,``2},System.Boolean,System.Nullable{System.Int32})">
+  ToPipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L937"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DataPipeline from a streaming data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;(TInput[] Inputs, TOutput[] Outputs)&gt; ToPipeline&lt;T, TInput, TOutput&gt;(this IStreamingDataLoader&lt;T, TInput, TOutput&gt; loader, bool shuffle = true, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loader</code> <a class="xref" href="AiDotNet.Interfaces.IStreamingDataLoader-3.html">IStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The streaming data loader.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle the data.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;(TInput[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1[],--2[]-.inputs">Inputs</a>, TOutput[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1[],--2[]-.outputs">Outputs</a>)&gt;</dt>
+    <dd><p>A new DataPipeline of input/output tuples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a pipeline from a streaming data loader,
+allowing you to chain operations like Map, Filter, Batch, etc.
+<p>Example:</p>
+<pre><code class="lang-csharp">var pipeline = streamingLoader.ToPipeline()
+    .Map(batch =&gt; NormalizeBatch(batch))
+    .Shuffle(1000)
+    .Prefetch(2);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToSamplePipeline_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToSamplePipeline*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToSamplePipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.ToSamplePipeline``3(AiDotNet.Interfaces.IStreamingDataLoader{``0,``1,``2},System.Boolean,System.Nullable{System.Int32})">
+  ToSamplePipeline&lt;T, TInput, TOutput&gt;(IStreamingDataLoader&lt;T, TInput, TOutput&gt;, bool, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L1002"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DataPipeline of individual samples from a streaming data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;(TInput Input, TOutput Output)&gt; ToSamplePipeline&lt;T, TInput, TOutput&gt;(this IStreamingDataLoader&lt;T, TInput, TOutput&gt; loader, bool shuffle = true, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>loader</code> <a class="xref" href="AiDotNet.Interfaces.IStreamingDataLoader-3.html">IStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The streaming data loader.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle the data.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1,--2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple---1,--2-.output">Output</a>)&gt;</dt>
+    <dd><p>A new DataPipeline of individual input/output samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Pipeline_DataPipelineExtensions_ToSamplePipeline__3_AiDotNet_Interfaces_IStreamingDataLoader___0___1___2__System_Boolean_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Unlike ToPipeline which yields batches, this yields
+individual samples. Useful when you want to apply per-sample operations before
+re-batching.
+<p>Example:</p>
+<pre><code class="lang-csharp">var pipeline = streamingLoader.ToSamplePipeline()
+    .Map(sample =&gt; AugmentSample(sample))
+    .Shuffle(5000)
+    .Batch(64);</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Pipeline_DataPipelineExtensions_Window_" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.Window*"></a>
+
+  <h3 id="AiDotNet_Data_Pipeline_DataPipelineExtensions_Window__1_AiDotNet_Data_Pipeline_DataPipeline___0__System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Pipeline.DataPipelineExtensions.Window``1(AiDotNet.Data.Pipeline.DataPipeline{``0},System.Int32,System.Nullable{System.Int32})">
+  Window&lt;T&gt;(DataPipeline&lt;T&gt;, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L1087"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies window-based operations to the pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static DataPipeline&lt;T[]&gt; Window&lt;T&gt;(this DataPipeline&lt;T&gt; source, int windowSize, int? shift = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T&gt;</dt>
+    <dd><p>The source pipeline.</p>
+</dd>
+    <dt><code>windowSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Size of each window.</p>
+</dd>
+    <dt><code>shift</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of elements to shift between windows. Default is windowSize (non-overlapping).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Pipeline.DataPipeline-1.html">DataPipeline</a>&lt;T[]&gt;</dt>
+    <dd><p>A new DataPipeline with windowed elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Pipeline_DataPipelineExtensions_Window__1_AiDotNet_Data_Pipeline_DataPipeline___0__System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Window groups consecutive elements together.
+With windowSize=5 and shift=1, you get overlapping windows useful for
+sequence models.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Pipeline/DataPipeline.cs/#L890" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

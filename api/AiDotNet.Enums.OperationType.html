@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum OperationType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum OperationType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different operation types in computation graphs for JIT compilation and automatic differentiation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_OperationType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.OperationType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.OperationType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_OperationType" data-uid="AiDotNet.Enums.OperationType" class="text-break">
+Enum OperationType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/OperationType.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different operation types in computation graphs for JIT compilation and automatic differentiation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum OperationType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_OperationType_Abs"><code>Abs = 8</code></dt>
+  
+  <dd><p>Element-wise absolute value - |x| for each element.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Activation"><code>Activation = 35</code></dt>
+  
+  <dd><p>Generic activation function application.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_AdaptivePooling"><code>AdaptivePooling = 146</code></dt>
+  
+  <dd><p>Adaptive pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Add"><code>Add = 2</code></dt>
+  
+  <dd><p>Element-wise addition of two tensors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_AffineGrid"><code>AffineGrid = 64</code></dt>
+  
+  <dd><p>Affine grid generation for spatial transformers.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_And"><code>And = 168</code></dt>
+  
+  <dd><p>Logical AND.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_AnomalyScore"><code>AnomalyScore = 107</code></dt>
+  
+  <dd><p>Anomaly score computation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Attention"><code>Attention = 130</code></dt>
+  
+  <dd><p>Generic attention mechanism operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_AveragePooling"><code>AveragePooling = 143</code></dt>
+  
+  <dd><p>Average pooling operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_AvgPool2D"><code>AvgPool2D = 60</code></dt>
+  
+  <dd><p>2D average pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_BatchNorm"><code>BatchNorm = 62</code></dt>
+  
+  <dd><p>Batch normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_BatchNormalization"><code>BatchNormalization = 138</code></dt>
+  
+  <dd><p>Batch normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_BentIdentity"><code>BentIdentity = 32</code></dt>
+  
+  <dd><p>Bent Identity - (sqrt(x² + 1) - 1) / 2 + x, smooth alternative to ReLU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Broadcast"><code>Broadcast = 129</code></dt>
+  
+  <dd><p>Broadcast operation - expands tensor dimensions to match target shape.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_CELU"><code>CELU = 30</code></dt>
+  
+  <dd><p>Continuously Differentiable ELU - max(0, x) + min(0, α * (exp(x/α) - 1)).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_CRFForward"><code>CRFForward = 106</code></dt>
+  
+  <dd><p>CRF forward algorithm for sequence labeling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Cast"><code>Cast = 172</code></dt>
+  
+  <dd><p>Type cast operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_CliffordInnerProduct"><code>CliffordInnerProduct = 80</code></dt>
+  
+  <dd><p>Inner (contraction) product of multivectors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Clip"><code>Clip = 173</code></dt>
+  
+  <dd><p>Clip values to range.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ComplexMatMul"><code>ComplexMatMul = 72</code></dt>
+  
+  <dd><p>Complex matrix multiplication for quantum operations.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ComplexMultiply"><code>ComplexMultiply = 73</code></dt>
+  
+  <dd><p>Element-wise complex multiplication.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Concat"><code>Concat = 44</code></dt>
+  
+  <dd><p>Concatenate multiple tensors along an axis.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Constant"><code>Constant = 1</code></dt>
+  
+  <dd><p>Constant node - represents a constant value that doesn't require gradients.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Conv2D"><code>Conv2D = 52</code></dt>
+  
+  <dd><p>2D convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ConvTranspose2D"><code>ConvTranspose2D = 53</code></dt>
+  
+  <dd><p>2D transposed convolution (deconvolution).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Convolution"><code>Convolution = 132</code></dt>
+  
+  <dd><p>General convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Convolution2D"><code>Convolution2D = 133</code></dt>
+  
+  <dd><p>2D convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Convolution3D"><code>Convolution3D = 134</code></dt>
+  
+  <dd><p>3D convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Crop"><code>Crop = 46</code></dt>
+  
+  <dd><p>Crop tensor by removing border elements.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_CrossAttention"><code>CrossAttention = 152</code></dt>
+  
+  <dd><p>Cross-attention operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Custom"><code>Custom = 126</code></dt>
+  
+  <dd><p>Custom user-defined operation for extensibility.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Deconvolution"><code>Deconvolution = 137</code></dt>
+  
+  <dd><p>Deconvolution (transposed convolution) operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DeformableConv2D"><code>DeformableConv2D = 57</code></dt>
+  
+  <dd><p>2D deformable convolution with learnable offsets and optional modulation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Dense"><code>Dense = 147</code></dt>
+  
+  <dd><p>Dense (fully connected) layer.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DepthwiseConv2D"><code>DepthwiseConv2D = 55</code></dt>
+  
+  <dd><p>2D depthwise convolution.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DepthwiseConvolution"><code>DepthwiseConvolution = 135</code></dt>
+  
+  <dd><p>Depthwise convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DilatedConv2D"><code>DilatedConv2D = 54</code></dt>
+  
+  <dd><p>2D dilated (atrous) convolution.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DilatedConvolution"><code>DilatedConvolution = 136</code></dt>
+  
+  <dd><p>Dilated convolution operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Divide"><code>Divide = 5</code></dt>
+  
+  <dd><p>Element-wise division of two tensors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_DropPath"><code>DropPath = 160</code></dt>
+  
+  <dd><p>DropPath regularization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Dropout"><code>Dropout = 127</code></dt>
+  
+  <dd><p>Dropout regularization operation - randomly zeros elements during training.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ELU"><code>ELU = 20</code></dt>
+  
+  <dd><p>Exponential Linear Unit - ELU(x) = x if x &gt; 0, alpha * (exp(x) - 1) otherwise.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Embedding"><code>Embedding = 67</code></dt>
+  
+  <dd><p>Embedding lookup operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Equal"><code>Equal = 163</code></dt>
+  
+  <dd><p>Element-wise equality.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Exp"><code>Exp = 9</code></dt>
+  
+  <dd><p>Element-wise exponential function - e^x for each element.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Expand"><code>Expand = 159</code></dt>
+  
+  <dd><p>Expand tensor dimensions.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FakeQuantization"><code>FakeQuantization = 125</code></dt>
+  
+  <dd><p>Fake quantization operation with Straight-Through Estimator (STE) for differentiable quantization.
+Forward: quantized = round(x / scale) * scale
+Backward: gradient passes through unchanged (STE)</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Flatten"><code>Flatten = 156</code></dt>
+  
+  <dd><p>Flatten tensor to 1D.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FullyConnected"><code>FullyConnected = 148</code></dt>
+  
+  <dd><p>Fully connected layer.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedAddReLU"><code>FusedAddReLU = 100</code></dt>
+  
+  <dd><p>Fused addition + ReLU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedConvBatchNorm"><code>FusedConvBatchNorm = 99</code></dt>
+  
+  <dd><p>Fused convolution + batch normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedConvBatchNormReLU"><code>FusedConvBatchNormReLU = 175</code></dt>
+  
+  <dd><p>Fused Conv + BatchNorm + ReLU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedLayerNormAttention"><code>FusedLayerNormAttention = 180</code></dt>
+  
+  <dd><p>Fused LayerNorm + Attention.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedLinearReLU"><code>FusedLinearReLU = 98</code></dt>
+  
+  <dd><p>Fused linear layer with ReLU (MatMul + Add + ReLU).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedMatMulAdd"><code>FusedMatMulAdd = 97</code></dt>
+  
+  <dd><p>Fused matrix multiplication + addition (MatMul + Add).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedMatMulBias"><code>FusedMatMulBias = 176</code></dt>
+  
+  <dd><p>Fused MatMul + Bias.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedMatMulBiasGELU"><code>FusedMatMulBiasGELU = 178</code></dt>
+  
+  <dd><p>Fused MatMul + Bias + GELU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedMatMulBiasReLU"><code>FusedMatMulBiasReLU = 177</code></dt>
+  
+  <dd><p>Fused MatMul + Bias + ReLU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_FusedMultiHeadAttention"><code>FusedMultiHeadAttention = 179</code></dt>
+  
+  <dd><p>Fused MultiHead Attention.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GELU"><code>GELU = 22</code></dt>
+  
+  <dd><p>Gaussian Error Linear Unit - x * Φ(x) where Φ is standard normal CDF.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GRU"><code>GRU = 154</code></dt>
+  
+  <dd><p>GRU recurrent layer.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GRUCell"><code>GRUCell = 70</code></dt>
+  
+  <dd><p>GRU cell operation for recurrent networks.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Gather"><code>Gather = 128</code></dt>
+  
+  <dd><p>Gather operation - selects elements from a tensor using indices.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Gaussian"><code>Gaussian = 33</code></dt>
+  
+  <dd><p>Gaussian activation - exp(-x²), bell-shaped response curve.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Gemm"><code>Gemm = 149</code></dt>
+  
+  <dd><p>General Matrix Multiplication.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GeometricProduct"><code>GeometricProduct = 78</code></dt>
+  
+  <dd><p>Geometric product of multivectors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GlobalAveragePooling"><code>GlobalAveragePooling = 144</code></dt>
+  
+  <dd><p>Global average pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GlobalMaxPooling"><code>GlobalMaxPooling = 145</code></dt>
+  
+  <dd><p>Global max pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GradeProject"><code>GradeProject = 83</code></dt>
+  
+  <dd><p>Grade projection of multivectors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GraphConv"><code>GraphConv = 66</code></dt>
+  
+  <dd><p>Graph convolutional operation for GNNs.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Greater"><code>Greater = 164</code></dt>
+  
+  <dd><p>Element-wise greater than.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GreaterOrEqual"><code>GreaterOrEqual = 166</code></dt>
+  
+  <dd><p>Element-wise greater or equal.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GridSample"><code>GridSample = 65</code></dt>
+  
+  <dd><p>Grid sampling for spatial transformers.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GroupNormalization"><code>GroupNormalization = 141</code></dt>
+  
+  <dd><p>Group normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_GumbelSoftmax"><code>GumbelSoftmax = 101</code></dt>
+  
+  <dd><p>Gumbel-Softmax for differentiable discrete sampling (used in stochastic layers).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_HardSigmoid"><code>HardSigmoid = 27</code></dt>
+  
+  <dd><p>Hard Sigmoid - piecewise linear approximation of sigmoid: clip((x + 1) / 2, 0, 1).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_HardTanh"><code>HardTanh = 28</code></dt>
+  
+  <dd><p>Hard Tanh - piecewise linear approximation of tanh: clip(x, -1, 1).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_HierarchicalSoftmax"><code>HierarchicalSoftmax = 121</code></dt>
+  
+  <dd><p>Hierarchical Softmax - tree-based efficient softmax for large vocabularies.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_HyperboloidDistance"><code>HyperboloidDistance = 88</code></dt>
+  
+  <dd><p>Hyperboloid distance metric.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ISRU"><code>ISRU = 110</code></dt>
+  
+  <dd><p>Inverse Square Root Unit - x / sqrt(1 + alpha * x²).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Input"><code>Input = 0</code></dt>
+  
+  <dd><p>Input node - represents a variable or parameter in the computation graph.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_InstanceNormalization"><code>InstanceNormalization = 140</code></dt>
+  
+  <dd><p>Instance normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LSTM"><code>LSTM = 153</code></dt>
+  
+  <dd><p>LSTM recurrent layer.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LSTMCell"><code>LSTMCell = 71</code></dt>
+  
+  <dd><p>LSTM cell operation for recurrent networks.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LayerNorm"><code>LayerNorm = 61</code></dt>
+  
+  <dd><p>Layer normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LayerNormalization"><code>LayerNormalization = 139</code></dt>
+  
+  <dd><p>Layer normalization.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LeakyReLU"><code>LeakyReLU = 21</code></dt>
+  
+  <dd><p>Leaky Rectified Linear Unit - max(alpha * x, x) where alpha is typically 0.01.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LeakyStateUpdate"><code>LeakyStateUpdate = 105</code></dt>
+  
+  <dd><p>Leaky state update for reservoir/echo state networks.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Less"><code>Less = 165</code></dt>
+  
+  <dd><p>Element-wise less than.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LessOrEqual"><code>LessOrEqual = 167</code></dt>
+  
+  <dd><p>Element-wise less or equal.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LiSHT"><code>LiSHT = 31</code></dt>
+  
+  <dd><p>Linearly Scaled Hyperbolic Tangent - x * tanh(x).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LocallyConnectedConv2D"><code>LocallyConnectedConv2D = 56</code></dt>
+  
+  <dd><p>2D locally connected convolution.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Log"><code>Log = 10</code></dt>
+  
+  <dd><p>Element-wise natural logarithm.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LogSoftmax"><code>LogSoftmax = 112</code></dt>
+  
+  <dd><p>Log-Softmax - log(softmax(x)), numerically stable for cross-entropy loss.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_LogSoftmin"><code>LogSoftmin = 114</code></dt>
+  
+  <dd><p>Log-Softmin - log(softmin(x)) = log(softmax(-x)).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MatMul"><code>MatMul = 14</code></dt>
+  
+  <dd><p>Matrix multiplication (not element-wise).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MaxPool2D"><code>MaxPool2D = 58</code></dt>
+  
+  <dd><p>2D max pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MaxPool3D"><code>MaxPool3D = 59</code></dt>
+  
+  <dd><p>3D max pooling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MaxPooling"><code>MaxPooling = 142</code></dt>
+  
+  <dd><p>Max pooling operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Maxout"><code>Maxout = 116</code></dt>
+  
+  <dd><p>Maxout activation - maximum over multiple linear pieces.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Mean"><code>Mean = 41</code></dt>
+  
+  <dd><p>Mean operation (reduces all dimensions).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Mish"><code>Mish = 24</code></dt>
+  
+  <dd><p>Mish activation - x * tanh(softplus(x)).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MobiusAdd"><code>MobiusAdd = 84</code></dt>
+  
+  <dd><p>Mobius addition in Poincare ball model.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MultiHeadAttention"><code>MultiHeadAttention = 69</code></dt>
+  
+  <dd><p>Multi-head attention operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Multiply"><code>Multiply = 4</code></dt>
+  
+  <dd><p>Element-wise multiplication (Hadamard product) of two tensors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MultivectorAdd"><code>MultivectorAdd = 81</code></dt>
+  
+  <dd><p>Multivector addition.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_MultivectorReverse"><code>MultivectorReverse = 82</code></dt>
+  
+  <dd><p>Multivector reverse operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Negate"><code>Negate = 7</code></dt>
+  
+  <dd><p>Element-wise negation - multiplies each element by -1.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Norm"><code>Norm = 13</code></dt>
+  
+  <dd><p>L2 norm computation along an axis - sqrt(sum(x²)).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Not"><code>Not = 170</code></dt>
+  
+  <dd><p>Logical NOT.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_OctonionAdd"><code>OctonionAdd = 77</code></dt>
+  
+  <dd><p>Octonion addition.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_OctonionConjugate"><code>OctonionConjugate = 76</code></dt>
+  
+  <dd><p>Octonion conjugation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_OctonionMatMul"><code>OctonionMatMul = 75</code></dt>
+  
+  <dd><p>Octonion matrix multiplication for neural networks.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_OctonionMultiply"><code>OctonionMultiply = 74</code></dt>
+  
+  <dd><p>Octonion multiplication (non-associative).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Or"><code>Or = 169</code></dt>
+  
+  <dd><p>Logical OR.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Output"><code>Output = 131</code></dt>
+  
+  <dd><p>Output node in computation graph.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PReLU"><code>PReLU = 108</code></dt>
+  
+  <dd><p>Parametric Rectified Linear Unit - max(0, x) + alpha * min(0, x) where alpha is learned.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Pad"><code>Pad = 45</code></dt>
+  
+  <dd><p>Pad tensor with values.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Permute"><code>Permute = 43</code></dt>
+  
+  <dd><p>Permute tensor dimensions (general transpose).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PixelShuffle"><code>PixelShuffle = 51</code></dt>
+  
+  <dd><p>Pixel shuffle operation for upsampling.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PoincareDistance"><code>PoincareDistance = 87</code></dt>
+  
+  <dd><p>Poincare ball distance metric.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PoincareExpMap"><code>PoincareExpMap = 85</code></dt>
+  
+  <dd><p>Poincare exponential map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PoincareLogMap"><code>PoincareLogMap = 86</code></dt>
+  
+  <dd><p>Poincare logarithmic map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_PositionalEncoding"><code>PositionalEncoding = 161</code></dt>
+  
+  <dd><p>Positional encoding for transformers.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Power"><code>Power = 6</code></dt>
+  
+  <dd><p>Element-wise power operation - raises each element to a specified exponent.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_RBFKernel"><code>RBFKernel = 63</code></dt>
+  
+  <dd><p>RBF (Radial Basis Function) kernel operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_RNN"><code>RNN = 155</code></dt>
+  
+  <dd><p>Basic RNN layer.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_RReLU"><code>RReLU = 117</code></dt>
+  
+  <dd><p>Randomized Leaky ReLU - LeakyReLU with random alpha during training.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReLU"><code>ReLU = 16</code></dt>
+  
+  <dd><p>Rectified Linear Unit - max(0, x).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReduceLogVariance"><code>ReduceLogVariance = 40</code></dt>
+  
+  <dd><p>Log-variance reduction along specified axes.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReduceMax"><code>ReduceMax = 39</code></dt>
+  
+  <dd><p>Maximum value reduction along specified axes.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReduceMean"><code>ReduceMean = 38</code></dt>
+  
+  <dd><p>Mean reduction along specified axes.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReduceMin"><code>ReduceMin = 150</code></dt>
+  
+  <dd><p>Minimum value reduction.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ReduceSum"><code>ReduceSum = 37</code></dt>
+  
+  <dd><p>Sum reduction along specified axes.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Reshape"><code>Reshape = 42</code></dt>
+  
+  <dd><p>Reshape tensor to new dimensions.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SELU"><code>SELU = 26</code></dt>
+  
+  <dd><p>Scaled Exponential Linear Unit - self-normalizing activation with fixed lambda and alpha.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SQRBF"><code>SQRBF = 115</code></dt>
+  
+  <dd><p>Square Radial Basis Function - smooth bell-shaped activation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ScaledDotProductAttention"><code>ScaledDotProductAttention = 68</code></dt>
+  
+  <dd><p>Scaled dot-product attention.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ScaledTanh"><code>ScaledTanh = 34</code></dt>
+  
+  <dd><p>Scaled Tanh - parameterized tanh with adjustable steepness β.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Scatter"><code>Scatter = 174</code></dt>
+  
+  <dd><p>Scatter values to indices.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Se3Exp"><code>Se3Exp = 95</code></dt>
+  
+  <dd><p>SE(3) exponential map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Se3Log"><code>Se3Log = 96</code></dt>
+  
+  <dd><p>SE(3) logarithmic map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SelfAttention"><code>SelfAttention = 151</code></dt>
+  
+  <dd><p>Self-attention operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Sigmoid"><code>Sigmoid = 17</code></dt>
+  
+  <dd><p>Sigmoid activation - 1 / (1 + e^(-x)).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Sign"><code>Sign = 111</code></dt>
+  
+  <dd><p>Sign function with surrogate gradient for training - returns -1, 0, or 1.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Slice"><code>Slice = 48</code></dt>
+  
+  <dd><p>Slice tensor along an axis - extract a portion with optional stride.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_So3Exp"><code>So3Exp = 93</code></dt>
+  
+  <dd><p>SO(3) exponential map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_So3Log"><code>So3Log = 94</code></dt>
+  
+  <dd><p>SO(3) logarithmic map.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SoftKNN"><code>SoftKNN = 123</code></dt>
+  
+  <dd><p>Soft K-Nearest Neighbors operation for differentiable instance-based learning.
+Uses attention-weighted contributions from all support vectors instead of hard k-selection.
+weights = softmax(-distances / temperature), output = Σ weights * labels</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SoftLocallyWeighted"><code>SoftLocallyWeighted = 124</code></dt>
+  
+  <dd><p>Soft locally-weighted regression operation for differentiable instance-based learning.
+Uses attention-weighted linear combination of training targets based on distance.
+weights = softmax(-||x - X_train||² / bandwidth), output = weights @ y_train</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SoftPlus"><code>SoftPlus = 25</code></dt>
+  
+  <dd><p>SoftPlus activation - ln(1 + e^x), smooth approximation of ReLU.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SoftSign"><code>SoftSign = 29</code></dt>
+  
+  <dd><p>SoftSign activation - x / (1 + |x|), alternative to tanh with polynomial tails.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SoftSplit"><code>SoftSplit = 122</code></dt>
+  
+  <dd><p>Soft split operation for differentiable decision trees.
+Uses sigmoid gating: p_left = σ((threshold - x[feature]) / temperature)
+output = p_left * left_value + (1 - p_left) * right_value</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Softmax"><code>Softmax = 19</code></dt>
+  
+  <dd><p>Softmax activation - converts logits to probability distribution.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Softmin"><code>Softmin = 113</code></dt>
+  
+  <dd><p>Softmin - softmax(-x), assigns higher probability to lower values.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SpMM"><code>SpMM = 90</code></dt>
+  
+  <dd><p>Sparse matrix-matrix multiplication.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SpMV"><code>SpMV = 89</code></dt>
+  
+  <dd><p>Sparse matrix-vector multiplication.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SparseGather"><code>SparseGather = 91</code></dt>
+  
+  <dd><p>Sparse gather operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SparseScatter"><code>SparseScatter = 92</code></dt>
+  
+  <dd><p>Sparse scatter operation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Sparsemax"><code>Sparsemax = 120</code></dt>
+  
+  <dd><p>Sparsemax - projects onto probability simplex, can produce sparse outputs.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SphericalSoftmax"><code>SphericalSoftmax = 118</code></dt>
+  
+  <dd><p>Spherical Softmax - L2 normalization followed by softmax.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Split"><code>Split = 47</code></dt>
+  
+  <dd><p>Split tensor along an axis into multiple tensors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Sqrt"><code>Sqrt = 11</code></dt>
+  
+  <dd><p>Element-wise square root.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Square"><code>Square = 12</code></dt>
+  
+  <dd><p>Element-wise square - x² for each element.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Squash"><code>Squash = 36</code></dt>
+  
+  <dd><p>Squashing activation for capsule networks - s(v) = ||v||² / (1 + ||v||²) * (v / ||v||).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Squeeze"><code>Squeeze = 157</code></dt>
+  
+  <dd><p>Remove dimensions of size 1.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Stack"><code>Stack = 162</code></dt>
+  
+  <dd><p>Stack tensors along new axis.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_StraightThroughThreshold"><code>StraightThroughThreshold = 103</code></dt>
+  
+  <dd><p>Straight-through threshold for HTM-style sparse activations.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Subtract"><code>Subtract = 3</code></dt>
+  
+  <dd><p>Element-wise subtraction of two tensors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_SurrogateSpike"><code>SurrogateSpike = 102</code></dt>
+  
+  <dd><p>Surrogate spike function for spiking neural networks with gradient estimation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Swish"><code>Swish = 23</code></dt>
+  
+  <dd><p>Swish/SiLU activation - x * sigmoid(x).</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Tanh"><code>Tanh = 18</code></dt>
+  
+  <dd><p>Hyperbolic tangent activation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_TaylorSoftmax"><code>TaylorSoftmax = 119</code></dt>
+  
+  <dd><p>Taylor Softmax - softmax using Taylor series approximation of exp.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_ThresholdedReLU"><code>ThresholdedReLU = 109</code></dt>
+  
+  <dd><p>Thresholded Rectified Linear Unit - x if x &gt; threshold, 0 otherwise.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_TopKSoftmax"><code>TopKSoftmax = 104</code></dt>
+  
+  <dd><p>Top-K softmax for mixture-of-experts routing.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Transpose"><code>Transpose = 15</code></dt>
+  
+  <dd><p>Matrix transpose - swaps rows and columns.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Unknown"><code>Unknown = 181</code></dt>
+  
+  <dd><p>Unknown operation type.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Unsqueeze"><code>Unsqueeze = 158</code></dt>
+  
+  <dd><p>Add dimension of size 1.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Upsample"><code>Upsample = 49</code></dt>
+  
+  <dd><p>Upsample tensor by repeating elements.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Upsample3D"><code>Upsample3D = 50</code></dt>
+  
+  <dd><p>3D upsampling operation for volumetric data.
+Increases spatial resolution by repeating or interpolating values in depth, height, and width.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_WedgeProduct"><code>WedgeProduct = 79</code></dt>
+  
+  <dd><p>Wedge (outer) product of multivectors.</p>
+</dd>
+    <dt id="AiDotNet_Enums_OperationType_Xor"><code>Xor = 171</code></dt>
+  
+  <dd><p>Logical XOR.</p>
+</dd>
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_OperationType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Operation types identify mathematical operations performed on tensors in neural networks.
+<p>When building a computation graph, each operation (like adding two tensors or applying an activation function)
+needs to be identified so that:</p>
+<ol>
+<li>The JIT compiler can optimize the code</li>
+<li>The automatic differentiation system can compute gradients correctly</li>
+<li>The system can analyze and transform the computation graph</li>
+</ol>
+<p>This enum provides type-safe identification of operations, preventing typos and enabling better tooling support.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/OperationType.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

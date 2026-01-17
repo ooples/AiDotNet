@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IAutoMLModel&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IAutoMLModel&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for AutoML models that automatically search for optimal model configurations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IAutoMLModel_3.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IAutoMLModel%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IAutoMLModel`3">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IAutoMLModel_3" data-uid="AiDotNet.Interfaces.IAutoMLModel`3" class="text-break">
+Interface IAutoMLModel&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for AutoML models that automatically search for optimal model configurations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IAutoMLModel&lt;T, TInput, TOutput&gt; : IFullModel&lt;T, TInput, TOutput&gt;, IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, TInput, TOutput&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;, IGradientComputable&lt;T, TInput, TOutput&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, TInput, TOutput&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;.Train(TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;.Predict(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, TInput, TOutput&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, TInput, TOutput&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, TInput, TOutput&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, TInput, TOutput&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, TInput, TOutput&gt;.ComputeGradients(TInput, TOutput, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Interfaces_IAutoMLModel_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>AutoML (Automated Machine Learning) models automatically search through different model types,
+hyperparameters, and architectures to find the best configuration for a given dataset.
+This interface extends IFullModel to provide AutoML-specific functionality like search space configuration,
+trial management, and optimization settings.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_BestModel_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.BestModel*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_BestModel" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.BestModel">
+  BestModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best model found so far</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IFullModel&lt;T, TInput, TOutput&gt;? BestModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_BestScore_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.BestScore*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_BestScore" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.BestScore">
+  BestScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best score achieved</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double BestScore { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_Status_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Status*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_Status" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Status">
+  Status
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current optimization status</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">AutoMLStatus Status { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.AutoMLStatus.html">AutoMLStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_TimeLimit_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.TimeLimit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_TimeLimit" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.TimeLimit">
+  TimeLimit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the time limit for the AutoML search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TimeSpan TimeLimit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_TrialLimit_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.TrialLimit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_TrialLimit" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.TrialLimit">
+  TrialLimit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of trials to run</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TrialLimit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_ConfigureSearchSpace_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.ConfigureSearchSpace*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_ConfigureSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.ConfigureSearchSpace(System.Collections.Generic.Dictionary{System.String,AiDotNet.AutoML.ParameterRange})">
+  ConfigureSearchSpace(Dictionary&lt;string, ParameterRange&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the search space for hyperparameter optimization</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ConfigureSearchSpace(Dictionary&lt;string, ParameterRange&gt; searchSpace)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>searchSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd><p>Dictionary defining parameter ranges to search</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_EnableEarlyStopping_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.EnableEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_EnableEarlyStopping_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.EnableEarlyStopping(System.Int32,System.Double)">
+  EnableEarlyStopping(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables early stopping</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void EnableEarlyStopping(int patience, double minDelta = 0.001)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>patience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of trials without improvement before stopping</p>
+</dd>
+    <dt><code>minDelta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum change to be considered an improvement</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_EnableNAS_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.EnableNAS*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_EnableNAS_System_Boolean_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.EnableNAS(System.Boolean)">
+  EnableNAS(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables Neural Architecture Search (NAS) for automatic network design</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void EnableNAS(bool enabled = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable NAS</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_GetFeatureImportanceAsync_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetFeatureImportanceAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_GetFeatureImportanceAsync" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetFeatureImportanceAsync">
+  GetFeatureImportanceAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets feature importance from the best model</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;Dictionary&lt;int, double&gt;&gt; GetFeatureImportanceAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;&gt;</dt>
+    <dd><p>Dictionary mapping feature indices to importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_GetResults_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetResults*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_GetResults" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetResults">
+  GetResults()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the results of all trials performed during search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;TrialResult&gt; GetResults()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.TrialResult.html">TrialResult</a>&gt;</dt>
+    <dd><p>List of trial results with scores and parameters</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_GetTrialHistory_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetTrialHistory*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_GetTrialHistory" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.GetTrialHistory">
+  GetTrialHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the history of all trials</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;TrialResult&gt; GetTrialHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.TrialResult.html">TrialResult</a>&gt;</dt>
+    <dd><p>List of trial results</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_ReportTrialResultAsync_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.ReportTrialResultAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_ReportTrialResultAsync_System_Collections_Generic_Dictionary_System_String_System_Object__System_Double_System_TimeSpan_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.ReportTrialResultAsync(System.Collections.Generic.Dictionary{System.String,System.Object},System.Double,System.TimeSpan)">
+  ReportTrialResultAsync(Dictionary&lt;string, object&gt;, double, TimeSpan)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reports the result of a trial</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task ReportTrialResultAsync(Dictionary&lt;string, object&gt; parameters, double score, TimeSpan duration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The parameters used in the trial</p>
+</dd>
+    <dt><code>score</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The score achieved</p>
+</dd>
+    <dt><code>duration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>The duration of the trial</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_Run_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Run*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_Run__1__2__1__2_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Run(`1,`2,`1,`2)">
+  Run(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs the AutoML optimization process (alternative name for Search)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Run(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_Search_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Search*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_Search__1__2__1__2_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.Search(`1,`2,`1,`2)">
+  Search(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the AutoML search process (synchronous version)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Search(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SearchAsync_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SearchAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SearchAsync__1__2__1__2_System_TimeSpan_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SearchAsync(`1,`2,`1,`2,System.TimeSpan,System.Threading.CancellationToken)">
+  SearchAsync(TInput, TOutput, TInput, TOutput, TimeSpan, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for the best model configuration asynchronously</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; SearchAsync(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets, TimeSpan timeLimit, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>Time limit for the search</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>The best model found</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SearchBestModel_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SearchBestModel*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SearchBestModel__1__2__1__2_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SearchBestModel(`1,`2,`1,`2)">
+  SearchBestModel(TInput, TOutput, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for the best model configuration (synchronous version)</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IFullModel&lt;T, TInput, TOutput&gt; SearchBestModel(TInput inputs, TOutput targets, TInput validationInputs, TOutput validationTargets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training inputs</p>
+</dd>
+    <dt><code>targets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Training targets</p>
+</dd>
+    <dt><code>validationInputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>Validation inputs</p>
+</dd>
+    <dt><code>validationTargets</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Validation targets</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Best model found</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetCandidateModels_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetCandidateModels*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetCandidateModels_System_Collections_Generic_List_AiDotNet_Enums_ModelType__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetCandidateModels(System.Collections.Generic.List{AiDotNet.Enums.ModelType})">
+  SetCandidateModels(List&lt;ModelType&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the models to consider in the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetCandidateModels(List&lt;ModelType&gt; modelTypes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelTypes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>&gt;</dt>
+    <dd><p>List of model types to evaluate</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetConstraints_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetConstraints*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetConstraints_System_Collections_Generic_List_AiDotNet_AutoML_SearchConstraint__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetConstraints(System.Collections.Generic.List{AiDotNet.AutoML.SearchConstraint})">
+  SetConstraints(List&lt;SearchConstraint&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets constraints for the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetConstraints(List&lt;SearchConstraint&gt; constraints)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>constraints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.AutoML.SearchConstraint.html">SearchConstraint</a>&gt;</dt>
+    <dd><p>List of search constraints</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetModelEvaluator_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetModelEvaluator*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetModelEvaluator_AiDotNet_Interfaces_IModelEvaluator__0__1__2__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetModelEvaluator(AiDotNet.Interfaces.IModelEvaluator{`0,`1,`2})">
+  SetModelEvaluator(IModelEvaluator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model evaluator to use for evaluating candidate models</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetModelEvaluator(IModelEvaluator&lt;T, TInput, TOutput&gt; evaluator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluator</code> <a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model evaluator</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetModelsToTry_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetModelsToTry*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetModelsToTry_System_Collections_Generic_List_AiDotNet_Enums_ModelType__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetModelsToTry(System.Collections.Generic.List{AiDotNet.Enums.ModelType})">
+  SetModelsToTry(List&lt;ModelType&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets which model types should be considered during the search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetModelsToTry(List&lt;ModelType&gt; modelTypes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelTypes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>&gt;</dt>
+    <dd><p>List of model types to evaluate</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetOptimizationMetric_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetOptimizationMetric*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetOptimizationMetric_AiDotNet_Enums_MetricType_System_Boolean_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetOptimizationMetric(AiDotNet.Enums.MetricType,System.Boolean)">
+  SetOptimizationMetric(MetricType, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the optimization metric</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetOptimizationMetric(MetricType metric, bool maximize = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metric</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The metric to optimize</p>
+</dd>
+    <dt><code>maximize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to maximize (true) or minimize (false) the metric</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetSearchSpace_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetSearchSpace*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetSearchSpace_System_Collections_Generic_Dictionary_System_String_AiDotNet_AutoML_ParameterRange__" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetSearchSpace(System.Collections.Generic.Dictionary{System.String,AiDotNet.AutoML.ParameterRange})">
+  SetSearchSpace(Dictionary&lt;string, ParameterRange&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the search space for hyperparameters</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetSearchSpace(Dictionary&lt;string, ParameterRange&gt; searchSpace)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>searchSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.AutoML.ParameterRange.html">ParameterRange</a>&gt;</dt>
+    <dd><p>Dictionary defining parameter ranges to search</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetTimeLimit_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetTimeLimit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetTimeLimit_System_TimeSpan_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetTimeLimit(System.TimeSpan)">
+  SetTimeLimit(TimeSpan)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the time limit for the AutoML search process</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTimeLimit(TimeSpan timeLimit)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>timeLimit</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>Maximum time to spend searching for optimal models</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SetTrialLimit_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetTrialLimit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SetTrialLimit_System_Int32_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SetTrialLimit(System.Int32)">
+  SetTrialLimit(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the maximum number of trials to execute during search</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTrialLimit(int maxTrials)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxTrials</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of model configurations to try</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IAutoMLModel_3_SuggestNextTrialAsync_" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SuggestNextTrialAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IAutoMLModel_3_SuggestNextTrialAsync" data-uid="AiDotNet.Interfaces.IAutoMLModel`3.SuggestNextTrialAsync">
+  SuggestNextTrialAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Suggests the next hyperparameters to try</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;Dictionary&lt;string, object&gt;&gt; SuggestNextTrialAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;&gt;</dt>
+    <dd><p>Dictionary of suggested parameter values</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IAutoMLModel.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

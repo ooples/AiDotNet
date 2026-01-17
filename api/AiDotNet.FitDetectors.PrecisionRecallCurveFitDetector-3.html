@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PrecisionRecallCurveFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PrecisionRecallCurveFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A detector that evaluates model fit quality using precision-recall curve metrics.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3">
+
+
+
+  <h1 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3" class="text-break">
+Class PrecisionRecallCurveFitDetector&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitDetectors.html">FitDetectors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A detector that evaluates model fit quality using precision-recall curve metrics.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PrecisionRecallCurveFitDetector&lt;T, TInput, TOutput&gt; : FitDetectorBase&lt;T, TInput, TOutput&gt;, IFitDetector&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html">FitDetectorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">PrecisionRecallCurveFitDetector&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitDetector-3.html">IFitDetector</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_NumOps">FitDetectorBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_Random">FitDetectorBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This class helps you understand how well your classification model is performing
+by analyzing two important metrics:
+<ol>
+<li><p>AUC (Area Under the Curve): A number between 0 and 1 that tells you how well your model can
+distinguish between classes. Higher is better, with 1.0 being perfect.</p>
+</li>
+<li><p>F1 Score: A number between 0 and 1 that balances precision (how many of your positive
+predictions were correct) and recall (how many actual positives your model found).
+Higher is better, with 1.0 being perfect.</p>
+</li>
+</ol>
+<p>This detector is especially useful for classification problems where you're trying to identify
+specific categories or classes.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3__ctor_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3__ctor_AiDotNet_Models_Options_PrecisionRecallCurveFitDetectorOptions_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.#ctor(AiDotNet.Models.Options.PrecisionRecallCurveFitDetectorOptions)">
+  PrecisionRecallCurveFitDetector(PrecisionRecallCurveFitDetectorOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the PrecisionRecallCurveFitDetector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PrecisionRecallCurveFitDetector(PrecisionRecallCurveFitDetectorOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.PrecisionRecallCurveFitDetectorOptions.html">PrecisionRecallCurveFitDetectorOptions</a></dt>
+    <dd><p>Configuration options for the detector. If null, default options will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3__ctor_AiDotNet_Models_Options_PrecisionRecallCurveFitDetectorOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the constructor that creates a new detector. You can provide custom options
+to control how the detector evaluates your model, or leave it as null to use the default settings.
+<p>The options control things like what threshold values determine a &quot;good&quot; AUC or F1 Score.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_CalculateConfidenceLevel_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.CalculateConfidenceLevel*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.CalculateConfidenceLevel(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the confidence level in the fit detection result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A confidence value between 0 and 1, where higher values indicate greater confidence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how confident we are in our assessment of your model.
+<p>It combines the AUC and F1 Score using weights that you can customize in the options.
+By default, both metrics are weighted equally.</p>
+<p>A higher confidence value (closer to 1) means we're more certain about our assessment of your model.
+This can help you decide how much to trust the recommendations provided.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetectFit_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.DetectFit*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.DetectFit(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes the model's performance data and determines the quality of fit.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override FitDetectorResult&lt;T&gt; DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A result object containing the fit type, confidence level, and recommendations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method that examines your model's performance and tells you
+how well it's doing. It:
+<ol>
+<li>Calculates the AUC and F1 Score from your model's predictions</li>
+<li>Determines if your model has a good fit, poor fit, or something in between</li>
+<li>Calculates how confident it is in this assessment</li>
+<li>Provides specific recommendations to help you improve your model</li>
+</ol>
+<p>The result contains all this information in an organized way that you can use to understand
+and improve your model.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when evaluationData is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetermineFitType_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.DetermineFitType*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.DetermineFitType(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines the type of fit based on AUC and F1 Score values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override FitType DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>A FitType enum value indicating the quality of the model fit.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method looks at your model's AUC and F1 Score and decides if your model is:
+<ul>
+<li>Good Fit: Both AUC and F1 Score are above the thresholds you set (or the default thresholds)</li>
+<li>Poor Fit: Both AUC and F1 Score are below the thresholds</li>
+<li>Moderate: Some metrics are good, others need improvement</li>
+</ul>
+<p>Think of it like getting a grade on your model's performance - A (Good), C (Moderate), or F (Poor).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_GenerateRecommendations_" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.GenerateRecommendations*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.PrecisionRecallCurveFitDetector`3.GenerateRecommendations(AiDotNet.Enums.FitType,AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates specific recommendations for improving the model based on the detected fit type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;string&gt; GenerateRecommendations(FitType fitType, ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitType</code> <a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The detected fit type (good fit, moderate, or poor fit).</p>
+</dd>
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of recommendations as strings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_PrecisionRecallCurveFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method provides practical advice on how to improve your model based on its current performance.
+<p>The recommendations are tailored to the specific fit type:</p>
+<ul>
+<li>Good Fit: Suggestions for fine-tuning an already well-performing model</li>
+<li>Moderate: Ideas for improving specific aspects of your model that need work</li>
+<li>Poor Fit: More extensive recommendations for addressing fundamental issues with your model</li>
+</ul>
+<p>These recommendations are designed to be actionable steps you can take to improve your model's performance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/PrecisionRecallCurveFitDetector.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

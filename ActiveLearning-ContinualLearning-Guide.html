@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Active Learning &amp; Continual Learning Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Active Learning &amp; Continual Learning Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/ActiveLearning-ContinualLearning-Guide.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="active-learning--continual-learning-guide">Active Learning &amp; Continual Learning Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<p>AiDotNet provides comprehensive implementations of Active Learning (AL) and Continual Learning (CL) strategies. This guide covers how to use these features effectively.</p>
+<h2 id="active-learning">Active Learning</h2>
+<p>Active Learning helps you train models more efficiently by strategically selecting which samples to label. Instead of labeling all data, the model identifies the most informative samples.</p>
+<h3 id="available-strategies">Available Strategies</h3>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Description</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>UncertaintySampling</strong></td>
+<td>Selects samples where model is most uncertain</td>
+<td>General use, classification</td>
+</tr>
+<tr>
+<td><strong>LeastConfidenceSampling</strong></td>
+<td>Selects samples with lowest prediction confidence</td>
+<td>Binary/multi-class classification</td>
+</tr>
+<tr>
+<td><strong>MarginSampling</strong></td>
+<td>Selects samples with smallest margin between top predictions</td>
+<td>Classification with close decisions</td>
+</tr>
+<tr>
+<td><strong>EntropySampling</strong></td>
+<td>Selects samples with highest prediction entropy</td>
+<td>Multi-class problems</td>
+</tr>
+<tr>
+<td><strong>QueryByCommittee</strong></td>
+<td>Uses committee disagreement for selection</td>
+<td>Ensemble models</td>
+</tr>
+<tr>
+<td><strong>BALD</strong></td>
+<td>Bayesian Active Learning by Disagreement</td>
+<td>Probabilistic models</td>
+</tr>
+<tr>
+<td><strong>BatchBALD</strong></td>
+<td>BALD extended for batch selection</td>
+<td>Batch mode acquisition</td>
+</tr>
+<tr>
+<td><strong>DiversitySampling</strong></td>
+<td>Selects diverse samples covering feature space</td>
+<td>Avoiding redundancy</td>
+</tr>
+<tr>
+<td><strong>CoreSetSelection</strong></td>
+<td>k-Center-Greedy selection in feature space</td>
+<td>Large unlabeled pools</td>
+</tr>
+<tr>
+<td><strong>DensityWeightedSampling</strong></td>
+<td>Combines uncertainty with density</td>
+<td>Avoiding outliers</td>
+</tr>
+<tr>
+<td><strong>InformationDensity</strong></td>
+<td>Balances informativeness and representativeness</td>
+<td>General use</td>
+</tr>
+<tr>
+<td><strong>VariationRatios</strong></td>
+<td>Measures uncertainty via variation ratios</td>
+<td>Simple uncertainty measure</td>
+</tr>
+<tr>
+<td><strong>ExpectedModelChange</strong></td>
+<td>Selects samples causing largest gradient changes</td>
+<td>Deep learning</td>
+</tr>
+<tr>
+<td><strong>HybridSampling</strong></td>
+<td>Combines uncertainty and diversity</td>
+<td>Production systems</td>
+</tr>
+<tr>
+<td><strong>RandomSampling</strong></td>
+<td>Random selection (baseline)</td>
+<td>Comparison baseline</td>
+</tr>
+</tbody>
+</table>
+<h3 id="basic-usage">Basic Usage</h3>
+<pre><code class="lang-csharp">using AiDotNet.ActiveLearning;
+using AiDotNet.Interfaces;
+
+// Create an active learning strategy
+var strategy = new UncertaintySampling&lt;double&gt;(
+    UncertaintySampling&lt;double&gt;.UncertaintyMeasure.Entropy);
+
+// Use the strategy to select samples from an unlabeled pool
+var model = GetYourModel(); // IFullModel&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;
+var unlabeledPool = GetUnlabeledData(); // Tensor&lt;double&gt;
+int batchSize = 10;
+
+// Select the most informative samples to label
+int[] selectedIndices = strategy.SelectSamples(model, unlabeledPool, batchSize);
+
+// Get selection statistics
+var stats = strategy.GetSelectionStatistics();
+Console.WriteLine($&quot;Min score: {stats[&quot;MinScore&quot;]}&quot;);
+Console.WriteLine($&quot;Max score: {stats[&quot;MaxScore&quot;]}&quot;);
+Console.WriteLine($&quot;Mean score: {stats[&quot;MeanScore&quot;]}&quot;);
+</code></pre>
+<h3 id="strategy-specific-usage">Strategy-Specific Usage</h3>
+<h4 id="query-by-committee">Query by Committee</h4>
+<pre><code class="lang-csharp">// Create a committee of models
+var committee = new List&lt;IFullModel&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;&gt;
+{
+    model1,
+    model2,
+    model3
+};
+
+// Create strategy with vote entropy measure
+var qbc = new QueryByCommittee&lt;double&gt;(
+    committee,
+    QueryByCommittee&lt;double&gt;.DisagreementMeasure.VoteEntropy);
+
+int[] selected = qbc.SelectSamples(committee[0], unlabeledPool, batchSize);
+</code></pre>
+<h4 id="bald-bayesian-active-learning">BALD (Bayesian Active Learning)</h4>
+<pre><code class="lang-csharp">// Create BALD strategy with MC Dropout samples
+var bald = new BALD&lt;double&gt;(numMCDropoutSamples: 10);
+
+// Optional: enable batch diversity
+bald.UseBatchDiversity = true;
+
+int[] selected = bald.SelectSamples(model, unlabeledPool, batchSize);
+</code></pre>
+<h4 id="hybrid-sampling">Hybrid Sampling</h4>
+<pre><code class="lang-csharp">// Combine uncertainty and diversity
+var hybrid = new HybridSampling&lt;double&gt;(
+    uncertaintyWeight: 0.6,
+    diversityWeight: 0.4,
+    uncertaintyMeasure: HybridSampling&lt;double&gt;.UncertaintyMeasure.Entropy);
+
+int[] selected = hybrid.SelectSamples(model, unlabeledPool, batchSize);
+</code></pre>
+<h3 id="active-learning-loop-example">Active Learning Loop Example</h3>
+<pre><code class="lang-csharp">public async Task&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt; ActiveLearningLoop&lt;T&gt;(
+    IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; model,
+    Tensor&lt;T&gt; unlabeledPool,
+    Func&lt;int[], Task&lt;Tensor&lt;T&gt;&gt;&gt; labelingOracle,
+    IActiveLearningStrategy&lt;T&gt; strategy,
+    int iterations = 10,
+    int batchSizePerIteration = 10)
+{
+    var labeledIndices = new List&lt;int&gt;();
+    var labeledInputs = new List&lt;Tensor&lt;T&gt;&gt;();
+    var labeledTargets = new List&lt;Tensor&lt;T&gt;&gt;();
+
+    for (int i = 0; i &lt; iterations; i++)
+    {
+        // Select most informative samples
+        int[] selectedIndices = strategy.SelectSamples(
+            model, unlabeledPool, batchSizePerIteration);
+
+        // Get labels from oracle (human annotator, etc.)
+        Tensor&lt;T&gt; labels = await labelingOracle(selectedIndices);
+
+        // Add to labeled set
+        labeledIndices.AddRange(selectedIndices);
+
+        // Retrain model on expanded labeled set
+        model.Train(GetInputsForIndices(unlabeledPool, selectedIndices), labels);
+
+        // Log progress
+        Console.WriteLine($&quot;Iteration {i + 1}: {labeledIndices.Count} total labeled samples&quot;);
+    }
+
+    return model;
+}
+</code></pre>
+<h2 id="continual-learning">Continual Learning</h2>
+<p>Continual Learning enables models to learn new tasks without forgetting previously learned knowledge. This is essential for systems that must adapt to new data over time.</p>
+<h3 id="available-strategies-1">Available Strategies</h3>
+<table>
+<thead>
+<tr>
+<th>Strategy</th>
+<th>Description</th>
+<th>Memory</th>
+<th>Best For</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ElasticWeightConsolidation (EWC)</strong></td>
+<td>Fisher Information regularization</td>
+<td>Low</td>
+<td>Regularization-based</td>
+</tr>
+<tr>
+<td><strong>OnlineEWC</strong></td>
+<td>Efficient online version of EWC</td>
+<td>Low</td>
+<td>Streaming tasks</td>
+</tr>
+<tr>
+<td><strong>SynapticIntelligence (SI)</strong></td>
+<td>Online importance estimation</td>
+<td>Low</td>
+<td>Efficient training</td>
+</tr>
+<tr>
+<td><strong>MemoryAwareSynapses (MAS)</strong></td>
+<td>Unsupervised importance estimation</td>
+<td>Low</td>
+<td>No labels needed</td>
+</tr>
+<tr>
+<td><strong>LearningWithoutForgetting (LwF)</strong></td>
+<td>Knowledge distillation</td>
+<td>Low</td>
+<td>Classification</td>
+</tr>
+<tr>
+<td><strong>GradientEpisodicMemory (GEM)</strong></td>
+<td>Gradient projection with memory</td>
+<td>Medium</td>
+<td>Hard constraints</td>
+</tr>
+<tr>
+<td><strong>AveragedGEM (A-GEM)</strong></td>
+<td>Efficient approximation of GEM</td>
+<td>Medium</td>
+<td>Faster GEM</td>
+</tr>
+<tr>
+<td><strong>ExperienceReplay</strong></td>
+<td>Replay buffer of past experiences</td>
+<td>High</td>
+<td>Simple and effective</td>
+</tr>
+<tr>
+<td><strong>GenerativeReplay</strong></td>
+<td>Use generator to replay past data</td>
+<td>Medium</td>
+<td>Memory efficient</td>
+</tr>
+<tr>
+<td><strong>PackNet</strong></td>
+<td>Progressive network pruning</td>
+<td>Low</td>
+<td>Network compression</td>
+</tr>
+<tr>
+<td><strong>ProgressiveNeuralNetworks</strong></td>
+<td>Add new columns for new tasks</td>
+<td>High</td>
+<td>No forgetting</td>
+</tr>
+<tr>
+<td><strong>VariationalContinualLearning (VCL)</strong></td>
+<td>Bayesian posterior updates</td>
+<td>Medium</td>
+<td>Uncertainty-aware</td>
+</tr>
+</tbody>
+</table>
+<h3 id="basic-usage-1">Basic Usage</h3>
+<pre><code class="lang-csharp">using AiDotNet.ContinualLearning;
+using AiDotNet.Interfaces;
+
+// Create a continual learning strategy
+var strategy = new ElasticWeightConsolidation&lt;double&gt;(lambda: 5000.0);
+
+// Get your neural network
+var network = GetYourNeuralNetwork(); // INeuralNetwork&lt;double&gt;
+
+// Before training on a new task
+strategy.BeforeTask(network, taskId: 1);
+
+// Train on the task (your training loop)
+TrainOnTask(network, taskData);
+
+// After training on the task
+strategy.AfterTask(network, taskData, taskId: 1);
+
+// The strategy now protects important weights learned from task 1
+</code></pre>
+<h3 id="strategy-specific-usage-1">Strategy-Specific Usage</h3>
+<h4 id="elastic-weight-consolidation">Elastic Weight Consolidation</h4>
+<pre><code class="lang-csharp">// Higher lambda = more protection against forgetting
+var ewc = new ElasticWeightConsolidation&lt;double&gt;(
+    lambda: 5000.0,
+    fisherEstimationSamples: 200);
+
+// Use in training loop
+strategy.BeforeTask(network, taskId);
+for (int epoch = 0; epoch &lt; epochs; epoch++)
+{
+    var baseLoss = ComputeTaskLoss(network, taskData);
+
+    // Add EWC regularization loss
+    var ewcLoss = ewc.ComputeLoss(network);
+    var totalLoss = baseLoss + ewcLoss;
+
+    // Backpropagate and update
+    Backpropagate(totalLoss);
+}
+strategy.AfterTask(network, taskData, taskId);
+</code></pre>
+<h4 id="learning-without-forgetting">Learning without Forgetting</h4>
+<pre><code class="lang-csharp">var lwf = new LearningWithoutForgetting&lt;double&gt;(
+    lambda: 1.0,
+    temperature: 2.0);  // Higher temperature = softer probability distribution
+
+// IMPORTANT: LwF requires PrepareDistillation before training on new task
+strategy.BeforeTask(network, taskId);
+lwf.PrepareDistillation(network, newTaskInputs, taskId);
+
+// Train with distillation loss
+for (int epoch = 0; epoch &lt; epochs; epoch++)
+{
+    var taskLoss = ComputeTaskLoss(network, taskData);
+    var distillLoss = lwf.ComputeLoss(network);
+    var totalLoss = taskLoss + distillLoss;
+
+    Backpropagate(totalLoss);
+}
+strategy.AfterTask(network, taskData, taskId);
+</code></pre>
+<h4 id="gradient-episodic-memory">Gradient Episodic Memory</h4>
+<pre><code class="lang-csharp">var gem = new GradientEpisodicMemory&lt;double&gt;(
+    memorySize: 256,  // Samples per task
+    margin: 0.5);     // Constraint margin
+
+// GEM modifies gradients to prevent forgetting
+strategy.BeforeTask(network, taskId);
+
+// In training loop
+var gradients = ComputeGradients(network, taskData);
+
+// Project gradients to satisfy constraints from previous tasks
+var projectedGradients = gem.ModifyGradients(network, gradients);
+
+ApplyGradients(network, projectedGradients);
+
+strategy.AfterTask(network, taskData, taskId);
+</code></pre>
+<h4 id="experience-replay">Experience Replay</h4>
+<pre><code class="lang-csharp">var replay = new ExperienceReplay&lt;double&gt;(
+    bufferSize: 1000,
+    batchSize: 32);
+
+// After each task, replay stores samples automatically via AfterTask
+strategy.AfterTask(network, taskData, taskId);
+
+// During training on new tasks, sample from replay buffer
+var replayBatch = replay.SampleBatch(network);
+if (replayBatch.HasValue)
+{
+    var (inputs, targets) = replayBatch.Value;
+    // Train on replay batch
+    network.Train(inputs, targets);
+}
+</code></pre>
+<h3 id="continual-learning-loop-example">Continual Learning Loop Example</h3>
+<pre><code class="lang-csharp">public async Task&lt;INeuralNetwork&lt;T&gt;&gt; ContinualLearningLoop&lt;T&gt;(
+    INeuralNetwork&lt;T&gt; network,
+    List&lt;(Tensor&lt;T&gt; inputs, Tensor&lt;T&gt; targets)&gt; tasks,
+    IContinualLearningStrategy&lt;T&gt; strategy,
+    int epochsPerTask = 10)
+{
+    for (int taskId = 0; taskId &lt; tasks.Count; taskId++)
+    {
+        var (inputs, targets) = tasks[taskId];
+
+        Console.WriteLine($&quot;Learning Task {taskId + 1}/{tasks.Count}&quot;);
+
+        // Prepare for new task
+        strategy.BeforeTask(network, taskId);
+
+        // Train on task
+        for (int epoch = 0; epoch &lt; epochsPerTask; epoch++)
+        {
+            // Standard task loss
+            var output = network.ForwardWithMemory(inputs);
+            var taskLoss = ComputeLoss(output, targets);
+
+            // Add continual learning regularization
+            var clLoss = strategy.ComputeLoss(network);
+            var totalLoss = Add(taskLoss, clLoss);
+
+            // Backprop
+            var gradients = network.ComputeGradients(inputs, targets);
+
+            // Optional: modify gradients (for GEM-based methods)
+            gradients = strategy.ModifyGradients(network, gradients);
+
+            network.ApplyGradients(gradients, learningRate);
+        }
+
+        // Consolidate task knowledge
+        strategy.AfterTask(network, (inputs, targets), taskId);
+
+        // Evaluate on all tasks to measure forgetting
+        EvaluateOnAllTasks(network, tasks, taskId);
+    }
+
+    return network;
+}
+</code></pre>
+<h2 id="combining-active-and-continual-learning">Combining Active and Continual Learning</h2>
+<p>Active Learning and Continual Learning can be combined for scenarios where you need to:</p>
+<ol>
+<li>Efficiently select which samples to label (AL)</li>
+<li>Learn new tasks without forgetting old ones (CL)</li>
+</ol>
+<pre><code class="lang-csharp">public async Task CombinedALCL&lt;T&gt;(
+    INeuralNetwork&lt;T&gt; network,
+    List&lt;Tensor&lt;T&gt;&gt; taskPools,  // Unlabeled pools for each task
+    Func&lt;int, int[], Task&lt;Tensor&lt;T&gt;&gt;&gt; labelingOracle,
+    IActiveLearningStrategy&lt;T&gt; alStrategy,
+    IContinualLearningStrategy&lt;T&gt; clStrategy)
+{
+    for (int taskId = 0; taskId &lt; taskPools.Count; taskId++)
+    {
+        var unlabeledPool = taskPools[taskId];
+
+        // Prepare for continual learning
+        clStrategy.BeforeTask(network, taskId);
+
+        // Active Learning: iteratively select and label samples
+        var labeledInputs = new List&lt;Tensor&lt;T&gt;&gt;();
+        var labeledTargets = new List&lt;Tensor&lt;T&gt;&gt;();
+
+        for (int alIter = 0; alIter &lt; 5; alIter++)
+        {
+            // Select most informative samples
+            int[] selected = alStrategy.SelectSamples(
+                network as IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;,
+                unlabeledPool,
+                batchSize: 10);
+
+            // Get labels
+            var labels = await labelingOracle(taskId, selected);
+
+            // Add to labeled set and train
+            // ... training code ...
+        }
+
+        // Consolidate with continual learning
+        var taskData = CombineData(labeledInputs, labeledTargets);
+        clStrategy.AfterTask(network, taskData, taskId);
+    }
+}
+</code></pre>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="active-learning-1">Active Learning</h3>
+<ol>
+<li><strong>Start with UncertaintySampling</strong> - It's simple, effective, and a good baseline</li>
+<li><strong>Use HybridSampling for production</strong> - Combines uncertainty and diversity</li>
+<li><strong>Monitor selection statistics</strong> - Track min/max/mean scores to understand model confidence</li>
+<li><strong>Consider batch diversity</strong> - Set <code>UseBatchDiversity = true</code> to avoid redundant samples</li>
+<li><strong>Compare against RandomSampling</strong> - Ensure your strategy provides meaningful improvement</li>
+</ol>
+<h3 id="continual-learning-1">Continual Learning</h3>
+<ol>
+<li><p><strong>Choose based on memory constraints</strong>:</p>
+<ul>
+<li>Low memory: EWC, SI, MAS</li>
+<li>Medium memory: GEM, A-GEM, VCL</li>
+<li>High memory: Experience Replay, Progressive Networks</li>
+</ul>
+</li>
+<li><p><strong>Tune lambda carefully</strong> - Too high prevents learning, too low causes forgetting</p>
+</li>
+<li><p><strong>Use Experience Replay as a strong baseline</strong> - Simple and often very effective</p>
+</li>
+<li><p><strong>Monitor backward transfer</strong> - Track performance on previous tasks over time</p>
+</li>
+<li><p><strong>Consider task similarity</strong> - Similar tasks need less protection (lower lambda)</p>
+</li>
+</ol>
+<h2 id="api-reference">API Reference</h2>
+<h3 id="iquerystrategyt-tinput-toutput">IQueryStrategy&lt;T, TInput, TOutput&gt;</h3>
+<pre><code class="lang-csharp">public interface IQueryStrategy&lt;T, TInput, TOutput&gt;
+{
+    /// &lt;summary&gt;
+    /// Gets the name of this query strategy.
+    /// &lt;/summary&gt;
+    string Name { get; }
+
+    /// &lt;summary&gt;
+    /// Scores unlabeled examples by informativeness.
+    /// &lt;/summary&gt;
+    Vector&lt;T&gt; ScoreExamples(
+        IFullModel&lt;T, TInput, TOutput&gt; model,
+        IDataset&lt;T, TInput, TOutput&gt; unlabeledData,
+        IDataset&lt;T, TInput, TOutput&gt;? labeledData = null);
+
+    /// &lt;summary&gt;
+    /// Selects the top-k most informative examples.
+    /// &lt;/summary&gt;
+    Vector&lt;int&gt; SelectBatch(
+        IFullModel&lt;T, TInput, TOutput&gt; model,
+        IDataset&lt;T, TInput, TOutput&gt; unlabeledData,
+        int k,
+        IDataset&lt;T, TInput, TOutput&gt;? labeledData = null);
+}
+</code></pre>
+<h3 id="icontinuallearningstrategyt-tinput-toutput">IContinualLearningStrategy&lt;T, TInput, TOutput&gt;</h3>
+<pre><code class="lang-csharp">public interface IContinualLearningStrategy&lt;T, TInput, TOutput&gt;
+{
+    /// &lt;summary&gt;
+    /// Initializes the strategy for a new task.
+    /// &lt;/summary&gt;
+    void PrepareForTask(IFullModel&lt;T, TInput, TOutput&gt; model, IDataset&lt;T, TInput, TOutput&gt; taskData);
+
+    /// &lt;summary&gt;
+    /// Computes the regularization loss to prevent forgetting.
+    /// &lt;/summary&gt;
+    T ComputeRegularizationLoss(IFullModel&lt;T, TInput, TOutput&gt; model);
+
+    /// &lt;summary&gt;
+    /// Adjusts the gradients to prevent forgetting previous tasks.
+    /// &lt;/summary&gt;
+    Vector&lt;T&gt; AdjustGradients(Vector&lt;T&gt; gradients);
+
+    /// &lt;summary&gt;
+    /// Finalizes learning after completing a task.
+    /// &lt;/summary&gt;
+    void FinalizeTask(IFullModel&lt;T, TInput, TOutput&gt; model);
+}
+</code></pre>
+<h2 id="further-reading">Further Reading</h2>
+<h3 id="active-learning-2">Active Learning</h3>
+<ul>
+<li>Settles, B. (2012). &quot;Active Learning.&quot; Morgan &amp; Claypool.</li>
+<li>Houlsby et al. (2011). &quot;Bayesian Active Learning for Classification and Preference Learning.&quot;</li>
+<li>Sener &amp; Savarese (2018). &quot;Active Learning for Convolutional Neural Networks: A Core-Set Approach.&quot;</li>
+</ul>
+<h3 id="continual-learning-2">Continual Learning</h3>
+<ul>
+<li>Kirkpatrick et al. (2017). &quot;Overcoming Catastrophic Forgetting in Neural Networks.&quot; (EWC)</li>
+<li>Zenke et al. (2017). &quot;Continual Learning Through Synaptic Intelligence.&quot;</li>
+<li>Lopez-Paz &amp; Ranzato (2017). &quot;Gradient Episodic Memory for Continual Learning.&quot;</li>
+<li>van de Ven &amp; Tolias (2019). &quot;Three Scenarios for Continual Learning.&quot;</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/ActiveLearning-ContinualLearning-Guide.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

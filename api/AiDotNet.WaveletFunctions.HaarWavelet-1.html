@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HaarWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HaarWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Haar wavelet function implementation for signal processing and analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_HaarWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.HaarWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_HaarWavelet_1" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1" class="text-break">
+Class HaarWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Haar wavelet function implementation for signal processing and analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HaarWavelet&lt;T&gt; : WaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html">WaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">HaarWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_WaveletFunctionBase_1_NumOps">WaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_HaarWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Haar wavelet is the simplest possible wavelet, resembling a step function. It is
+discontinuous and represents the same wavelet as the Daubechies wavelet with one vanishing moment.
+This implementation provides methods for calculating wavelet values and decomposing signals
+using the Haar wavelet transform.
+</p>
+<p><b>For Beginners:</b> The Haar wavelet is like a digital "on/off" switch for analyzing data.
+<p>Think of the Haar wavelet as the simplest possible pattern-matching tool:</p>
+<ul>
+<li>It's a square wave that is +1 for half its width and -1 for the other half</li>
+<li>It's excellent at detecting sudden changes or edges in your data</li>
+<li>It's the oldest and simplest type of wavelet, discovered in 1909</li>
+</ul>
+<p>The Haar wavelet is particularly good at finding abrupt transitions in your data,
+like the edge between a light and dark area in an image or a sudden change in a sound wave.
+It's widely used in image compression, feature detection, and as a teaching tool for wavelet concepts.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1__ctor" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.#ctor">
+  HaarWavelet()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.WaveletFunctions.HaarWavelet-1.html">HaarWavelet&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HaarWavelet()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor initializes the Haar wavelet and sets up the numeric operations helper
+for the specified numeric type T. Unlike other wavelets, the Haar wavelet doesn't require
+any parameters as it has a fixed, simple definition.
+</p>
+<p><b>For Beginners:</b> This sets up the Haar wavelet for use.
+<p>When creating a Haar wavelet:</p>
+<ul>
+<li>No parameters are needed because the Haar wavelet has a fixed shape</li>
+<li>It's the simplest wavelet, defined by just a few values</li>
+<li>It's ready to use immediately after creation</li>
+</ul>
+<p>The simplicity of the Haar wavelet makes it a good starting point for understanding
+wavelets in general, before moving on to more complex wavelet types.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1_Calculate__0_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Haar wavelet function value at the specified point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input point at which to calculate the wavelet value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Haar wavelet function value at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the value of the Haar wavelet function at the given input point.
+The Haar wavelet is defined as +1 for x in [0,0.5), -1 for x in [0.5,1), and 0 elsewhere.
+This step-like function is useful for detecting abrupt changes in signals.
+</p>
+<p><b>For Beginners:</b> This method tells you what value the Haar wavelet has at a specific point.
+<p>The Haar wavelet has a very simple pattern:</p>
+<ul>
+<li>If x is between 0 (inclusive) and 0.5 (exclusive), it returns +1</li>
+<li>If x is between 0.5 (inclusive) and 1 (exclusive), it returns -1</li>
+<li>For all other values of x, it returns 0</li>
+</ul>
+<p>This creates a simple step function that goes up, then down, and is zero everywhere else.
+This shape is particularly good at detecting sudden changes or edges in your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes an input signal using the Haar wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail coefficients of the decomposed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the Haar wavelet transform, which decomposes the input signal into
+approximation coefficients (averages) and detail coefficients (differences). For each pair of
+adjacent values in the input, it computes the scaled average and difference. The approximation
+coefficients represent the low-frequency components of the signal, while the detail coefficients
+represent the high-frequency components.
+</p>
+<p><b>For Beginners:</b> This method breaks down your data into "averages" and "differences".
+<p>When decomposing a signal with the Haar wavelet:</p>
+<ul>
+<li>The method takes every pair of adjacent values in your data</li>
+<li>For each pair, it calculates their average (for the approximation)</li>
+<li>For each pair, it also calculates their difference (for the detail)</li>
+<li>These values are scaled by a factor (1/v2) to preserve energy</li>
+</ul>
+<p>The approximation tells you about the overall trend of your data (like a blurry version),
+while the detail captures the sharp changes and edges (like the fine details).
+This process reduces your data to half its original size while preserving its essential information.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input vector length is not even.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling coefficients used in the Haar wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the scaling coefficients [1/v2, 1/v2].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the scaling coefficients used in the Haar wavelet transform, which are
+[1/v2, 1/v2]. These coefficients are used to calculate the approximation (low-frequency)
+components of the signal during decomposition. The factor 1/v2 ensures energy conservation
+during the transform.
+</p>
+<p><b>For Beginners:</b> This method gives you the values used to calculate averages in the transform.
+<p>The scaling coefficients for the Haar wavelet:</p>
+<ul>
+<li>Are simply [1/v2, 1/v2]</li>
+<li>Act like a simple averaging filter (both values are the same)</li>
+<li>Are used to create the &quot;approximation&quot; part when decomposing a signal</li>
+</ul>
+<p>The factor 1/v2 (approximately 0.7071) is important for mathematical reasons:
+it ensures that the energy of the signal is preserved during transformation,
+which makes the transform reversible and maintains correct signal properties.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet coefficients used in the Haar wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the wavelet coefficients [1/v2, -1/v2].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the wavelet coefficients used in the Haar wavelet transform, which are
+[1/v2, -1/v2]. These coefficients are used to calculate the detail (high-frequency)
+components of the signal during decomposition. The factor 1/v2 ensures energy conservation
+during the transform, and the opposite signs detect differences between adjacent values.
+</p>
+<p><b>For Beginners:</b> This method gives you the values used to calculate differences in the transform.
+<p>The wavelet coefficients for the Haar wavelet:</p>
+<ul>
+<li>Are simply [1/v2, -1/v2]</li>
+<li>Act like a difference detector (one positive, one negative)</li>
+<li>Are used to create the &quot;detail&quot; part when decomposing a signal</li>
+</ul>
+<p>The opposite signs mean this filter finds differences between adjacent values,
+which is why it's so good at detecting edges and sudden changes in your data.
+The factor 1/v2 (approximately 0.7071) ensures mathematical consistency
+with the scaling coefficients.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_HaarWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_HaarWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.HaarWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Reconstruct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reconstruct(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_HaarWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>For the Haar wavelet, reconstruction is the inverse of decomposition:</p>
+<ul>
+<li>For each pair of coefficients (approx[i], detail[i]):
+<ul>
+<li>reconstructed[2*i] = (approx[i] + detail[i]) / sqrt(2)</li>
+<li>reconstructed[2*i+1] = (approx[i] - detail[i]) / sqrt(2)</li>
+</ul>
+</li>
+</ul>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should equal the original signal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/HaarWavelet.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

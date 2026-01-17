@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SimdKernels | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SimdKernels | AiDotNet Documentation ">
+      
+      <meta name="description" content="SIMD-optimized kernels for common operations. Provides hardware-accelerated implementations using AVX/SSE and ARM NEON. Falls back to scalar operations when intrinsics are unavailable.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Simd_SimdKernels.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Simd.SimdKernels%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Simd_SimdKernels" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels" class="text-break">
+Class SimdKernels  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L17"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Simd.html">Simd</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>SIMD-optimized kernels for common operations.
+Provides hardware-accelerated implementations using AVX/SSE and ARM NEON.
+Falls back to scalar operations when intrinsics are unavailable.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class SimdKernels</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SimdKernels</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Ceiling_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Ceiling_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Ceiling(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Ceiling(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L887"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise ceiling for double-precision values.
+Uses AVX intrinsics when available, otherwise falls back to scalar Math.Ceiling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Ceiling(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for ceiling results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Ceiling_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Ceiling_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Ceiling(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Ceiling(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L711"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise ceiling (smallest integer greater than or equal to each element).
+Uses AVX/SSE4.1 intrinsics when available, otherwise falls back to scalar Math.Ceiling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Ceiling(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for ceiling results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Cos_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Cos_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Cos(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Cos(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1093"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise cosine for double-precision values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Cos(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values in radians.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for cosine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Cos_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Cos_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Cos(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Cos(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1022"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise cosine for single-precision values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Cos(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values in radians.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for cosine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_DotProduct_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.DotProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_DotProduct_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.DotProduct(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single})">
+  DotProduct(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float DotProduct(ReadOnlySpan&lt;float&gt; a, ReadOnlySpan&lt;float&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ELU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ELU_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ELU(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  ELU(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise for double precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ELU(ReadOnlySpan&lt;double&gt; input, double alpha, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ELU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ELU_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ELU(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  ELU(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L565"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise: x if x &gt; 0, alpha * (exp(x) - 1) otherwise.
+Uses SIMD vectorization for comparison and blending where available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ELU(ReadOnlySpan&lt;float&gt; input, float alpha, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Exp_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Exp_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Exp(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Exp(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Exp(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Floor_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Floor_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Floor(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Floor(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L832"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise floor for double-precision values.
+Uses AVX intrinsics when available, otherwise falls back to scalar Math.Floor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Floor(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for floor results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Floor_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Floor_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Floor(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Floor(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L652"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise floor (largest integer less than or equal to each element).
+Uses AVX/SSE4.1 intrinsics when available, otherwise falls back to scalar Math.Floor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Floor(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for floor results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Frac_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Frac_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Frac(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Frac(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L941"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise fractional part for double-precision values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Frac(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for fractional part results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Frac_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Frac_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Frac(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Frac(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L770"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise fractional part (x - floor(x)).
+Uses SIMD floor operation and subtraction when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Frac(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for fractional part results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_GELU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_GELU_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.GELU(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  GELU(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise for double precision.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void GELU(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_GELU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_GELU_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.GELU(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  GELU(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L429"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+Optimized using SIMD vectorization where available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void GELU(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_LeakyReLU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_LeakyReLU_System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.LeakyReLU(System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  LeakyReLU(ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise using SIMD: max(alpha * x, x).
+Uses AVX/SSE for vectorized comparison and blending when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void LeakyReLU(ReadOnlySpan&lt;double&gt; input, double alpha, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_LeakyReLU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_LeakyReLU_System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.LeakyReLU(System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  LeakyReLU(ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise using SIMD: max(alpha * x, x).
+Uses AVX/SSE for vectorized comparison and blending when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void LeakyReLU(ReadOnlySpan&lt;float&gt; input, float alpha, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Mish_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Mish_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Mish(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Mish(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise for double precision: x * tanh(softplus(x)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Mish(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Mish_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Mish_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Mish(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Mish(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L508"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).
+Optimized using SIMD vectorization where available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Mish(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ReLU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ReLU_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ReLU(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  ReLU(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU element-wise using SIMD: max(0, x).
+Uses AVX/SSE for vectorized comparison when available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ReLU(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ReLU_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ReLU_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ReLU(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  ReLU(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ReLU(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ScalarMultiplyAdd_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ScalarMultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ScalarMultiplyAdd_System_ReadOnlySpan_System_Double__System_ReadOnlySpan_System_Double__System_Double_System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ScalarMultiplyAdd(System.ReadOnlySpan{System.Double},System.ReadOnlySpan{System.Double},System.Double,System.Span{System.Double})">
+  ScalarMultiplyAdd(ReadOnlySpan&lt;double&gt;, ReadOnlySpan&lt;double&gt;, double, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes destination[i] = a[i] + b[i] * scalar for double-precision values using SIMD.
+Uses FMA (Fused Multiply-Add) when available for better performance and precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ScalarMultiplyAdd(ReadOnlySpan&lt;double&gt; a, ReadOnlySpan&lt;double&gt; b, double scalar, Span&lt;double&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ScalarMultiplyAdd_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ScalarMultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_ScalarMultiplyAdd_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Single_System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.ScalarMultiplyAdd(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Single,System.Span{System.Single})">
+  ScalarMultiplyAdd(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, float, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void ScalarMultiplyAdd(ReadOnlySpan&lt;float&gt; a, ReadOnlySpan&lt;float&gt; b, float scalar, Span&lt;float&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sin_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sin_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sin(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Sin(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1073"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise sine for double-precision values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Sin(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values in radians.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for sine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sin_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sin_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sin(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Sin(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L998"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise sine for single-precision values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Sin(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values in radians.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for sine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input and output lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_SinCos_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.SinCos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_SinCos_System_ReadOnlySpan_System_Double__System_Span_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.SinCos(System.ReadOnlySpan{System.Double},System.Span{System.Double},System.Span{System.Double})">
+  SinCos(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise sine and cosine simultaneously for double-precision values.
+More efficient than computing sin and cos separately.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SinCos(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; sinOutput, Span&lt;double&gt; cosOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Source span of double values in radians.</p>
+</dd>
+    <dt><code>sinOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for sine results.</p>
+</dd>
+    <dt><code>cosOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Destination span for cosine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when span lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_SinCos_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.SinCos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_SinCos_System_ReadOnlySpan_System_Single__System_Span_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.SinCos(System.ReadOnlySpan{System.Single},System.Span{System.Single},System.Span{System.Single})">
+  SinCos(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1048"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes element-wise sine and cosine simultaneously for single-precision values.
+More efficient than computing sin and cos separately.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void SinCos(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; sinOutput, Span&lt;float&gt; cosOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Source span of float values in radians.</p>
+</dd>
+    <dt><code>sinOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for sine results.</p>
+</dd>
+    <dt><code>cosOutput</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>Destination span for cosine results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when span lengths differ.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sum_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Sum_System_ReadOnlySpan_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Sum(System.ReadOnlySpan{System.Single})">
+  Sum(ReadOnlySpan&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L594"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Sum(ReadOnlySpan&lt;float&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Swish_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Swish_System_ReadOnlySpan_System_Double__System_Span_System_Double__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Swish(System.ReadOnlySpan{System.Double},System.Span{System.Double})">
+  Swish(ReadOnlySpan&lt;double&gt;, Span&lt;double&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L1290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise for double precision: x * sigmoid(x).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Swish(ReadOnlySpan&lt;double&gt; input, Span&lt;double&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Swish_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_Swish_System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.Swish(System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  Swish(ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L538"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).
+Uses SIMD vectorization for the multiplication portion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void Swish(ReadOnlySpan&lt;float&gt; input, Span&lt;float&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_VectorAdd_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_VectorAdd_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorAdd(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  VectorAdd(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void VectorAdd(ReadOnlySpan&lt;float&gt; a, ReadOnlySpan&lt;float&gt; b, Span&lt;float&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Simd_SimdKernels_VectorMultiply_" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Simd_SimdKernels_VectorMultiply_System_ReadOnlySpan_System_Single__System_ReadOnlySpan_System_Single__System_Span_System_Single__" data-uid="AiDotNet.Tensors.Engines.Simd.SimdKernels.VectorMultiply(System.ReadOnlySpan{System.Single},System.ReadOnlySpan{System.Single},System.Span{System.Single})">
+  VectorMultiply(ReadOnlySpan&lt;float&gt;, ReadOnlySpan&lt;float&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void VectorMultiply(ReadOnlySpan&lt;float&gt; a, ReadOnlySpan&lt;float&gt; b, Span&lt;float&gt; result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Simd/SimdKernels.cs/#L17" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

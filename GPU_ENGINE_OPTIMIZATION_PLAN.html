@@ -1,0 +1,1400 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Engine Optimization Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Engine Optimization Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_ENGINE_OPTIMIZATION_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-engine-optimization-plan">GPU Engine Optimization Plan</h1>
+
+<h2 id="overview">Overview</h2>
+<p>This document outlines the plan to move GPU-specific optimizations from individual layers into the <code>IEngine</code> interface, keeping layers backend-agnostic while enabling GPU acceleration.</p>
+<h2 id="goals">Goals</h2>
+<ol>
+<li><strong>Layers stay backend-agnostic</strong> - No GPU/CUDA/OpenCL code in layer implementations</li>
+<li><strong>Engine owns optimization decisions</strong> - Engine chooses best implementation based on available hardware</li>
+<li><strong>Reduce code duplication</strong> - Common patterns handled in <code>LayerBase&lt;T&gt;</code></li>
+<li><strong>Type-safe API</strong> - Use enums instead of strings, clear parameter purposes</li>
+</ol>
+<h2 id="proposed-iengine-additions">Proposed IEngine Additions</h2>
+<h3 id="1-persistent-tensor-registration">1. Persistent Tensor Registration</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Hint to the engine that a tensor will be reused across many operations.
+/// Engine may choose to cache it on GPU memory for faster access.
+/// &lt;/summary&gt;
+void RegisterPersistentTensor&lt;T&gt;(Tensor&lt;T&gt; tensor, PersistentTensorRole role);
+void UnregisterPersistentTensor&lt;T&gt;(Tensor&lt;T&gt; tensor);
+</code></pre>
+<p><strong>PersistentTensorRole Enum:</strong></p>
+<pre><code class="lang-csharp">public enum PersistentTensorRole
+{
+    /// &lt;summary&gt;Layer weights that change only during training updates.&lt;/summary&gt;
+    Weights,
+
+    /// &lt;summary&gt;Layer biases that change only during training updates.&lt;/summary&gt;
+    Biases,
+
+    /// &lt;summary&gt;Normalization parameters (gamma/beta for BatchNorm, etc.).&lt;/summary&gt;
+    NormalizationParams,
+
+    /// &lt;summary&gt;Embedding lookup tables.&lt;/summary&gt;
+    Embeddings,
+
+    /// &lt;summary&gt;Attention key/value caches for inference.&lt;/summary&gt;
+    AttentionCache,
+
+    /// &lt;summary&gt;Other persistent tensors not fitting above categories.&lt;/summary&gt;
+    Other
+}
+</code></pre>
+<h3 id="2-fused-operations">2. Fused Operations</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Fused linear transformation: output = activation(input @ weights.T + bias)
+/// Engine chooses optimal implementation (fused GPU kernel, cuBLAS, or CPU).
+/// &lt;/summary&gt;
+Tensor&lt;T&gt; FusedLinear&lt;T&gt;(
+    Tensor&lt;T&gt; input,
+    Tensor&lt;T&gt; weights,
+    Tensor&lt;T&gt;? bias,
+    FusedActivationType activation);
+
+/// &lt;summary&gt;
+/// Fused batch normalization with optional activation.
+/// &lt;/summary&gt;
+Tensor&lt;T&gt; FusedBatchNorm&lt;T&gt;(
+    Tensor&lt;T&gt; input,
+    Tensor&lt;T&gt; gamma,
+    Tensor&lt;T&gt; beta,
+    Tensor&lt;T&gt; runningMean,
+    Tensor&lt;T&gt; runningVar,
+    float epsilon,
+    bool training,
+    FusedActivationType activation);
+
+/// &lt;summary&gt;
+/// Fused convolution with optional bias and activation.
+/// &lt;/summary&gt;
+Tensor&lt;T&gt; FusedConv2D&lt;T&gt;(
+    Tensor&lt;T&gt; input,
+    Tensor&lt;T&gt; kernel,
+    Tensor&lt;T&gt;? bias,
+    int strideH, int strideW,
+    int padH, int padW,
+    int dilationH, int dilationW,
+    FusedActivationType activation);
+</code></pre>
+<p><strong>FusedActivationType Enum:</strong></p>
+<pre><code class="lang-csharp">public enum FusedActivationType
+{
+    None,
+    ReLU,
+    LeakyReLU,
+    Sigmoid,
+    Tanh,
+    GELU,
+    Swish,
+    Softmax
+}
+</code></pre>
+<h3 id="3-layerbase-integration">3. LayerBase Integration</h3>
+<pre><code class="lang-csharp">// In LayerBase&lt;T&gt;
+protected void RegisterTrainableParameter(Tensor&lt;T&gt; tensor, PersistentTensorRole role)
+{
+    Engine.RegisterPersistentTensor(tensor, role);
+    _registeredTensors.Add(tensor);
+}
+
+protected override void Dispose(bool disposing)
+{
+    if (disposing)
+    {
+        foreach (var tensor in _registeredTensors)
+        {
+            Engine.UnregisterPersistentTensor(tensor);
+        }
+    }
+    base.Dispose(disposing);
+}
+</code></pre>
+<h2 id="complete-layer-checklist-117-layers">Complete Layer Checklist (117 Layers)</h2>
+<h3 id="priority-1-denselinear-layers-high-gpu-impact---fusedlinear">Priority 1: Dense/Linear Layers (High GPU Impact - FusedLinear)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Has Bias</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[x] DenseLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - Uses FusedLinear, RegisterTrainableParameter</td>
+</tr>
+<tr>
+<td>[x] FullyConnectedLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor</td>
+</tr>
+<tr>
+<td>[x] SparseLinearLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>⏭️ Skipped - Uses SparseTensor (incompatible)</td>
+</tr>
+<tr>
+<td>[x] LocallyConnectedLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor</td>
+</tr>
+<tr>
+<td>[x] HyperbolicLinearLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>⏭️ Skipped - Uses Matrix<t> (incompatible)</t></td>
+</tr>
+<tr>
+<td>[x] OctonionLinearLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>⏭️ Skipped - Uses Octonion arrays (incompatible)</td>
+</tr>
+<tr>
+<td>[x] FeedForwardLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor</td>
+</tr>
+<tr>
+<td>[x] GatedLinearUnitLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor</td>
+</tr>
+<tr>
+<td>[x] HighwayLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - RegisterTrainableParameter, InvalidatePersistentTensor</td>
+</tr>
+<tr>
+<td>[x] ExpertLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>⏭️ Skipped - Delegates to contained layers</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-2-convolutional-layers-high-gpu-impact---fusedconv2d3d">Priority 2: Convolutional Layers (High GPU Impact - FusedConv2D/3D)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Has Bias</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[x] ConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>✅ Complete - Uses Engine.Conv2D, RegisterTrainableParameter</td>
+</tr>
+<tr>
+<td>[ ] Conv3DLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DeconvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DepthwiseSeparableConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DilatedConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SeparableConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DeformableConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] EdgeConditionalConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SubpixelConvolutionalLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ConvLSTMLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] PatchEmbeddingLayer</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-3-attention-layers-high-gpu-impact---fusedattention">Priority 3: Attention Layers (High GPU Impact - FusedAttention)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] MultiHeadAttentionLayer</td>
+<td>Yes (Q/K/V/O)</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SelfAttentionLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] CrossAttentionLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] AttentionLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GraphAttentionLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] TransformerEncoderLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] TransformerDecoderLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DecoderLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GraphTransformerLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpatialTransformerLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-4-normalization-layers-medium-gpu-impact---fusednorm">Priority 4: Normalization Layers (Medium GPU Impact - FusedNorm)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Params</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] BatchNormalizationLayer</td>
+<td>Yes (gamma/beta)</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] LayerNormalizationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GroupNormalizationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] InstanceNormalizationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpectralNormalizationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-5-recurrent-layers-medium-gpu-impact---fusedrnn">Priority 5: Recurrent Layers (Medium GPU Impact - FusedRNN)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] LSTMLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GRULayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] RecurrentLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] BidirectionalLayer</td>
+<td>Yes (wraps RNN)</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] TemporalMemoryLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ContinuumMemorySystemLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MemoryReadLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MemoryWriteLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SynapticPlasticityLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-6-graph-neural-network-layers-medium-gpu-impact">Priority 6: Graph Neural Network Layers (Medium GPU Impact)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] GraphConvolutionalLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GraphSAGELayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GraphIsomorphismLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DirectionalGraphLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] HeterogeneousGraphLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MessagePassingLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] PrincipalNeighbourhoodAggregationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DiffusionConvLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpiralConvLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MeshEdgeConvLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MeshPoolLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-7-embedding-layers-low-medium-gpu-impact">Priority 7: Embedding Layers (Low-Medium GPU Impact)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] EmbeddingLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] PositionalEncodingLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] TimeEmbeddingLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-8-pooling-layers-low-gpu-impact---memory-bound">Priority 8: Pooling Layers (Low GPU Impact - Memory Bound)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Params</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] MaxPoolingLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] AveragePoolingLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] GlobalPoolingLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] AdaptiveAveragePoolingLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MaxPool3DLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] PoolingLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpatialPoolerLayer</td>
+<td>No</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-9-capsule-network-layers-specialized">Priority 9: Capsule Network Layers (Specialized)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] CapsuleLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] PrimaryCapsuleLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DigitCapsuleLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-10-residualblock-layers-composite---delegate-to-sub-layers">Priority 10: Residual/Block Layers (Composite - Delegate to Sub-layers)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] ResidualLayer</td>
+<td>No (wraps)</td>
+<td>Delegate to children</td>
+</tr>
+<tr>
+<td>[ ] BasicBlock</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] BottleneckBlock</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DenseBlock</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] DenseBlockLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ResidualDenseBlock</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] RRDBLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] InvertedResidualBlock</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SqueezeAndExcitationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] TransitionLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] RepParameterizationLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-11-specialized-compute-layers">Priority 11: Specialized Compute Layers</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] RBFLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] RBMLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ReservoirLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpikingLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] QuantumLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] MixtureOfExpertsLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ReadoutLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] ConditionalRandomFieldLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] AnomalyDetectorLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<h3 id="priority-12-utility-layers-no-trainable-params---minimal-changes">Priority 12: Utility Layers (No Trainable Params - Minimal Changes)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Params</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] ActivationLayer</td>
+<td>No</td>
+<td>Uses Engine activation</td>
+</tr>
+<tr>
+<td>[ ] DropoutLayer</td>
+<td>No</td>
+<td>GPU random</td>
+</tr>
+<tr>
+<td>[ ] FlattenLayer</td>
+<td>No</td>
+<td>Reshape only</td>
+</tr>
+<tr>
+<td>[ ] ReshapeLayer</td>
+<td>No</td>
+<td>Reshape only</td>
+</tr>
+<tr>
+<td>[ ] InputLayer</td>
+<td>No</td>
+<td>Pass-through</td>
+</tr>
+<tr>
+<td>[ ] AddLayer</td>
+<td>No</td>
+<td>Element-wise</td>
+</tr>
+<tr>
+<td>[ ] MultiplyLayer</td>
+<td>No</td>
+<td>Element-wise</td>
+</tr>
+<tr>
+<td>[ ] ConcatenateLayer</td>
+<td>No</td>
+<td>Memory op</td>
+</tr>
+<tr>
+<td>[ ] SplitLayer</td>
+<td>No</td>
+<td>Memory op</td>
+</tr>
+<tr>
+<td>[ ] CroppingLayer</td>
+<td>No</td>
+<td>Memory op</td>
+</tr>
+<tr>
+<td>[ ] PaddingLayer</td>
+<td>No</td>
+<td>Memory op</td>
+</tr>
+<tr>
+<td>[ ] MaskingLayer</td>
+<td>No</td>
+<td>Element-wise</td>
+</tr>
+<tr>
+<td>[ ] GaussianNoiseLayer</td>
+<td>No</td>
+<td>GPU random</td>
+</tr>
+<tr>
+<td>[ ] LambdaLayer</td>
+<td>No</td>
+<td>Custom op</td>
+</tr>
+<tr>
+<td>[ ] MeanLayer</td>
+<td>No</td>
+<td>Reduction</td>
+</tr>
+<tr>
+<td>[ ] LogVarianceLayer</td>
+<td>No</td>
+<td>Reduction</td>
+</tr>
+<tr>
+<td>[ ] SequenceLastLayer</td>
+<td>No</td>
+<td>Indexing</td>
+</tr>
+<tr>
+<td>[ ] TimeDistributedLayer</td>
+<td>No (wraps)</td>
+<td>Delegate</td>
+</tr>
+<tr>
+<td>[ ] PixelShuffleLayer</td>
+<td>No</td>
+<td>Reshape</td>
+</tr>
+<tr>
+<td>[ ] UpsamplingLayer</td>
+<td>No</td>
+<td>Interpolation</td>
+</tr>
+<tr>
+<td>[ ] Upsample3DLayer</td>
+<td>No</td>
+<td>Interpolation</td>
+</tr>
+<tr>
+<td>[ ] ReconstructionLayer</td>
+<td>No</td>
+<td>Composite</td>
+</tr>
+<tr>
+<td>[ ] MeasurementLayer</td>
+<td>No</td>
+<td>Diagnostic</td>
+</tr>
+</tbody>
+</table>
+<h3 id="generatordiscriminator-layers-composite">Generator/Discriminator Layers (Composite)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Has Weights</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>[ ] RRDBNetGenerator</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] UNetDiscriminator</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+<tr>
+<td>[ ] SpyNetLayer</td>
+<td>Yes</td>
+<td>Needs update</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><strong>Total: 117 layers</strong></p>
+<ul>
+<li><strong>With trainable parameters: ~85 layers</strong></li>
+<li><strong>Without trainable parameters: ~32 layers</strong></li>
+</ul>
+<h2 id="critical-findings-iengine-operations-status">Critical Findings: IEngine Operations Status</h2>
+<h3 id="standard-operations-per-research-papers">Standard Operations (Per Research Papers)</h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Reference</th>
+<th>Current Status</th>
+<th>Impact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ScaledDotProductAttention</td>
+<td>&quot;Attention Is All You Need&quot; (Vaswani 2017)</td>
+<td>✅ COMPLETE</td>
+<td>Attention layers can use Engine.ScaledDotProductAttention</td>
+</tr>
+<tr>
+<td>FlashAttention</td>
+<td>FlashAttention papers (2022-2023)</td>
+<td>✅ COMPLETE</td>
+<td>Memory-efficient attention available</td>
+</tr>
+<tr>
+<td>GroupedQueryAttention</td>
+<td>&quot;GQA&quot; (Ainslie 2023)</td>
+<td>✅ COMPLETE</td>
+<td>Engine.GroupedQueryAttention implemented</td>
+</tr>
+<tr>
+<td>RMSNorm</td>
+<td>&quot;Root Mean Square Layer Normalization&quot;</td>
+<td>✅ COMPLETE</td>
+<td>Engine.RMSNorm with backward pass</td>
+</tr>
+<tr>
+<td>SiLU/Swish</td>
+<td>&quot;Swish: A Self-Gated Activation Function&quot;</td>
+<td>✅ COMPLETE</td>
+<td>Fused activations available</td>
+</tr>
+<tr>
+<td>GeGLU</td>
+<td>&quot;GLU Variants Improve Transformer&quot;</td>
+<td>✅ COMPLETE</td>
+<td>Engine.GeGLU with backward pass</td>
+</tr>
+<tr>
+<td>ScatterAdd/Mean/Max</td>
+<td>Graph Neural Networks</td>
+<td>✅ COMPLETE</td>
+<td>All scatter operations with backward passes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="layers-using-manual-implementations-instead-of-iengine">Layers Using Manual Implementations Instead of IEngine</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Issue</th>
+<th>Manual Loop Count</th>
+<th>Should Use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CrossAttentionLayer</strong></td>
+<td>Manual 4-nested matmul for all ops</td>
+<td>20+ loops</td>
+<td>Engine.TensorMatMul, Engine.Softmax</td>
+</tr>
+<tr>
+<td><strong>GraphAttentionLayer</strong></td>
+<td>Manual attention despite 24 Engine calls</td>
+<td>85 loops</td>
+<td>Engine.ScaledDotProductAttention</td>
+</tr>
+<tr>
+<td><strong>GraphTransformerLayer</strong></td>
+<td>Manual loops</td>
+<td>75+ NumOps</td>
+<td>Engine operations</td>
+</tr>
+<tr>
+<td><strong>MessagePassingLayer</strong></td>
+<td>Manual aggregation</td>
+<td>73+ NumOps</td>
+<td>Engine.Scatter/Gather</td>
+</tr>
+<tr>
+<td><strong>DiffusionConvLayer</strong></td>
+<td>Manual convolution</td>
+<td>43+ NumOps</td>
+<td>Engine.Conv operations</td>
+</tr>
+<tr>
+<td>SpikingLayer</td>
+<td>Mixed (uses 130 Engine calls)</td>
+<td>95 NumOps</td>
+<td>More Engine ops possible</td>
+</tr>
+<tr>
+<td>AnomalyDetectorLayer</td>
+<td>Manual multiply-accumulate</td>
+<td>High</td>
+<td>Engine.TensorMatMul</td>
+</tr>
+</tbody>
+</table>
+<h3 id="layers-correctly-using-iengine-good-examples">Layers Correctly Using IEngine (Good Examples)</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Engine Calls</th>
+<th>Manual Loops</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AttentionLayer</td>
+<td>40+</td>
+<td>Few</td>
+<td>Good - uses Engine.BatchMatMul, TensorMatMul</td>
+</tr>
+<tr>
+<td>LSTMLayer</td>
+<td>48</td>
+<td>11</td>
+<td>Good - mostly Engine operations</td>
+</tr>
+<tr>
+<td>GRULayer</td>
+<td>32</td>
+<td>16</td>
+<td>Good - mostly Engine operations</td>
+</tr>
+<tr>
+<td>ConvolutionalLayer</td>
+<td>Many</td>
+<td>Few</td>
+<td>Good - uses Engine.Conv2D</td>
+</tr>
+<tr>
+<td>BatchNormalizationLayer</td>
+<td>Many</td>
+<td>5</td>
+<td>Good - uses Engine.BatchNorm</td>
+</tr>
+<tr>
+<td>SelfAttentionLayer</td>
+<td>Many</td>
+<td>Few</td>
+<td>Good - uses Engine.Softmax</td>
+</tr>
+</tbody>
+</table>
+<h3 id="implemented-iengine-operations">Implemented IEngine Operations</h3>
+<p>All proposed operations have been implemented in IEngine.cs with full forward and backward passes:</p>
+<ul>
+<li><code>ScaledDotProductAttention&lt;T&gt;</code> - Standard attention mechanism</li>
+<li><code>ScaledDotProductAttentionBackward&lt;T&gt;</code> - Gradient computation</li>
+<li><code>FlashAttention&lt;T&gt;</code> - Memory-efficient attention (O(N) memory)</li>
+<li><code>FlashAttentionBackward&lt;T&gt;</code> - Gradient computation</li>
+<li><code>GroupedQueryAttention&lt;T&gt;</code> - GQA for efficient inference</li>
+<li><code>GroupedQueryAttentionBackward&lt;T&gt;</code> - Gradient computation</li>
+<li><code>RMSNorm&lt;T&gt;</code> - Root Mean Square normalization</li>
+<li><code>RMSNormBackward&lt;T&gt;</code> - Gradient computation</li>
+<li><code>GeGLU&lt;T&gt;</code> - Gated Linear Unit with GELU</li>
+<li><code>GeGLUBackward&lt;T&gt;</code> - Gradient computation</li>
+<li><code>ScatterAdd&lt;T&gt;</code> / <code>ScatterMean&lt;T&gt;</code> / <code>ScatterMax&lt;T&gt;</code> - Graph operations</li>
+<li><code>ScatterAddBackward&lt;T&gt;</code> / <code>ScatterMeanBackward&lt;T&gt;</code> / <code>ScatterMaxBackward&lt;T&gt;</code> - Gradients</li>
+</ul>
+<h2 id="layers-requiring-immediate-refactoring">Layers Requiring Immediate Refactoring</h2>
+<p>These layers have significant manual implementations that should use IEngine:</p>
+<h3 id="high-priority-performance-critical">High Priority (Performance Critical)</h3>
+<ol>
+<li><strong>CrossAttentionLayer</strong> - Core diffusion model component, manual matmul</li>
+<li><strong>GraphAttentionLayer</strong> - 85 manual loops</li>
+<li><strong>GraphTransformerLayer</strong> - Graph + Attention, 75+ NumOps calls</li>
+<li><strong>MessagePassingLayer</strong> - GNN core, 73+ NumOps calls</li>
+</ol>
+<h3 id="medium-priority">Medium Priority</h3>
+<ol start="5">
+<li><strong>DiffusionConvLayer</strong> - 43+ NumOps calls</li>
+<li><strong>SpatialTransformerLayer</strong> - Combines attention with spatial ops</li>
+<li><strong>TimeEmbeddingLayer</strong> - 30+ NumOps calls</li>
+<li><strong>HeterogeneousGraphLayer</strong> - 30+ NumOps calls</li>
+</ol>
+<h2 id="implementation-order">Implementation Order</h2>
+<ol>
+<li><p><strong>Phase 1: IEngine Interface</strong> ✅ COMPLETE</p>
+<ul>
+<li>[x] Add <code>PersistentTensorRole</code> enum - <code>src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs</code></li>
+<li>[x] Add <code>FusedActivationType</code> enum - <code>src/AiDotNet.Tensors/Engines/FusedActivationType.cs</code></li>
+<li>[x] Add <code>RegisterPersistentTensor</code>/<code>UnregisterPersistentTensor</code>/<code>InvalidatePersistentTensor</code> to IEngine</li>
+<li>[x] Add <code>FusedLinear</code>, <code>FusedLinearBackward</code> to IEngine</li>
+<li>[x] Add <code>FusedConv2D</code>, <code>FusedBatchNorm</code> to IEngine</li>
+<li>[x] Add <code>LeakyReLU</code> tensor operation to IEngine</li>
+<li>[x] Add <code>ScaledDotProductAttention</code>, <code>FlashAttention</code>, <code>GroupedQueryAttention</code> to IEngine</li>
+<li>[x] Add <code>RMSNorm</code>, <code>GeGLU</code> to IEngine</li>
+<li>[x] Add <code>ScatterAdd</code>, <code>ScatterMean</code>, <code>ScatterMax</code> to IEngine</li>
+<li>[x] Implement in CpuEngine (CPU fallback path with vectorized SIMD operations)</li>
+<li>[x] Implement in GpuEngine (DirectGpu path with proper GPU kernels)</li>
+<li>[x] Implement persistent tensor GPU buffer caching in DirectGpuTensorEngine</li>
+</ul>
+</li>
+<li><p><strong>Phase 2: LayerBase Integration</strong> ✅ COMPLETE</p>
+<ul>
+<li>[x] Add <code>RegisterTrainableParameter</code> helper to LayerBase<t></t></li>
+<li>[x] Add <code>_registeredTensors</code> list for tracking</li>
+<li>[x] Add disposal cleanup for registered tensors in Dispose(bool)</li>
+<li>[x] Document pattern for derived layers</li>
+</ul>
+</li>
+<li><p><strong>Phase 3: Priority 1 Layers</strong> ✅ COMPLETE</p>
+<ul>
+<li>[x] Refactor DenseLayer to use FusedLinear</li>
+<li>[x] Refactor ConvolutionalLayer to use FusedConv2D</li>
+<li>[x] Remove GPU-specific code from layers (DirectGpu imports, caching fields)</li>
+<li>[x] Add RegisterTrainableParameter calls to constructors</li>
+<li>[x] Add Engine.InvalidatePersistentTensor calls in UpdateParameters, SetParameters, Dispose</li>
+</ul>
+</li>
+<li><p><strong>Phase 4: Priority 2-3 Layers</strong></p>
+<ul>
+<li>Add FusedBatchNorm, FusedLayerNorm</li>
+<li>Add FusedAttention</li>
+<li>Update normalization and attention layers</li>
+</ul>
+</li>
+<li><p><strong>Phase 5: Remaining Layers</strong></p>
+<ul>
+<li>Update in priority order</li>
+<li>Each layer should only use IEngine methods</li>
+</ul>
+</li>
+</ol>
+<h2 id="testing-strategy">Testing Strategy</h2>
+<ol>
+<li><strong>Unit tests</strong>: Each fused operation has correctness tests</li>
+<li><strong>Performance tests</strong>: Compare CPU vs GPU for each layer type</li>
+<li><strong>Integration tests</strong>: Full network forward/backward passes</li>
+<li><strong>Regression tests</strong>: Ensure numerical equivalence with old implementation</li>
+</ol>
+<h2 id="success-criteria">Success Criteria</h2>
+<ul>
+<li>[ ] No layer directly references DirectGpu, CUDA, OpenCL, or HIP</li>
+<li>[x] LayerBase has <code>RegisterTrainableParameter</code> helper available for layers</li>
+<li>[x] GPU acceleration infrastructure available (IEngine operations implemented)</li>
+<li>[x] CPU fallback works correctly when GPU unavailable (implemented in CpuEngine)</li>
+<li>[ ] All 117 layers refactored to use IEngine operations</li>
+<li>[ ] Performance improvement measurable in benchmarks</li>
+</ul>
+<h2 id="implementation-progress-log">Implementation Progress Log</h2>
+<h3 id="2025-01-02-phase-1-iengine-additions-complete">2025-01-02: Phase 1 IEngine Additions Complete</h3>
+<p><strong>Files Created:</strong></p>
+<ul>
+<li><code>src/AiDotNet.Tensors/Engines/FusedActivationType.cs</code> - Enum for fused operation activation types</li>
+<li><code>src/AiDotNet.Tensors/Engines/PersistentTensorRole.cs</code> - Enum for GPU memory management hints</li>
+</ul>
+<p><strong>IEngine.cs Additions:</strong></p>
+<ul>
+<li><code>FusedLinear&lt;T&gt;</code> - Fused MatMul + Bias + Activation</li>
+<li><code>FusedLinearBackward&lt;T&gt;</code> - Backward pass for fused linear</li>
+<li><code>FusedConv2D&lt;T&gt;</code> - Fused Conv2D + Bias + Activation</li>
+<li><code>FusedBatchNorm&lt;T&gt;</code> - Fused BatchNorm + Activation</li>
+<li><code>RegisterPersistentTensor&lt;T&gt;</code> - Register tensor for GPU residency</li>
+<li><code>UnregisterPersistentTensor&lt;T&gt;</code> - Remove from GPU cache</li>
+<li><code>InvalidatePersistentTensor&lt;T&gt;</code> - Mark tensor data as stale</li>
+<li><code>LeakyReLU&lt;T&gt;</code> - Tensor operation for Leaky ReLU activation</li>
+</ul>
+<p><strong>CpuEngine.cs Implementations:</strong></p>
+<ul>
+<li>All fused operations implemented as sequential CPU operations</li>
+<li>Persistent tensor methods are no-ops (CPU doesn't need caching)</li>
+<li>LeakyReLU uses TensorPrimitivesHelper for optimized implementation</li>
+</ul>
+<p><strong>Completed:</strong></p>
+<ul>
+<li>[x] Implement GpuEngine versions using DirectGpu fused kernels</li>
+<li>[x] Add RmsNormBackward to IDirectGpuBackend</li>
+<li>[x] Add ScatterAddBackward to IDirectGpuBackend</li>
+</ul>
+<h3 id="2026-01-02-gpuengine-fused-operations-and-backend-updates">2026-01-02: GpuEngine Fused Operations and Backend Updates</h3>
+<p><strong>IDirectGpuBackend.cs Additions:</strong></p>
+<ul>
+<li><code>RmsNormBackward</code> - Backward pass for RMS normalization</li>
+<li><code>ScatterAddBackward</code> - Backward pass for scatter-add operation</li>
+</ul>
+<p><strong>NormalizationKernels.cs Additions (OpenCL):</strong></p>
+<ul>
+<li><code>rmsnorm_backward</code> - OpenCL kernel for RMS norm gradient computation</li>
+<li><code>rmsnorm_grad_gamma</code> - OpenCL kernel for gamma gradient accumulation</li>
+<li><code>scatter_add_backward</code> - OpenCL kernel for scatter-add backward (gather)</li>
+</ul>
+<p><strong>Backend Implementations:</strong></p>
+<ul>
+<li>OpenCL: Full GPU implementation using custom kernels</li>
+<li>CUDA: Full GPU implementation using custom kernels</li>
+<li>HIP: Full GPU implementation using custom kernels</li>
+</ul>
+<p><strong>DirectGpuTensorEngine.cs:</strong></p>
+<ul>
+<li><code>FusedLinear&lt;T&gt;</code> - GPU-accelerated using GemmBiasRelu/Gelu/Sigmoid/Tanh kernels</li>
+<li><code>FusedBatchNorm&lt;T&gt;</code> - GPU-accelerated batch normalization with activation</li>
+<li><code>FusedConv2D&lt;T&gt;</code> - GPU-accelerated using backend.Conv2D with activation</li>
+<li><code>RegisterPersistentTensor&lt;T&gt;</code> - GPU buffer caching with ConcurrentDictionary</li>
+<li><code>UnregisterPersistentTensor&lt;T&gt;</code> - Releases cached GPU buffers</li>
+<li><code>InvalidatePersistentTensor&lt;T&gt;</code> - Re-uploads tensor data to GPU</li>
+</ul>
+<p><strong>CpuFusedOperations.cs (Created):</strong></p>
+<ul>
+<li>Vectorized SIMD-optimized fused operations for CPU path</li>
+<li><code>FusedGemmBiasActivation</code> - TensorPrimitives-based GEMM with fused bias/activation</li>
+<li><code>FusedLayerNormActivation</code> - Fused layer normalization</li>
+<li><code>FusedResidualLayerNorm</code> - Fused residual connection with layer norm</li>
+<li><code>FusedScaledSoftmax</code> - Fused scaling with softmax</li>
+<li><code>FusedBiasDropout</code> - Fused bias addition with dropout</li>
+</ul>
+<h3 id="2026-01-02-phase-2-layerbase-integration-complete">2026-01-02: Phase 2 LayerBase Integration Complete</h3>
+<p><strong>LayerBase.cs Additions:</strong></p>
+<ul>
+<li><code>RegisterTrainableParameter(Tensor&lt;T&gt; tensor, PersistentTensorRole role)</code> - Helper method at line 1877</li>
+<li><code>_registeredTensors</code> list for tracking registered tensors at line 285</li>
+<li>Proper disposal cleanup in <code>Dispose(bool)</code> that unregisters all tensors</li>
+</ul>
+<p><strong>Additional IEngine Operations Added:</strong></p>
+<ul>
+<li><code>ScaledDotProductAttention&lt;T&gt;</code> with backward pass</li>
+<li><code>FlashAttention&lt;T&gt;</code> with backward pass (memory-efficient O(N) attention)</li>
+<li><code>GroupedQueryAttention&lt;T&gt;</code> with backward pass</li>
+<li><code>RMSNorm&lt;T&gt;</code> with backward pass</li>
+<li><code>GeGLU&lt;T&gt;</code> with backward pass</li>
+<li><code>ScatterAdd&lt;T&gt;</code>, <code>ScatterMean&lt;T&gt;</code>, <code>ScatterMax&lt;T&gt;</code> with backward passes</li>
+</ul>
+<h3 id="2026-01-02-phase-3-priority-1-layers-complete">2026-01-02: Phase 3 Priority 1 Layers Complete</h3>
+<p><strong>DenseLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Removed <code>using AiDotNet.Tensors.Engines.DirectGpu;</code> import</li>
+<li>Removed GPU-specific fields: <code>_weightsTransposedCache</code>, <code>_directGpuWeightsBuffer</code>, <code>_cuBlasInstance</code>, etc.</li>
+<li>Added <code>RegisterTrainableParameter(_weights, PersistentTensorRole.Weights)</code> in both constructors</li>
+<li>Added <code>RegisterTrainableParameter(_biases, PersistentTensorRole.Biases)</code> in both constructors</li>
+<li>Forward method now uses <code>Engine.FusedLinear(input, weights, bias, FusedActivationType)</code> for GPU/CPU optimized operations</li>
+<li>Added <code>GetFusedActivationType()</code> method mapping ReLU/Sigmoid/Tanh to enum values</li>
+<li>Replaced <code>InvalidateWeightCaches()</code> with <code>Engine.InvalidatePersistentTensor(_weights/biases)</code> in:
+<ul>
+<li><code>SetWeights()</code> method</li>
+<li><code>UpdateParameters()</code> method</li>
+<li><code>SetParameters()</code> method</li>
+<li><code>Dispose(bool)</code> method</li>
+</ul>
+</li>
+</ul>
+<p><strong>ConvolutionalLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Already correctly uses <code>Engine.Conv2D()</code> and <code>Engine.TensorBroadcastAdd()</code> for forward pass</li>
+<li>Already correctly uses <code>Engine.Conv2DBackwardInput/Kernel()</code> and <code>Engine.ReduceSum()</code> for backward pass</li>
+<li>Added <code>using AiDotNet.Tensors.Engines;</code> import for PersistentTensorRole enum</li>
+<li>Added <code>RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights)</code> in both constructors</li>
+<li>Added <code>RegisterTrainableParameter(_biases, PersistentTensorRole.Biases)</code> in both constructors</li>
+<li>Added <code>Engine.InvalidatePersistentTensor(_kernels/biases)</code> in:
+<ul>
+<li><code>UpdateParameters()</code> method</li>
+<li><code>SetParameters()</code> method</li>
+<li>New <code>Dispose(bool)</code> override for GPU resource cleanup</li>
+</ul>
+</li>
+</ul>
+<p><strong>HipBackend.cs Bug Fix:</strong></p>
+<ul>
+<li>Added missing <code>GemmBias()</code> method (GEMM + bias without activation)</li>
+<li>Added missing <code>BiasAdd()</code> method (row-wise bias addition to matrix)</li>
+<li>These methods are required by IDirectGpuBackend interface for FusedLinear operations</li>
+</ul>
+<h3 id="2026-01-02-phase-3-continuation---all-priority-1-layers-complete">2026-01-02: Phase 3 Continuation - All Priority 1 Layers Complete</h3>
+<p><strong>LayerBase.cs Enhancement:</strong></p>
+<ul>
+<li>Added <code>GetFusedActivationType()</code> method with comprehensive activation mapping</li>
+<li>Supports: ReLU, Sigmoid, Tanh, GELU, LeakyReLU, Swish/SiLU</li>
+<li>Enables all layers to use fused GPU operations without code duplication</li>
+</ul>
+<p><strong>FullyConnectedLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Added <code>RegisterTrainableParameter(_weights/_biases)</code> in both constructors</li>
+<li>Added <code>Engine.InvalidatePersistentTensor(_weights/_biases)</code> in UpdateParameters, SetParameters</li>
+</ul>
+<p><strong>FeedForwardLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Added <code>RegisterTrainableParameter(Weights/Biases)</code> in both constructors</li>
+<li>Added <code>Engine.InvalidatePersistentTensor(Weights/Biases)</code> in UpdateParameters, SetParameters</li>
+</ul>
+<p><strong>GatedLinearUnitLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Added <code>RegisterTrainableParameter</code> for all 4 tensors (_linearWeights, _gateWeights, _linearBias, _gateBias)</li>
+<li>Added <code>Engine.InvalidatePersistentTensor</code> for all 4 tensors in UpdateParameters, SetParameters</li>
+</ul>
+<p><strong>HighwayLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Added <code>RegisterTrainableParameter</code> for all 4 tensors (_transformWeights, _transformBias, _gateWeights, _gateBias)</li>
+<li>Added <code>Engine.InvalidatePersistentTensor</code> for all 4 tensors in UpdateParameters, SetParameters</li>
+</ul>
+<p><strong>LocallyConnectedLayer.cs Refactoring:</strong></p>
+<ul>
+<li>Added <code>RegisterTrainableParameter(_weights/_biases)</code> in both constructors</li>
+<li>Added <code>Engine.InvalidatePersistentTensor(_weights/_biases)</code> in UpdateParameters, SetParameters</li>
+</ul>
+<p><strong>Layers Skipped (Incompatible Types):</strong></p>
+<ul>
+<li>ExpertLayer: Delegates parameter management to contained layers</li>
+<li>SparseLinearLayer: Uses SparseTensor<t> which is not compatible with Tensor<t>-based API</t></t></li>
+<li>HyperbolicLinearLayer: Uses Matrix<t> instead of Tensor<t></t></t></li>
+<li>OctonionLinearLayer: Uses Octonion<t> arrays instead of Tensor<t></t></t></li>
+</ul>
+<p><strong>Priority 1 Status: ✅ COMPLETE (10/10 layers)</strong></p>
+<ul>
+<li>6 layers fully refactored with GPU tensor registration</li>
+<li>4 layers appropriately skipped due to type incompatibility</li>
+</ul>
+<p><strong>Next Steps:</strong></p>
+<ul>
+<li>Phase 4: Update Priority 2 (Convolutional) layers</li>
+<li>Phase 5: Update attention layers to use ScaledDotProductAttention/FlashAttention</li>
+<li>Phase 6: Update remaining layers (normalization, pooling, etc.)</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_ENGINE_OPTIMIZATION_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

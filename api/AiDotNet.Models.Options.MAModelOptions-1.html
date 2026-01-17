@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MAModelOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MAModelOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Moving Average (MA) models, which are used to analyze time series data by modeling the error terms as a linear combination of previous error terms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_MAModelOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.MAModelOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.MAModelOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_MAModelOptions_1" data-uid="AiDotNet.Models.Options.MAModelOptions`1" class="text-break">
+Class MAModelOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Moving Average (MA) models, which are used to analyze time series data
+by modeling the error terms as a linear combination of previous error terms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MAModelOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">MAModelOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_MAModelOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Moving Average (MA) model is a fundamental component in time series analysis and forecasting.
+Unlike autoregressive (AR) models that express the current value as a function of past values,
+MA models express the current value as a function of past forecast errors (also called shocks or innovations).
+This makes MA models particularly effective at capturing short-term, irregular patterns in time series data.
+The model is defined by its order (q), which determines how many past error terms are included in the model.
+</p>
+<p><b>For Beginners:</b> A Moving Average (MA) model helps predict future values in a time series
+(like daily temperatures, stock prices, or website traffic) based on recent unexpected changes or "surprises."
+<p>Imagine you're trying to predict tomorrow's temperature:</p>
+<ul>
+<li>An MA model doesn't just look at yesterday's actual temperature</li>
+<li>Instead, it focuses on the recent &quot;surprises&quot; - the differences between what was predicted and what actually happened</li>
+<li>It assumes that these recent surprises contain useful information about what might happen next</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>If the weather has been consistently 2 degrees warmer than predicted for the past few days</li>
+<li>An MA model would adjust tomorrow's forecast to account for this pattern of surprises</li>
+</ul>
+<p>This approach is particularly useful for data that has short-term patterns or fluctuations.
+This class allows you to configure how the MA model will be built and optimized.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_MAModelOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.MAModelOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MAModelOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.MAModelOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate that controls the step size in each iteration of the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MAModelOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate determines how large of a step the optimization algorithm takes in the direction
+of the gradient during each iteration when estimating the MA model parameters. A higher learning
+rate allows for faster convergence but risks overshooting the optimal solution or causing instability.
+A lower learning rate provides more stability but may require more iterations to converge and
+risks getting stuck in local optima. For MA models, the optimization typically involves minimizing
+the sum of squared errors between observed values and the model's predictions.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the model adjusts its parameters
+during training.
+<p>Imagine you're trying to find the lowest point in a valley while blindfolded:</p>
+<ul>
+<li>The learning rate determines your step size as you move downhill</li>
+<li>A large learning rate (like 0.1) means taking big steps</li>
+<li>A small learning rate (like 0.001) means taking tiny steps</li>
+</ul>
+<p>The default value of 0.01 provides a balance between:</p>
+<ul>
+<li>Speed: Higher values help the model learn faster</li>
+<li>Stability: Lower values help prevent the model from &quot;overshooting&quot; the best answer</li>
+</ul>
+<p>If your model's parameters seem to be fluctuating wildly during training, try decreasing this value.
+If training is proceeding very slowly, try increasing it.</p>
+<p>Finding the right learning rate often requires experimentation - too high and the training might
+become unstable, too low and it might take too long to converge.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MAModelOptions_1_MAOrder_" data-uid="AiDotNet.Models.Options.MAModelOptions`1.MAOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MAModelOptions_1_MAOrder" data-uid="AiDotNet.Models.Options.MAModelOptions`1.MAOrder">
+  MAOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the Moving Average model, which determines how many past error terms are included.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MAOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The MA order (q), defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MAModelOptions_1_MAOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The MA order, commonly denoted as q, specifies how many lagged error terms are included in the model.
+For example, an MA(1) model includes only the most recent error term, while an MA(2) includes the two
+most recent error terms. Higher order models can capture more complex patterns in the data but require
+more parameters to be estimated, increasing the risk of overfitting and computational complexity.
+The appropriate order typically depends on the structure of the autocorrelation in the error terms and
+can be informed by examining the autocorrelation function (ACF) of the time series.
+</p>
+<p><b>For Beginners:</b> This setting determines how many past "surprises" the model considers.
+<p>Think of it like determining how far back you look for patterns:</p>
+<ul>
+<li>MAOrder = 1: Only yesterday's surprise matters (default)</li>
+<li>MAOrder = 2: Both yesterday's and the day before's surprises matter</li>
+<li>MAOrder = 3: The last three days' surprises matter</li>
+</ul>
+<p>The default value of 1 is often a good starting point because:</p>
+<ul>
+<li>It captures the most immediate effects</li>
+<li>It's less likely to overfit to random fluctuations</li>
+<li>It's easier to estimate reliably</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>Your data shows patterns that persist for several time periods</li>
+<li>Statistical tests (like looking at autocorrelation) suggest longer-term relationships</li>
+<li>You have enough data to reliably estimate more parameters</li>
+</ul>
+<p>Be cautious with higher orders, as they require more data to estimate accurately and can lead
+to more complex models that might not generalize well to new data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MAModelOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.MAModelOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MAModelOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.MAModelOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations allowed for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MAModelOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper limit on how many iterations the optimization algorithm will perform
+when estimating the MA model parameters. The algorithm may terminate earlier if convergence is
+achieved based on the tolerance value. In the context of MA models, each iteration involves
+computing the model errors based on the current parameter estimates and then updating those
+parameters based on the gradient of the error function.
+</p>
+<p><b>For Beginners:</b> This setting controls how many attempts the algorithm gets to
+find the optimal parameters.
+<p>Think of it like trying to tune a radio:</p>
+<ul>
+<li>Each &quot;iteration&quot; is one adjustment of the dial</li>
+<li>You keep adjusting until you get clear reception or run out of patience</li>
+<li>This parameter is your &quot;patience limit&quot;</li>
+</ul>
+<p>The default value of 1000 is sufficient for many problems. You might need to increase it if:</p>
+<ul>
+<li>You have a complex time series with many patterns</li>
+<li>The model consistently stops due to reaching the maximum iterations without converging</li>
+<li>You're working with a low learning rate that requires more iterations</li>
+</ul>
+<p>You might want to decrease it if:</p>
+<ul>
+<li>Training is taking too long and you want faster results</li>
+<li>You're doing initial experimentation and don't need perfect results</li>
+</ul>
+<p>Note that the algorithm might stop before reaching this maximum if it determines that
+additional iterations won't significantly improve the model (based on the Tolerance setting).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_MAModelOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.MAModelOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_MAModelOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.MAModelOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance that determines when the optimization algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.000001 (1e-6).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_MAModelOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the threshold for determining when the optimization has converged.
+The algorithm will stop when the improvement in the objective function (typically the sum
+of squared errors) between consecutive iterations falls below this tolerance value.
+A smaller tolerance requires more precision in the solution, potentially leading to better model
+performance but requiring more iterations, while a larger tolerance allows for earlier
+termination but might result in less optimal parameter estimates.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the model needs to be before
+it decides it's "good enough."
+<p>Imagine you're weighing ingredients for a recipe:</p>
+<ul>
+<li>How precise do you need to be? Within 1 gram? 0.1 gram? 0.01 gram?</li>
+<li>This setting determines when to stop fine-tuning the model's parameters</li>
+</ul>
+<p>The default value of 0.000001 (one millionth) means:</p>
+<ul>
+<li>If an iteration improves the model's performance by less than one millionth</li>
+<li>The algorithm will decide it's &quot;good enough&quot; and stop</li>
+</ul>
+<p>This is quite a precise setting, appropriate for many time series applications where
+high accuracy is desirable.</p>
+<p>You might want to increase this value (make it less strict, like 1e-4) if:</p>
+<ul>
+<li>Training is taking too long</li>
+<li>You're doing preliminary exploration</li>
+<li>You don't need extremely precise parameter estimates</li>
+</ul>
+<p>You might want to decrease this value (make it more strict, like 1e-8) if:</p>
+<ul>
+<li>You need very precise forecasts</li>
+<li>Your application is highly sensitive to small errors</li>
+<li>You have the computational resources for longer training</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/MAModelOptions.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

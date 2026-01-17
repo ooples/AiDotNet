@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IContextCompressor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IContextCompressor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for compressing context documents to reduce token usage while preserving relevance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IContextCompressor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IContextCompressor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IContextCompressor`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IContextCompressor_1" data-uid="AiDotNet.Interfaces.IContextCompressor`1" class="text-break">
+Interface IContextCompressor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IContextCompressor.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for compressing context documents to reduce token usage while preserving relevance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IContextCompressor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for relevance scoring.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IContextCompressor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A context compressor reduces the size of retrieved documents before passing them to a language model,
+helping to stay within token limits while maintaining the most relevant information.
+</p>
+<p><b>For Beginners:</b> A context compressor is like a summarizer for search results.
+<p>Think of it like preparing a briefing:</p>
+<ul>
+<li>You retrieve 10 long documents (might be 50,000 tokens)</li>
+<li>Your language model can only handle 8,000 tokens</li>
+<li>The compressor extracts key sentences and information</li>
+<li>Result: Compressed to 5,000 tokens with the most important content</li>
+</ul>
+<p>This ensures you can:</p>
+<ul>
+<li>Use more retrieved documents without hitting token limits</li>
+<li>Focus on the most relevant parts of each document</li>
+<li>Reduce costs by using fewer tokens</li>
+<li>Still get accurate answers from the compressed context</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IContextCompressor_1_Compress_" data-uid="AiDotNet.Interfaces.IContextCompressor`1.Compress*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IContextCompressor_1_Compress_System_Collections_Generic_List_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___System_String_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.Interfaces.IContextCompressor`1.Compress(System.Collections.Generic.List{AiDotNet.RetrievalAugmentedGeneration.Models.Document{`0}},System.String,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  Compress(List&lt;Document&lt;T&gt;&gt;, string, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IContextCompressor.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a collection of documents while preserving relevance to the query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;Document&lt;T&gt;&gt; Compress(List&lt;Document&lt;T&gt;&gt; documents, string query, Dictionary&lt;string, object&gt;? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>documents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The documents to compress.</p>
+</dd>
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query text used to determine relevance.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Optional compression parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The compressed documents with reduced content but maintained relevance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IContextCompressor_1_Compress_System_Collections_Generic_List_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___System_String_System_Collections_Generic_Dictionary_System_String_System_Object___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method takes documents and reduces their content size while keeping the parts
+most relevant to the query. The compression strategy varies by implementation - some
+may use extractive methods (selecting key sentences), others may use abstractive
+methods (generating summaries), or hybrid approaches.
+</p>
+<p><b>For Beginners:</b> This reduces document size while keeping important information.
+<p>For example:</p>
+<ul>
+<li>Input: 3 documents, each 2000 tokens (6000 total)</li>
+<li>Query: &quot;How do I train a neural network?&quot;</li>
+<li>Processing: Extract sentences about training, remove unrelated content</li>
+<li>Output: 3 documents, each 500 tokens (1500 total)</li>
+</ul>
+<p>The compressed documents still contain the key information needed to answer
+the question, but take up much less space.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IContextCompressor.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

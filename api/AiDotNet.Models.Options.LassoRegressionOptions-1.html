@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LassoRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LassoRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Lasso Regression (L1 regularized linear regression).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LassoRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LassoRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LassoRegressionOptions_1" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1" class="text-break">
+Class LassoRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Lasso Regression (L1 regularized linear regression).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LassoRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">LassoRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_LassoRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Lasso (Least Absolute Shrinkage and Selection Operator) Regression extends ordinary least squares
+by adding an L1 penalty term to the loss function. Unlike Ridge Regression (L2), Lasso can shrink
+coefficients exactly to zero, effectively performing automatic feature selection.
+</p>
+<p>
+The objective function minimized is: (1/2n) * ||y - Xw||^2 + alpha * ||w||_1
+where alpha controls the strength of the regularization and ||w||_1 is the L1 norm (sum of absolute values).
+</p>
+<p><b>For Beginners:</b> Lasso Regression is like Ridge Regression but with a key difference:
+it can completely eliminate unimportant features.
+<p>While Ridge Regression shrinks coefficients toward zero but never quite reaches it,
+Lasso can set coefficients exactly to zero. This makes Lasso useful for:</p>
+<ul>
+<li>Feature selection: Identifying which features actually matter</li>
+<li>Sparse models: Creating simpler models with fewer non-zero coefficients</li>
+<li>High-dimensional data: When you have many features but suspect only a few are relevant</li>
+</ul>
+<p>Example scenario:</p>
+<ul>
+<li>You have 100 features for predicting house prices</li>
+<li>Only 10 of them actually matter (location, size, etc.)</li>
+<li>Lasso will automatically set the other 90 coefficients to zero</li>
+<li>This gives you a simpler, more interpretable model</li>
+</ul>
+<p>The trade-off:</p>
+<ul>
+<li>Lasso requires iterative optimization (slower than Ridge)</li>
+<li>If features are highly correlated, Lasso might arbitrarily pick one and zero out others</li>
+<li>For groups of correlated features, consider ElasticNet instead</li>
+</ul>
+<p>Note: If your features are on different scales, consider normalizing your data
+before training using INormalizer implementations like ZScoreNormalizer or MinMaxNormalizer.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LassoRegressionOptions_1_Alpha_" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LassoRegressionOptions_1_Alpha" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the regularization strength (alpha). Must be a non-negative value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LassoRegressionOptions_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the strength of the L1 regularization penalty. Larger values
+result in more coefficients being set to zero (sparser models). Smaller values allow
+the model to fit the training data more closely with more non-zero coefficients.
+</p>
+<p><b>For Beginners:</b> Alpha controls how aggressively Lasso eliminates features.
+<p>The effect of alpha:</p>
+<ul>
+<li>Alpha = 0.0: No regularization (ordinary least squares, all features kept)</li>
+<li>Alpha = 0.1: Light regularization (most features kept)</li>
+<li>Alpha = 1.0: Moderate regularization (default, good starting point)</li>
+<li>Alpha = 10.0: Strong regularization (many features eliminated)</li>
+</ul>
+<p>Tips for choosing alpha:</p>
+<ul>
+<li>Start with the default (1.0) and examine which features have non-zero coefficients</li>
+<li>If too many features are eliminated, decrease alpha</li>
+<li>If the model still overfits, increase alpha</li>
+<li>Use cross-validation with a range of alpha values to find the optimal value</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is negative.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_LassoRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LassoRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the coordinate descent algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LassoRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Lasso requires iterative optimization using coordinate descent. This parameter limits
+the number of iterations to prevent infinite loops. If convergence is not achieved
+within this limit, the algorithm stops with the current solution.
+</p>
+<p><b>For Beginners:</b> This sets how many times the algorithm can try to improve the solution.
+<p>The coordinate descent algorithm works by:</p>
+<ol>
+<li>Looking at each coefficient one at a time</li>
+<li>Adjusting it to reduce the error</li>
+<li>Repeating until no more improvement can be made</li>
+</ol>
+<p>Usually, convergence happens well before 1000 iterations. You might increase this if:</p>
+<ul>
+<li>You have many features and see warnings about not converging</li>
+<li>Your tolerance is very strict</li>
+</ul>
+<p>You might decrease this if:</p>
+<ul>
+<li>Training is too slow and you're okay with an approximate solution</li>
+<li>You want to limit computational time</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_LassoRegressionOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LassoRegressionOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 1e-4.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LassoRegressionOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm stops when the maximum change in coefficients between iterations
+falls below this threshold. Smaller values result in more precise solutions
+but require more iterations.
+</p>
+<p><b>For Beginners:</b> This determines how precise the solution needs to be.
+<p>Think of it like a target:</p>
+<ul>
+<li>Tolerance = 1e-4 (0.0001): Good enough for most purposes (default)</li>
+<li>Tolerance = 1e-6: Very precise, but takes longer</li>
+<li>Tolerance = 1e-2: Fast but less accurate</li>
+</ul>
+<p>For most applications, the default is fine. Only change this if:</p>
+<ul>
+<li>You need very high precision (decrease tolerance)</li>
+<li>Training is too slow (increase tolerance)</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when value is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_Options_LassoRegressionOptions_1_WarmStart_" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.WarmStart*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LassoRegressionOptions_1_WarmStart" data-uid="AiDotNet.Models.Options.LassoRegressionOptions`1.WarmStart">
+  WarmStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use warm starting for cross-validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool WarmStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to use warm starting; false otherwise. Default is true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LassoRegressionOptions_1_WarmStart_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When warm starting is enabled and the model is retrained with a different alpha,
+the previous solution is used as the starting point. This can significantly
+speed up cross-validation when testing multiple alpha values.
+</p>
+<p><b>For Beginners:</b> Warm starting speeds up training when trying different alpha values.
+<p>Imagine you're training models with alpha = 0.1, 0.5, 1.0, 2.0:</p>
+<ul>
+<li>Without warm start: Each model starts from scratch</li>
+<li>With warm start: Each model starts from where the previous one ended</li>
+</ul>
+<p>This is faster because solutions for similar alpha values are similar.
+Keep this enabled (default) unless you have a specific reason to disable it.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LassoRegressionOptions.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

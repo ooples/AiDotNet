@@ -1,0 +1,3737 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for a multi-step training pipeline with customizable stages.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TrainingPipelineConfiguration_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TrainingPipelineConfiguration%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3" class="text-break">
+Class TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for a multi-step training pipeline with customizable stages.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A training pipeline defines a sequence of training stages that are executed in order.
+Each stage can have its own training method, optimizer, learning rate, dataset, and
+evaluation criteria. This enables advanced training workflows like:
+</p>
+<ul><li><b>InstructGPT:</b> SFT → Reward Model → PPO</li><li><b>Llama 2:</b> SFT → Rejection Sampling → DPO</li><li><b>Anthropic Claude:</b> SFT → Constitutional AI → RLHF</li><li><b>DeepSeek:</b> SFT → GRPO</li><li><b>Curriculum:</b> Easy → Medium → Hard stages</li></ul>
+<p><b>For Beginners:</b> Think of this as a recipe with multiple cooking steps.
+Just like you might marinate, then sear, then bake - training can have multiple
+phases where each phase teaches the model something different.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CheckpointDirectory_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CheckpointDirectory*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CheckpointDirectory" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CheckpointDirectory">
+  CheckpointDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the directory for intermediate checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CheckpointDirectory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CheckpointDirectory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is &quot;./checkpoints&quot;. Relative to working directory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultBatchSize_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultBatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultBatchSize" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultBatchSize">
+  DefaultBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the default batch size for all stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DefaultBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 8. Adjust based on available GPU memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultLearningRate_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultLearningRate" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultLearningRate">
+  DefaultLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the default learning rate for all stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DefaultLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 2e-5, standard for fine-tuning pre-trained models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultOptimizer_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultOptimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultOptimizer" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DefaultOptimizer">
+  DefaultOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the default optimizer type for all stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizerType DefaultOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OptimizerType.html">OptimizerType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DefaultOptimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is AdamW. Individual stages can override this with OptimizerOverride.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Description_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Description*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Description" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the description of this pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Description { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableAutoSelection_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EnableAutoSelection*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableAutoSelection" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EnableAutoSelection">
+  EnableAutoSelection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use automatic pipeline selection when no stages are defined.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAutoSelection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableAutoSelection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When true and Stages is empty, the system analyzes available data and
+automatically constructs an appropriate training pipeline.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableExperimentTracking_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EnableExperimentTracking*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableExperimentTracking" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EnableExperimentTracking">
+  EnableExperimentTracking
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log to WandB or similar experiment trackers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableExperimentTracking { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EnableExperimentTracking_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable to use experiment tracking services.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluateAfterEachStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EvaluateAfterEachStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluateAfterEachStage" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EvaluateAfterEachStage">
+  EvaluateAfterEachStage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to run evaluation after each stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EvaluateAfterEachStage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluateAfterEachStage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Helps track progress between stages.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluationMetrics_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EvaluationMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluationMetrics" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.EvaluationMetrics">
+  EvaluationMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the evaluation metrics to track.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] EvaluationMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_EvaluationMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default includes loss and perplexity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ExperimentName_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ExperimentName*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ExperimentName" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ExperimentName">
+  ExperimentName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the experiment name for tracking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ExperimentName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ExperimentName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is empty (auto-generated from pipeline name).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEarlyStopping_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEarlyStopping" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalEarlyStopping">
+  GlobalEarlyStopping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the global early stopping configuration applied across stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GlobalEarlyStoppingConfig GlobalEarlyStopping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.GlobalEarlyStoppingConfig.html">GlobalEarlyStoppingConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEarlyStopping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default configuration with patience=5 and monitoring loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEvaluationData_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalEvaluationData*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEvaluationData" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalEvaluationData">
+  GlobalEvaluationData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the evaluation data to use across all stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningData&lt;T, TInput, TOutput&gt;? GlobalEvaluationData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalEvaluationData_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is null. Set this to use the same validation data across all stages.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalSeed_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalSeed" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.GlobalSeed">
+  GlobalSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the global random seed for reproducibility across all stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GlobalSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_GlobalSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 42. Use for reproducible training runs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_InterStageCallbacks_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.InterStageCallbacks*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_InterStageCallbacks" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.InterStageCallbacks">
+  InterStageCallbacks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets callback actions to execute between stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Action&lt;TrainingStageResult&lt;T, TInput, TOutput&gt;&gt;&gt;? InterStageCallbacks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStageResult-3.html">TrainingStageResult</a>&lt;T, TInput, TOutput&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_LogDirectory_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.LogDirectory*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_LogDirectory" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.LogDirectory">
+  LogDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the logging directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string LogDirectory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_LogDirectory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is &quot;./logs&quot;. Relative to working directory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MaxCheckpointsToKeep_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MaxCheckpointsToKeep*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MaxCheckpointsToKeep" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MaxCheckpointsToKeep">
+  MaxCheckpointsToKeep
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of checkpoints to keep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxCheckpointsToKeep { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MaxCheckpointsToKeep_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 3. Older checkpoints are deleted to save disk space.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Metadata_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Metadata*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Metadata" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom metadata for the pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Metadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Empty by default. Use to store custom key-value pairs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MixedPrecisionDType_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MixedPrecisionDType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MixedPrecisionDType" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MixedPrecisionDType">
+  MixedPrecisionDType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mixed precision data type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixedPrecisionType MixedPrecisionDType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MixedPrecisionType.html">MixedPrecisionType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MixedPrecisionDType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is FP16 for broad GPU compatibility. Use BF16 on Ampere+ GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Name_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Name*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Name" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the name of this pipeline for identification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineComplete_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineComplete*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineComplete" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineComplete">
+  OnPipelineComplete
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets callback actions to execute when the pipeline completes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Action&lt;List&lt;TrainingStageResult&lt;T, TInput, TOutput&gt;&gt;&gt;? OnPipelineComplete { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStageResult-3.html">TrainingStageResult</a>&lt;T, TInput, TOutput&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineError_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineError*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineError" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineError">
+  OnPipelineError
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets callback actions to execute on pipeline failure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Action&lt;Exception, TrainingStageResult&lt;T, TInput, TOutput&gt;?&gt;? OnPipelineError { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.exception">Exception</a>, <a class="xref" href="AiDotNet.Models.Options.TrainingStageResult-3.html">TrainingStageResult</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineStart_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineStart*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_OnPipelineStart" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.OnPipelineStart">
+  OnPipelineStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets callback actions to execute before the pipeline starts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Action&lt;TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt;&gt;? OnPipelineStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeCheckpointPath_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ResumeCheckpointPath*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeCheckpointPath" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ResumeCheckpointPath">
+  ResumeCheckpointPath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the specific checkpoint path to resume from.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ResumeCheckpointPath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeCheckpointPath_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is empty (use latest if ResumeFromCheckpoint is true).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeFromCheckpoint_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ResumeFromCheckpoint*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeFromCheckpoint" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ResumeFromCheckpoint">
+  ResumeFromCheckpoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to resume from the latest checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ResumeFromCheckpoint { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ResumeFromCheckpoint_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Set to true to continue interrupted training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SaveIntermediateCheckpoints_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SaveIntermediateCheckpoints*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SaveIntermediateCheckpoints" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SaveIntermediateCheckpoints">
+  SaveIntermediateCheckpoints
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save checkpoints between stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SaveIntermediateCheckpoints { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SaveIntermediateCheckpoints_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Enables recovery from failures.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Stages_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Stages*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Stages" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Stages">
+  Stages
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ordered list of training stages in the pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt; Stages { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Stages_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Stages are executed sequentially. The output model from each stage
+becomes the input model for the next stage.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Tags_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Tags*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Tags" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Tags">
+  Tags
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets tags for categorizing the pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] Tags { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Tags_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Empty by default. Useful for filtering and organizing pipelines.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_UseMixedPrecision_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.UseMixedPrecision*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_UseMixedPrecision" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.UseMixedPrecision">
+  UseMixedPrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use mixed precision training globally.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseMixedPrecision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_UseMixedPrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable for faster training with lower memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_VerboseLogging_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.VerboseLogging*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_VerboseLogging" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.VerboseLogging">
+  VerboseLogging
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enable verbose logging.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool VerboseLogging { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_VerboseLogging_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable for detailed debug output.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddAdapterMergingStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddAdapterMergingStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddAdapterMergingStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddAdapterMergingStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddAdapterMergingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L938"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an adapter merging stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddAdapterMergingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddAgenticStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddAgenticStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddAgenticStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddAgenticStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddAgenticStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1037"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an agentic behavior training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddAgenticStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddCPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L430"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Contrastive Preference Optimization (CPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddCPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddChainOfThoughtStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddChainOfThoughtStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddChainOfThoughtStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddChainOfThoughtStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddChainOfThoughtStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L999"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a chain-of-thought training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddChainOfThoughtStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCheckpointStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCheckpointStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCheckpointStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCheckpointStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddCheckpointStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a checkpoint stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddCheckpointStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCodeFineTuningStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCodeFineTuningStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCodeFineTuningStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCodeFineTuningStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddCodeFineTuningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L961"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a code fine-tuning stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddCodeFineTuningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddConstitutionalAIStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddConstitutionalAIStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddConstitutionalAIStage_System_String___System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddConstitutionalAIStage(System.String[],System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddConstitutionalAIStage(string[]?, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L705"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Constitutional AI stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddConstitutionalAIStage(string[]? principles = null, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>principles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The constitutional principles to use.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCustomStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCustomStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddCustomStage_System_String_System_Func_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_System_Threading_Tasks_Task_AiDotNet_Interfaces_IFullModel__0__1__2____System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddCustomStage(System.String,System.Func{AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Threading.CancellationToken,System.Threading.Tasks.Task{AiDotNet.Interfaces.IFullModel{`0,`1,`2}}},System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddCustomStage(string, Func&lt;IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken, Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;&gt;, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom training stage with user-defined logic.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddCustomStage(string name, Func&lt;IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken, Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;&gt; trainFunc, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name of the custom stage.</p>
+</dd>
+    <dt><code>trainFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-4">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;&gt;</dt>
+    <dd><p>The custom training function.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddDPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddDPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddDPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddDPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddDPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L349"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Direct Preference Optimization (DPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddDPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddDistillationStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddDistillationStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddDistillationStage_AiDotNet_Interfaces_IFullModel__0__1__2__System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddDistillationStage(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddDistillationStage(IFullModel&lt;T, TInput, TOutput&gt;?, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L834"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a knowledge distillation stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddDistillationStage(IFullModel&lt;T, TInput, TOutput&gt;? teacherModel = null, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacherModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The teacher model to distill from.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddEvaluationStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddEvaluationStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddEvaluationStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddEvaluationStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddEvaluationStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an evaluation-only stage (no training, just metrics).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddEvaluationStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddGRPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddGRPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddGRPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddGRPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddGRPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L558"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a GRPO (Group Relative Policy Optimization) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddGRPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddHarmlessnessStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddHarmlessnessStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddHarmlessnessStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddHarmlessnessStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddHarmlessnessStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L746"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a harmlessness training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddHarmlessnessStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddHelpfulnessStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddHelpfulnessStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddHelpfulnessStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddHelpfulnessStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddHelpfulnessStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L765"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a helpfulness training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddHelpfulnessStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddIPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddIPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddIPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddIPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddIPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L370"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an Identity Preference Optimization (IPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddIPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddInstructionTuningStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddInstructionTuningStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddInstructionTuningStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddInstructionTuningStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddInstructionTuningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L326"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an instruction tuning stage (specialized SFT).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddInstructionTuningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddKTOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddKTOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddKTOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddKTOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddKTOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L390"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Kahneman-Tversky Optimization (KTO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddKTOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddLoRAStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddLoRAStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddLoRAStage_System_Int32_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddLoRAStage(System.Int32,System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddLoRAStage(int, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L884"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a LoRA adapter training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddLoRAStage(int rank = 16, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>LoRA rank (dimension of low-rank matrices).</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddMathReasoningStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddMathReasoningStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddMathReasoningStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddMathReasoningStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddMathReasoningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L980"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a math reasoning fine-tuning stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddMathReasoningStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddMultiTurnConversationStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddMultiTurnConversationStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddMultiTurnConversationStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddMultiTurnConversationStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddMultiTurnConversationStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1056"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a multi-turn conversation training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddMultiTurnConversationStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddORPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddORPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddORPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddORPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddORPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L469"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an Odds Ratio Preference Optimization (ORPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddORPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddPPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a PPO stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddPPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPROStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPROStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPROStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPROStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddPROStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L662"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Preference Ranking Optimization (PRO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddPROStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPreferenceStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPreferenceStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddPreferenceStage_AiDotNet_Interfaces_FineTuningMethodType_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddPreferenceStage(AiDotNet.Interfaces.FineTuningMethodType,System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddPreferenceStage(FineTuningMethodType, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L490"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a generic preference optimization stage with configurable method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddPreferenceStage(FineTuningMethodType method = FineTuningMethodType.DPO, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>method</code> <a class="xref" href="AiDotNet.Interfaces.FineTuningMethodType.html">FineTuningMethodType</a></dt>
+    <dd><p>The preference optimization method to use.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddProcessRewardModelStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddProcessRewardModelStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddProcessRewardModelStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddProcessRewardModelStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddProcessRewardModelStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1098"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a process reward model (PRM) training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddProcessRewardModelStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddQLoRAStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddQLoRAStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddQLoRAStage_System_Int32_System_Int32_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddQLoRAStage(System.Int32,System.Int32,System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddQLoRAStage(int, int, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L911"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a QLoRA (quantized LoRA) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddQLoRAStage(int rank = 16, int bits = 4, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>LoRA rank.</p>
+</dd>
+    <dt><code>bits</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Quantization bits (4 or 8).</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLAIFStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLAIFStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLAIFStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLAIFStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRLAIFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L579"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an RLAIF (RL from AI Feedback) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRLAIFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLHFStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLHFStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLHFStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLHFStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRLHFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L514"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an RLHF (PPO-based) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRLHFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRLStage_AiDotNet_Interfaces_FineTuningMethodType_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRLStage(AiDotNet.Interfaces.FineTuningMethodType,System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRLStage(FineTuningMethodType, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L599"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a generic reinforcement learning stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRLStage(FineTuningMethodType method = FineTuningMethodType.RLHF, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>method</code> <a class="xref" href="AiDotNet.Interfaces.FineTuningMethodType.html">FineTuningMethodType</a></dt>
+    <dd><p>The RL method to use.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRRHFStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRRHFStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRRHFStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRRHFStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRRHFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L643"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Rank Responses to align Human Feedback (RRHF) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRRHFStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRejectionSamplingStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRejectionSamplingStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRejectionSamplingStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRejectionSamplingStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRejectionSamplingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L622"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Rejection Sampling Optimization (RSO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRejectionSamplingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRewardModelStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRewardModelStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRewardModelStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRewardModelStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRewardModelStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1079"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a reward model training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRewardModelStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRobustDPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRobustDPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddRobustDPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddRobustDPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddRobustDPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Robust DPO (R-DPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddRobustDPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSFTStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSFTStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSFTStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSFTStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSFTStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a supervised fine-tuning (SFT) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSFTStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSLiCStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSLiCStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSLiCStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSLiCStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSLiCStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L681"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Sequence Likelihood Calibration (SLiC-HF) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSLiCStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSPINStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSPINStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSPINStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSPINStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSPINStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L788"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Self-Play Fine-Tuning (SPIN) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSPINStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSafetyAlignmentStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSafetyAlignmentStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSafetyAlignmentStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSafetyAlignmentStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSafetyAlignmentStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L727"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a safety alignment stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSafetyAlignmentStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSelfRewardingStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSelfRewardingStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSelfRewardingStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSelfRewardingStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSelfRewardingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L810"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a self-rewarding stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSelfRewardingStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSimPOStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSimPOStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSimPOStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSimPOStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSimPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a Simple Preference Optimization (SimPO) stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSimPOStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddStage_AiDotNet_Models_Options_TrainingStage__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddStage(AiDotNet.Models.Options.TrainingStage{`0,`1,`2})">
+  AddStage(TrainingStage&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a training stage to the pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddStage(TrainingStage&lt;T, TInput, TOutput&gt; stage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stage</code> <a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The stage to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSyntheticDataStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSyntheticDataStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddSyntheticDataStage_AiDotNet_Interfaces_IFullModel__0__1__2__System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddSyntheticDataStage(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddSyntheticDataStage(IFullModel&lt;T, TInput, TOutput&gt;?, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L858"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a synthetic data training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddSyntheticDataStage(IFullModel&lt;T, TInput, TOutput&gt;? teacherModel = null, Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacherModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The teacher model to generate synthetic data.</p>
+</dd>
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddToolUseStage_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddToolUseStage*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AddToolUseStage_System_Action_AiDotNet_Models_Options_TrainingStage__0__1__2___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AddToolUseStage(System.Action{AiDotNet.Models.Options.TrainingStage{`0,`1,`2}})">
+  AddToolUseStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1018"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a tool use training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AddToolUseStage(Action&lt;TrainingStage&lt;T, TInput, TOutput&gt;&gt;? configure = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>configure</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStage-3.html">TrainingStage</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>Optional configuration action for the stage.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>This configuration for method chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AgentTraining_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AgentTraining*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AgentTraining_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AgentTraining(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  AgentTraining(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1903"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an agent/tool-use training pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AgentTraining(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? toolData = null, FineTuningData&lt;T, TInput, TOutput&gt;? agenticData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>toolData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>agenticData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AnthropicClaude_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AnthropicClaude*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AnthropicClaude_AiDotNet_Models_Options_FineTuningData__0__1__2__System_String___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.AnthropicClaude(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.String[])">
+  AnthropicClaude(FineTuningData&lt;T, TInput, TOutput&gt;?, string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an Anthropic Claude-style pipeline (SFT → Constitutional AI → RLHF).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; AnthropicClaude(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, string[]? principles = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>principles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_AnthropicClaude_AiDotNet_Models_Options_FineTuningData__0__1__2__System_String____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Anthropic's Constitutional AI approach for Claude models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Auto_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Auto*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Auto_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Auto(AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  Auto(FineTuningData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1947"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Automatically selects an appropriate pipeline based on available data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; Auto(FineTuningData&lt;T, TInput, TOutput&gt; availableData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>availableData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CodeModel_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CodeModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CodeModel_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CodeModel(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  CodeModel(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1771"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a code model training pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; CodeModel(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? codeExecutionData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>codeExecutionData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ConstitutionalAI_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ConstitutionalAI*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ConstitutionalAI_AiDotNet_Models_Options_FineTuningData__0__1__2__System_String___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ConstitutionalAI(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.String[])">
+  ConstitutionalAI(FineTuningData&lt;T, TInput, TOutput&gt;?, string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1504"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Constitutional AI pipeline (SFT → CAI critique/revision → preference).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; ConstitutionalAI(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, string[]? principles = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>principles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CurriculumLearning_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CurriculumLearning*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_CurriculumLearning_System_ValueTuple_System_String_AiDotNet_Models_Options_FineTuningData__0__1__2_____" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.CurriculumLearning(System.ValueTuple{System.String,AiDotNet.Models.Options.FineTuningData{`0,`1,`2}}[])">
+  CurriculumLearning(params (string Name, FineTuningData&lt;T, TInput, TOutput&gt; Data)[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1537"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a curriculum learning pipeline with progressively harder stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; CurriculumLearning(params (string Name, FineTuningData&lt;T, TInput, TOutput&gt; Data)[] curriculumStages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>curriculumStages</code> (<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,aidotnet.models.options.finetuningdata--0,-1,-2--.name">Name</a>, <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,aidotnet.models.options.finetuningdata--0,-1,-2--.data">Data</a>)[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DeepSeek_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DeepSeek*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DeepSeek_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.DeepSeek(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  DeepSeek(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DeepSeek-style pipeline (SFT → GRPO).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; DeepSeek(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? grpoData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>grpoData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_DeepSeek_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>DeepSeek's efficient training approach using GRPO instead of PPO.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_FullRLHF_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.FullRLHF*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_FullRLHF_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.FullRLHF(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  FullRLHF(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1466"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a full RLHF pipeline (SFT → Reward Model → PPO).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; FullRLHF(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? rlData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>rlData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_InstructGPT_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.InstructGPT*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_InstructGPT_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.InstructGPT(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  InstructGPT(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an OpenAI InstructGPT-style pipeline (SFT → Reward Model → PPO).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; InstructGPT(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null, FineTuningData&lt;T, TInput, TOutput&gt;? rlData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>rlData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_InstructGPT_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The original ChatGPT training pipeline from the InstructGPT paper.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_IterativeRefinement_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.IterativeRefinement*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_IterativeRefinement_System_Int32_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.IterativeRefinement(System.Int32,AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  IterativeRefinement(int, FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an iterative refinement pipeline that runs multiple DPO rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; IterativeRefinement(int iterations, FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_IterativeSPIN_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.IterativeSPIN*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_IterativeSPIN_System_Int32_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.IterativeSPIN(System.Int32,AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  IterativeSPIN(int, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1624"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an iterative SPIN pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; IterativeSPIN(int iterations = 3, FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_KnowledgeDistillation_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.KnowledgeDistillation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_KnowledgeDistillation_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.KnowledgeDistillation(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  KnowledgeDistillation(IFullModel&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1744"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a distillation pipeline (teacher → student).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; KnowledgeDistillation(IFullModel&lt;T, TInput, TOutput&gt;? teacherModel = null, FineTuningData&lt;T, TInput, TOutput&gt;? data = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacherModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Llama2_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Llama2*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Llama2_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Llama2(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  Llama2(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a Meta Llama 2-style pipeline (SFT → Rejection Sampling → DPO).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; Llama2(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Llama2_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Meta's approach for Llama 2 Chat models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_LoRAFineTuning_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.LoRAFineTuning*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_LoRAFineTuning_System_Int32_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.LoRAFineTuning(System.Int32,AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  LoRAFineTuning(int, FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1672"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a memory-efficient LoRA fine-tuning pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; LoRAFineTuning(int rank = 16, FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MathReasoning_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MathReasoning*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_MathReasoning_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.MathReasoning(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  MathReasoning(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1813"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a math reasoning model pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; MathReasoning(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? cotData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>cotData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ORPOAlignment_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ORPOAlignment*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ORPOAlignment_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ORPOAlignment(AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  ORPOAlignment(FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a reference-free alignment pipeline using ORPO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; ORPOAlignment(FineTuningData&lt;T, TInput, TOutput&gt;? data = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ORPOAlignment_AiDotNet_Models_Options_FineTuningData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>ORPO combines SFT and preference learning, requiring no reference model.
+More memory-efficient than DPO.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_QLoRAFineTuning_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.QLoRAFineTuning*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_QLoRAFineTuning_System_Int32_System_Int32_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.QLoRAFineTuning(System.Int32,System.Int32,AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  QLoRAFineTuning(int, int, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1717"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a QLoRA fine-tuning pipeline for maximum memory efficiency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; QLoRAFineTuning(int rank = 16, int bits = 4, FineTuningData&lt;T, TInput, TOutput&gt;? data = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>bits</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SafetyFocused_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SafetyFocused*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SafetyFocused_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_String___" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SafetyFocused(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.String[])">
+  SafetyFocused(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?, string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1861"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a safety-focused training pipeline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; SafetyFocused(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? safetyData = null, string[]? principles = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>safetyData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>principles</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SimPOAlignment_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SimPOAlignment*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_SimPOAlignment_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.SimPOAlignment(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  SimPOAlignment(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1435"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a SimPO alignment pipeline (reference-free, simple).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; SimPOAlignment(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_StandardAlignment_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.StandardAlignment*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_StandardAlignment_AiDotNet_Models_Options_FineTuningData__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.StandardAlignment(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  StandardAlignment(FineTuningData&lt;T, TInput, TOutput&gt;?, FineTuningData&lt;T, TInput, TOutput&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L1372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a standard SFT → DPO pipeline (most common alignment workflow).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingPipelineConfiguration&lt;T, TInput, TOutput&gt; StandardAlignment(FineTuningData&lt;T, TInput, TOutput&gt;? sftData = null, FineTuningData&lt;T, TInput, TOutput&gt;? preferenceData = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sftData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+    <dt><code>preferenceData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.TrainingPipelineConfiguration-3.html">TrainingPipelineConfiguration</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Validate_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Validate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_Validate" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.Validate">
+  Validate()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L2022"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates the pipeline configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; Validate()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of validation errors, empty if valid.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ValidateOrThrow_" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ValidateOrThrow*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingPipelineConfiguration_3_ValidateOrThrow" data-uid="AiDotNet.Models.Options.TrainingPipelineConfiguration`3.ValidateOrThrow">
+  ValidateOrThrow()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L2059"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Throws an exception if the pipeline is invalid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ValidateOrThrow()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingPipelineConfiguration.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

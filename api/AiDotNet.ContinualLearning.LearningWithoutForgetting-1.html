@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LearningWithoutForgetting&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LearningWithoutForgetting&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Learning without Forgetting (LwF) for continual learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_LearningWithoutForgetting_1.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.LearningWithoutForgetting%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1" class="text-break">
+Class LearningWithoutForgetting&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Learning without Forgetting (LwF) for continual learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LearningWithoutForgetting&lt;T&gt; : IContinualLearningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LearningWithoutForgetting&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IContinualLearningStrategy-1.html">IContinualLearningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Learning without Forgetting is like teaching a student to solve
+new problems while making sure they remember how to solve old ones. It does this by asking
+the student to match their old answers (before learning new material) even as they learn
+new things.</p>
+<p><b>How it works:</b></p>
+<ol><li>Before learning a new task, LwF records the network's predictions (soft targets)
+on the new task's inputs using the old model.</li><li>During training on the new task, the loss function includes both:
+the regular task loss AND a distillation loss that encourages matching the old predictions.</li><li>The distillation loss uses temperature-scaled softmax to capture the
+relationships between classes, not just the predicted class.</li></ol>
+<p><b>Reference:</b> Li and Hoiem, "Learning without Forgetting" (2017). IEEE TPAMI.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1__ctor_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1__ctor_System_Double_System_Double_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.#ctor(System.Double,System.Double)">
+  LearningWithoutForgetting(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the LearningWithoutForgetting class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LearningWithoutForgetting(double lambda = 1, double temperature = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lambda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The weight of the distillation loss (default: 1.0).</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Temperature for softmax distillation (default: 2.0).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1__ctor_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b></p>
+<ul><li>Lambda: How much to weight the "don't forget" loss compared to
+the "learn new task" loss. Higher values preserve more old knowledge.</li><li>Temperature: Controls how "soft" the predictions are. Higher temperature
+makes the probability distribution smoother, which helps transfer more nuanced knowledge
+from the old model to the new one.</li></ul>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Lambda_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Lambda*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Lambda" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Lambda">
+  Lambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the regularization strength parameter (lambda) for loss-based continual learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Lambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Lambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Lambda controls how strongly the strategy prevents forgetting.
+A higher lambda means the network is more conservative about changing weights important
+for previous tasks, but this might make it harder to learn new tasks effectively.</p>
+<p>Typical values range from 100 to 10000, depending on the complexity of tasks
+and how important it is to preserve old knowledge versus learning new knowledge.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_TaskCount_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.TaskCount*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_TaskCount" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.TaskCount">
+  TaskCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of tasks that have stored predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TaskCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Temperature_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Temperature*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Temperature" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Temperature">
+  Temperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature for knowledge distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Temperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Temperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Temperature controls how "soft" the probability distribution becomes:</p>
+<ul><li>T = 1: Normal softmax (sharp, peaked distribution)</li><li>T = 2-5: Softer distribution that reveals class relationships</li><li>T &gt; 5: Very soft, almost uniform distribution</li></ul>
+<p>Typical values for LwF are 2-4.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_AfterTask_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.AfterTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_AfterTask_AiDotNet_Interfaces_INeuralNetwork__0__System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.AfterTask(AiDotNet.Interfaces.INeuralNetwork{`0},System.ValueTuple{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32)">
+  AfterTask(INeuralNetwork&lt;T&gt;, (Tensor&lt;T&gt; inputs, Tensor&lt;T&gt; targets), int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes information after completing training on a task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AfterTask(INeuralNetwork&lt;T&gt; network, (Tensor&lt;T&gt; inputs, Tensor&lt;T&gt; targets) taskData, int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network that was trained.</p>
+</dd>
+    <dt><code>taskData</code> (<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>Data from the completed task for computing importance measures.</p>
+</dd>
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier for the completed task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_AfterTask_AiDotNet_Interfaces_INeuralNetwork__0__System_ValueTuple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is called after you finish training on a task.
+It allows the strategy to compute and store information about what the network learned,
+which will be used to protect this knowledge when learning future tasks.</p>
+<p>For example, in Elastic Weight Consolidation (EWC), this computes the Fisher
+Information Matrix to identify which weights are most important for the completed task.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_BeforeTask_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.BeforeTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_BeforeTask_AiDotNet_Interfaces_INeuralNetwork__0__System_Int32_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.BeforeTask(AiDotNet.Interfaces.INeuralNetwork{`0},System.Int32)">
+  BeforeTask(INeuralNetwork&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prepares the strategy before starting to learn a new task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void BeforeTask(INeuralNetwork&lt;T&gt; network, int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network that will be trained.</p>
+</dd>
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier for the upcoming task (0-indexed).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_BeforeTask_AiDotNet_Interfaces_INeuralNetwork__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is called before you start training on a new task.
+It allows the strategy to capture the network's current state or prepare any necessary
+data structures for protecting knowledge from previous tasks.</p>
+<p>For example, in Learning without Forgetting (LwF), this might store the network's
+predictions on the new task's inputs before training begins, so we can later encourage
+the network to maintain similar predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ComputeDistillationLoss_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ComputeDistillationLoss*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ComputeDistillationLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ComputeDistillationLoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeDistillationLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the distillation loss between current and old predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeDistillationLoss(Tensor&lt;T&gt; currentPredictions, Tensor&lt;T&gt; oldPredictions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentPredictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The network's current predictions.</p>
+</dd>
+    <dt><code>oldPredictions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The network's predictions before learning new tasks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The distillation loss (KL divergence with temperature scaling).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ComputeLoss_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ComputeLoss*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ComputeLoss_AiDotNet_Interfaces_INeuralNetwork__0__" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ComputeLoss(AiDotNet.Interfaces.INeuralNetwork{`0})">
+  ComputeLoss(INeuralNetwork&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the regularization loss to prevent forgetting previous tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeLoss(INeuralNetwork&lt;T&gt; network)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network being trained.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The regularization loss value that should be added to the task loss.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ComputeLoss_AiDotNet_Interfaces_INeuralNetwork__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates an additional loss term that penalizes
+the network for deviating from its learned knowledge of previous tasks. You add this
+to your regular task loss during training:</p>
+<pre><code class="lang-csharp">var totalLoss = taskLoss + strategy.ComputeLoss(network);</code></pre>
+<p>For example, in EWC, this returns a penalty proportional to how much important
+weights have changed from their optimal values for previous tasks. Larger changes to
+important weights result in higher loss, discouraging the network from forgetting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ModifyGradients_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ModifyGradients*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ModifyGradients_AiDotNet_Interfaces_INeuralNetwork__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.ModifyGradients(AiDotNet.Interfaces.INeuralNetwork{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ModifyGradients(INeuralNetwork&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L208"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Modifies the gradient to prevent catastrophic forgetting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ModifyGradients(INeuralNetwork&lt;T&gt; network, Vector&lt;T&gt; gradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network being trained.</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients from the current task loss.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Modified gradients that protect previous task knowledge.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_ModifyGradients_AiDotNet_Interfaces_INeuralNetwork__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some continual learning strategies work by modifying the
+gradients (the update directions for weights) rather than adding a loss term.
+This method takes the gradients computed from the current task and modifies them
+to avoid interfering with previously learned tasks.</p>
+<p>For example, in Gradient Episodic Memory (GEM), if a gradient would hurt
+performance on stored examples from previous tasks, it's projected to the closest
+gradient that doesn't interfere with those examples.</p>
+<p>If a strategy doesn't use gradient modification, this should return the
+gradients unchanged.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_PrepareDistillation_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.PrepareDistillation*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_PrepareDistillation_AiDotNet_Interfaces_INeuralNetwork__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.PrepareDistillation(AiDotNet.Interfaces.INeuralNetwork{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  PrepareDistillation(INeuralNetwork&lt;T&gt;, Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prepares distillation by recording the old model's predictions on new task inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void PrepareDistillation(INeuralNetwork&lt;T&gt; network, Tensor&lt;T&gt; newTaskInputs, int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>network</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network before training on the new task.</p>
+</dd>
+    <dt><code>newTaskInputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The inputs for the new task.</p>
+</dd>
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The identifier for the new task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_PrepareDistillation_AiDotNet_Interfaces_INeuralNetwork__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this method before training on a new task. It records
+what the network currently predicts for the new task's inputs. These predictions become
+the "soft targets" that the network tries to match during training, preventing it from
+forgetting its old behavior.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Reset_" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Reset*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Reset" data-uid="AiDotNet.ContinualLearning.LearningWithoutForgetting`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the strategy, clearing all stored task information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_LearningWithoutForgetting_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method clears all the information the strategy has
+accumulated about previous tasks. After calling this, the network will be free to
+learn new tasks without any constraints from previously learned tasks.</p>
+<p>Use this when you want to start fresh or when you're done with a sequence
+of tasks and want to begin a new independent sequence.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/LearningWithoutForgetting.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

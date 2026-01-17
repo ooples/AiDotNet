@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorShapeExtensions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorShapeExtensions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides extension methods and utilities for working with tensor shapes in the IR.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_IR_TensorShapeExtensions.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.IR.TensorShapeExtensions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions" class="text-break">
+Class TensorShapeExtensions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a>.<a class="xref" href="AiDotNet.JitCompiler.IR.html">IR</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides extension methods and utilities for working with tensor shapes in the IR.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class TensorShapeExtensions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorShapeExtensions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides helper methods for working with tensor shapes (represented as int[] arrays).
+It integrates with the existing Tensor&lt;T&gt; infrastructure which already uses int[] for shapes.
+</p>
+<p><b>For Beginners:</b> In AiDotNet, tensor shapes are represented as integer arrays.
+<p>For example:</p>
+<ul>
+<li>[5] is a vector with 5 elements</li>
+<li>[3, 4] is a 3×4 matrix</li>
+<li>[2, 3, 4] is a 3D tensor</li>
+</ul>
+<p>This class provides utilities to work with these shapes:</p>
+<ul>
+<li>Check if two shapes are compatible for operations</li>
+<li>Compute the result shape when broadcasting</li>
+<li>Validate shapes</li>
+<li>Compare shapes</li>
+</ul>
+<p>These utilities are used by the JIT compiler to understand tensor dimensions
+and generate optimized code.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_BroadcastWith_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.BroadcastWith*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_BroadcastWith_System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.BroadcastWith(System.Int32[],System.Int32[])">
+  BroadcastWith(int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the broadcast shape resulting from combining two shapes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] BroadcastWith(this int[] shape1, int[] shape2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The first shape.</p>
+</dd>
+    <dt><code>shape2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The second shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The broadcast result shape.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_BroadcastWith_System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The broadcast shape is computed by taking the maximum dimension at each position
+when comparing from right to left.
+</p>
+<p><b>For Beginners:</b> This calculates what shape results when broadcasting two tensors.
+<p>Examples:</p>
+<ul>
+<li>[3, 4] + [3, 4] → [3, 4] (same shape)</li>
+<li>[3, 4] + [1, 4] → [3, 4] (first dimension expands from 1 to 3)</li>
+<li>[3, 4] + [4] → [3, 4] (vector broadcasts to match all rows)</li>
+<li>[5, 3, 4] + [4] → [5, 3, 4] (vector broadcasts across all 5×3 positions)</li>
+</ul>
+<p>The result tells us what shape the output will have after the operation.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if shapes are not compatible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetElementCount_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetElementCount*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetElementCount_System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetElementCount(System.Int32[])">
+  GetElementCount(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the total number of elements in a tensor with the given shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetElementCount(this int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The tensor shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of elements, or -1 if any dimension is dynamic.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetElementCount_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates how many total values a tensor holds.
+<p>For example:</p>
+<ul>
+<li>[] has 1 element (scalar - a single number)</li>
+<li>[5] has 5 elements</li>
+<li>[3, 4] has 3 × 4 = 12 elements</li>
+<li>[2, 3, 4] has 2 × 3 × 4 = 24 elements</li>
+</ul>
+<p>If any dimension is -1 (meaning &quot;dynamic&quot; or &quot;unknown&quot;), returns -1.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetRank_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetRank*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetRank_System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetRank(System.Int32[])">
+  GetRank(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank (number of dimensions) of a tensor shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetRank(this int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The tensor shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetRank_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The rank is how many dimensions the tensor has.
+<ul>
+<li>[5] has rank 1 (a vector)</li>
+<li>[3, 4] has rank 2 (a matrix)</li>
+<li>[2, 3, 4] has rank 3 (a 3D tensor)</li>
+<li>[] has rank 0 (a scalar - single number)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShapeHashCode_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShapeHashCode*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShapeHashCode_System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShapeHashCode(System.Int32[])">
+  GetShapeHashCode(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a hash code for a tensor shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int GetShapeHashCode(this int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape to hash.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A hash code.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShapeHashCode_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This hash code can be used to cache compiled graphs based on shape.
+Shapes with the same dimensions will have the same hash.
+</p>
+<p><b>For Beginners:</b> This creates a unique number that represents the shape.
+<p>It's like a fingerprint for the shape - two identical shapes will have
+the same hash code. This is used to quickly check if we've already compiled
+code for a tensor of this shape, so we can reuse it instead of recompiling.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShape_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShape*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShape__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.GetShape``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  GetShape&lt;T&gt;(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts the shape from a Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int[] GetShape&lt;T&gt;(this Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape as an int array.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShape__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This gets the shape from an existing Tensor object.
+<p>Since Tensor already has a Shape property, this just returns it.
+It's provided for consistency with the IR infrastructure.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsCompatibleWith_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.IsCompatibleWith*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsCompatibleWith_System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.IsCompatibleWith(System.Int32[],System.Int32[])">
+  IsCompatibleWith(int[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if this shape is compatible with another shape for broadcasting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsCompatibleWith(this int[] shape1, int[] shape2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The first shape.</p>
+</dd>
+    <dt><code>shape2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The second shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the shapes are compatible for broadcasting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsCompatibleWith_System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Broadcasting allows operations between tensors of different shapes by automatically
+expanding dimensions. Two shapes are compatible if:
+- They have the same rank and all dimensions match, OR
+- One dimension is 1 (can be broadcast), OR
+- One tensor has fewer dimensions (will be expanded)
+</p>
+<p><b>For Beginners:</b> Broadcasting lets you do operations on tensors of different sizes.
+<p>For example:</p>
+<ul>
+<li>[3, 4] and [3, 4] are compatible (same shape)</li>
+<li>[3, 4] and [1, 4] are compatible (first dimension broadcasts)</li>
+<li>[3, 4] and [4] are compatible (vector broadcasts across all rows)</li>
+<li>[3, 4] and [3, 5] are NOT compatible (incompatible dimensions)</li>
+</ul>
+<p>This is very useful in neural networks where you often add a bias vector to every
+row of a matrix - broadcasting handles this automatically.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsValidShape_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.IsValidShape*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsValidShape_System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.IsValidShape(System.Int32[])">
+  IsValidShape(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a shape is well-formed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsValidShape(this int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape to validate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if valid.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_IsValidShape_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A shape is valid if all dimensions are either positive or -1 (dynamic).
+Zero dimensions are not allowed.
+</p>
+<p><b>For Beginners:</b> This checks that a shape makes sense.
+<p>Valid shapes:</p>
+<ul>
+<li>[] (scalar)</li>
+<li>[5] (vector with 5 elements)</li>
+<li>[3, 4] (3×4 matrix)</li>
+<li>[-1, 4] (dynamic first dimension, 4 columns)</li>
+</ul>
+<p>Invalid shapes:</p>
+<ul>
+<li>[0, 4] (can't have zero dimension)</li>
+<li>[3, -2] (only -1 is allowed for dynamic)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapeToString_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.ShapeToString*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapeToString_System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.ShapeToString(System.Int32[])">
+  ShapeToString(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a string representation of a shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string ShapeToString(this int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape to represent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapeToString_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a shape to a readable string for debugging.
+<p>Examples:</p>
+<ul>
+<li>[] → &quot;scalar&quot;</li>
+<li>[5] → &quot;[5]&quot;</li>
+<li>[3, 4] → &quot;[3, 4]&quot;</li>
+<li>[2, -1, 4] → &quot;[2, ?, 4]&quot; (? means dynamic)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapesEqual_" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.ShapesEqual*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapesEqual_System_Int32___System_Int32___" data-uid="AiDotNet.JitCompiler.IR.TensorShapeExtensions.ShapesEqual(System.Int32[],System.Int32[])">
+  ShapesEqual(int[]?, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if two shapes are exactly equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool ShapesEqual(int[]? shape1, int[]? shape2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The first shape.</p>
+</dd>
+    <dt><code>shape2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The second shape.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if shapes are equal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IR_TensorShapeExtensions_ShapesEqual_System_Int32___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks if two shapes are identical.
+<p>Examples:</p>
+<ul>
+<li>[3, 4] equals [3, 4] → true</li>
+<li>[3, 4] equals [4, 3] → false (different order!)</li>
+<li>[3, 4] equals [1, 4] → false (different dimensions)</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IR/TensorShape.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

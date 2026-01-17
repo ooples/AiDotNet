@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NeuralNetworkARIMAOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NeuralNetworkARIMAOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Neural Network ARIMA (AutoRegressive Integrated Moving Average) models, which combine traditional statistical time series methods with neural networks for improved forecasting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.NeuralNetworkARIMAOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1" class="text-break">
+Class NeuralNetworkARIMAOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Neural Network ARIMA (AutoRegressive Integrated Moving Average) models,
+which combine traditional statistical time series methods with neural networks for improved forecasting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NeuralNetworkARIMAOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">NeuralNetworkARIMAOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Neural Network ARIMA is a hybrid approach that extends traditional ARIMA models by incorporating
+neural networks to capture complex nonlinear patterns in time series data. This approach leverages
+both the statistical foundation of ARIMA for handling linear dependencies, seasonality, and trends,
+while using neural networks to model nonlinear relationships that traditional ARIMA cannot capture.
+The resulting model can provide more accurate forecasts for time series with complex patterns,
+regime shifts, or other nonlinear dynamics that are common in real-world data.
+</p>
+<p><b>For Beginners:</b> Neural Network ARIMA combines two powerful approaches for predicting future values in a time series:
+<p>Imagine you're trying to predict tomorrow's temperature:</p>
+<ul>
+<li>ARIMA is like using mathematical formulas that look at recent temperatures and patterns</li>
+<li>Neural Networks are like having a smart system that can learn complex relationships from data</li>
+<li>Neural Network ARIMA combines both approaches to get better predictions</li>
+</ul>
+<p>Traditional ARIMA is good at capturing:</p>
+<ul>
+<li>How today's temperature relates to yesterday's (AR - AutoRegressive)</li>
+<li>How random fluctuations from previous days affect today (MA - Moving Average)</li>
+</ul>
+<p>But it struggles with complex patterns like:</p>
+<ul>
+<li>When a cold front arrives, temperatures might drop suddenly but then recover differently than normal</li>
+<li>How humidity and cloud cover might interact in non-obvious ways to affect temperature</li>
+</ul>
+<p>The neural network part helps capture these complex relationships, while the ARIMA part
+ensures the basic time patterns are properly handled. This combination often produces
+better forecasts than either approach alone.</p>
+<p>This class lets you configure both the ARIMA components and the neural network that will
+work together to make predictions.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_AROrder_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.AROrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_AROrder" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.AROrder">
+  AROrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AutoRegressive (AR) order, which determines how many previous time steps
+are used as inputs to predict the current value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AROrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The AR order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_AROrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The AR order specifies the number of lagged observations of the time series itself that are
+included in the model as predictors. This parameter is crucial for capturing direct dependencies
+between current values and past values. Higher AR orders allow the model to capture longer-term
+dependencies but increase model complexity and computational requirements. The optimal AR order
+often depends on the inherent memory of the process generating the time series.
+</p>
+<p><b>For Beginners:</b> This setting determines how many previous time points
+the model looks at to make predictions.
+<p>Imagine predicting today's temperature:</p>
+<ul>
+<li>AR order = 1: Only yesterday's temperature is considered</li>
+<li>AR order = 7: An entire week of previous temperatures is considered</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model only looks at the most recent value to predict the next one</li>
+<li>This is often a good starting point for many time series</li>
+</ul>
+<p>You might want a higher value if:</p>
+<ul>
+<li>Your data shows patterns that depend on values from multiple time periods ago</li>
+<li>The series has weekly, monthly, or other cyclic patterns</li>
+<li>You have enough data to support learning these longer-term relationships</li>
+</ul>
+<p>You might want to keep it at 1 if:</p>
+<ul>
+<li>You have limited data</li>
+<li>The most recent value is the strongest predictor</li>
+<li>You're dealing with a fast-changing time series where older values become irrelevant quickly</li>
+</ul>
+<p>AR stands for &quot;AutoRegressive&quot; - using the series' own past values to predict its future.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_DifferencingOrder_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.DifferencingOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_DifferencingOrder" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.DifferencingOrder">
+  DifferencingOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The order of differencing applied to the time series data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DifferencingOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_DifferencingOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specifies how many times the differencing operation is applied to the time series to achieve stationarity.
+Differencing helps remove trends and seasonality by computing differences between consecutive observations.
+</p>
+<p><b>For Beginners:</b> This determines how the model handles trends in your data.
+<p>Imagine you're tracking daily temperatures:</p>
+<ul>
+<li>If temperatures are steadily rising over time (a trend), it's harder to predict exact values</li>
+<li>Differencing transforms the data to focus on changes rather than absolute values</li>
+<li>For example, instead of predicting &quot;it will be 75°F tomorrow,&quot; the model might work with
+&quot;it will be 2°F warmer than today&quot;</li>
+</ul>
+<p>The differencing order tells the model how many times to apply this transformation:</p>
+<ul>
+<li>Order 0: Use the original values (no differencing)</li>
+<li>Order 1: Use the differences between consecutive values</li>
+<li>Order 2: Use the differences of the differences</li>
+</ul>
+<p>Higher orders help handle more complex trends, but too high may introduce unnecessary complexity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_ExogenousVariables_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.ExogenousVariables*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_ExogenousVariables" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.ExogenousVariables">
+  ExogenousVariables
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of exogenous (external) variables to include in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ExogenousVariables { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of exogenous variables, defaulting to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_ExogenousVariables_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Exogenous variables are external factors not part of the time series itself but that may
+influence its behavior. This parameter specifies how many such variables are incorporated
+into the model. Including relevant exogenous variables can significantly improve forecast
+accuracy by accounting for external drivers of the time series. When this value is set to
+a positive number, the model expects these additional variables to be provided during training
+and forecasting.
+</p>
+<p><b>For Beginners:</b> This setting determines how many external factors
+(beyond the time series itself) the model will consider.
+<p>Going back to our temperature example:</p>
+<ul>
+<li>Time series data: Historical daily temperatures</li>
+<li>Exogenous variables might include: humidity, cloud cover, wind speed</li>
+</ul>
+<p>The default value of 0 means:</p>
+<ul>
+<li>The model only looks at the time series itself</li>
+<li>No external factors are considered</li>
+</ul>
+<p>You might want to increase this value if:</p>
+<ul>
+<li>You know there are specific external factors that influence your data</li>
+<li>You have reliable data for these external factors</li>
+<li>These external factors help explain sudden changes or patterns in your data</li>
+</ul>
+<p>For example, if you're forecasting:</p>
+<ul>
+<li>Retail sales, exogenous variables might include: holidays, promotions, weather</li>
+<li>Energy demand, exogenous variables might include: temperature, day of week, special events</li>
+<li>Stock prices, exogenous variables might include: interest rates, sector indices, news sentiment</li>
+</ul>
+<p>Adding exogenous variables can make your model much more accurate, but requires having
+this additional data available both for training and when making future predictions.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_LaggedPredictions_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.LaggedPredictions*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_LaggedPredictions" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.LaggedPredictions">
+  LaggedPredictions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of lagged predictions to use as inputs to the neural network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LaggedPredictions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of lagged predictions, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_LaggedPredictions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines how many of the model's own previous predictions are fed back into
+the neural network as inputs for making the next prediction. This creates a recurrent structure
+even in feedforward networks, allowing the model to capture temporal dependencies that span
+multiple time steps. Using lagged predictions can improve performance in cases where future
+values depend not just on past observations but on how those observations were predicted.
+</p>
+<p><b>For Beginners:</b> This setting controls how many of the model's own
+previous predictions it uses to make new predictions.
+<p>This is different from AR order:</p>
+<ul>
+<li>AR order uses actual historical values from your data</li>
+<li>LaggedPredictions uses the model's own previous predictions</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers its most recent prediction when making a new one</li>
+<li>This helps create continuity in forecasts</li>
+</ul>
+<p>You might want a higher value if:</p>
+<ul>
+<li>You're making longer-term forecasts</li>
+<li>The way values change over time is as important as the values themselves</li>
+<li>Your time series has momentum that should persist in forecasts</li>
+</ul>
+<p>You might want to keep it at 1 if:</p>
+<ul>
+<li>You're primarily interested in short-term forecasts</li>
+<li>You want to minimize error accumulation</li>
+<li>You prefer simpler model behavior</li>
+</ul>
+<p>This feature helps the neural network portion develop a &quot;memory&quot; of its own predictions,
+which can lead to more coherent forecasting sequences.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_MAOrder_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.MAOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_MAOrder" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.MAOrder">
+  MAOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Moving Average (MA) order, which determines how many previous error terms
+are used in the prediction model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MAOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The MA order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_MAOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The MA order specifies the number of lagged forecast errors that are included in the model.
+This component captures the relationship between the current value and previous random shocks
+to the system. MA terms help model the short-term effects of unexpected events or noise in
+the time series. Higher MA orders allow the model to account for longer-lasting effects of
+past disturbances but can make the model more difficult to estimate reliably.
+</p>
+<p><b>For Beginners:</b> This setting determines how many previous prediction errors
+the model considers.
+<p>Continuing with our temperature example:</p>
+<ul>
+<li>Suppose yesterday the model predicted 75°F but it was actually 78°F (an error of +3°F)</li>
+<li>The MA part lets the model learn from this error</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model only considers the most recent prediction error</li>
+<li>This helps adjust for recent unexpected changes</li>
+</ul>
+<p>You might want a higher value if:</p>
+<ul>
+<li>Your data shows that effects from unexpected events tend to linger</li>
+<li>The time series has persistent errors in one direction</li>
+<li>You notice that after a big miss, the model continues to miss in following periods</li>
+</ul>
+<p>You might want to keep it at 1 if:</p>
+<ul>
+<li>Errors tend to be random and don't show patterns</li>
+<li>You want to keep the model simpler</li>
+<li>You have limited data</li>
+</ul>
+<p>MA stands for &quot;Moving Average&quot; - though it's not actually taking averages of the data,
+but rather modeling how unexpected shocks continue to affect future values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_NeuralNetwork_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.NeuralNetwork*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_NeuralNetwork" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.NeuralNetwork">
+  NeuralNetwork
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the neural network to use in the hybrid model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public INeuralNetwork&lt;T&gt;? NeuralNetwork { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The neural network instance, defaulting to null (in which case a default network will be created).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_NeuralNetwork_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property allows specification of a custom neural network architecture to be used within
+the hybrid ARIMA model. When provided, this neural network will be used to model the nonlinear
+components of the time series after the linear ARIMA components have been applied. The network
+should accept inputs that conform to the AR order, MA order, and exogenous variables specified,
+and produce outputs suitable for the forecasting task. If left null, a default architecture
+appropriate for the specified parameters will be created automatically.
+</p>
+<p><b>For Beginners:</b> This setting lets you provide your own custom neural network
+instead of using the default one.
+<p>The neural network is the &quot;smart&quot; part of the model that learns complex patterns:</p>
+<ul>
+<li>It takes inputs (past values, errors, external factors)</li>
+<li>It processes them through layers of interconnected nodes</li>
+<li>It produces predictions based on patterns it learned during training</li>
+</ul>
+<p>The default value of null means:</p>
+<ul>
+<li>The system will automatically create a suitable neural network for you</li>
+<li>This is convenient and works well in many cases</li>
+</ul>
+<p>You might want to provide your own network if:</p>
+<ul>
+<li>You have expertise in neural network design</li>
+<li>Your time series has very specific characteristics that need a specialized architecture</li>
+<li>You want to experiment with different network structures</li>
+</ul>
+<p>For example, you might create:</p>
+<ul>
+<li>A deeper network with more layers for very complex data</li>
+<li>A network with specific activation functions suited to your data characteristics</li>
+<li>A network with dropout or regularization to prevent overfitting</li>
+</ul>
+<p>If you're new to neural networks, it's recommended to start with the default (null)
+and let the system create an appropriate network automatically.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_OptimizeParameters_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.OptimizeParameters*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_OptimizeParameters" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.OptimizeParameters">
+  OptimizeParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the model should attempt to optimize its parameters during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool OptimizeParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_OptimizeParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model may use the configured <a class="xref" href="AiDotNet.Models.Options.NeuralNetworkARIMAOptions-1.html#AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_Optimizer">Optimizer</a> (or a default optimizer) to refine
+AR/MA coefficients and neural network parameters beyond their initial estimates.
+</p>
+<p><b>For Beginners:</b>
+Turning this on tells the model to spend extra time trying to find better parameter values. This can
+improve accuracy, but it can also make training take longer.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_Optimizer_" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_Optimizer" data-uid="AiDotNet.Models.Options.NeuralNetworkARIMAOptions`1.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer to use for training the neural network component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The optimizer instance, defaulting to null (in which case a default optimizer will be used).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_NeuralNetworkARIMAOptions_1_Optimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property allows specification of the optimization algorithm to be used when training the
+neural network portion of the model. The optimizer controls how the network's weights are updated
+based on the calculated gradients during backpropagation. Different optimizers have various
+properties regarding convergence speed, likelihood of finding global optima, and behavior in the
+presence of noisy gradients. If left null, a default optimizer (typically a variant of stochastic
+gradient descent with momentum) will be used.
+</p>
+<p><b>For Beginners:</b> This setting determines the method used to train
+the neural network part of your model.
+<p>Think of training a neural network like descending a mountain to find the lowest point:</p>
+<ul>
+<li>The optimizer is the strategy you use to navigate downhill</li>
+<li>Different strategies have different tradeoffs in speed, accuracy, and reliability</li>
+</ul>
+<p>The default value of null means:</p>
+<ul>
+<li>The system will choose a standard optimizer for you</li>
+<li>This is usually Adam or SGD with momentum, which work well for many problems</li>
+</ul>
+<p>You might want to provide your own optimizer if:</p>
+<ul>
+<li>Your model is getting stuck in training</li>
+<li>You need faster convergence</li>
+<li>You're dealing with a particularly challenging dataset</li>
+</ul>
+<p>Common optimizer options include:</p>
+<ul>
+<li>Adam: Good all-around performer that adapts learning rates</li>
+<li>SGD with momentum: Simple but effective, especially with proper tuning</li>
+<li>RMSProp: Good for non-stationary objectives</li>
+<li>Nesterov Accelerated Gradient: Helps avoid overshooting minima</li>
+</ul>
+<p>If you're new to time series forecasting, start with the default (null) optimizer
+and only change it if you encounter specific training issues.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/NeuralNetworkARIMAOptions.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

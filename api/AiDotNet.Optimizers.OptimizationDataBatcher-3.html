@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OptimizationDataBatcher&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OptimizationDataBatcher&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides batch iteration utilities for optimization input data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Optimizers_OptimizationDataBatcher_3.md&amp;value=---%0Auid%3A%20AiDotNet.Optimizers.OptimizationDataBatcher%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3">
+
+
+
+  <h1 id="AiDotNet_Optimizers_OptimizationDataBatcher_3" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3" class="text-break">
+Class OptimizationDataBatcher&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Optimizers.html">Optimizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides batch iteration utilities for optimization input data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OptimizationDataBatcher&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OptimizationDataBatcher&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+OptimizationDataBatcher provides efficient batch iteration over optimization input data,
+integrating with the DataLoader batching infrastructure for consistent behavior.
+</p>
+<p><b>For Beginners:</b> When training machine learning models, you typically don't
+feed all your data at once. Instead, you break it into smaller "batches" and train
+on each batch. This class makes that process easy and efficient:
+<pre><code class="lang-csharp">var batcher = new OptimizationDataBatcher&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;(
+    inputData, batchSize: 32, shuffle: true);
+
+foreach (var (xBatch, yBatch, indices) in batcher.GetBatches())
+{
+    // Train on this batch
+    var gradient = CalculateGradient(xBatch, yBatch);
+    UpdateParameters(gradient);
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3__ctor_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3__ctor_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__System_Int32_System_Boolean_System_Boolean_System_Nullable_System_Int32__AiDotNet_Interfaces_IDataSampler_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.#ctor(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2},System.Int32,System.Boolean,System.Boolean,System.Nullable{System.Int32},AiDotNet.Interfaces.IDataSampler)">
+  OptimizationDataBatcher(OptimizationInputData&lt;T, TInput, TOutput&gt;, int, bool, bool, int?, IDataSampler?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OptimizationDataBatcher class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationDataBatcher(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData, int batchSize, bool shuffle = true, bool dropLast = false, int? seed = null, IDataSampler? sampler = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimization input data containing training, validation, and test sets.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle the data before batching. Default is true.</p>
+</dd>
+    <dt><code>dropLast</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to drop the last incomplete batch. Default is false.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+    <dt><code>sampler</code> <a class="xref" href="AiDotNet.Interfaces.IDataSampler.html">IDataSampler</a></dt>
+    <dd><p>Optional custom sampler for advanced sampling strategies.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_BatchSize_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_BatchSize" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the batch size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_DataSize_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.DataSize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_DataSize" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.DataSize">
+  DataSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples in the training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DataSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_NumBatches_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.NumBatches*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_NumBatches" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.NumBatches">
+  NumBatches
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of batches per epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumBatches { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatchIndices_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.GetBatchIndices*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatchIndices" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.GetBatchIndices">
+  GetBatchIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates through training data in batches, returning only the indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int[]&gt; GetBatchIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]&gt;</dt>
+    <dd><p>An enumerable of index arrays for each batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatchIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is useful when you need to calculate gradients or perform operations
+that only require the indices, not the actual data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatches_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.GetBatches*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatches" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.GetBatches">
+  GetBatches()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates through training data in batches.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;(TInput XBatch, TOutput YBatch, int[] Indices)&gt; GetBatches()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,system.int32[]-.xbatch">XBatch</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,system.int32[]-.ybatch">YBatch</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2,system.int32[]-.indices">Indices</a>)&gt;</dt>
+    <dd><p>An enumerable of tuples containing batch inputs, outputs, and indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizationDataBatcher_3_GetBatches_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Each iteration gives you:
+- xBatch: The input features for this batch
+- yBatch: The corresponding target values
+- indices: The original indices of samples in this batch (useful for tracking)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithClassBalancing_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithClassBalancing*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithClassBalancing__1_System_Collections_Generic_IReadOnlyList_System_Int32__System_Int32_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithClassBalancing``1(System.Collections.Generic.IReadOnlyList{System.Int32},System.Int32)">
+  WithClassBalancing&lt;TWeight&gt;(IReadOnlyList&lt;int&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new batcher with weighted sampling for class balancing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationDataBatcher&lt;T, TInput, TOutput&gt; WithClassBalancing&lt;TWeight&gt;(IReadOnlyList&lt;int&gt; labels, int numClasses)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>labels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The class labels for each sample.</p>
+</dd>
+    <dt><code>numClasses</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of classes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Optimizers.OptimizationDataBatcher-3.html">OptimizationDataBatcher</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new OptimizationDataBatcher with weighted sampling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TWeight</code></dt>
+    <dd><p>The numeric type for weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithCurriculumLearning_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithCurriculumLearning*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithCurriculumLearning__1_System_Collections_Generic_IEnumerable___0__System_Int32_AiDotNet_Data_Sampling_CurriculumStrategy_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithCurriculumLearning``1(System.Collections.Generic.IEnumerable{``0},System.Int32,AiDotNet.Data.Sampling.CurriculumStrategy)">
+  WithCurriculumLearning&lt;TDifficulty&gt;(IEnumerable&lt;TDifficulty&gt;, int, CurriculumStrategy)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new batcher with curriculum learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationDataBatcher&lt;T, TInput, TOutput&gt; WithCurriculumLearning&lt;TDifficulty&gt;(IEnumerable&lt;TDifficulty&gt; difficulties, int totalEpochs, CurriculumStrategy strategy = CurriculumStrategy.Linear)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>difficulties</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;TDifficulty&gt;</dt>
+    <dd><p>Difficulty score for each sample (0 = easiest, 1 = hardest).</p>
+</dd>
+    <dt><code>totalEpochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of epochs for curriculum completion.</p>
+</dd>
+    <dt><code>strategy</code> <a class="xref" href="AiDotNet.Data.Sampling.CurriculumStrategy.html">CurriculumStrategy</a></dt>
+    <dd><p>The curriculum progression strategy.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Optimizers.OptimizationDataBatcher-3.html">OptimizationDataBatcher</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new OptimizationDataBatcher with curriculum learning.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TDifficulty</code></dt>
+    <dd><p>The numeric type for difficulty scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithSampler_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithSampler*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizationDataBatcher_3_WithSampler_AiDotNet_Interfaces_IDataSampler_" data-uid="AiDotNet.Optimizers.OptimizationDataBatcher`3.WithSampler(AiDotNet.Interfaces.IDataSampler)">
+  WithSampler(IDataSampler)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new batcher with a different sampler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationDataBatcher&lt;T, TInput, TOutput&gt; WithSampler(IDataSampler sampler)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampler</code> <a class="xref" href="AiDotNet.Interfaces.IDataSampler.html">IDataSampler</a></dt>
+    <dd><p>The new sampler to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Optimizers.OptimizationDataBatcher-3.html">OptimizationDataBatcher</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new OptimizationDataBatcher with the specified sampler.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizationDataBatcher.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for regression models, which are statistical methods used to estimate relationships between variables and make predictions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_RegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.RegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.RegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_RegressionOptions_1" data-uid="AiDotNet.Models.Options.RegressionOptions`1" class="text-break">
+Class RegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RegressionOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for regression models, which are statistical methods used to estimate
+relationships between variables and make predictions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RegressionOptions&lt;T&gt; : ModelOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used in matrix operations for the regression model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><span class="xref">RegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.BayesianRegressionOptions-1.html">BayesianRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ElasticNetRegressionOptions-1.html">ElasticNetRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GeneralizedAdditiveModelOptions-1.html">GeneralizedAdditiveModelOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LassoRegressionOptions-1.html">LassoRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LogisticRegressionOptions-1.html">LogisticRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MultinomialLogisticRegressionOptions-1.html">MultinomialLogisticRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NegativeBinomialRegressionOptions-1.html">NegativeBinomialRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OrthogonalRegressionOptions-1.html">OrthogonalRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PartialLeastSquaresRegressionOptions-1.html">PartialLeastSquaresRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PoissonRegressionOptions-1.html">PoissonRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PolynomialRegressionOptions-1.html">PolynomialRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PrincipalComponentRegressionOptions-1.html">PrincipalComponentRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.QuantileRegressionOptions-1.html">QuantileRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RidgeRegressionOptions-1.html">RidgeRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RobustRegressionOptions-1.html">RobustRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.StepwiseRegressionOptions-1.html">StepwiseRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.WeightedRegressionOptions-1.html">WeightedRegressionOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_RegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Regression analysis is a fundamental statistical technique used to model the relationship between a 
+dependent variable and one or more independent variables. This class provides configuration options 
+for regression models, allowing customization of how the regression algorithm operates. Regression 
+models are widely used in machine learning and statistics for prediction, forecasting, and understanding 
+variable relationships. Common regression types include linear regression, polynomial regression, 
+and regularized regression methods like ridge and lasso regression.
+</p>
+<p><b>For Beginners:</b> Regression is a way to find patterns in your data that help predict numbers.
+<p>Think about predicting house prices:</p>
+<ul>
+<li>You have information like square footage, number of bedrooms, and neighborhood</li>
+<li>Regression helps you create a formula that uses these features to predict the price</li>
+<li>The formula might look like: Price = (Square Footage × Factor1) + (Bedrooms × Factor2) + BaseValue</li>
+</ul>
+<p>What regression does:</p>
+<ul>
+<li>It analyzes your existing data (houses with known prices)</li>
+<li>It finds the best values for each factor in the formula</li>
+<li>It creates a model that can predict prices for new houses</li>
+</ul>
+<p>This is useful when:</p>
+<ul>
+<li>You need to predict a numerical value (like price, temperature, or sales)</li>
+<li>You have data with features that might influence that value</li>
+<li>You want to understand how much each feature contributes to the prediction</li>
+</ul>
+<p>For example, a weather app might use regression to predict tomorrow's temperature based on
+today's readings, humidity levels, and seasonal patterns.</p>
+<p>This class lets you configure how the regression model is constructed and calculated.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod_" data-uid="AiDotNet.Models.Options.RegressionOptions`1.DecompositionMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod" data-uid="AiDotNet.Models.Options.RegressionOptions`1.DecompositionMethod">
+  DecompositionMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RegressionOptions.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used in the regression calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMatrixDecomposition&lt;T&gt;? DecompositionMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMatrixDecomposition-1.html">IMatrixDecomposition</a>&lt;T&gt;</dt>
+    <dd><p>An implementation of IMatrixDecomposition&lt;T&gt; or null to use the default method.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Matrix decomposition is a crucial mathematical technique used in solving regression problems, 
+especially when dealing with systems of linear equations. Different decomposition methods have 
+varying characteristics in terms of numerical stability, computational efficiency, and applicability 
+to specific problem types. Common decomposition methods include Singular Value Decomposition (SVD), 
+QR decomposition, Cholesky decomposition, and LU decomposition. The choice of decomposition method 
+can significantly impact the accuracy and performance of the regression algorithm, particularly for 
+ill-conditioned problems or large datasets.
+</p>
+<p><b>For Beginners:</b> Matrix decomposition is a mathematical technique that helps solve complex 
+equations more efficiently.
+<p>Think of it like breaking down a difficult math problem into simpler steps:</p>
+<ul>
+<li>Regression often involves solving systems of equations with many variables</li>
+<li>These equations can be represented as matrices (tables of numbers)</li>
+<li>Matrix decomposition breaks these complex matrices into simpler components</li>
+<li>This makes calculations faster, more accurate, and more stable</li>
+</ul>
+<p>Different decomposition methods have different strengths:</p>
+<ul>
+<li>Some are faster but less accurate for certain problems</li>
+<li>Some handle special cases better (like when variables are highly correlated)</li>
+<li>Some are more numerically stable (less likely to have rounding errors)</li>
+</ul>
+<p>You can leave this setting as null (the default) to let the algorithm choose an appropriate
+method, or specify a particular decomposition method if you have specific requirements or
+knowledge about your data's characteristics.</p>
+<p>Unless you have a specific reason to change this, it's usually best to leave it as the default.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_RegressionOptions_1_UseIntercept_" data-uid="AiDotNet.Models.Options.RegressionOptions`1.UseIntercept*"></a>
+
+  <h3 id="AiDotNet_Models_Options_RegressionOptions_1_UseIntercept" data-uid="AiDotNet.Models.Options.RegressionOptions`1.UseIntercept">
+  UseIntercept
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RegressionOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether the regression model should include an intercept term (also known as bias term).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseIntercept { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to include an intercept term; false to force the regression line through the origin. Default is true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_RegressionOptions_1_UseIntercept_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The intercept term (also called the bias or constant term) represents the expected value of the 
+dependent variable when all independent variables are zero. Including an intercept allows the 
+regression line to "float" and not be constrained to pass through the origin. This is appropriate 
+for most real-world problems where a baseline value exists even when predictor variables are zero. 
+In some specific scientific or engineering contexts where a zero input must theoretically produce 
+a zero output, setting UseIntercept to false may be more appropriate. The decision to include or 
+exclude an intercept should be based on domain knowledge and the specific requirements of the 
+modeling task.
+</p>
+<p><b>For Beginners:</b> This setting determines whether your prediction formula includes a 
+"starting value" or base amount.
+<p>Using our house price example:</p>
+<ul>
+<li>With UseIntercept = true (default): Price = (Square Footage × Factor1) + (Bedrooms × Factor2) + BaseValue</li>
+<li>With UseIntercept = false: Price = (Square Footage × Factor1) + (Bedrooms × Factor2)</li>
+</ul>
+<p>The difference is that &quot;BaseValue&quot; (the intercept):</p>
+<ul>
+<li>Represents the predicted price when all other factors are zero</li>
+<li>Allows the model to have a starting point that isn't zero</li>
+<li>Makes the model more flexible for most real-world problems</li>
+</ul>
+<p>When to use true (include intercept):</p>
+<ul>
+<li>Most real-world scenarios (the default and recommended for beginners)</li>
+<li>When you expect there to be some base value even when all features are zero</li>
+<li>For example, even a 0 square foot house with 0 bedrooms might still have some land value</li>
+</ul>
+<p>When to use false (no intercept):</p>
+<ul>
+<li>When you know theoretically that zero input should produce zero output</li>
+<li>In scientific models where this constraint is physically meaningful</li>
+<li>For example, if measuring how far a spring stretches based on weight, zero weight means zero stretch</li>
+</ul>
+<p>For most applications, keep this set to true unless you have a specific reason to change it.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/RegressionOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

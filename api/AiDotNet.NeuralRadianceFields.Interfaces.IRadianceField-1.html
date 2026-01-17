@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IRadianceField&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IRadianceField&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the core functionality for neural radiance field models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1">
+
+
+
+  <h1 id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1" class="text-break">
+Interface IRadianceField&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Interfaces/IRadianceField.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralRadianceFields.html">NeuralRadianceFields</a>.<a class="xref" href="AiDotNet.NeuralRadianceFields.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the core functionality for neural radiance field models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IRadianceField&lt;T&gt; : INeuralNetwork&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html#AiDotNet_Interfaces_INeuralNetwork_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">INeuralNetwork&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html#AiDotNet_Interfaces_INeuralNetwork_1_SetTrainingMode_System_Boolean_">INeuralNetwork&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html#AiDotNet_Interfaces_INeuralNetwork_1_ForwardWithMemory_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">INeuralNetwork&lt;T&gt;.ForwardWithMemory(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html#AiDotNet_Interfaces_INeuralNetwork_1_Backpropagate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">INeuralNetwork&lt;T&gt;.Backpropagate(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html#AiDotNet_Interfaces_INeuralNetwork_1_GetParameterGradients">INeuralNetwork&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html#AiDotNet_Interfaces_IFullModel_3_DefaultLossFunction">IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Train__0__1_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_Predict__0_">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModel-3.html#AiDotNet_Interfaces_IModel_3_GetModelMetadata">IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_SaveState_System_IO_Stream_">ICheckpointableModel.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html#AiDotNet_Interfaces_ICheckpointableModel_LoadState_System_IO_Stream_">ICheckpointableModel.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_GetParameters">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_GetActiveFeatureIndices">IFeatureAware.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">IFeatureAware.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html#AiDotNet_Interfaces_IFeatureAware_IsFeatureUsed_System_Int32_">IFeatureAware.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html#AiDotNet_Interfaces_IFeatureImportance_1_GetFeatureImportance">IFeatureImportance&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_DeepCopy">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html#AiDotNet_Interfaces_ICloneable_1_Clone">ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ComputeGradients__1__2_AiDotNet_Interfaces_ILossFunction__0__">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html#AiDotNet_Interfaces_IGradientComputable_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A neural radiance field represents a 3D scene as a continuous function.</p>
+<p>Traditional 3D representations:</p>
+<ul>
+<li>Meshes: Surfaces made of triangles</li>
+<li>Voxels: 3D grid of cubes (like 3D pixels)</li>
+<li>Point clouds: Collection of 3D points</li>
+</ul>
+<p>Neural Radiance Fields (NeRF):</p>
+<ul>
+<li>Represents scene as a neural network</li>
+<li>Input: 3D position (X, Y, Z) and viewing direction</li>
+<li>Output: Color (RGB) and density (opacity/volume density)</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>The neural network &quot;knows&quot; what the scene looks like from any position</li>
+<li>Ask &quot;What's at position (x, y, z) when viewed from direction (θ, φ)?&quot;</li>
+<li>Network responds &quot;Color is (r, g, b) and density is σ&quot;</li>
+</ul>
+<p>Why this is powerful:</p>
+<ul>
+<li>Continuous representation (query any position, not limited to discrete grid)</li>
+<li>View-dependent effects (reflections, specularities)</li>
+<li>Compact storage (just network weights, not millions of voxels)</li>
+<li>Novel view synthesis (render from any camera angle)</li>
+</ul>
+<p>Applications:</p>
+<ul>
+<li>Virtual reality and AR: Create photorealistic 3D scenes</li>
+<li>Film and gaming: Capture real locations and render from any angle</li>
+<li>Robotics: Build 3D maps of environments</li>
+<li>Cultural heritage: Digitally preserve historical sites</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_QueryField_" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.QueryField*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_QueryField_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.QueryField(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  QueryField(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Interfaces/IRadianceField.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Queries the radiance field at specific 3D positions and viewing directions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Tensor&lt;T&gt; rgb, Tensor&lt;T&gt; density) QueryField(Tensor&lt;T&gt; positions, Tensor&lt;T&gt; viewingDirections)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>positions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of 3D positions [N, 3] where N is number of query points.</p>
+</dd>
+    <dt><code>viewingDirections</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of viewing directions [N, 3] (unit vectors).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>A tuple containing RGB colors [N, 3] and density values [N, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_QueryField_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the core operation of a radiance field.</p>
+<p>For each query point:</p>
+<ul>
+<li>Position (x, y, z): Where in 3D space are we looking?</li>
+<li>Direction (dx, dy, dz): Which direction are we looking from?</li>
+</ul>
+<p>The network returns:</p>
+<ul>
+<li>RGB (r, g, b): The color at that point from that direction</li>
+<li>Density σ: How &quot;solid&quot; or &quot;opaque&quot; that point is</li>
+</ul>
+<p>Example query:</p>
+<ul>
+<li>Position: (2.5, 1.0, -3.0) - a point in space</li>
+<li>Direction: (0.0, 0.0, -1.0) - looking straight down negative Z axis</li>
+<li>Result: (Red: 0.8, Green: 0.3, Blue: 0.1, Density: 5.2)
+This means the point appears orange when viewed from that direction,
+and it's fairly opaque (high density)</li>
+</ul>
+<p>Density interpretation:</p>
+<ul>
+<li>Density = 0: Completely transparent (empty space)</li>
+<li>Density &gt; 0: Increasingly opaque (solid material)</li>
+<li>Higher density = light is more likely to stop at this point</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderImage_" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.RenderImage*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderImage_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_System_Int32__0_" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.RenderImage(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32,System.Int32,`0)">
+  RenderImage(Vector&lt;T&gt;, Matrix&lt;T&gt;, int, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Interfaces/IRadianceField.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Renders an image from a specific camera position and orientation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; RenderImage(Vector&lt;T&gt; cameraPosition, Matrix&lt;T&gt; cameraRotation, int imageWidth, int imageHeight, T focalLength)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cameraPosition</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>3D position of the camera [3].</p>
+</dd>
+    <dt><code>cameraRotation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Rotation matrix of the camera [3, 3].</p>
+</dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Width of the output image in pixels.</p>
+</dd>
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Height of the output image in pixels.</p>
+</dd>
+    <dt><code>focalLength</code> <span class="xref">T</span></dt>
+    <dd><p>Camera focal length.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Rendered RGB image tensor [height, width, 3].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderImage_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This renders a 2D image from the 3D scene representation.</p>
+<p>The rendering process:</p>
+<ol>
+<li>For each pixel in the output image:
+<ul>
+<li>Cast a ray from camera through that pixel</li>
+<li>Sample points along the ray</li>
+<li>Query radiance field at each sample point</li>
+<li>Combine colors using volume rendering (accumulate with alpha blending)</li>
+</ul>
+</li>
+</ol>
+<p>Volume rendering equation:</p>
+<ul>
+<li>For each ray, accumulate: Color = Σ(transmittance × color × alpha)</li>
+<li>Transmittance: How much light passes through previous points</li>
+<li>Alpha: How much light is absorbed at this point (based on density)</li>
+</ul>
+<p>Example:</p>
+<ul>
+<li>Camera at (0, 0, 5) looking at origin</li>
+<li>Image 512×512 pixels</li>
+<li>Cast 512×512 = 262,144 rays</li>
+<li>Sample 64 points per ray = 16.8 million queries</li>
+<li>Blend results to get final image</li>
+</ul>
+<p>This is why NeRF rendering can be slow - many network queries!
+Optimizations like Instant-NGP speed this up significantly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderRays_" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.RenderRays*"></a>
+
+  <h3 id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderRays_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__0__0_" data-uid="AiDotNet.NeuralRadianceFields.Interfaces.IRadianceField`1.RenderRays(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,`0,`0)">
+  RenderRays(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Interfaces/IRadianceField.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Renders rays through the radiance field using volume rendering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; RenderRays(Tensor&lt;T&gt; rayOrigins, Tensor&lt;T&gt; rayDirections, int numSamples, T nearBound, T farBound)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rayOrigins</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Origins of rays to render [N, 3].</p>
+</dd>
+    <dt><code>rayDirections</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Directions of rays (unit vectors) [N, 3].</p>
+</dd>
+    <dt><code>numSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per ray.</p>
+</dd>
+    <dt><code>nearBound</code> <span class="xref">T</span></dt>
+    <dd><p>Near clipping distance.</p>
+</dd>
+    <dt><code>farBound</code> <span class="xref">T</span></dt>
+    <dd><p>Far clipping distance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Rendered RGB colors for each ray [N, 3].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralRadianceFields_Interfaces_IRadianceField_1_RenderRays_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Volume rendering is how we convert the radiance field into images.</p>
+<p>For each ray:</p>
+<ol>
+<li>Sample points: Generate sample positions between near and far bounds</li>
+<li>Query field: Get RGB and density at each sample</li>
+<li>Compute alpha: Convert density to opacity for each segment</li>
+<li>Accumulate color: Blend colors front-to-back</li>
+</ol>
+<p>The algorithm:</p>
+<pre><code>For each sample i along ray:
+  alpha_i = 1 - exp(-density_i * distance_i)
+  transmittance_i = exp(-sum of all previous densities)
+  color_contribution_i = transmittance_i * alpha_i * color_i
+  total_color += color_contribution_i
+</code></pre>
+<p>Example with 4 samples:</p>
+<ul>
+<li>Sample 0: Empty space (density ≈ 0) → contributes little</li>
+<li>Sample 1: Empty space (density ≈ 0) → contributes little</li>
+<li>Sample 2: Surface (density high) → contributes most of the color</li>
+<li>Sample 3: Behind surface → mostly blocked by sample 2</li>
+</ul>
+<p>Parameters:</p>
+<ul>
+<li>numSamples: More samples = better quality but slower (typical: 64-192)</li>
+<li>nearBound/farBound: Define region to sample (e.g., 0.1 to 10.0 meters)</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralRadianceFields/Interfaces/IRadianceField.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

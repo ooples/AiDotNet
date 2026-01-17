@@ -1,0 +1,2230 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaSGDOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaSGDOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Meta-SGD (Meta Stochastic Gradient Descent) algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Options_MetaSGDOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Options.MetaSGDOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3" class="text-break">
+Class MetaSGDOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Meta-SGD (Meta Stochastic Gradient Descent) algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MetaSGDOptions&lt;T, TInput, TOutput&gt; : IMetaLearnerOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaSGDOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Meta-SGD extends MAML by learning not just the model initialization but also per-parameter
+learning rates, momentum terms, and update directions. This effectively learns a custom
+optimizer configuration for each parameter, enabling highly specialized adaptation strategies.
+</p>
+<p>
+<b>For Beginners:</b> Think of Meta-SGD as "learning how to learn" at the finest grain:
+</p>
+<p>
+In standard training, you pick one learning rate for all parameters. But different parts
+of a neural network might benefit from different learning rates. Meta-SGD figures this out
+automatically by learning:
+- <b>Per-parameter learning rates:</b> Some weights need small updates, others larger
+- <b>Per-parameter momentum:</b> Some weights benefit from momentum, others don't
+- <b>Update directions:</b> Sometimes the gradient direction should be flipped or scaled
+</p>
+<p>
+<b>Algorithm Overview:</b>
+<pre><code class="lang-csharp"># For each model parameter θ_i, learn:
+#   - α_i: the optimal learning rate
+#   - β_i: the optimal momentum coefficient
+#   - d_i: the optimal update direction/scaling
+
+# Meta-training:
+for each task in task_batch:
+    adapted_params = initial_params.copy()
+    for step in range(K_inner):
+        gradients = compute_gradients(adapted_params, support_set)
+        for i in range(num_params):
+            # Per-parameter update rule
+            update_i = α_i * d_i * gradients[i] + β_i * velocity[i]
+            adapted_params[i] -= update_i
+
+    query_loss = evaluate(adapted_params, query_set)
+
+# Meta-update: optimize α_i, β_i, d_i using query_loss gradient</code></pre>
+
+<p>
+<b>Key Insights:</b>
+1. Per-parameter optimization allows heterogeneous learning rates across layers
+2. First-order method: no Hessian computation needed, much faster than second-order MAML
+3. Learned optimizers reveal which parameters are important for quick adaptation
+4. Can combine with various base update rules (SGD, Adam, RMSprop)
+</p>
+<p>
+<b>Reference:</b> Li, Z., Zhou, F., Chen, F., &amp; Li, H. (2017).
+Meta-SGD: Learning to Learn Quickly for Few-Shot Learning.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3__ctor_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  MetaSGDOptions(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L666"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MetaSGDOptions class with the required meta-model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaSGDOptions(IFullModel&lt;T, TInput, TOutput&gt; metaModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metaModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The meta-model to be trained (required).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2___examples">Examples</h4>
+  <pre><code class="lang-csharp">// Create Meta-SGD options with minimal configuration
+var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
+var metaSGD = new MetaSGDAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+
+// Create Meta-SGD options with custom per-parameter optimizer
+var options = new MetaSGDOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+{
+    UpdateRuleType = MetaSGDUpdateRuleType.Adam,
+    LearnMomentum = true,
+    LearnDirection = true,
+    LearnAdamBetas = true,
+    UseParameterGrouping = true,
+    NumParameterGroups = 20
+};</code></pre>
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when metaModel is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamBeta1Init_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamBeta1Init*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamBeta1Init" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamBeta1Init">
+  AdamBeta1Init
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L527"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for Adam beta1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamBeta1Init { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.9 (standard Adam default).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamBeta2Init_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamBeta2Init*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamBeta2Init" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamBeta2Init">
+  AdamBeta2Init
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L533"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial value for Adam beta2.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamBeta2Init { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.999 (standard Adam default).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamEpsilonInit_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamEpsilonInit*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdamEpsilonInit" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdamEpsilonInit">
+  AdamEpsilonInit
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L539"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the epsilon value for Adam numerical stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamEpsilonInit { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 1e-8.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdaptationSteps" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of gradient steps to take during inner loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 5 (typical for few-shot learning).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_AdaptationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Meta-SGD uses first-order optimization, so more adaptation steps are computationally
+cheaper than in MAML. However, too many steps can lead to overfitting on the
+support set.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_CheckpointFrequency_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_CheckpointFrequency" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to save checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_DataLoader_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.DataLoader*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_DataLoader" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.DataLoader">
+  DataLoader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the episodic data loader for sampling tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? DataLoader { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (tasks must be provided manually to MetaTrain).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EnableCheckpointing_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EnableCheckpointing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EnableCheckpointing" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EnableCheckpointing">
+  EnableCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save checkpoints during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EvaluationFrequency_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EvaluationFrequency" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to evaluate during meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 500.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EvaluationTasks_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EvaluationTasks*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_EvaluationTasks" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.EvaluationTasks">
+  EvaluationTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to use for evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationTasks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 100.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GradientClipThreshold_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GradientClipThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GradientClipThreshold" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GradientClipThreshold">
+  GradientClipThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? GradientClipThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Default: 10.0 (prevents exploding gradients during meta-training).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GradientClipThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Gradient clipping is particularly important in Meta-SGD because the
+per-parameter learning rates can amplify gradients if they grow too large.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerLearningRate" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the inner loop (task adaptation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In Meta-SGD, this serves as the initial value for per-parameter learning rates
+when using uniform initialization. During meta-training, each parameter will
+learn its own optimal learning rate, which may diverge from this initial value.
+</p>
+<p>
+<b>For Beginners:</b> This is the starting point for all learning rates.
+Meta-SGD will adjust each one individually as it learns.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerOptimizer_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerOptimizer" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerOptimizer">
+  InnerOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for inner-loop adaptation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? InnerOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (uses the learned per-parameter optimizer).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerOptimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In Meta-SGD, this is typically not used directly because the per-parameter
+optimizer with learned coefficients replaces standard optimization.
+This is provided for compatibility with the base interface.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerSteps_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerSteps" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.InnerSteps">
+  InnerSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of inner steps during meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InnerSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 5 (matches AdaptationSteps by default).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_InnerSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This can be different from AdaptationSteps to allow for different behavior
+during training vs. adaptation. Some implementations use fewer inner steps
+during training for efficiency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LayerDecayFactor_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LayerDecayFactor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LayerDecayFactor" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LayerDecayFactor">
+  LayerDecayFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L448"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the decay factor per layer depth.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LayerDecayFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.9.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LayerDecayFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only used when UseLayerWiseDecay is true. A value of 0.9 means each
+successive layer has 90% of the previous layer's learning rate.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnAdamBetas_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnAdamBetas*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnAdamBetas" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnAdamBetas">
+  LearnAdamBetas
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L521"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to learn Adam beta parameters when using Adam update rule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LearnAdamBetas { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnAdamBetas_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled with Adam update rule, learns per-parameter beta1 and beta2
+coefficients. This adds significant complexity but can improve performance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnDirection_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnDirection*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnDirection" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnDirection">
+  LearnDirection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L349"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to learn per-parameter update direction signs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LearnDirection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true (helps with gradient sign ambiguity).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnDirection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The direction parameter can flip or scale the gradient direction for each
+parameter. This helps when the natural gradient direction isn't optimal
+for fast adaptation.
+</p>
+<p>
+<b>Mathematical formulation:</b>
+θ_i' = θ_i - α_i × d_i × ∇_θ_i L
+where d_i is the learned direction scaling factor.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnLearningRate" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnLearningRate">
+  LearnLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to learn per-parameter learning rates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LearnLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true (the core feature of Meta-SGD).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the defining feature of Meta-SGD. Each parameter gets its own
+learned learning rate that is optimized during meta-training to enable
+fast adaptation to new tasks.
+</p>
+<p>
+<b>For Beginners:</b> Keep this true! This is what makes Meta-SGD special.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnMomentum_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnMomentum*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnMomentum" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearnMomentum">
+  LearnMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to learn per-parameter momentum coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LearnMomentum { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false (adds complexity, only enable if needed).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearnMomentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, each parameter learns its own momentum coefficient.
+This can help with parameters that benefit from momentum-based updates
+but adds to the number of meta-parameters to learn.
+</p>
+<p>
+<b>For Beginners:</b> Leave this false initially. Only enable if you find
+that per-parameter learning rates alone aren't sufficient.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitRange_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateInitRange*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitRange" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateInitRange">
+  LearningRateInitRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initialization range for learning rates when using random initialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateInitRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When using Random initialization, learning rates are initialized uniformly
+in [InnerLearningRate - range/2, InnerLearningRate + range/2].
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitialization_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateInitialization*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitialization" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateInitialization">
+  LearningRateInitialization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L369"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initialization strategy for per-parameter learning rates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaSGDLearningRateInitialization LearningRateInitialization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Options.MetaSGDLearningRateInitialization.html">MetaSGDLearningRateInitialization</a></dt>
+    <dd><p>Default: MetaSGDLearningRateInitialization.Uniform.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateInitialization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Initialization strategies:</b>
+- <b>Uniform:</b> All learning rates start at InnerLearningRate
+- <b>Random:</b> Random values within LearningRateInitRange
+- <b>MagnitudeBased:</b> Based on parameter magnitudes
+- <b>LayerBased:</b> Different rates per layer depth
+- <b>Xavier:</b> Xavier-style initialization
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateL2Reg_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateL2Reg*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateL2Reg" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateL2Reg">
+  LearningRateL2Reg
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L417"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the L2 regularization coefficient for learned learning rates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateL2Reg { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.0 (no regularization).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateL2Reg_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Regularizing learning rates prevents them from growing too large and
+helps with generalization across tasks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateSchedule_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateSchedule*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LearningRateSchedule" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LearningRateSchedule">
+  LearningRateSchedule
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L625"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate schedule type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaSGDLearningRateScheduleType LearningRateSchedule { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Options.MetaSGDLearningRateScheduleType.html">MetaSGDLearningRateScheduleType</a></dt>
+    <dd><p>Default: MetaSGDLearningRateScheduleType.CosineAnnealing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LossFunction_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LossFunction" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Default: null (uses model's default loss function if available).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The loss function is used both in the inner loop (task adaptation) and
+outer loop (meta-optimization) to guide the learning of per-parameter optimizers.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MaxLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MaxLearningRate" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L405"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed per-parameter learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 1.0 (prevents learning rates from becoming too large).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Clipping learning rates to a maximum prevents unstable updates that
+could blow up during adaptation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaBatchSize_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaBatchSize*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaBatchSize" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaBatchSize">
+  MetaBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to sample per meta-training iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 4 (typical meta-batch size).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Larger batch sizes provide more stable gradients for the meta-parameters
+but require more memory and computation per iteration.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaModel_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaModel" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaModel">
+  MetaModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta-model to be trained. This is the only required property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; MetaModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The model must implement IFullModel to support parameter getting/setting
+required for Meta-SGD's per-parameter optimization. Each parameter in the model
+will have its own learned learning rate, momentum, and direction coefficients.
+</p>
+<p>
+<b>For Beginners:</b> This is the neural network whose parameters you want to
+meta-train. Meta-SGD will learn how to optimize each weight in this network.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaOptimizer_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaOptimizer" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MetaOptimizer">
+  MetaOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for meta-parameter updates (outer loop).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? MetaOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Default: null (uses built-in Adam optimizer with OuterLearningRate).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MetaOptimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This optimizer updates the learned per-parameter learning rates, momentums,
+and directions. Adam is typically used as it handles the sparse gradients
+from per-parameter optimization well.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MinLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MinLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MinLearningRate" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.MinLearningRate">
+  MinLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed per-parameter learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 1e-6 (prevents learning rates from becoming too small).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_MinLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Clipping learning rates to a minimum prevents parameters from becoming
+"frozen" during adaptation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumCurvatureSamples_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumCurvatureSamples*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumCurvatureSamples" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumCurvatureSamples">
+  NumCurvatureSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L591"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of samples for curvature approximation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumCurvatureSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumCurvatureSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Number of random directions used for Hessian-vector product approximation.
+Only used when UseHessianFree is true.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumMetaIterations_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumMetaIterations*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumMetaIterations" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumMetaIterations">
+  NumMetaIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of meta-training iterations to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMetaIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 10000 (Meta-SGD typically needs many iterations).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumMetaIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Meta-SGD often requires more iterations than MAML because it has more
+meta-parameters to learn (per-parameter coefficients). Monitor the
+validation loss to determine when to stop.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumParameterGroups_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumParameterGroups*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumParameterGroups" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.NumParameterGroups">
+  NumParameterGroups
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L481"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of parameter groups.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumParameterGroups { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_NumParameterGroups_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only used when UseParameterGrouping is true. Parameters are partitioned
+into this many groups, with each group sharing a single learned learning rate.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_OuterLearningRate" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the outer loop (meta-optimization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_OuterLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This controls how quickly the per-parameter learning rates, momentums, and
+directions are updated during meta-training. A lower value provides more
+stable learning but slower convergence.
+</p>
+<p>
+<b>For Beginners:</b> This controls how fast Meta-SGD learns the optimal
+per-parameter configurations. Too high causes instability, too low is slow.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ParameterSharingThreshold_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.ParameterSharingThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ParameterSharingThreshold" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.ParameterSharingThreshold">
+  ParameterSharingThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L505"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the similarity threshold for parameter sharing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ParameterSharingThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 0.95.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ParameterSharingThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Only used when UseParameterSharing is true. Parameters with similarity
+above this threshold will share learning rate configurations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_RandomSeed_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_RandomSeed" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Default: null (non-deterministic).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ScheduleWarmupEpisodes_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.ScheduleWarmupEpisodes*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ScheduleWarmupEpisodes" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.ScheduleWarmupEpisodes">
+  ScheduleWarmupEpisodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L637"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of warmup episodes for learning rate schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ScheduleWarmupEpisodes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default: 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_ScheduleWarmupEpisodes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+During warmup, the learning rate gradually increases from a small value
+to the target value. This can help with training stability.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_TrustRegionRadius_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.TrustRegionRadius*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_TrustRegionRadius" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.TrustRegionRadius">
+  TrustRegionRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L567"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the trust region radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double TrustRegionRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default: 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_TrustRegionRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Maximum allowed magnitude for parameter updates. Only used when
+UseTrustRegion is true.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UpdateRuleType_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UpdateRuleType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UpdateRuleType" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UpdateRuleType">
+  UpdateRuleType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the update rule type for per-parameter optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaSGDUpdateRuleType UpdateRuleType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.Options.MetaSGDUpdateRuleType.html">MetaSGDUpdateRuleType</a></dt>
+    <dd><p>Default: MetaSGDUpdateRuleType.SGD.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UpdateRuleType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>Update Rule Types:</b>
+- <b>SGD:</b> Standard gradient descent with learned learning rates
+- <b>SGDWithMomentum:</b> Adds learned momentum terms per parameter
+- <b>Adam:</b> Full Adam optimizer with learned beta parameters
+- <b>RMSprop:</b> RMSprop with learned decay rates
+- <b>AdaGrad:</b> AdaGrad with learned accumulation
+- <b>AdaDelta:</b> AdaDelta with learned decay
+</p>
+<p>
+<b>For Beginners:</b> Start with SGD and only move to more complex rules
+if you find SGD isn't working well for your problem.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseFirstOrder_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseFirstOrder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseFirstOrder" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseFirstOrder">
+  UseFirstOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use first-order approximation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true (Meta-SGD is inherently first-order).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseFirstOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Meta-SGD is designed as a first-order algorithm. Unlike MAML, it doesn't
+require computing gradients through the adaptation process. This property
+is always effectively true for standard Meta-SGD.
+</p>
+<p>
+<b>For Beginners:</b> First-order means Meta-SGD doesn't need to compute
+complex second-order derivatives, making it much faster than MAML.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseHessianFree_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseHessianFree*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseHessianFree" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseHessianFree">
+  UseHessianFree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L579"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use Hessian-free approximation for meta-gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseHessianFree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseHessianFree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Hessian-free methods can provide better meta-gradient estimates at
+the cost of additional computation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLayerWiseDecay_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseLayerWiseDecay*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLayerWiseDecay" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseLayerWiseDecay">
+  UseLayerWiseDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L436"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to apply layer-wise learning rate decay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLayerWiseDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLayerWiseDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, deeper layers get smaller initial learning rates.
+This can help with training stability in very deep networks.
+</p>
+<p>
+<b>Formula:</b> layer_lr = base_lr × (LayerDecayFactor ^ layer_depth)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLearningRateSchedule_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseLearningRateSchedule*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLearningRateSchedule" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseLearningRateSchedule">
+  UseLearningRateSchedule
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L619"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a learning rate schedule for meta-learning rates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLearningRateSchedule { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseLearningRateSchedule_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the meta-learning rate (outer loop) follows a schedule
+during training. This can help with convergence.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterGrouping_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseParameterGrouping*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterGrouping" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseParameterGrouping">
+  UseParameterGrouping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L469"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use parameter grouping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseParameterGrouping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterGrouping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, parameters are grouped and share learning rates within
+groups. This reduces the number of meta-parameters and can improve
+generalization when the model has many parameters.
+</p>
+<p>
+<b>For Beginners:</b> Enable this for very large models to reduce
+memory usage and potentially improve generalization.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterSharing_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseParameterSharing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterSharing" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseParameterSharing">
+  UseParameterSharing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L493"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use parameter sharing based on similarity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseParameterSharing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseParameterSharing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, parameters with similar values or gradients share
+learning rate configurations. This can improve sample efficiency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseTrustRegion_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseTrustRegion*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseTrustRegion" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseTrustRegion">
+  UseTrustRegion
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L555"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use trust region for parameter updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTrustRegion { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseTrustRegion_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Trust region methods constrain the magnitude of parameter updates,
+which can improve stability during meta-training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseWarmStart_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseWarmStart*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseWarmStart" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.UseWarmStart">
+  UseWarmStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L603"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use warm-start initialization for the optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseWarmStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default: true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_UseWarmStart_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, initializes per-parameter learning rates and other
+coefficients to reasonable default values based on the configuration.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_Clone_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.Clone*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_Clone" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L784"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the Meta-SGD options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearnerOptions&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>A new MetaSGDOptions instance with the same configuration values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GetEffectiveParameterGroups_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GetEffectiveParameterGroups*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GetEffectiveParameterGroups_System_Int32_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GetEffectiveParameterGroups(System.Int32)">
+  GetEffectiveParameterGroups(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L896"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective number of parameter groups.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetEffectiveParameterGroups(int numModelParameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numModelParameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of model parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parameter groups after considering options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GetTotalMetaParameters_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GetTotalMetaParameters*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GetTotalMetaParameters_System_Int32_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.GetTotalMetaParameters(System.Int32)">
+  GetTotalMetaParameters(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L868"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of learnable meta-parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetTotalMetaParameters(int numModelParameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numModelParameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of model parameters.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of meta-parameters to learn.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_GetTotalMetaParameters_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The total depends on which features are enabled:
+- Per-parameter learning rates: +numModelParameters
+- Per-parameter momentum: +numModelParameters
+- Per-parameter direction: +numModelParameters
+- Adam betas (if learning): +2*numModelParameters
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_IsValid_" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.IsValid*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_IsValid" data-uid="AiDotNet.MetaLearning.Options.MetaSGDOptions`3.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L689"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that all Meta-SGD configuration options are properly set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid for Meta-SGD training; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_MetaSGDOptions_3_IsValid_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Validates all required hyperparameters and Meta-SGD-specific settings:
+- Standard meta-learning parameters (learning rates, steps, etc.)
+- Learning rate bounds and regularization
+- Parameter grouping configuration
+- Adam beta parameters if using Adam
+- Trust region settings
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/MetaSGDOptions.cs/#L63" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GemmAutoTuner | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GemmAutoTuner | AiDotNet Documentation ">
+      
+      <meta name="description" content="Auto-tuner for GEMM kernel selection and parameter optimization. Uses Bayesian-inspired heuristics to quickly find optimal configurations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner" class="text-break">
+Class GemmAutoTuner  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.html">DirectGpu</a>.<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.html">OpenCL</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Auto-tuner for GEMM kernel selection and parameter optimization.
+Uses Bayesian-inspired heuristics to quickly find optimal configurations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class GemmAutoTuner</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GemmAutoTuner</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_CachedConfigCount_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.CachedConfigCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_CachedConfigCount" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.CachedConfigCount">
+  CachedConfigCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L3382"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of cached configurations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CachedConfigCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_EnableDiagnostics_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.EnableDiagnostics*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_EnableDiagnostics" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.EnableDiagnostics">
+  EnableDiagnostics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enable verbose diagnostic output for debugging tuning progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool EnableDiagnostics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_EnableProgress_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.EnableProgress*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_EnableProgress" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.EnableProgress">
+  EnableProgress
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Emit progress output during tuning and benchmarks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool EnableProgress { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_LogFilePath_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.LogFilePath*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_LogFilePath" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.LogFilePath">
+  LogFilePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Log file path for diagnostic output. If null, logs to console.
+Shared with DynamicGemmKernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string? LogFilePath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_Logger_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.Logger*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_Logger" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.Logger">
+  Logger
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optional logger for live tuning diagnostics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ILogger? Logger { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/microsoft.extensions.logging.ilogger">ILogger</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_ProgressInterval_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.ProgressInterval*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_ProgressInterval" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.ProgressInterval">
+  ProgressInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Show progress every N trials (default: 10).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int ProgressInterval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TrialHeartbeatSeconds_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TrialHeartbeatSeconds*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TrialHeartbeatSeconds" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TrialHeartbeatSeconds">
+  TrialHeartbeatSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Emit a heartbeat log for long-running trials (seconds). Set to 0 to disable.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int TrialHeartbeatSeconds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TrialLogFilePath_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TrialLogFilePath*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TrialLogFilePath" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TrialLogFilePath">
+  TrialLogFilePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>CSV log file path for trial features and results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string? TrialLogFilePath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_ClearCache_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.ClearCache*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_ClearCache" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.ClearCache">
+  ClearCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L3371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the tuning cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_SelectConfig_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.SelectConfig*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_SelectConfig_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GpuCapabilities_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.SelectConfig(System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities)">
+  SelectConfig(int, int, int, GpuCapabilities)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L743"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects the best kernel configuration based on matrix dimensions and GPU capabilities.
+Uses heuristics for instant selection without runtime tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GemmConfig SelectConfig(int M, int N, int K, GpuCapabilities capabilities)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>capabilities</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities.html">GpuCapabilities</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmConfig.html">GemmConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TuneForDimensions_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TuneForDimensions*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TuneForDimensions_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GpuCapabilities_System_Func_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmConfig_System_Double__System_Int32_System_Int32_System_Boolean_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TuneForDimensions(System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities,System.Func{AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmConfig,System.Double},System.Int32,System.Int32,System.Boolean)">
+  TuneForDimensions(int, int, int, GpuCapabilities, Func&lt;GemmConfig, double&gt;, int, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L806"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs actual benchmark to find optimal configuration using exhaustive search.
+Use this for production workloads that will run many times.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TuningResult[] TuneForDimensions(int M, int N, int K, GpuCapabilities capabilities, Func&lt;GemmConfig, double&gt; benchmarkFunc, int warmupRuns = 2, int benchmarkRuns = 5, bool useFullSearchSpace = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>capabilities</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities.html">GpuCapabilities</a></dt>
+    <dd></dd>
+    <dt><code>benchmarkFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmConfig.html">GemmConfig</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>warmupRuns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>benchmarkRuns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>useFullSearchSpace</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.TuningResult.html">TuningResult</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TuneWithBayesianOptimization_" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TuneWithBayesianOptimization*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TuneWithBayesianOptimization_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GpuCapabilities_System_Func_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmConfig_System_Double__System_Int32_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmAutoTuner.TuneWithBayesianOptimization(System.Int32,System.Int32,System.Int32,AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities,System.Func{AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmConfig,System.Double},System.Int32,System.Int32,System.Int32,System.Int32,System.Nullable{System.Int32})">
+  TuneWithBayesianOptimization(int, int, int, GpuCapabilities, Func&lt;GemmConfig, double&gt;, int, int, int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L866"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs Bayesian optimization to efficiently find optimal configuration.
+More efficient than exhaustive search when the configuration space is large.
+Uses Gaussian Process regression with Expected Improvement acquisition function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TuningResult[] TuneWithBayesianOptimization(int M, int N, int K, GpuCapabilities capabilities, Func&lt;GemmConfig, double&gt; benchmarkFunc, int maxTrials = 20, int initialRandomSamples = 5, int warmupRuns = 2, int benchmarkRuns = 3, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>M</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>N</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>K</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>capabilities</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GpuCapabilities.html">GpuCapabilities</a></dt>
+    <dd></dd>
+    <dt><code>benchmarkFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.GemmConfig.html">GemmConfig</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>maxTrials</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>initialRandomSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>warmupRuns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>benchmarkRuns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.OpenCL.TuningResult.html">TuningResult</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmAutoTuner_TuneWithBayesianOptimization_System_Int32_System_Int32_System_Int32_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GpuCapabilities_System_Func_AiDotNet_Tensors_Engines_DirectGpu_OpenCL_GemmConfig_System_Double__System_Int32_System_Int32_System_Int32_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This implementation is inspired by the AiDotNet HyperparameterOptimization/BayesianOptimizer.
+It uses a simplified GP model optimized for kernel parameter tuning.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/GemmAutoTuner.cs/#L80" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

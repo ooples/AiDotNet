@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ModelRegistry&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ModelRegistry&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of model registry for managing trained model storage and versioning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ModelRegistry_ModelRegistry_3.md&amp;value=---%0Auid%3A%20AiDotNet.ModelRegistry.ModelRegistry%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ModelRegistry.ModelRegistry`3">
+
+
+
+  <h1 id="AiDotNet_ModelRegistry_ModelRegistry_3" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3" class="text-break">
+Class ModelRegistry&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ModelRegistry.html">ModelRegistry</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of model registry for managing trained model storage and versioning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ModelRegistry&lt;T, TInput, TOutput&gt; : ModelRegistryBase&lt;T, TInput, TOutput&gt;, IModelRegistry&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for models.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for models.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html">ModelRegistryBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ModelRegistry&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelRegistry-3.html">IModelRegistry</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_RegistryDirectory">ModelRegistryBase&lt;T, TInput, TOutput&gt;.RegistryDirectory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_SyncLock">ModelRegistryBase&lt;T, TInput, TOutput&gt;.SyncLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_JsonSettings">ModelRegistryBase&lt;T, TInput, TOutput&gt;.JsonSettings</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_RegisterModel__1_System_String_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Models_ModelMetadata__0__System_Collections_Generic_Dictionary_System_String_System_String__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.RegisterModel&lt;TMetadata&gt;(string, IModel&lt;TInput, TOutput, TMetadata&gt;, ModelMetadata&lt;T&gt;, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_CreateModelVersion__1_System_String_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Models_ModelMetadata__0__System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.CreateModelVersion&lt;TMetadata&gt;(string, IModel&lt;TInput, TOutput, TMetadata&gt;, ModelMetadata&lt;T&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModel_System_String_System_Nullable_System_Int32__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModel(string, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetLatestModel_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetLatestModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelByStage_System_String_AiDotNet_Interfaces_ModelStage_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelByStage(string, ModelStage)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_TransitionModelStage_System_String_System_Int32_AiDotNet_Interfaces_ModelStage_System_Boolean_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.TransitionModelStage(string, int, ModelStage, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_ListModels_System_String_System_Collections_Generic_Dictionary_System_String_System_String__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.ListModels(string, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_ListModelVersions_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.ListModelVersions(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_SearchModels_AiDotNet_Models_ModelSearchCriteria__0__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.SearchModels(ModelSearchCriteria&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_UpdateModelMetadata_System_String_System_Int32_AiDotNet_Models_ModelMetadata__0__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.UpdateModelMetadata(string, int, ModelMetadata&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_UpdateModelTags_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_String__">ModelRegistryBase&lt;T, TInput, TOutput&gt;.UpdateModelTags(string, int, Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_DeleteModelVersion_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.DeleteModelVersion(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_DeleteModel_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.DeleteModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_CompareModels_System_String_System_Int32_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.CompareModels(string, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelLineage_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelLineage(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_ArchiveModel_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.ArchiveModel(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelStoragePath_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelStoragePath(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_AttachModelCard_System_String_System_Int32_AiDotNet_AdversarialRobustness_Documentation_ModelCard_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.AttachModelCard(string, int, ModelCard)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelCard_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelCard(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GenerateModelCard_System_String_System_Int32_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GenerateModelCard(string, int, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_SaveModelCard_System_String_System_Int32_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.SaveModelCard(string, int, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_EnsureRegistryDirectoryExists">ModelRegistryBase&lt;T, TInput, TOutput&gt;.EnsureRegistryDirectoryExists()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelDirectoryPath_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelDirectoryPath(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetModelVersionPath_System_String_System_Int32_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetModelVersionPath(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_ValidateModelName_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.ValidateModelName(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_SerializeToJson_System_Object_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.SerializeToJson(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_DeserializeFromJson__1_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.DeserializeFromJson&lt;TResult&gt;(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetSanitizedFileName_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetSanitizedFileName(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_GetSanitizedPath_System_String_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.GetSanitizedPath(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ModelRegistry.ModelRegistryBase-3.html#AiDotNet_ModelRegistry_ModelRegistryBase_3_ValidatePathWithinDirectory_System_String_System_String_">ModelRegistryBase&lt;T, TInput, TOutput&gt;.ValidatePathWithinDirectory(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ModelRegistry_ModelRegistry_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This is a complete implementation of a model registry that manages
+the lifecycle of your trained models.</p>
+<p>Features include:</p>
+<ul>
+<li>Model versioning (track different versions of the same model)</li>
+<li>Lifecycle stages (Development, Staging, Production, Archived)</li>
+<li>Model comparison and lineage tracking</li>
+<li>Persistent storage with JSON serialization</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3__ctor_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3__ctor_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.#ctor(System.String)">
+  ModelRegistry(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ModelRegistry class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelRegistry(string? registryDirectory = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>registryDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to store models. Defaults to &quot;./model_registry&quot;.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_ArchiveModel_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ArchiveModel*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_ArchiveModel_System_String_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ArchiveModel(System.String,System.Int32)">
+  ArchiveModel(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L510"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Archives a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ArchiveModel(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_AttachModelCard_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.AttachModelCard*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_AttachModelCard_System_String_System_Int32_AiDotNet_AdversarialRobustness_Documentation_ModelCard_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.AttachModelCard(System.String,System.Int32,AiDotNet.AdversarialRobustness.Documentation.ModelCard)">
+  AttachModelCard(string, int, ModelCard)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L531"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attaches a Model Card to a registered model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void AttachModelCard(string modelName, int version, ModelCard modelCard)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>modelCard</code> <a class="xref" href="AiDotNet.AdversarialRobustness.Documentation.ModelCard.html">ModelCard</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelRegistry_ModelRegistry_3_AttachModelCard_System_String_System_Int32_AiDotNet_AdversarialRobustness_Documentation_ModelCard__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A Model Card is like a nutrition label for AI models.
+This method associates a Model Card with a specific version of your model,
+documenting its intended use, limitations, and performance characteristics.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_CompareModels_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.CompareModels*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_CompareModels_System_String_System_Int32_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.CompareModels(System.String,System.Int32,System.Int32)">
+  CompareModels(string, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two model versions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelComparison&lt;T&gt; CompareModels(string modelName, int version1, int version2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version1</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>version2</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelComparison-1.html">ModelComparison</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_CreateModelVersion_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.CreateModelVersion*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_CreateModelVersion__1_System_String_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Models_ModelMetadata__0__System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.CreateModelVersion``1(System.String,AiDotNet.Interfaces.IModel{`1,`2,``0},AiDotNet.Models.ModelMetadata{`0},System.String)">
+  CreateModelVersion&lt;TMetadata&gt;(string, IModel&lt;TInput, TOutput, TMetadata&gt;, ModelMetadata&lt;T&gt;, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new version of an existing model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int CreateModelVersion&lt;TMetadata&gt;(string modelName, IModel&lt;TInput, TOutput, TMetadata&gt; model, ModelMetadata&lt;T&gt; metadata, string? description = null) where TMetadata : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, TMetadata&gt;</dt>
+    <dd></dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TMetadata</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_DeleteModel_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.DeleteModel*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_DeleteModel_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.DeleteModel(System.String)">
+  DeleteModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L408"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes all versions of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void DeleteModel(string modelName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_DeleteModelVersion_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.DeleteModelVersion*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_DeleteModelVersion_System_String_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.DeleteModelVersion(System.String,System.Int32)">
+  DeleteModelVersion(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L364"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a specific model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void DeleteModelVersion(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GenerateModelCard_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GenerateModelCard*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GenerateModelCard_System_String_System_Int32_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GenerateModelCard(System.String,System.Int32,System.String)">
+  GenerateModelCard(string, int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L597"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a Model Card from the registered model's metadata and evaluation results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelCard GenerateModelCard(string modelName, int version, string? developers = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>developers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AdversarialRobustness.Documentation.ModelCard.html">ModelCard</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelRegistry_ModelRegistry_3_GenerateModelCard_System_String_System_Int32_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This automatically creates a Model Card from information
+already stored about your model. It's a quick way to create documentation without
+having to fill in everything manually.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetLatestModel_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetLatestModel*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetLatestModel_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetLatestModel(System.String)">
+  GetLatestModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the latest version of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override RegisteredModel&lt;T, TInput, TOutput&gt; GetLatestModel(string modelName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.RegisteredModel-3.html">RegisteredModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModel_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModel*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModel_System_String_System_Nullable_System_Int32__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModel(System.String,System.Nullable{System.Int32})">
+  GetModel(string, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific model version from the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override RegisteredModel&lt;T, TInput, TOutput&gt; GetModel(string modelName, int? version = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.RegisteredModel-3.html">RegisteredModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelByStage_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelByStage*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelByStage_System_String_AiDotNet_Interfaces_ModelStage_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelByStage(System.String,AiDotNet.Interfaces.ModelStage)">
+  GetModelByStage(string, ModelStage)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model currently in a specific stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override RegisteredModel&lt;T, TInput, TOutput&gt;? GetModelByStage(string modelName, ModelStage stage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>stage</code> <a class="xref" href="AiDotNet.Interfaces.ModelStage.html">ModelStage</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.RegisteredModel-3.html">RegisteredModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelCard_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelCard*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelCard_System_String_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelCard(System.String,System.Int32)">
+  GetModelCard(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L554"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Model Card for a registered model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelCard? GetModelCard(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.AdversarialRobustness.Documentation.ModelCard.html">ModelCard</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelLineage_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelLineage*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelLineage_System_String_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelLineage(System.String,System.Int32)">
+  GetModelLineage(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L485"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the lineage information for a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelLineage GetModelLineage(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelLineage.html">ModelLineage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelStoragePath_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelStoragePath*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_GetModelStoragePath_System_String_System_Int32_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.GetModelStoragePath(System.String,System.Int32)">
+  GetModelStoragePath(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L518"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the storage location for a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string GetModelStoragePath(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_ListModelVersions_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ListModelVersions*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_ListModelVersions_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ListModelVersions(System.String)">
+  ListModelVersions(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all versions of a specific model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override List&lt;ModelVersionInfo&lt;T&gt;&gt; ListModelVersions(string modelName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.ModelVersionInfo-1.html">ModelVersionInfo</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_ListModels_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ListModels*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_ListModels_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.ListModels(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  ListModels(string?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all models in the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override List&lt;string&gt; ListModels(string? filter = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_RegisterModel_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.RegisterModel*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_RegisterModel__1_System_String_AiDotNet_Interfaces_IModel__1__2___0__AiDotNet_Models_ModelMetadata__0__System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.RegisterModel``1(System.String,AiDotNet.Interfaces.IModel{`1,`2,``0},AiDotNet.Models.ModelMetadata{`0},System.Collections.Generic.Dictionary{System.String,System.String})">
+  RegisterModel&lt;TMetadata&gt;(string, IModel&lt;TInput, TOutput, TMetadata&gt;, ModelMetadata&lt;T&gt;, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers a new model in the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string RegisterModel&lt;TMetadata&gt;(string name, IModel&lt;TInput, TOutput, TMetadata&gt; model, ModelMetadata&lt;T&gt; metadata, Dictionary&lt;string, string&gt;? tags = null) where TMetadata : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, TMetadata&gt;</dt>
+    <dd></dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TMetadata</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_SaveModelCard_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.SaveModelCard*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_SaveModelCard_System_String_System_Int32_System_String_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.SaveModelCard(System.String,System.Int32,System.String)">
+  SaveModelCard(string, int, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L670"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the Model Card for a model version to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SaveModelCard(string modelName, int version, string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ModelRegistry_ModelRegistry_3_SaveModelCard_System_String_System_Int32_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The filePath must resolve to a location within the registry directory
+to prevent path traversal attacks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_SearchModels_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.SearchModels*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_SearchModels_AiDotNet_Models_ModelSearchCriteria__0__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.SearchModels(AiDotNet.Models.ModelSearchCriteria{`0})">
+  SearchModels(ModelSearchCriteria&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for models based on criteria.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override List&lt;RegisteredModel&lt;T, TInput, TOutput&gt;&gt; SearchModels(ModelSearchCriteria&lt;T&gt; searchCriteria)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>searchCriteria</code> <a class="xref" href="AiDotNet.Models.ModelSearchCriteria-1.html">ModelSearchCriteria</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.RegisteredModel-3.html">RegisteredModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_TransitionModelStage_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.TransitionModelStage*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_TransitionModelStage_System_String_System_Int32_AiDotNet_Interfaces_ModelStage_System_Boolean_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.TransitionModelStage(System.String,System.Int32,AiDotNet.Interfaces.ModelStage,System.Boolean)">
+  TransitionModelStage(string, int, ModelStage, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transitions a model version to a different stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void TransitionModelStage(string modelName, int version, ModelStage targetStage, bool archivePrevious = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>targetStage</code> <a class="xref" href="AiDotNet.Interfaces.ModelStage.html">ModelStage</a></dt>
+    <dd></dd>
+    <dt><code>archivePrevious</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_UpdateModelMetadata_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.UpdateModelMetadata*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_UpdateModelMetadata_System_String_System_Int32_AiDotNet_Models_ModelMetadata__0__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.UpdateModelMetadata(System.String,System.Int32,AiDotNet.Models.ModelMetadata{`0})">
+  UpdateModelMetadata(string, int, ModelMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the metadata for a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateModelMetadata(string modelName, int version, ModelMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ModelRegistry_ModelRegistry_3_UpdateModelTags_" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.UpdateModelTags*"></a>
+
+  <h3 id="AiDotNet_ModelRegistry_ModelRegistry_3_UpdateModelTags_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.ModelRegistry.ModelRegistry`3.UpdateModelTags(System.String,System.Int32,System.Collections.Generic.Dictionary{System.String,System.String})">
+  UpdateModelTags(string, int, Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L344"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds or updates tags for a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void UpdateModelTags(string modelName, int version, Dictionary&lt;string, string&gt; tags)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ModelRegistry/ModelRegistry.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

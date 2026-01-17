@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExtremelyRandomizedTreesRegression&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExtremelyRandomizedTreesRegression&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees with additional randomization for improved prediction accuracy and reduced overfitting.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1.md&amp;value=---%0Auid%3A%20AiDotNet.Regression.ExtremelyRandomizedTreesRegression%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1">
+
+
+
+  <h1 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1" class="text-break">
+Class ExtremelyRandomizedTreesRegression&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Regression.html">Regression</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements an Extremely Randomized Trees regression model, which is an ensemble method that uses multiple decision trees
+with additional randomization for improved prediction accuracy and reduced overfitting.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ExtremelyRandomizedTreesRegression&lt;T&gt; : AsyncDecisionTreeRegressionBase&lt;T&gt;, IAsyncTreeBasedModel&lt;T&gt;, ITreeBasedRegression&lt;T&gt;, INonLinearRegression&lt;T&gt;, IRegression&lt;T&gt;, IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html">AsyncDecisionTreeRegressionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ExtremelyRandomizedTreesRegression&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAsyncTreeBasedModel-1.html">IAsyncTreeBasedModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITreeBasedRegression-1.html">ITreeBasedRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.INonLinearRegression-1.html">INonLinearRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRegression-1.html">IRegression</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_NumOps">AsyncDecisionTreeRegressionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Engine">AsyncDecisionTreeRegressionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Root">AsyncDecisionTreeRegressionBase&lt;T&gt;.Root</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Options">AsyncDecisionTreeRegressionBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Regularization">AsyncDecisionTreeRegressionBase&lt;T&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureImportances">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureImportances</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Random">AsyncDecisionTreeRegressionBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_FeatureNames">AsyncDecisionTreeRegressionBase&lt;T&gt;.FeatureNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.Predict(Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetParameters">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetActiveFeatureIndices">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_IsFeatureUsed_System_Int32_">AsyncDecisionTreeRegressionBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">AsyncDecisionTreeRegressionBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_GetFeatureImportance">AsyncDecisionTreeRegressionBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DeepCopy">AsyncDecisionTreeRegressionBase&lt;T&gt;.DeepCopy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_Clone">AsyncDecisionTreeRegressionBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadModel_System_String_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ParameterCount">AsyncDecisionTreeRegressionBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_DefaultLossFunction">AsyncDecisionTreeRegressionBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__">AsyncDecisionTreeRegressionBase&lt;T&gt;.ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">AsyncDecisionTreeRegressionBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SaveState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_LoadState_System_IO_Stream_">AsyncDecisionTreeRegressionBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_UseSoftTree">AsyncDecisionTreeRegressionBase&lt;T&gt;.UseSoftTree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Regression.AsyncDecisionTreeRegressionBase-1.html#AiDotNet_Regression_AsyncDecisionTreeRegressionBase_1_SoftTreeTemperature">AsyncDecisionTreeRegressionBase&lt;T&gt;.SoftTreeTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Extremely Randomized Trees (also known as Extra Trees) is an ensemble method that builds multiple decision trees
+and averages their predictions to improve accuracy and reduce overfitting. Unlike Random Forests, which use the best
+split for each feature, Extra Trees selects random thresholds for each feature and chooses the best among these
+random thresholds, adding an additional layer of randomization that can further reduce variance.
+</p>
+<p><b>For Beginners:</b> This model works like a committee of decision trees that vote on predictions.
+<p>While a single decision tree might make mistakes due to its specific structure,
+a group of different trees can work together to make more reliable predictions:</p>
+<ul>
+<li>Each tree sees a random subset of the training data</li>
+<li>Each tree uses random thresholds for making decisions</li>
+<li>The final prediction is the average of all individual tree predictions</li>
+</ul>
+<p>The key advantage is that by adding extra randomness in how the trees are built,
+the model avoids &quot;memorizing&quot; the training data and becomes better at generalizing
+to new data. This is similar to how asking many different people for their opinion
+often leads to better decisions than relying on just one person.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1__ctor_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1__ctor_AiDotNet_Models_Options_ExtremelyRandomizedTreesRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.#ctor(AiDotNet.Models.Options.ExtremelyRandomizedTreesRegressionOptions,AiDotNet.Interfaces.IRegularization{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Regression.ExtremelyRandomizedTreesRegression-1.html">ExtremelyRandomizedTreesRegression&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExtremelyRandomizedTreesRegression(ExtremelyRandomizedTreesRegressionOptions options, IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? regularization = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.ExtremelyRandomizedTreesRegressionOptions.html">ExtremelyRandomizedTreesRegressionOptions</a></dt>
+    <dd><p>Configuration options for the Extremely Randomized Trees algorithm.</p>
+</dd>
+    <dt><code>regularization</code> <a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Optional regularization strategy to prevent overfitting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1__ctor_AiDotNet_Models_Options_ExtremelyRandomizedTreesRegressionOptions_AiDotNet_Interfaces_IRegularization__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new Extremely Randomized Trees regression model with the specified options and
+regularization strategy. The options control parameters such as the number of trees, maximum tree depth,
+and feature selection. If no regularization is specified, no regularization is applied.
+</p>
+<p><b>For Beginners:</b> This is how you create a new Extremely Randomized Trees model.
+<p>You need to provide:</p>
+<ul>
+<li>options: Controls how the ensemble works (like how many trees to use, how deep each tree can be)</li>
+<li>regularization: Optional setting to help prevent the model from &quot;memorizing&quot; the training data</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Create options for an Extra Trees model with 100 trees
+var options = new ExtremelyRandomizedTreesRegressionOptions {
+    NumberOfTrees = 100,
+    MaxDepth = 10
+};
+
+// Create the model
+var extraTrees = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_MaxDepth_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.MaxDepth*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_MaxDepth" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.MaxDepth">
+  MaxDepth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum depth of the decision trees in the ensemble.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int MaxDepth { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of levels in each tree, from the root to the deepest leaf.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_MaxDepth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the maximum depth of the individual decision trees in the ensemble. This is one of the
+most important parameters for controlling the complexity of the model. Deeper trees can capture more complex
+patterns but are more prone to overfitting.
+</p>
+<p><b>For Beginners:</b> This property tells you how many levels of questions each tree in the ensemble can ask.
+<p>Just like with a single decision tree:</p>
+<ul>
+<li>A smaller MaxDepth (e.g., 3-5): Creates simpler trees that might miss some patterns but are less likely to memorize the training data</li>
+<li>A larger MaxDepth (e.g., 10-20): Creates more complex trees that can capture detailed patterns but might learn noise in the training data</li>
+</ul>
+<p>One advantage of ensemble methods is that you can often use slightly deeper trees than you would with a single decision tree,
+because the averaging of multiple trees helps prevent overfitting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_NumberOfTrees_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_NumberOfTrees" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of trees in the ensemble model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int NumberOfTrees { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of decision trees used in the ensemble.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_NumberOfTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of individual decision trees that make up the Extremely Randomized Trees
+ensemble. A larger number of trees typically improves prediction accuracy but increases training and
+prediction time.
+</p>
+<p><b>For Beginners:</b> This tells you how many individual decision trees work together in this model.
+<p>Think of it as the size of your &quot;committee of experts&quot;:</p>
+<ul>
+<li>A small number (10-50): Faster to train but might be less accurate</li>
+<li>A medium number (50-200): Good balance of accuracy and speed</li>
+<li>A large number (200+): More accurate but slower to train and use</li>
+</ul>
+<p>Unlike a single decision tree model, which has just one tree, ensemble methods like
+Extremely Randomized Trees use multiple trees working together to make better predictions.
+The final prediction is the average of what all these trees predict.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_SupportsJitCompilation_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_SupportsJitCompilation" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L535"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this Extremely Randomized Trees model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> when soft tree mode is enabled and trees have been trained;
+<code>false</code> otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Extremely Randomized Trees supports JIT compilation when soft tree mode is enabled.
+In soft mode, each tree in the ensemble uses sigmoid-based soft gating instead of
+hard if-then splits, making the entire ensemble differentiable.
+</p>
+<p><b>For Beginners:</b> JIT compilation is available when soft tree mode is enabled.
+<p>In soft tree mode:</p>
+<ul>
+<li>Each tree in the Extra Trees ensemble uses smooth transitions</li>
+<li>All trees can be exported as a single computation graph</li>
+<li>The final prediction averages all tree outputs</li>
+</ul>
+<p>This gives you the benefits of extra randomization with JIT-compiled speed.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_CalculateFeatureImportancesAsync_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.CalculateFeatureImportancesAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_CalculateFeatureImportancesAsync_System_Int32_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.CalculateFeatureImportancesAsync(System.Int32)">
+  CalculateFeatureImportancesAsync(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the average feature importances across all trees in the ensemble.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task CalculateFeatureImportancesAsync(int numFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of features in the model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous calculation operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_CreateNewInstance_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.CreateNewInstance*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_CreateNewInstance" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.CreateNewInstance">
+  CreateNewInstance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L504"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the extremely randomized trees regression model with the same configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; CreateNewInstance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance of <a class="xref" href="AiDotNet.Regression.ExtremelyRandomizedTreesRegression-1.html">ExtremelyRandomizedTreesRegression&lt;T&gt;</a> with the same configuration as the current instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_CreateNewInstance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new extremely randomized trees regression model that has the same configuration 
+as the current instance. It's used for model persistence, cloning, and transferring the model's 
+configuration to new instances.
+</p>
+<p><b>For Beginners:</b> This method makes a fresh copy of the current model with the same settings.
+<p>It's like making a blueprint copy of your model that can be used to:</p>
+<ul>
+<li>Save your model's settings</li>
+<li>Create a new identical model</li>
+<li>Transfer your model's configuration to another system</li>
+</ul>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Create multiple similar models</li>
+<li>Save a model's configuration for later use</li>
+<li>Reset a model while keeping its settings</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Deserialize_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Deserialize_System_Byte___" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L440"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized Extremely Randomized Trees model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] modelData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reconstructs an Extremely Randomized Trees model from a byte array that was previously created
+using the Serialize method. It restores the model's configuration options, feature importances, and all
+individual decision trees in the ensemble, allowing the model to be used for predictions without retraining.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved model from a sequence of bytes.
+<p>Deserialization allows you to:</p>
+<ul>
+<li>Load a model that was saved earlier</li>
+<li>Use a model without having to retrain it</li>
+<li>Share models between different applications</li>
+</ul>
+<p>When you deserialize an Extremely Randomized Trees model:</p>
+<ul>
+<li>All settings are restored</li>
+<li>Feature importances are recovered</li>
+<li>All individual trees in the ensemble are reconstructed</li>
+<li>The model is ready to make predictions immediately</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Load from a file
+byte[] modelData = File.ReadAllBytes(&quot;extraTrees.model&quot;);
+
+// Deserialize the model
+var extraTrees = new ExtremelyRandomizedTreesRegression&lt;double&gt;(options);
+extraTrees.Deserialize(modelData);
+
+// Now you can use the model for predictions
+var predictions = await extraTrees.PredictAsync(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_ExportComputationGraph_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L562"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the Extremely Randomized Trees model's computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The root node of the exported computation graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When soft tree mode is enabled, this exports the entire Extra Trees ensemble as a
+differentiable computation graph. Each tree is exported individually, and their
+outputs are averaged to produce the final prediction.
+</p>
+<p><b>For Beginners:</b> This exports the Extra Trees ensemble as a computation graph.
+<p>Extra Trees, like Random Forest, averages predictions from all trees.
+The main difference is how trees are built (random thresholds instead of optimal),
+but for JIT compilation the averaging formula is the same.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when soft tree mode is not enabled.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the forest has not been trained (no trees).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_GetModelMetadata_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_GetModelMetadata" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L313"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the Extremely Randomized Trees model and its configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, number of trees, maximum tree depth,
+and feature importances if available. This information can be useful for model management, comparison,
+and documentation purposes.
+</p>
+<p><b>For Beginners:</b> This method provides information about your Extremely Randomized Trees model.
+<p>The metadata includes:</p>
+<ul>
+<li>The type of model (Extremely Randomized Trees)</li>
+<li>How many trees are in the ensemble</li>
+<li>Maximum depth of each tree</li>
+<li>How important each feature is for making predictions (if available)</li>
+</ul>
+<p>This information is helpful when:</p>
+<ul>
+<li>Comparing different models</li>
+<li>Documenting your model's configuration</li>
+<li>Troubleshooting model performance</li>
+<li>Understanding which features have the biggest impact on predictions</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var metadata = extraTrees.GetModelMetadata();
+Console.WriteLine($&quot;Model type: {metadata.ModelType}&quot;);
+Console.WriteLine($&quot;Number of trees: {metadata.AdditionalInfo[&quot;NumberOfTrees&quot;]}&quot;);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_PredictAsync_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.PredictAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.PredictAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PredictAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously predicts target values for the provided input features using the trained ensemble model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;Vector&lt;T&gt;&gt; PredictAsync(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample to predict and each column represents a feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A task that returns a vector of predicted values corresponding to each input sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_PredictAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method predicts target values for new input data by averaging the predictions from all decision trees
+in the ensemble. Each tree's prediction is computed in parallel, and the results are then averaged to form
+the final prediction. Any specified regularization is applied to both the input data and the predictions.
+</p>
+<p><b>For Beginners:</b> This method uses your trained model to make predictions on new data.
+<p>The prediction process:</p>
+<ol>
+<li>Each individual tree in the ensemble makes its own prediction</li>
+<li>These predictions happen in parallel to save time</li>
+<li>The final prediction is the average of all the individual tree predictions</li>
+</ol>
+<p>For example, if you're predicting house prices and have 100 trees:</p>
+<ul>
+<li>Tree 1 predicts: $250,000</li>
+<li>Tree 2 predicts: $275,000</li>
+<li>...</li>
+<li>Tree 100 predicts: $260,000</li>
+<li>Final prediction: Average of all 100 predictions</li>
+</ul>
+<p>The &quot;Async&quot; in the name means this method returns a Task, allowing your program to do other things
+while waiting for predictions to complete.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Make predictions
+var predictions = await extraTrees.PredictAsync(newFeatures);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Serialize_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Serialize" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L370"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the Extremely Randomized Trees model to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the Extremely Randomized Trees model into a byte array that can be stored in a file,
+database, or transmitted over a network. The serialized data includes the model's configuration options,
+feature importances, and all individual decision trees in the ensemble.
+</p>
+<p><b>For Beginners:</b> This method saves your trained model as a sequence of bytes.
+<p>Serialization allows you to:</p>
+<ul>
+<li>Save your model to a file</li>
+<li>Store your model in a database</li>
+<li>Send your model over a network</li>
+<li>Keep your model for later use without having to retrain it</li>
+</ul>
+<p>The serialized data includes:</p>
+<ul>
+<li>All the model's settings (like number of trees and maximum depth)</li>
+<li>The importance of each feature</li>
+<li>Every individual decision tree in the ensemble</li>
+</ul>
+<p>Because Extremely Randomized Trees models contain multiple trees, the serialized data
+can be quite large compared to a single decision tree model.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Serialize the model
+byte[] modelData = extraTrees.Serialize();
+
+// Save to a file
+File.WriteAllBytes(&quot;extraTrees.model&quot;, modelData);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_TrainAsync_" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.TrainAsync*"></a>
+
+  <h3 id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Regression.ExtremelyRandomizedTreesRegression`1.TrainAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  TrainAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Asynchronously trains the Extremely Randomized Trees model using the provided input features and target values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task TrainAsync(Matrix&lt;T&gt; x, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix where each row represents a sample and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of target values corresponding to each sample in x.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task representing the asynchronous training operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Regression_ExtremelyRandomizedTreesRegression_1_TrainAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds the Extremely Randomized Trees ensemble by training multiple decision trees in parallel.
+Each tree is trained on a randomly sampled subset of the training data (bootstrap sampling). The trees
+are built with additional randomization in feature selection and threshold determination. The level of
+parallelism can be controlled through the options.
+</p>
+<p><b>For Beginners:</b> This method teaches the model how to make predictions using your data.
+<p>During training:</p>
+<ol>
+<li>The model creates multiple decision trees (as specified in NumberOfTrees)</li>
+<li>Each tree is given a random sample of your training data (some examples may be repeated, others left out)</li>
+<li>Each tree learns independently but with extra randomness in how it makes decisions</li>
+<li>The trees are trained in parallel to save time (using multiple CPU cores)</li>
+</ol>
+<p>The &quot;Async&quot; in the name means this method can run without blocking other operations in your program,
+which is especially helpful when training large models that take significant time.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Train the model
+await extraTrees.TrainAsync(features, targets);
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Regression/ExtremelyRandomizedTreesRegression.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ContinuousBatcherConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ContinuousBatcherConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for the continuous batcher.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig">
+
+
+
+  <h1 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig" class="text-break">
+Class ContinuousBatcherConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L6"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Serving.html">Serving</a>.<a class="xref" href="AiDotNet.Serving.ContinuousBatching.html">ContinuousBatching</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for the continuous batcher.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ContinuousBatcherConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ContinuousBatcherConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_AutoStart_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.AutoStart*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_AutoStart" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.AutoStart">
+  AutoStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to automatically start the batcher when a request is submitted.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AutoStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_EnableSpeculativeDecoding_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.EnableSpeculativeDecoding*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_EnableSpeculativeDecoding" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.EnableSpeculativeDecoding">
+  EnableSpeculativeDecoding
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to enable speculative decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableSpeculativeDecoding { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_EosTokenId_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.EosTokenId*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_EosTokenId" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.EosTokenId">
+  EosTokenId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>End-of-sequence token ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EosTokenId { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_IdleSleepMs_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.IdleSleepMs*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_IdleSleepMs" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.IdleSleepMs">
+  IdleSleepMs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Milliseconds to sleep when idle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int IdleSleepMs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_MaxContextLength_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.MaxContextLength*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_MaxContextLength" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.MaxContextLength">
+  MaxContextLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum number of tokens in context (prompt + generated).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxContextLength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SchedulerConfig_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SchedulerConfig*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SchedulerConfig" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SchedulerConfig">
+  SchedulerConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scheduler configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BatchSchedulerConfig SchedulerConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.ContinuousBatching.BatchSchedulerConfig.html">BatchSchedulerConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculationDepth_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculationDepth*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculationDepth" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculationDepth">
+  SpeculationDepth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of tokens to draft ahead when speculative decoding is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SpeculationDepth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculationPolicy_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculationPolicy*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculationPolicy" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculationPolicy">
+  SpeculationPolicy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Policy for when speculative decoding should run (default: Auto).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SpeculationPolicy SpeculationPolicy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.SpeculationPolicy.html">SpeculationPolicy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculativeMethod_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculativeMethod*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculativeMethod" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.SpeculativeMethod">
+  SpeculativeMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Speculative decoding method to use (default: Auto).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SpeculativeMethod SpeculativeMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Configuration.SpeculativeMethod.html">SpeculativeMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_SpeculativeMethod_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This keeps the public serving surface compact while enabling internal selection of
+classic draft-model speculation vs tree-based alternatives (Medusa/EAGLE).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_UseTreeSpeculation_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.UseTreeSpeculation*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_UseTreeSpeculation" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.UseTreeSpeculation">
+  UseTreeSpeculation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use tree-based speculation (multiple draft continuations).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTreeSpeculation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_UseTreeSpeculation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is an advanced option; when false the batcher uses classic speculative decoding.
+Some speculative methods may implicitly enable this internally.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_ForModel_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.ForModel*"></a>
+
+  <h3 id="AiDotNet_Serving_ContinuousBatching_ContinuousBatcherConfig_ForModel_System_String_System_Int32_" data-uid="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.ForModel(System.String,System.Int32)">
+  ForModel(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates config for a specific model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ContinuousBatcherConfig ForModel(string modelName, int maxBatchSize = 8)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>maxBatchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.ContinuousBatching.ContinuousBatcherConfig.html">ContinuousBatcherConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Serving/ContinuousBatching/ContinuousBatcherConfig.cs/#L6" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

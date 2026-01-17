@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DallE3Model&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DallE3Model&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="DALL-E 3 style text-to-image generation model with advanced prompt understanding and high-fidelity image generation capabilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Models_DallE3Model_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Models.DallE3Model%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Models.DallE3Model`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Models_DallE3Model_1" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1" class="text-break">
+Class DallE3Model&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>DALL-E 3 style text-to-image generation model with advanced prompt understanding
+and high-fidelity image generation capabilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DallE3Model&lt;T&gt; : LatentDiffusionModelBase&lt;T&gt;, ILatentDiffusionModel&lt;T&gt;, IDiffusionModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;, IDallE3Model&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html">DiffusionModelBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html">LatentDiffusionModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DallE3Model&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILatentDiffusionModel-1.html">ILatentDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDallE3Model-1.html">IDallE3Model</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GuidanceScale">LatentDiffusionModelBase&lt;T&gt;.GuidanceScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsNegativePrompt">LatentDiffusionModelBase&lt;T&gt;.SupportsNegativePrompt</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SupportsInpainting">LatentDiffusionModelBase&lt;T&gt;.SupportsInpainting</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_EncodeToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_">LatentDiffusionModelBase&lt;T&gt;.EncodeToLatent(Tensor&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_DecodeFromLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LatentDiffusionModelBase&lt;T&gt;.DecodeFromLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_GenerateFromText_System_String_System_String_System_Int32_System_Int32_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.GenerateFromText(string, string, int, int, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ImageToImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Double_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.ImageToImage(Tensor&lt;T&gt;, string, string, double, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Inpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_String_System_Int32_System_Nullable_System_Double__System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Inpaint(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, string, int, double?, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SetGuidanceScale_System_Double_">LatentDiffusionModelBase&lt;T&gt;.SetGuidanceScale(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_PredictNoise_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.PredictNoise(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_Generate_System_Int32___System_Int32_System_Nullable_System_Int32__">LatentDiffusionModelBase&lt;T&gt;.Generate(int[], int, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ApplyGuidance_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_">LatentDiffusionModelBase&lt;T&gt;.ApplyGuidance(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_SampleNoiseTensor_System_Int32___System_Random_">LatentDiffusionModelBase&lt;T&gt;.SampleNoiseTensor(int[], Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_ResizeMaskToLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">LatentDiffusionModelBase&lt;T&gt;.ResizeMaskToLatent(Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.LatentDiffusionModelBase-1.html#AiDotNet_Diffusion_LatentDiffusionModelBase_1_BlendLatentsWithMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">LatentDiffusionModelBase&lt;T&gt;.BlendLatentsWithMask(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_NumOps">DiffusionModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_RandomGenerator">DiffusionModelBase&lt;T&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LossFunction">DiffusionModelBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LearningRate">DiffusionModelBase&lt;T&gt;.LearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Scheduler">DiffusionModelBase&lt;T&gt;.Scheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_DefaultLossFunction">DiffusionModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SupportsJitCompilation">DiffusionModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___">DiffusionModelBase&lt;T&gt;.ComputeLoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">DiffusionModelBase&lt;T&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">DiffusionModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Serialize">DiffusionModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_Deserialize_System_Byte___">DiffusionModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveModel_System_String_">DiffusionModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadModel_System_String_">DiffusionModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SaveState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_LoadState_System_IO_Stream_">DiffusionModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetActiveFeatureIndices">DiffusionModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">DiffusionModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_IsFeatureUsed_System_Int32_">DiffusionModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_GetFeatureImportance">DiffusionModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">DiffusionModelBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">DiffusionModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">DiffusionModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Diffusion.DiffusionModelBase-1.html#AiDotNet_NeuralNetworks_Diffusion_DiffusionModelBase_1_SampleNoise_System_Int32_System_Random_">DiffusionModelBase&lt;T&gt;.SampleNoise(int, Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Diffusion_Models_DallE3Model_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This implementation provides DALL-E 3 style capabilities including prompt expansion,
+text rendering, style control, and high-quality image generation at multiple sizes.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1__ctor_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1__ctor_AiDotNet_Models_Options_DiffusionModelOptions__0__AiDotNet_Interfaces_INoiseScheduler__0__AiDotNet_Interfaces_IConditioningModule__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.#ctor(AiDotNet.Models.Options.DiffusionModelOptions{`0},AiDotNet.Interfaces.INoiseScheduler{`0},AiDotNet.Interfaces.IConditioningModule{`0},System.Nullable{System.Int32})">
+  DallE3Model(DiffusionModelOptions&lt;T&gt;?, INoiseScheduler&lt;T&gt;?, IConditioningModule&lt;T&gt;?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DallE3Model class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DallE3Model(DiffusionModelOptions&lt;T&gt;? options = null, INoiseScheduler&lt;T&gt;? scheduler = null, IConditioningModule&lt;T&gt;? conditioner = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.DiffusionModelOptions-1.html">DiffusionModelOptions</a>&lt;T&gt;</dt>
+    <dd><p>Optional configuration options.</p>
+</dd>
+    <dt><code>scheduler</code> <a class="xref" href="AiDotNet.Interfaces.INoiseScheduler-1.html">INoiseScheduler</a>&lt;T&gt;</dt>
+    <dd><p>Optional noise scheduler.</p>
+</dd>
+    <dt><code>conditioner</code> <a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd><p>Optional conditioning module for text encoding.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Conditioner_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Conditioner*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Conditioner" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Conditioner">
+  Conditioner
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the conditioning module (optional, for conditioned generation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IConditioningModule&lt;T&gt;? Conditioner { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IConditioningModule-1.html">IConditioningModule</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_LatentChannels_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_LatentChannels" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_LatentChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 4 for Stable Diffusion models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_MaxPromptLength_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.MaxPromptLength*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_MaxPromptLength" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.MaxPromptLength">
+  MaxPromptLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum prompt length in characters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxPromptLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_NoisePredictor_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.NoisePredictor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_NoisePredictor" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.NoisePredictor">
+  NoisePredictor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the noise predictor model (U-Net, DiT, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override INoisePredictor&lt;T&gt; NoisePredictor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INoisePredictor-1.html">INoisePredictor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_ParameterCount_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_ParameterCount" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L746"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportedSizes_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportedSizes*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportedSizes" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportedSizes">
+  SupportedSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the supported image sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;DallE3ImageSize&gt; SupportedSizes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportsEditing_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportsEditing*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportsEditing" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportsEditing">
+  SupportsEditing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the model supports image editing (inpainting).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsEditing { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportsVariations_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportsVariations*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_SupportsVariations" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SupportsVariations">
+  SupportsVariations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the model supports image variations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsVariations { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_VAE_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.VAE*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_VAE" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.VAE">
+  VAE
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the VAE model used for encoding and decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IVAEModel&lt;T&gt; VAE { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_CheckPromptSafety_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.CheckPromptSafety*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_CheckPromptSafety_System_String_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.CheckPromptSafety(System.String)">
+  CheckPromptSafety(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L433"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a prompt is likely to be rejected for safety reasons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (bool IsSafe, IEnumerable&lt;string&gt; FlaggedCategories) CheckPromptSafety(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.issafe">IsSafe</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.flaggedcategories">FlaggedCategories</a>)</dt>
+    <dd><p>Whether the prompt is safe and any flagged categories.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Clone_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Clone" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L759"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDiffusionModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IDiffusionModel-1.html">IDiffusionModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_CreateVariations_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.CreateVariations*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_CreateVariations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Double_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.CreateVariations(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Double,AiDotNet.Interfaces.DallE3ImageSize)">
+  CreateVariations(Tensor&lt;T&gt;, int, double, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates variations of an existing image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Tensor&lt;T&gt;&gt; CreateVariations(Tensor&lt;T&gt; image, int count = 4, double variationStrength = 0.5, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Source image to create variations of.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of variations to generate.</p>
+</dd>
+    <dt><code>variationStrength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>How different from original (0-1).</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of image variations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_DeepCopy_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_DeepCopy" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L753"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Edit_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Edit*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Edit_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Edit(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  Edit(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Edits an existing image based on a prompt and mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Edit(Tensor&lt;T&gt; image, Tensor&lt;T&gt; mask, string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Original image to edit.</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mask indicating areas to edit (white = edit, black = keep).</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of what to generate in masked areas.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Edited image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_Edit_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Change specific parts of an image!
+<p>The mask tells the model where to make changes:</p>
+<ul>
+<li>White (255) areas will be regenerated based on prompt</li>
+<li>Black (0) areas will be preserved from the original</li>
+<li>Gray areas blend between original and generated</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_EstimateQuality_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.EstimateQuality*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_EstimateQuality_System_String_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.EstimateQuality(System.String)">
+  EstimateQuality(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L488"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the generation quality before actually generating.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T PredictedQuality, IEnumerable&lt;string&gt; Suggestions) EstimateQuality(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt to evaluate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.ienumerable-system.string--.predictedquality">PredictedQuality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.ienumerable-system.string--.suggestions">Suggestions</a>)</dt>
+    <dd><p>Predicted quality score and improvement suggestions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_ExpandPrompt_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.ExpandPrompt*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_ExpandPrompt_System_String_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.ExpandPrompt(System.String,AiDotNet.Interfaces.DallE3Style)">
+  ExpandPrompt(string, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L455"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Expands a simple prompt into a more detailed description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ExpandPrompt(string simplePrompt, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>simplePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Brief description.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Desired style for expansion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Expanded, detailed prompt.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Generate_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Generate_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Generate(System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style,System.Nullable{System.Int32})">
+  Generate(string, DallE3ImageSize, DallE3Quality, DallE3Style, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image from a text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Generate(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired image.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image tensor [channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_Generate_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The main function - describe what you want!
+<p>Tips for good prompts:</p>
+<ul>
+<li>Be specific about subject, style, and composition</li>
+<li>Include lighting and mood descriptions</li>
+<li>Mention artistic style if desired (e.g., &quot;oil painting&quot;, &quot;digital art&quot;)</li>
+<li>Describe spatial relationships clearly</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateConsistentSet_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateConsistentSet*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateConsistentSet_System_String_System_Collections_Generic_IEnumerable_System_String__System_Int32_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateConsistentSet(System.String,System.Collections.Generic.IEnumerable{System.String},System.Int32,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateConsistentSet(string, IEnumerable&lt;string&gt;, int, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L467"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a consistent set of images (same character/scene, different poses/angles).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Tensor&lt;T&gt;&gt; GenerateConsistentSet(string basePrompt, IEnumerable&lt;string&gt; variations, int consistencySeed, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Base description of the subject.</p>
+</dd>
+    <dt><code>variations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of variation descriptions (poses, angles, etc.).</p>
+</dd>
+    <dt><code>consistencySeed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Seed for maintaining consistency.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of consistent images.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateForUseCase_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateForUseCase*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateForUseCase_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateForUseCase(System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateForUseCase(string, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image optimized for a specific use case.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateForUseCase(string prompt, string useCase, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Image description.</p>
+</dd>
+    <dt><code>useCase</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Use case: &quot;social_media&quot;, &quot;product_photo&quot;, &quot;illustration&quot;, &quot;concept_art&quot;, &quot;stock_photo&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image optimized for use case.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateMultiple_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateMultiple*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateMultiple_System_String_System_Int32_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateMultiple(System.String,System.Int32,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style)">
+  GenerateMultiple(string, int, DallE3ImageSize, DallE3Quality, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates multiple images from a text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Tensor&lt;T&gt;&gt; GenerateMultiple(string prompt, int count = 4, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired images.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of images to generate (1-4).</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of generated image tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateTileable_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateTileable*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateTileable_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateTileable(System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateTileable(string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L411"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a seamlessly tileable image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateTileable(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Pattern or texture description.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tileable image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateTileable_System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Useful for creating textures, wallpapers, and backgrounds
+that can be repeated without visible seams.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithComposition_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithComposition*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithComposition_System_String_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String_System_Double___AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithComposition(System.String,System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.Double}},AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateWithComposition(string, IEnumerable&lt;(string Element, string Position, double Prominence)&gt;, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L420"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with controlled composition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWithComposition(string prompt, IEnumerable&lt;(string Element, string Position, double Prominence)&gt; compositionGuide, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Overall description.</p>
+</dd>
+    <dt><code>compositionGuide</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.element">Element</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.position">Position</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.prominence">Prominence</a>)&gt;</dt>
+    <dd><p>Composition elements with positions.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image following composition guide.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithComposition_System_String_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String_System_Double___AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Control where things appear in your image!
+<p>Composition guide format:
+[(&quot;subject&quot;, &quot;center&quot;, 0.5), (&quot;background&quot;, &quot;back&quot;, 0.2), (&quot;accent&quot;, &quot;bottom-right&quot;, 0.3)]</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithPrompt_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithPrompt*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithPrompt_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithPrompt(System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style)">
+  GenerateWithPrompt(string, DallE3ImageSize, DallE3Quality, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with the revised/expanded prompt returned.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Tensor&lt;T&gt; Image, string RevisedPrompt) GenerateWithPrompt(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Original text prompt.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.revisedprompt">RevisedPrompt</a>)</dt>
+    <dd><p>Generated image and the expanded prompt used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithPrompt_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+DALL-E 3 internally expands prompts for better results.
+This method returns both the image and the expanded prompt
+so you can see how your prompt was interpreted.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithStyle_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithStyle*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithStyle_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithStyle(System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality)">
+  GenerateWithStyle(string, string, DallE3ImageSize, DallE3Quality)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image in a specific artistic style.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWithStyle(string prompt, string artisticStyle, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Content description.</p>
+</dd>
+    <dt><code>artisticStyle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Style: &quot;photorealistic&quot;, &quot;oil_painting&quot;, &quot;watercolor&quot;, &quot;digital_art&quot;, &quot;anime&quot;, &quot;sketch&quot;, &quot;3d_render&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image in specified style.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithText_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithText*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithText_System_String_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GenerateWithText(System.String,System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateWithText(string, string, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with specific text rendered in it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GenerateWithText(string prompt, string textToRender, string textPlacement = &quot;center&quot;, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Overall image description.</p>
+</dd>
+    <dt><code>textToRender</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Exact text to appear in the image.</p>
+</dd>
+    <dt><code>textPlacement</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Where to place text: &quot;top&quot;, &quot;center&quot;, &quot;bottom&quot;, &quot;overlay&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image with text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_GenerateWithText_System_String_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+DALL-E 3 has improved text rendering capabilities compared to earlier models.
+Use this method when you need specific text to appear in the image.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GetModelMetadata_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GetModelMetadata" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L781"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves metadata and performance metrics about the trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>An object containing metadata and performance metrics about the trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides information about the model's structure, parameters, and performance metrics.</p>
+<p><b>For Beginners:</b> Model metadata is like a report card for your machine learning model.</p>
+<p>Just as a report card shows how well a student is performing in different subjects,
+model metadata shows how well your model is performing and provides details about its structure.</p>
+<p>This information typically includes:</p>
+<ul>
+<li>Accuracy measures: How well does the model's predictions match actual values?</li>
+<li>Error metrics: How far off are the model's predictions on average?</li>
+<li>Model parameters: What patterns did the model learn from the data?</li>
+<li>Training information: How long did training take? How many iterations were needed?</li>
+</ul>
+<p>For example, in a house price prediction model, metadata might include:</p>
+<ul>
+<li>Average prediction error (e.g., off by $15,000 on average)</li>
+<li>How strongly each feature (bedrooms, location) influences the prediction</li>
+<li>How well the model fits the training data</li>
+</ul>
+<p>This information helps you understand your model's strengths and weaknesses,
+and decide if it's ready to use or needs more training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_GetParameters_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_GetParameters" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L698"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Outpaint_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Outpaint*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Outpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_String_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Outpaint(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.String)">
+  Outpaint(Tensor&lt;T&gt;, string, int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Outpaints an image, extending it beyond its original boundaries.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Outpaint(Tensor&lt;T&gt; image, string direction, int extensionPixels, string? prompt = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Original image.</p>
+</dd>
+    <dt><code>direction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Direction to extend: &quot;left&quot;, &quot;right&quot;, &quot;top&quot;, &quot;bottom&quot;, &quot;all&quot;.</p>
+</dd>
+    <dt><code>extensionPixels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many pixels to extend.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt to guide the extension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Extended image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_SetParameters_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L720"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Models_DallE3Model_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Diffusion_Models_DallE3Model_1_Upscale_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Upscale*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Models_DallE3Model_1_Upscale_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Boolean_" data-uid="AiDotNet.Diffusion.Models.DallE3Model`1.Upscale(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Boolean)">
+  Upscale(Tensor&lt;T&gt;, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L289"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Upscales an image to higher resolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Upscale(Tensor&lt;T&gt; image, int scaleFactor = 2, bool enhanceDetails = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Image to upscale.</p>
+</dd>
+    <dt><code>scaleFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Upscale factor (2 or 4).</p>
+</dd>
+    <dt><code>enhanceDetails</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enhance details during upscaling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Upscaled image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Models/DallE3Model.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

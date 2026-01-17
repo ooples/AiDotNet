@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IContinualLearner&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IContinualLearner&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for continual learning trainers that can learn multiple tasks sequentially.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Interfaces.IContinualLearner%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3" class="text-break">
+Interface IContinualLearner&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for continual learning trainers that can learn multiple tasks sequentially.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IContinualLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Continual learning (also called lifelong learning) is the ability
+to learn new tasks over time without forgetting previously learned knowledge. Traditional
+neural networks suffer from "catastrophic forgetting" - when trained on new data, they
+forget what they learned before.</p>
+<p><b>This interface provides methods to:</b>
+<ul><li>Learn new tasks while protecting old knowledge</li><li>Evaluate performance on all learned tasks</li><li>Save and load model state for resuming training</li></ul>
+
+<p><b>Common Implementations:</b>
+<ul><li><b>EWCTrainer:</b> Uses Elastic Weight Consolidation to protect important weights</li><li><b>LwFTrainer:</b> Uses Learning without Forgetting with knowledge distillation</li><li><b>GEMTrainer:</b> Uses Gradient Episodic Memory to constrain gradients</li></ul>
+
+<p><b>References:</b>
+<ul><li>Parisi et al. "Continual Lifelong Learning with Neural Networks: A Review" (2019)</li><li>De Lange et al. "A Continual Learning Survey" (2021)</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_BaseModel_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.BaseModel*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_BaseModel" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.BaseModel">
+  BaseModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying model being trained.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IFullModel&lt;T, TInput, TOutput&gt; BaseModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Config_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Config*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Config" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Config">
+  Config
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration for the continual learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IContinualLearnerConfig&lt;T&gt; Config { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig-1.html">IContinualLearnerConfig</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_IsTraining_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.IsTraining*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_IsTraining" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.IsTraining">
+  IsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the learner is currently training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_MemoryUsageBytes_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.MemoryUsageBytes*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_MemoryUsageBytes" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.MemoryUsageBytes">
+  MemoryUsageBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current memory usage of the learner in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long MemoryUsageBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_TasksLearned_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.TasksLearned*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_TasksLearned" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.TasksLearned">
+  TasksLearned
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of tasks that have been learned.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int TasksLearned { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_ComputeForgetting_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.ComputeForgetting*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_ComputeForgetting" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.ComputeForgetting">
+  ComputeForgetting()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the current forgetting metric for all tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;int, T&gt; ComputeForgetting()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd><p>Dictionary mapping task ID to forgetting amount.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_EvaluateAllTasks_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.EvaluateAllTasks*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_EvaluateAllTasks" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.EvaluateAllTasks">
+  EvaluateAllTasks()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model on all learned tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ContinualEvaluationResult&lt;T&gt; EvaluateAllTasks()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualEvaluationResult-1.html">ContinualEvaluationResult</a>&lt;T&gt;</dt>
+    <dd><p>Comprehensive evaluation result including backward/forward transfer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_EvaluateTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.EvaluateTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_EvaluateTask_System_Int32_AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.EvaluateTask(System.Int32,AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  EvaluateTask(int, IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model on a specific task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">TaskEvaluationResult&lt;T&gt; EvaluateTask(int taskId, IDataset&lt;T, TInput, TOutput&gt; testData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task identifier (0-indexed).</p>
+</dd>
+    <dt><code>testData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The test data for the task.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.TaskEvaluationResult-1.html">TaskEvaluationResult</a>&lt;T&gt;</dt>
+    <dd><p>Evaluation result for the specified task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_GetAllHistory_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.GetAllHistory*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_GetAllHistory" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.GetAllHistory">
+  GetAllHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all training history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;ContinualLearningResult&lt;T&gt;&gt; GetAllHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of all training results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_GetTaskHistory_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.GetTaskHistory*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_GetTaskHistory_System_Int32_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.GetTaskHistory(System.Int32)">
+  GetTaskHistory(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the training history for a specific task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ContinualLearningResult&lt;T&gt;? GetTaskHistory(int taskId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The task identifier.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult</a>&lt;T&gt;</dt>
+    <dd><p>The training result for the task, or null if not available.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_LearnTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.LearnTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_LearnTask_AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.LearnTask(AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  LearnTask(IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learns a new task from the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ContinualLearningResult&lt;T&gt; LearnTask(IDataset&lt;T, TInput, TOutput&gt; taskData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset for the new task.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult</a>&lt;T&gt;</dt>
+    <dd><p>Result containing training metrics and performance information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_LearnTask_AiDotNet_Interfaces_IDataset__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method trains the model on the new task while using the configured
+strategy to prevent forgetting of previously learned tasks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_LearnTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.LearnTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_LearnTask_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__System_Nullable_System_Int32__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.LearnTask(AiDotNet.Interfaces.IDataset{`0,`1,`2},AiDotNet.Interfaces.IDataset{`0,`1,`2},System.Nullable{System.Int32})">
+  LearnTask(IDataset&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learns a new task with a validation set for early stopping and monitoring.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ContinualLearningResult&lt;T&gt; LearnTask(IDataset&lt;T, TInput, TOutput&gt; taskData, IDataset&lt;T, TInput, TOutput&gt; validationData, int? earlyStoppingPatience = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training dataset for the new task.</p>
+</dd>
+    <dt><code>validationData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The validation dataset for the new task.</p>
+</dd>
+    <dt><code>earlyStoppingPatience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of epochs without improvement before stopping.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult</a>&lt;T&gt;</dt>
+    <dd><p>Result containing training metrics and performance information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Load_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Load*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Load_System_String_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Load(System.String)">
+  Load(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the learner state from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Load(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to load the state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Reset_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Reset*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Reset" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the learner to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This clears all learned knowledge, including:
+- Model parameters (reset to initial values)
+- Strategy state
+- Memory buffer
+- Task history
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Save_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Save*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Save_System_String_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.Save(System.String)">
+  Save(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the learner state to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Save(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to save the state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_Save_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This saves all state needed to resume training, including:
+- Model parameters
+- Strategy state (e.g., Fisher Information for EWC)
+- Memory buffer contents
+- Training history
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_EpochCompleted" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.EpochCompleted">
+  EpochCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when an epoch completes during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;EpochEventArgs&lt;T&gt;&gt;? EpochCompleted</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.EpochEventArgs-1.html">EpochEventArgs</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_TaskCompleted" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.TaskCompleted">
+  TaskCompleted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when a task finishes training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;TaskCompletedEventArgs&lt;T&gt;&gt;? TaskCompleted</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.TaskCompletedEventArgs-1.html">TaskCompletedEventArgs</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearner_3_TaskStarted" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearner`3.TaskStarted">
+  TaskStarted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when a task starts training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">event EventHandler&lt;TaskEventArgs&gt;? TaskStarted</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.eventhandler-1">EventHandler</a>&lt;<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.TaskEventArgs.html">TaskEventArgs</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearner.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

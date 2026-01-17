@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimizer, which is an efficient optimization algorithm for training machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LBFGSOptimizerOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LBFGSOptimizerOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3" class="text-break">
+Class LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Limited-memory Broyden-Fletcher-Goldfarb-Shanno (L-BFGS) optimizer,
+which is an efficient optimization algorithm for training machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt; : GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html">GradientBasedOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">LBFGSOptimizerOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientCache">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LossFunction">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_Regularization">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.Regularization</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DataSampler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DataSampler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_ShuffleData">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.ShuffleData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_DropLastBatch">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.DropLastBatch</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_RandomSeed">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_EnableGradientClipping">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.EnableGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_GradientClippingMethod">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.GradientClippingMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientNorm">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_MaxGradientValue">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGradientValue</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_LearningRateScheduler">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.LearningRateScheduler</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GradientBasedOptimizerOptions-3.html#AiDotNet_Models_Options_GradientBasedOptimizerOptions_3_SchedulerStepMode">GradientBasedOptimizerOptions&lt;T, TInput, TOutput&gt;.SchedulerStepMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+L-BFGS is a quasi-Newton optimization method that approximates the Broyden-Fletcher-Goldfarb-Shanno (BFGS)
+algorithm using limited memory. It's particularly effective for optimizing parameters in models with
+many parameters, as it doesn't need to store the full Hessian matrix. This makes it more memory-efficient
+than full BFGS while still providing good convergence properties.
+</p>
+<p><b>For Beginners:</b> L-BFGS is an advanced optimization algorithm that helps train machine learning
+models more efficiently than simpler methods like gradient descent.
+<p>Think of training a machine learning model as finding the lowest point in a hilly landscape, where the
+lowest point represents the best model parameters. While basic algorithms like gradient descent simply
+follow the steepest downhill path, L-BFGS is smarter:</p>
+<ul>
+<li>It remembers information about previous steps to make better decisions about where to go next</li>
+<li>It can take larger steps when appropriate, potentially finding the lowest point faster</li>
+<li>It requires less memory than some other advanced methods, making it practical for larger models</li>
+</ul>
+<p>L-BFGS is particularly useful when:</p>
+<ul>
+<li>You have many parameters to optimize (complex models)</li>
+<li>You need faster convergence than gradient descent provides</li>
+<li>You have limited memory resources compared to what full second-order methods would require</li>
+</ul>
+<p>This class lets you configure how L-BFGS behaves during training, including how much history it
+remembers and how it adjusts its learning rate.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_BatchSize_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_BatchSize" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to -1 (full batch).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The batch size controls how many examples are used to calculate gradients.
+L-BFGS traditionally uses full-batch gradients (batch size -1) because it maintains a history of
+gradient and position differences that require consistent gradients between iterations.
+Using mini-batches would introduce noise that disrupts the two-loop recursion.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_InitialLearningRate_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.InitialLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_InitialLearningRate" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.InitialLearningRate">
+  InitialLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial learning rate for the L-BFGS algorithm, which controls the initial
+step size during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial learning rate, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_InitialLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The initial learning rate determines the step size at the beginning of the optimization process.
+Unlike standard gradient descent, L-BFGS can adjust this rate during optimization based on the
+curvature information it approximates. This property overrides the base class implementation to
+provide a more suitable default for L-BFGS.
+</p>
+<p><b>For Beginners:</b> The initial learning rate determines how big your first steps are
+when searching for the best model parameters.
+<p>Think of it like adjusting your initial step size when walking downhill:</p>
+<ul>
+<li>Too small (e.g., 0.01): You'll move very cautiously but might take a long time to reach the bottom</li>
+<li>Too large (e.g., 10.0): You might move quickly but risk overshooting the lowest point</li>
+</ul>
+<p>L-BFGS is special because it can adjust this step size automatically as it goes, but the initial
+value still matters. The default of 1.0 is generally a good starting point for L-BFGS, which is
+higher than typical values for simpler algorithms like gradient descent (which might use 0.01-0.1).</p>
+<p>Note: This property uses the &quot;new&quot; keyword because it overrides the base class property with a
+different default value that's more appropriate for L-BFGS.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateDecreaseFactor_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.LearningRateDecreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateDecreaseFactor" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.LearningRateDecreaseFactor">
+  LearningRateDecreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is decreased when the algorithm encounters
+difficulties or needs to take more careful steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateDecreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate decrease factor, defaulting to 0.95.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateDecreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+During optimization, if the algorithm encounters challenges such as increasing error or difficult
+terrain in the optimization landscape, it may decrease the learning rate to take more careful steps.
+This parameter controls how quickly the learning rate is reduced, with values less than 1.0
+representing the multiplicative factor applied to the current learning rate.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm reduces its step
+size when it encounters difficulties.
+<p>When L-BFGS isn't making good progress or finds itself in a tricky part of the optimization
+landscape, it might decide to take smaller, more careful steps. This parameter determines how
+much it decreases the step size each time:</p>
+<ul>
+<li>With the default value of 0.95, the step size decreases by 5% each time</li>
+<li>A value of 0.9 would decrease the step size by 10% each time</li>
+<li>A value of 0.99 would decrease the step size by just 1% each time</li>
+</ul>
+<p>Lower values make the algorithm more cautious when it encounters problems, quickly reducing
+step size to navigate difficult areas. The default value of 0.95 provides a moderate decrease
+that works well in most situations, allowing the algorithm to adapt without becoming too timid.</p>
+<p>This parameter works together with LearningRateIncreaseFactor to help the algorithm adapt its
+step size throughout the optimization process.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateIncreaseFactor_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.LearningRateIncreaseFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateIncreaseFactor" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.LearningRateIncreaseFactor">
+  LearningRateIncreaseFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which the learning rate is increased when the algorithm determines
+that larger steps would be beneficial.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRateIncreaseFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate increase factor, defaulting to 1.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_LearningRateIncreaseFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+During optimization, if the algorithm determines that progress is being made consistently, it may
+increase the learning rate to accelerate convergence. This parameter controls how aggressively
+the learning rate is increased, with values greater than 1.0 representing the multiplicative
+factor applied to the current learning rate.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm increases its step
+size when it's making good progress.
+<p>When L-BFGS is moving in a promising direction and making consistent progress, it might decide
+to increase its step size to get to the solution faster. This parameter determines how much it
+increases the step size each time:</p>
+<ul>
+<li>With the default value of 1.05, the step size increases by 5% each time</li>
+<li>A value of 1.1 would increase the step size by 10% each time</li>
+<li>A value of 1.01 would increase the step size by just 1% each time</li>
+</ul>
+<p>Higher values make the algorithm more aggressive in speeding up when things are going well, but
+might also make it more likely to overshoot. The default value of 1.05 provides a moderate
+increase that works well in most situations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxIterations_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxIterations" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations the L-BFGS algorithm will perform before stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper limit on the number of optimization steps the algorithm will take.
+Even if other stopping criteria (such as convergence thresholds) have not been met, the algorithm
+will terminate after this many iterations. This property overrides the base class implementation
+to provide a more suitable default for L-BFGS.
+</p>
+<p><b>For Beginners:</b> This setting determines the maximum number of steps the algorithm
+will take before giving up, even if it hasn't found the optimal solution yet.
+<p>Think of this as a safety limit to prevent the algorithm from running forever. The L-BFGS algorithm
+will stop when either:</p>
+<ul>
+<li>It finds a solution that's good enough (based on other stopping criteria), or</li>
+<li>It reaches this maximum number of iterations</li>
+</ul>
+<p>The default value of 1000 is typically sufficient for many problems. Consider:</p>
+<ul>
+<li>Increasing it (e.g., to 2000 or 5000) for complex problems where the algorithm might need
+more steps to converge to a good solution</li>
+<li>Decreasing it (e.g., to 500 or less) if you need faster results and can accept a less
+optimal solution, or if you're just testing the algorithm</li>
+</ul>
+<p>L-BFGS typically converges faster than simpler methods like gradient descent, so it often
+needs fewer iterations to reach a good solution. However, the exact number needed depends
+greatly on your specific problem.</p>
+<p>Note: This property uses the &quot;new&quot; keyword because it overrides the base class property with a
+different default value that's more appropriate for L-BFGS.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxLearningRate_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MaxLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxLearningRate" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MaxLearningRate">
+  MaxLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum learning rate allowed during optimization, preventing the learning
+rate from becoming too large.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum learning rate, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MaxLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper bound on the learning rate during optimization. If the adaptive
+learning rate mechanism attempts to increase the learning rate above this value, it will be
+clamped to this maximum. This helps prevent the algorithm from taking steps that are too large,
+which could cause instability or divergence. This property overrides the base class implementation
+to provide a more suitable default for L-BFGS.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from taking steps that are too
+large, which could cause it to miss the optimal solution.
+<p>As L-BFGS adjusts its step size during training, it might sometimes decide to take very large
+steps. This parameter sets a maximum size - if the algorithm wants to take an even larger step,
+it will use this maximum value instead.</p>
+<p>The default value of 10.0 allows the algorithm to take fairly large steps when appropriate, but
+not so large that it risks completely overshooting good solutions.</p>
+<p>You typically won't need to change this unless:</p>
+<ul>
+<li>You notice the algorithm is making wild jumps and not converging well
+(might want to decrease it)</li>
+<li>You're working with a function that has very flat regions that require large steps
+(might want to increase it)</li>
+</ul>
+<p>Note: This property uses the &quot;new&quot; keyword because it overrides the base class property with a
+different default value that's more appropriate for L-BFGS.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MemorySize_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MemorySize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MemorySize" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MemorySize">
+  MemorySize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the memory size, which determines how many previous iterations' information
+the L-BFGS algorithm stores to approximate the Hessian matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MemorySize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The memory size, defaulting to 10.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MemorySize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The memory size parameter controls how many previous iterations' gradient information is stored
+to approximate the inverse Hessian matrix. A larger memory size can lead to better approximations
+but requires more memory and computational resources per iteration.
+</p>
+<p><b>For Beginners:</b> This setting controls how much "history" the L-BFGS algorithm remembers
+when deciding where to go next.
+<p>Imagine you're hiking down a mountain to find the lowest point:</p>
+<ul>
+<li>With a small memory size (like 3-5), you only remember your most recent few steps to decide
+where to go next</li>
+<li>With a larger memory size (like 10-20), you remember more of your journey, which might help
+you make better decisions, but requires more mental effort</li>
+</ul>
+<p>The default value of 10 works well for many problems. Consider:</p>
+<ul>
+<li>Increasing it (15-20) if you have plenty of memory and the algorithm seems to be converging slowly</li>
+<li>Decreasing it (5-8) if you're working with very large models and memory is a concern</li>
+</ul>
+<p>Generally, values between 3 and 20 are common, with diminishing returns as you increase beyond that.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MinLearningRate_" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MinLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MinLearningRate" data-uid="AiDotNet.Models.Options.LBFGSOptimizerOptions`3.MinLearningRate">
+  MinLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum learning rate allowed during optimization, preventing the learning
+rate from becoming too small.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum learning rate, defaulting to 1e-6 (0.000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LBFGSOptimizerOptions_3_MinLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets a lower bound on the learning rate during optimization. If the adaptive
+learning rate mechanism attempts to reduce the learning rate below this value, it will be
+clamped to this minimum. This helps prevent the algorithm from taking steps that are too small
+to make meaningful progress. This property overrides the base class implementation to provide
+a more suitable default for L-BFGS.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from taking steps that are too
+tiny to make meaningful progress.
+<p>As L-BFGS adjusts its step size during training, it might sometimes decide to take very small
+steps. This parameter sets a minimum size - if the algorithm wants to take an even smaller step,
+it will use this minimum value instead.</p>
+<p>The default value of 0.000001 (written as 1e-6 in scientific notation) is very small, allowing
+the algorithm to take tiny steps when appropriate, but not so small that they become ineffective.</p>
+<p>You typically won't need to change this unless:</p>
+<ul>
+<li>You notice the algorithm is making extremely slow progress in the later stages of training
+(might want to increase it)</li>
+<li>You're working with a function that requires extremely precise optimization
+(might want to decrease it)</li>
+</ul>
+<p>Note: This property uses the &quot;new&quot; keyword because it overrides the base class property with a
+different default value that's more appropriate for L-BFGS.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LBFGSOptimizerOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

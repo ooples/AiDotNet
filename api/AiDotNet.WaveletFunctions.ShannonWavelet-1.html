@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ShannonWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ShannonWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Shannon wavelet function implementation for signal processing and frequency analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_ShannonWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.ShannonWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_ShannonWavelet_1" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1" class="text-break">
+Class ShannonWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Shannon wavelet function implementation for signal processing and frequency analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ShannonWavelet&lt;T&gt; : WaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html">WaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ShannonWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_WaveletFunctionBase_1_NumOps">WaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Shannon wavelet is a band-limited wavelet that is perfectly localized in the frequency domain.
+It is defined as the product of a sinc function and a cosine modulation. This wavelet is particularly
+useful for signal analysis where precise frequency localization is required, though it has poor
+time localization due to the slow decay of the sinc function.
+</p>
+<p><b>For Beginners:</b> The Shannon wavelet is like a specialized frequency analyzer.
+<p>Think of the Shannon wavelet as a musical tuning fork that:</p>
+<ul>
+<li>Can precisely identify specific frequencies in your data</li>
+<li>Has perfect frequency localization (it knows exactly which frequencies are present)</li>
+<li>Is less precise about when those frequencies occur in the signal</li>
+</ul>
+<p>This wavelet is particularly useful when you need to know exactly which frequencies are
+in your data, but don't need to know precisely when they occur. It's like having a
+perfect pitch detector that can tell you exactly which notes are being played, but is
+less precise about when each note starts and stops.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1__ctor" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.#ctor">
+  ShannonWavelet()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.WaveletFunctions.ShannonWavelet-1.html">ShannonWavelet&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ShannonWavelet()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor initializes the Shannon wavelet and sets up the numeric operations helper
+for the specified numeric type T. The Shannon wavelet doesn't require additional parameters
+as it has a fixed, well-defined mathematical form.
+</p>
+<p><b>For Beginners:</b> This sets up the Shannon wavelet for use.
+<p>When creating a Shannon wavelet:</p>
+<ul>
+<li>No parameters are needed because it has a fixed mathematical definition</li>
+<li>It's ready to use immediately after creation</li>
+</ul>
+<p>The Shannon wavelet has a specific mathematical form that doesn't need customization.
+This makes it simple to set up, but it also means you can't adjust its properties
+to better match specific types of data as you can with some other wavelets.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Calculate__0_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Shannon wavelet function value at the specified point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input point at which to calculate the wavelet value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Shannon wavelet function value at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the value of the Shannon wavelet function at the given input point.
+The Shannon wavelet is defined as sinc(x) * cos(x/2), where sinc(x) = sin(x)/x for x ? 0
+and sinc(0) = 1. This function has perfect frequency localization but poor time localization.
+</p>
+<p><b>For Beginners:</b> This method calculates the height of the Shannon wavelet at a specific point.
+<p>When you use this method:</p>
+<ul>
+<li>You provide a point (x) on the horizontal axis</li>
+<li>The method returns the height of the Shannon wavelet at that point</li>
+<li>It combines a sinc function (sin(x)/x) with a cosine modulation</li>
+</ul>
+<p>The sinc function gives the wavelet its frequency properties, while the
+cosine modulation shifts the frequency band to be centered around a non-zero frequency.
+This creates a wavelet that's excellent at isolating specific frequency bands.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes an input signal using the Shannon wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail coefficients of the decomposed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the Shannon wavelet transform, which decomposes the input signal into
+approximation coefficients (low-frequency components) and detail coefficients (high-frequency components).
+It uses the Fast Fourier Transform to implement the transform efficiently in the frequency domain,
+which is natural for the Shannon wavelet since it has a simple rectangular spectrum.
+</p>
+<p><b>For Beginners:</b> This method breaks down your data into low-frequency and high-frequency parts.
+<p>When decomposing a signal with the Shannon wavelet:</p>
+<ul>
+<li>First, the data is converted to the frequency domain using FFT</li>
+<li>Then, the frequencies are simply split into two halves</li>
+<li>Low frequencies go into the approximation, high frequencies into the detail</li>
+<li>The results are converted back to the time domain</li>
+</ul>
+<p>This is like having two perfect filters: one that keeps all the bass notes and
+nothing else, and another that keeps all the treble notes and nothing else.
+The Shannon wavelet is unique because it makes this perfect frequency separation possible.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L232"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling coefficients used in the Shannon wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the scaling coefficients in the frequency domain.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the scaling coefficients used in the Shannon wavelet transform, which
+represent the low-pass filter in the frequency domain. For the Shannon wavelet, these
+coefficients form an ideal low-pass filter with a sharp cutoff at half the Nyquist frequency.
+</p>
+<p><b>For Beginners:</b> This method gives you the values used to extract low frequencies.
+<p>The scaling coefficients in the Shannon wavelet:</p>
+<ul>
+<li>Form an ideal low-pass filter in the frequency domain</li>
+<li>Are based on the sinc function, which is the Fourier transform of a rectangular window</li>
+<li>Keep all frequencies below a certain threshold and completely reject all frequencies above it</li>
+</ul>
+<p>This is like a perfect audio equalizer that can completely separate bass from treble
+without any overlap or distortion. In most real-world filters, there's always some
+blurring at the boundary, but the Shannon wavelet achieves a theoretically perfect separation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet coefficients used in the Shannon wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the wavelet coefficients in the frequency domain.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the wavelet coefficients used in the Shannon wavelet transform, which
+represent the high-pass filter in the frequency domain. For the Shannon wavelet, these
+coefficients form an ideal high-pass filter with a sharp cutoff at half the Nyquist frequency.
+The coefficients are modulated by a cosine to shift the passband to the appropriate frequency range.
+</p>
+<p><b>For Beginners:</b> This method gives you the values used to extract high frequencies.
+<p>The wavelet coefficients in the Shannon wavelet:</p>
+<ul>
+<li>Form an ideal high-pass filter in the frequency domain</li>
+<li>Are based on the sinc function modulated by a cosine</li>
+<li>Keep all frequencies above a certain threshold and completely reject all frequencies below it</li>
+</ul>
+<p>This is the complement to the scaling coefficients - together they form a perfect
+pair of filters that split the frequency spectrum exactly in half with no overlap or gap.
+This perfect separation is a unique property of the Shannon wavelet.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Int32__" data-uid="AiDotNet.WaveletFunctions.ShannonWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Nullable{System.Int32})">
+  Reconstruct(Vector&lt;T&gt;, Vector&lt;T&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reconstruct(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail, int? originalLength = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+    <dt><code>originalLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional. The length of the original signal before decomposition.
+If not provided, the length is inferred from coefficient lengths, which may be off by one for odd-length signals.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ShannonWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>For Shannon wavelets, reconstruction combines the frequency bands:</p>
+<ol>
+<li>Transform both approximation and detail to frequency domain using FFT</li>
+<li>Place approximation spectrum in the low frequency half</li>
+<li>Place detail spectrum in the high frequency half</li>
+<li>Transform the combined spectrum back to time domain</li>
+</ol>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should equal the original signal.</p>
+<p>Note: For signals with odd length, pass the original length to ensure perfect reconstruction.
+Without it, the reconstructed signal may be one element longer than the original.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ShannonWavelet.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

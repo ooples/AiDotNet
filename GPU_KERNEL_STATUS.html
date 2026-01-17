@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Kernel Implementation Status | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Kernel Implementation Status | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_KERNEL_STATUS.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-kernel-implementation-status">GPU Kernel Implementation Status</h1>
+
+<p>This document tracks all GPU kernels needed for full GPU-resident training across CUDA, HIP (AMD), and OpenCL backends.</p>
+<h2 id="kernel-categories">Kernel Categories</h2>
+<h3 id="legend">Legend</h3>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>✅</td>
+<td>Implemented in all backends (CUDA, HIP, OpenCL)</td>
+</tr>
+<tr>
+<td>⚠️</td>
+<td>Implemented in some backends (see notes)</td>
+</tr>
+<tr>
+<td>❌</td>
+<td>Not implemented in any backend</td>
+</tr>
+<tr>
+<td>🔧</td>
+<td>Exists but needs fixes/improvements</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="1-activation-forward-kernels">1. Activation Forward Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>relu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>leaky_relu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>sigmoid</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>tanh</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gelu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>swish/silu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>softmax</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>elu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>mish</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>softplus</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>hardswish</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-activation-backward-kernels">2. Activation Backward Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>relu_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>ActivationLayer, all ReLU layers</td>
+</tr>
+<tr>
+<td>leaky_relu_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LeakyReLU activations</td>
+</tr>
+<tr>
+<td>sigmoid_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Sigmoid activations, gates</td>
+</tr>
+<tr>
+<td>tanh_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Tanh activations, LSTM/GRU</td>
+</tr>
+<tr>
+<td>gelu_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Transformers, BERT</td>
+</tr>
+<tr>
+<td>softmax_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Attention, classification</td>
+</tr>
+<tr>
+<td>elu_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>ELU activations</td>
+</tr>
+<tr>
+<td>swish_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Swish/SiLU activations</td>
+</tr>
+<tr>
+<td>mish_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Mish activation</td>
+</tr>
+<tr>
+<td>softplus_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Softplus activation</td>
+</tr>
+<tr>
+<td>hardswish_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>HardSwish activation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-convolution-kernels">3. Convolution Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>im2col</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>All conv layers</td>
+</tr>
+<tr>
+<td>conv2d_direct</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>ConvolutionalLayer</td>
+</tr>
+<tr>
+<td>depthwise_conv2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>DepthwiseSeparable</td>
+</tr>
+<tr>
+<td>conv_transpose2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>DeconvolutionalLayer</td>
+</tr>
+<tr>
+<td>conv3d_direct</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Conv3DLayer</td>
+</tr>
+<tr>
+<td><strong>Backward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>col2im</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>All conv backward</td>
+</tr>
+<tr>
+<td>conv2d_backward_input</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>ConvolutionalLayer backward</td>
+</tr>
+<tr>
+<td>conv2d_backward_weights</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>ConvolutionalLayer backward</td>
+</tr>
+<tr>
+<td>conv3d_backward_input</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Conv3DLayer backward</td>
+</tr>
+<tr>
+<td>conv3d_backward_weights</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Conv3DLayer backward</td>
+</tr>
+<tr>
+<td>deconv_backward_input</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>DeconvolutionalLayer backward</td>
+</tr>
+<tr>
+<td>deconv_backward_weights</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>DeconvolutionalLayer backward</td>
+</tr>
+<tr>
+<td>depthwise_conv2d_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>DepthwiseSeparable backward</td>
+</tr>
+<tr>
+<td>dilated_conv2d_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>DilatedConvolutionalLayer</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-normalization-kernels">4. Normalization Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>batchnorm_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>BatchNormalizationLayer</td>
+</tr>
+<tr>
+<td>layernorm_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LayerNormalizationLayer</td>
+</tr>
+<tr>
+<td>groupnorm_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GroupNormalizationLayer</td>
+</tr>
+<tr>
+<td>instancenorm_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>InstanceNormalizationLayer</td>
+</tr>
+<tr>
+<td>rmsnorm_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>RMSNorm (LLaMA style)</td>
+</tr>
+<tr>
+<td><strong>Backward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>batchnorm_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>BatchNormalizationLayer</td>
+</tr>
+<tr>
+<td>layernorm_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LayerNormalizationLayer</td>
+</tr>
+<tr>
+<td>layernorm_grad_params</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LayerNorm gamma/beta grads</td>
+</tr>
+<tr>
+<td>groupnorm_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GroupNormalizationLayer</td>
+</tr>
+<tr>
+<td>instancenorm_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>InstanceNormalizationLayer</td>
+</tr>
+<tr>
+<td>rmsnorm_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>RMSNorm backward</td>
+</tr>
+<tr>
+<td>rmsnorm_grad_gamma</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>RMSNorm gamma gradient</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-pooling-kernels">5. Pooling Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>maxpool2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>MaxPoolingLayer</td>
+</tr>
+<tr>
+<td>avgpool2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AveragePoolingLayer</td>
+</tr>
+<tr>
+<td>global_avgpool2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GlobalPoolingLayer</td>
+</tr>
+<tr>
+<td>global_maxpool2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GlobalPoolingLayer</td>
+</tr>
+<tr>
+<td>adaptive_avgpool2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AdaptiveAveragePoolingLayer</td>
+</tr>
+<tr>
+<td><strong>Backward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>maxpool2d_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>MaxPoolingLayer ✓</td>
+</tr>
+<tr>
+<td>avgpool2d_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AveragePoolingLayer ✓</td>
+</tr>
+<tr>
+<td>global_avgpool2d_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GlobalPoolingLayer</td>
+</tr>
+<tr>
+<td>global_maxpool2d_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GlobalPoolingLayer</td>
+</tr>
+<tr>
+<td>adaptive_avgpool2d_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AdaptiveAveragePoolingLayer</td>
+</tr>
+<tr>
+<td>maxpool3d_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>MaxPool3DLayer</td>
+</tr>
+<tr>
+<td>avgpool3d_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>AveragePool3DLayer</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-attention-kernels">6. Attention Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>scaled_dot_product_attention</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AttentionLayer, MHA</td>
+</tr>
+<tr>
+<td>flash_attention_v2</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Memory-efficient attention</td>
+</tr>
+<tr>
+<td>grouped_query_attention</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GQA (LLaMA 2 style)</td>
+</tr>
+<tr>
+<td><strong>Backward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>flash_attention_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>All attention layers</td>
+</tr>
+<tr>
+<td>grouped_query_attention_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>GQA backward</td>
+</tr>
+<tr>
+<td>cross_attention_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>CrossAttentionLayer</td>
+</tr>
+<tr>
+<td>multi_head_attention_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>QKV projection grads</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-loss-function-kernels">7. Loss Function Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Forward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>mse_loss</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>MeanSquaredErrorLoss</td>
+</tr>
+<tr>
+<td>cross_entropy_loss</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>CrossEntropyLoss</td>
+</tr>
+<tr>
+<td>bce_loss</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>BinaryCrossEntropyLoss</td>
+</tr>
+<tr>
+<td>smooth_l1_loss</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>HuberLoss</td>
+</tr>
+<tr>
+<td><strong>Backward</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>mse_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>MeanSquaredErrorLoss</td>
+</tr>
+<tr>
+<td>cross_entropy_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>CrossEntropyLoss</td>
+</tr>
+<tr>
+<td>bce_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>BinaryCrossEntropyLoss</td>
+</tr>
+<tr>
+<td>smooth_l1_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>HuberLoss</td>
+</tr>
+<tr>
+<td>focal_loss</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>FocalLoss</td>
+</tr>
+<tr>
+<td>focal_loss_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>FocalLoss</td>
+</tr>
+<tr>
+<td>triplet_loss</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>TripletLoss</td>
+</tr>
+<tr>
+<td>triplet_loss_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>TripletLoss</td>
+</tr>
+<tr>
+<td>contrastive_loss</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>ContrastiveLoss</td>
+</tr>
+<tr>
+<td>contrastive_loss_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>ContrastiveLoss</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-optimizer-kernels">8. Optimizer Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sgd_step</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>SGDOptimizer</td>
+</tr>
+<tr>
+<td>sgd_momentum_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>MomentumOptimizer</td>
+</tr>
+<tr>
+<td>adam_step</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AdamOptimizer</td>
+</tr>
+<tr>
+<td>adamw_step</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AdamWOptimizer</td>
+</tr>
+<tr>
+<td>rmsprop_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>RMSpropOptimizer</td>
+</tr>
+<tr>
+<td>adagrad_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>AdagradOptimizer</td>
+</tr>
+<tr>
+<td>nag_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>NesterovOptimizer</td>
+</tr>
+<tr>
+<td>lars_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LARSOptimizer</td>
+</tr>
+<tr>
+<td>lamb_update</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>LAMBOptimizer</td>
+</tr>
+<tr>
+<td>gradient_clip_norm</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>All optimizers</td>
+</tr>
+<tr>
+<td>gradient_clip_value</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>All optimizers</td>
+</tr>
+</tbody>
+</table>
+<h2 id="9-embedding-kernels">9. Embedding Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>embedding_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>EmbeddingLayer</td>
+</tr>
+<tr>
+<td>embedding_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>EmbeddingLayer (sparse scatter)</td>
+</tr>
+<tr>
+<td>gather_kernel</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>General gather ops</td>
+</tr>
+<tr>
+<td>scatter_add_kernel</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>Sparse gradient accumulation</td>
+</tr>
+</tbody>
+</table>
+<h2 id="10-recurrent-kernels-lstmgru">10. Recurrent Kernels (LSTM/GRU)</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>LSTM</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>lstm_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>LSTMLayer</td>
+</tr>
+<tr>
+<td>lstm_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>LSTMLayer (BPTT)</td>
+</tr>
+<tr>
+<td>lstm_cell_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Single LSTM step</td>
+</tr>
+<tr>
+<td>lstm_cell_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Single LSTM backward</td>
+</tr>
+<tr>
+<td><strong>GRU</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>gru_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>GRULayer</td>
+</tr>
+<tr>
+<td>gru_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>GRULayer (BPTT)</td>
+</tr>
+<tr>
+<td>gru_cell_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Single GRU step</td>
+</tr>
+<tr>
+<td>gru_cell_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>Single GRU backward</td>
+</tr>
+<tr>
+<td><strong>ConvLSTM</strong></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>convlstm_forward</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>ConvLSTMLayer (composed from Conv2D + element-wise ops)</td>
+</tr>
+<tr>
+<td>convlstm_backward</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>ConvLSTMLayer (GPU BPTT via Conv2D ops)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="11-utility-kernels">11. Utility Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>transpose_2d</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>batched_transpose</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>permute_general</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+<td>General axis permutation</td>
+</tr>
+<tr>
+<td>copy_buffer</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>fill_buffer</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>Zero initialization</td>
+</tr>
+<tr>
+<td>dropout_forward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>dropout_backward</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>clamp</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>where_cond</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>argmax_axis</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>argmin_axis</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>reduce_sum</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+<td>Needs OpenCL impl</td>
+</tr>
+<tr>
+<td>reduce_max</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+<td>Needs OpenCL impl</td>
+</tr>
+</tbody>
+</table>
+<h2 id="12-fused-kernels">12. Fused Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gemm_bias_relu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gemm_bias_gelu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gemm_bias_sigmoid</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gemm_bias_tanh</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gemm_bias</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>gemm_bias_swish</td>
+<td>✅</td>
+<td>✅</td>
+<td>❌</td>
+<td></td>
+</tr>
+<tr>
+<td>layernorm_relu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>layernorm_gelu</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>residual_layernorm</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>bias_dropout</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="13-graph-neural-network-kernels">13. Graph Neural Network Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sparse_mm_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>⚠️</td>
+<td>GCN, GAT, GraphSAGE</td>
+</tr>
+<tr>
+<td>sparse_mm_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>All GNN backward</td>
+</tr>
+<tr>
+<td>message_passing_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>MessagePassingLayer</td>
+</tr>
+<tr>
+<td>message_passing_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>MessagePassingLayer</td>
+</tr>
+<tr>
+<td>scatter_add</td>
+<td>❌</td>
+<td>❌</td>
+<td>✅</td>
+<td>Graph aggregation</td>
+</tr>
+<tr>
+<td>scatter_max</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Graph aggregation</td>
+</tr>
+<tr>
+<td>scatter_mean</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Graph aggregation</td>
+</tr>
+<tr>
+<td>edge_softmax</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>GAT attention</td>
+</tr>
+<tr>
+<td>diffusion_conv_forward</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>DiffusionConvLayer (spectral via GEMM/Exp)</td>
+</tr>
+<tr>
+<td>diffusion_conv_backward</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>⚠️</td>
+<td>DiffusionConvLayer (spectral backward via GEMM/Exp)</td>
+</tr>
+</tbody>
+</table>
+<h2 id="14-3dmesh-kernels">14. 3D/Mesh Kernels</h2>
+<table>
+<thead>
+<tr>
+<th>Kernel</th>
+<th>CUDA</th>
+<th>HIP</th>
+<th>OpenCL</th>
+<th>Unblocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>upsample3d_nearest</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Upsample3DLayer</td>
+</tr>
+<tr>
+<td>upsample3d_nearest_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>Upsample3DLayer</td>
+</tr>
+<tr>
+<td>mesh_conv_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>MeshEdgeConvLayer</td>
+</tr>
+<tr>
+<td>mesh_conv_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>MeshEdgeConvLayer</td>
+</tr>
+<tr>
+<td>spiral_conv_forward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>SpiralConvLayer</td>
+</tr>
+<tr>
+<td>spiral_conv_backward</td>
+<td>❌</td>
+<td>❌</td>
+<td>❌</td>
+<td>SpiralConvLayer</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="priority-kernel-implementation-order">Priority Kernel Implementation Order</h2>
+<h3 id="tier-0-blockers-for-basic-training-critical">Tier 0: Blockers for Basic Training (CRITICAL)</h3>
+<p>These must be implemented first to enable any GPU training:</p>
+<ol>
+<li><strong>GEMM backward (for DenseLayer)</strong> - Already available via transpose + GEMM</li>
+<li><strong>Activation backward</strong> - ✅ Already implemented (relu, sigmoid, tanh, gelu, softmax)</li>
+<li><strong>Loss backward</strong> - ✅ Already implemented (mse, cross_entropy, bce)</li>
+<li><strong>SGD/Adam update</strong> - ✅ Already implemented</li>
+</ol>
+<p><strong>Status: UNBLOCKED</strong> - Basic training infrastructure kernels exist!</p>
+<h3 id="tier-1-cnn-training">Tier 1: CNN Training</h3>
+<ol>
+<li>conv2d_backward_input - ✅ Exists</li>
+<li>conv2d_backward_weights - ✅ Exists</li>
+<li>batchnorm_backward - ✅ Exists</li>
+<li>pooling backward - ✅ Exists (max, avg)</li>
+</ol>
+<p><strong>Status: UNBLOCKED</strong> - CNN training kernels exist!</p>
+<h3 id="tier-2-transformer-training">Tier 2: Transformer Training</h3>
+<ol>
+<li>layernorm_backward - ✅ Exists</li>
+<li>attention backward - ✅ flash_attention_backward exists</li>
+<li>embedding_backward - ✅ Exists</li>
+</ol>
+<p><strong>Status: UNBLOCKED</strong> - Transformer training kernels exist!</p>
+<h3 id="tier-3-recurrent-network-training-partial">Tier 3: Recurrent Network Training (PARTIAL)</h3>
+<p><strong>Cell-level kernels</strong> (single timestep):</p>
+<ol>
+<li>✅ lstm_cell_forward</li>
+<li>✅ lstm_cell_backward</li>
+<li>✅ gru_cell_forward</li>
+<li>✅ gru_cell_backward</li>
+</ol>
+<p><strong>Sequence-level kernels</strong> (BPTT through time):</p>
+<ol>
+<li>❌ lstm_forward (full sequence)</li>
+<li>❌ lstm_backward (full sequence BPTT)</li>
+<li>❌ gru_forward (full sequence)</li>
+<li>❌ gru_backward (full sequence BPTT)</li>
+<li>⚠️ convlstm_forward/backward (composed kernels)</li>
+</ol>
+<p><strong>Status: PARTIAL</strong> - Cell kernels exist, sequence-level BPTT kernels needed</p>
+<h3 id="tier-4-graph-neural-network-training-blockers">Tier 4: Graph Neural Network Training (BLOCKERS)</h3>
+<ol>
+<li>❌ sparse_mm_backward</li>
+<li>❌ scatter_add (CUDA/HIP)</li>
+<li>❌ message_passing_backward</li>
+</ol>
+<p><strong>Status: BLOCKED</strong> - Need sparse/scatter kernels</p>
+<h3 id="tier-5-remaining-backward-kernels">Tier 5: Remaining Backward Kernels</h3>
+<p><strong>Implemented:</strong></p>
+<ol>
+<li>✅ conv3d_backward_input, conv3d_backward_weights</li>
+<li>✅ groupnorm_backward (simplified - see note)</li>
+<li>✅ instancenorm_backward (simplified - see note)</li>
+<li>✅ global_avgpool_backward, global_maxpool_backward</li>
+</ol>
+<p><strong>Note:</strong> groupnorm_backward and instancenorm_backward use simplified per-element gradients.
+Full group-wise/instance-wise reduction terms are not yet implemented.</p>
+<p><strong>Still Missing:</strong></p>
+<ol>
+<li>❌ mish_backward, softplus_backward, hardswish_backward</li>
+</ol>
+<hr>
+<h2 id="backend-parity-gaps">Backend Parity Gaps</h2>
+<h3 id="opencl-missing-compared-to-cudahip">OpenCL Missing (compared to CUDA/HIP)</h3>
+<ul>
+<li>reduce_sum, reduce_max</li>
+<li>permute_general</li>
+<li>gemm_bias_swish</li>
+<li>sgd_momentum_update (uses different name)</li>
+</ul>
+<h3 id="cudahip-missing-compared-to-opencl">CUDA/HIP Missing (compared to OpenCL)</h3>
+<ul>
+<li>rmsnorm_backward, rmsnorm_grad_gamma</li>
+<li>scatter_add_kernel, gather_kernel</li>
+<li>fill_buffer</li>
+</ul>
+<hr>
+<h2 id="summary-statistics">Summary Statistics</h2>
+<table>
+<thead>
+<tr>
+<th>Category</th>
+<th>Total Kernels</th>
+<th>Implemented</th>
+<th>Missing</th>
+<th>% Complete</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Activation Forward</td>
+<td>11</td>
+<td>11</td>
+<td>0</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Activation Backward</td>
+<td>11</td>
+<td>8</td>
+<td>3</td>
+<td>73%</td>
+</tr>
+<tr>
+<td>Convolution</td>
+<td>14</td>
+<td>10</td>
+<td>4</td>
+<td>71%</td>
+</tr>
+<tr>
+<td>Normalization</td>
+<td>12</td>
+<td>11</td>
+<td>1</td>
+<td>92%</td>
+</tr>
+<tr>
+<td>Pooling</td>
+<td>12</td>
+<td>10</td>
+<td>2</td>
+<td>83%</td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>7</td>
+<td>6</td>
+<td>1</td>
+<td>86%</td>
+</tr>
+<tr>
+<td>Loss Functions</td>
+<td>10</td>
+<td>8</td>
+<td>2</td>
+<td>80%</td>
+</tr>
+<tr>
+<td>Optimizer</td>
+<td>11</td>
+<td>9</td>
+<td>2</td>
+<td>82%</td>
+</tr>
+<tr>
+<td>Embedding</td>
+<td>4</td>
+<td>4</td>
+<td>0</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Recurrent (cell)</td>
+<td>4</td>
+<td>4</td>
+<td>0</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>Recurrent (sequence)</td>
+<td>6</td>
+<td>0</td>
+<td>6</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>Graph Neural Networks</td>
+<td>10</td>
+<td>4</td>
+<td>6</td>
+<td>40%</td>
+</tr>
+<tr>
+<td>3D/Mesh</td>
+<td>6</td>
+<td>2</td>
+<td>4</td>
+<td>33%</td>
+</tr>
+<tr>
+<td><strong>TOTAL</strong></td>
+<td><strong>118</strong></td>
+<td><strong>89</strong></td>
+<td><strong>29</strong></td>
+<td><strong>75%</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="key-findings">Key Findings</h2>
+<h3 id="good-news">Good News</h3>
+<ol>
+<li><strong>Basic training is UNBLOCKED</strong>: Dense, Conv2D, BatchNorm, Attention, Loss functions all have backward kernels</li>
+<li><strong>All optimizer kernels implemented</strong>: SGD, Adam, AdamW, RMSprop, Adagrad, and more</li>
+<li><strong>Good backend parity</strong>: CUDA, HIP, OpenCL have similar coverage</li>
+<li><strong>Cell-level recurrent kernels complete</strong>: lstm_cell_<em>, gru_cell_</em> all implemented</li>
+</ol>
+<h3 id="remaining-blockers">Remaining Blockers</h3>
+<ol>
+<li><strong>Sequence-level LSTM/GRU kernels</strong>: Full BPTT kernels not yet implemented</li>
+<li><strong>GroupNorm/InstanceNorm backward</strong>: Simplified implementation (missing group-wise reduction terms)</li>
+<li><strong>GNN sparse kernels</strong>: sparse_mm_backward, message_passing_backward needed</li>
+</ol>
+<h3 id="recommended-implementation-order">Recommended Implementation Order</h3>
+<ol>
+<li>LSTM cell forward/backward (unblocks LSTMLayer, ConvLSTMLayer)</li>
+<li>GRU cell forward/backward (unblocks GRULayer)</li>
+<li>scatter_add for CUDA/HIP (unblocks GNN layers)</li>
+<li>sparse_mm_backward (unblocks GNN training)</li>
+<li>Conv3D backward (unblocks 3D CNNs)</li>
+<li>Remaining optimizer kernels</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_KERNEL_STATUS.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

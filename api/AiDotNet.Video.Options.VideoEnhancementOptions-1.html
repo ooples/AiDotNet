@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class VideoEnhancementOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class VideoEnhancementOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for video enhancement models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Video_Options_VideoEnhancementOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Video.Options.VideoEnhancementOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1">
+
+
+
+  <h1 id="AiDotNet_Video_Options_VideoEnhancementOptions_1" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1" class="text-break">
+Class VideoEnhancementOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Video.html">Video</a>.<a class="xref" href="AiDotNet.Video.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for video enhancement models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class VideoEnhancementOptions&lt;T&gt; : VideoModelOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html">VideoModelOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">VideoEnhancementOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_HiddenDimension">VideoModelOptions&lt;T&gt;.HiddenDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_NumAttentionHeads">VideoModelOptions&lt;T&gt;.NumAttentionHeads</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_NumLayers">VideoModelOptions&lt;T&gt;.NumLayers</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_DropoutRate">VideoModelOptions&lt;T&gt;.DropoutRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_NumFrames">VideoModelOptions&lt;T&gt;.NumFrames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_InputHeight">VideoModelOptions&lt;T&gt;.InputHeight</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_InputWidth">VideoModelOptions&lt;T&gt;.InputWidth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_InputChannels">VideoModelOptions&lt;T&gt;.InputChannels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_LearningRate">VideoModelOptions&lt;T&gt;.LearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_BatchSize">VideoModelOptions&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_WeightDecay">VideoModelOptions&lt;T&gt;.WeightDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_UseGradientClipping">VideoModelOptions&lt;T&gt;.UseGradientClipping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_MaxGradientNorm">VideoModelOptions&lt;T&gt;.MaxGradientNorm</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_UseGpu">VideoModelOptions&lt;T&gt;.UseGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_UseMixedPrecision">VideoModelOptions&lt;T&gt;.UseMixedPrecision</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html#AiDotNet_Video_Options_VideoModelOptions_1_RandomSeed">VideoModelOptions&lt;T&gt;.RandomSeed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Extends <a class="xref" href="AiDotNet.Video.Options.VideoModelOptions-1.html">VideoModelOptions&lt;T&gt;</a> with enhancement-specific settings
+like scale factor, temporal smoothing, and loss function configuration.
+</p>
+<p>
+<b>For Beginners:</b> These options control how your video enhancement model works.
+The most important options are:
+- ScaleFactor: How much to upscale the video (2x, 4x, etc.)
+- EnhancementType: What kind of enhancement to apply
+- UseTemporalConsistency: Whether to keep frames looking consistent over time
+<p>Example:</p>
+<pre><code class="lang-csharp">var options = new VideoEnhancementOptions&lt;double&gt;
+{
+    ScaleFactor = 4,
+    EnhancementType = VideoEnhancementType.SuperResolution,
+    UseTemporalConsistency = true
+};
+var model = new VideoSuperResolution&lt;double&gt;(options);</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_AdversarialLossWeight_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.AdversarialLossWeight*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_AdversarialLossWeight" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.AdversarialLossWeight">
+  AdversarialLossWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight for adversarial (GAN) loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? AdversarialLossWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_AdversarialLossWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 0.1.
+Adversarial loss encourages realistic textures and details.
+Set to 0 to disable GAN training.
+</p>
+<p>
+<b>For Beginners:</b> GAN loss uses a "discriminator" network to push
+the model to generate more realistic-looking results. It adds some
+training complexity but produces sharper outputs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_EnhancementType_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.EnhancementType*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_EnhancementType" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.EnhancementType">
+  EnhancementType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of enhancement to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public VideoEnhancementType? EnhancementType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Video.Interfaces.VideoEnhancementType.html">VideoEnhancementType</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_EnhancementType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: SuperResolution.
+Different enhancement types use different model architectures internally.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_FlowLossWeight_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.FlowLossWeight*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_FlowLossWeight" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.FlowLossWeight">
+  FlowLossWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight for flow-warping loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? FlowLossWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_FlowLossWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 0.2.
+Ensures motion-consistent enhancement by warping frames using optical flow.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_L1LossWeight_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.L1LossWeight*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_L1LossWeight" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.L1LossWeight">
+  L1LossWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight for pixel-wise L1 loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? L1LossWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_L1LossWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 1.0.
+L1 loss ensures pixel accuracy. Higher weight = more accurate but potentially blurrier.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumFeatureChannels_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.NumFeatureChannels*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumFeatureChannels" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.NumFeatureChannels">
+  NumFeatureChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of feature channels in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? NumFeatureChannels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumFeatureChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 64.
+More channels = more capacity but more memory usage.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumResidualBlocks_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.NumResidualBlocks*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumResidualBlocks" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.NumResidualBlocks">
+  NumResidualBlocks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of residual blocks in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? NumResidualBlocks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_NumResidualBlocks_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 16 for 2x scale, 23 for 4x scale.
+More blocks = higher quality but slower.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_PerceptualLossWeight_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.PerceptualLossWeight*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_PerceptualLossWeight" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.PerceptualLossWeight">
+  PerceptualLossWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight for perceptual loss (VGG-based).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? PerceptualLossWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_PerceptualLossWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 1.0.
+Perceptual loss encourages visually pleasing results even if they differ
+pixel-by-pixel from the target. Set to 0 to disable.
+</p>
+<p>
+<b>For Beginners:</b> Perceptual loss makes the output look good to humans,
+even if it's not mathematically identical to the target. It's important
+for realistic-looking results.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_RecurrentIterations_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.RecurrentIterations*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_RecurrentIterations" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.RecurrentIterations">
+  RecurrentIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of recurrent iterations for temporal models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RecurrentIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_RecurrentIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 3.
+More iterations can improve quality but increase processing time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_ScaleFactor_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.ScaleFactor*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_ScaleFactor" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.ScaleFactor">
+  ScaleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the spatial scale factor for upscaling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? ScaleFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_ScaleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 2 (2x upscaling).
+Common values: 2, 4, 8. Higher values produce larger output but require more computation.
+</p>
+<p>
+<b>For Beginners:</b> This is how much bigger the output video will be.
+- ScaleFactor = 2: 720x480 becomes 1440x960
+- ScaleFactor = 4: 720x480 becomes 2880x1920
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalLossWeight_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.TemporalLossWeight*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalLossWeight" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.TemporalLossWeight">
+  TemporalLossWeight
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight for temporal consistency loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? TemporalLossWeight { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalLossWeight_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 0.5.
+Penalizes flickering between frames. Only used when UseTemporalConsistency is true.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalScaleFactor_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.TemporalScaleFactor*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalScaleFactor" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.TemporalScaleFactor">
+  TemporalScaleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temporal scale factor for frame rate increase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? TemporalScaleFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_TemporalScaleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: 1 (no frame rate change).
+Set to 2 for 2x frame rate, 4 for 4x, etc.
+</p>
+<p>
+<b>For Beginners:</b> This adds extra frames to make the video smoother.
+- TemporalScaleFactor = 2: 30fps becomes 60fps
+- TemporalScaleFactor = 4: 30fps becomes 120fps
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseAttention_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseAttention*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseAttention" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseAttention">
+  UseAttention
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use attention mechanisms in residual blocks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? UseAttention { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseAttention_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: true.
+Attention helps the model focus on important regions but adds computation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseBidirectional_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseBidirectional*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseBidirectional" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseBidirectional">
+  UseBidirectional
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use bidirectional propagation for temporal models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? UseBidirectional { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseBidirectional_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: true.
+Bidirectional models look at both past and future frames, improving quality
+but requiring more memory and preventing real-time processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseTemporalConsistency_" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseTemporalConsistency*"></a>
+
+  <h3 id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseTemporalConsistency" data-uid="AiDotNet.Video.Options.VideoEnhancementOptions`1.UseTemporalConsistency">
+  UseTemporalConsistency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to enforce temporal consistency between frames.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool? UseTemporalConsistency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Video_Options_VideoEnhancementOptions_1_UseTemporalConsistency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Default: true.
+When enabled, the model uses recurrent connections or temporal attention
+to ensure frames look consistent over time (no flickering).
+</p>
+<p>
+<b>For Beginners:</b> Keep this true! It prevents annoying flickering
+artifacts in the output video. Only disable for single-frame processing.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Video/Options/VideoEnhancementOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

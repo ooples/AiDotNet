@@ -1,0 +1,1319 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FineTuningBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FineTuningBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all fine-tuning methods.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FineTuning_FineTuningBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.FineTuning.FineTuningBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FineTuning.FineTuningBase`3">
+
+
+
+  <h1 id="AiDotNet_FineTuning_FineTuningBase_3" data-uid="AiDotNet.FineTuning.FineTuningBase`3" class="text-break">
+Class FineTuningBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FineTuning.html">FineTuning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all fine-tuning methods.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class FineTuningBase&lt;T, TInput, TOutput&gt; : IFineTuning&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FineTuningBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFineTuning-3.html">IFineTuning</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.FineTuning.ConstitutionalAIFineTuning-3.html">ConstitutionalAIFineTuning&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.ContrastivePreferenceOptimization-3.html">ContrastivePreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.DirectPreferenceOptimization-3.html">DirectPreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.GroupRelativePolicyOptimization-3.html">GroupRelativePolicyOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.IdentityPreferenceOptimization-3.html">IdentityPreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.KahnemanTverskyOptimization-3.html">KahnemanTverskyOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.OddsRatioPreferenceOptimization-3.html">OddsRatioPreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.PairwiseRankingOptimization-3.html">PairwiseRankingOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.RankResponsesHumanFeedback-3.html">RankResponsesHumanFeedback&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.ReinforcementLearningHumanFeedback-3.html">ReinforcementLearningHumanFeedback&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.RobustDirectPreferenceOptimization-3.html">RobustDirectPreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.SelfPlayFineTuning-3.html">SelfPlayFineTuning&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.SimplePreferenceOptimization-3.html">SimplePreferenceOptimization&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.StatisticalRejectionSampling-3.html">StatisticalRejectionSampling&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.SupervisedFineTuning-3.html">SupervisedFineTuning&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FineTuning_FineTuningBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract class provides common functionality shared by all fine-tuning implementations,
+including serialization, option management, and utility methods.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all specific fine-tuning methods
+(like DPO, RLHF, SimPO) build upon. It provides common functionality so each method
+only needs to implement its unique training logic.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3__ctor_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3__ctor_AiDotNet_Models_Options_FineTuningOptions__0__" data-uid="AiDotNet.FineTuning.FineTuningBase`3.#ctor(AiDotNet.Models.Options.FineTuningOptions{`0})">
+  FineTuningBase(FineTuningOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the fine-tuning base class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected FineTuningBase(FineTuningOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningOptions-1.html">FineTuningOptions</a>&lt;T&gt;</dt>
+    <dd><p>The fine-tuning configuration options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_CurrentMetrics" data-uid="AiDotNet.FineTuning.FineTuningBase`3.CurrentMetrics">
+  CurrentMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Metrics collected during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected FineTuningMetrics&lt;T&gt; CurrentMetrics</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningMetrics-1.html">FineTuningMetrics</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_NumOps" data-uid="AiDotNet.FineTuning.FineTuningBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The numeric operations helper for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Options" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The configuration options for this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected FineTuningOptions&lt;T&gt; Options</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningOptions-1.html">FineTuningOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Random" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random number generator for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random Random</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_Category_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Category*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Category" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Category">
+  Category
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the category of this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract FineTuningCategory Category { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.FineTuningCategory.html">FineTuningCategory</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_MethodName_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.MethodName*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_MethodName" data-uid="AiDotNet.FineTuning.FineTuningBase`3.MethodName">
+  MethodName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string MethodName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_MethodName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Examples: &quot;DPO&quot;, &quot;RLHF&quot;, &quot;SimPO&quot;, &quot;ORPO&quot;, &quot;SFT&quot;, &quot;Constitutional AI&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_RequiresReferenceModel_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.RequiresReferenceModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_RequiresReferenceModel" data-uid="AiDotNet.FineTuning.FineTuningBase`3.RequiresReferenceModel">
+  RequiresReferenceModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this method requires a reference model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract bool RequiresReferenceModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_RequiresReferenceModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Most preference methods (DPO, IPO) require a reference model for KL regularization.
+Reference-free methods (SimPO, ORPO) do not require one, making them more memory efficient.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_RequiresRewardModel_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.RequiresRewardModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_RequiresRewardModel" data-uid="AiDotNet.FineTuning.FineTuningBase`3.RequiresRewardModel">
+  RequiresRewardModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this method requires a reward model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract bool RequiresRewardModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_RequiresRewardModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+RL-based methods (RLHF, PPO, GRPO) require a reward model.
+Direct preference methods (DPO, IPO, KTO) do not require one.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_SupportsPEFT_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.SupportsPEFT*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_SupportsPEFT" data-uid="AiDotNet.FineTuning.FineTuningBase`3.SupportsPEFT">
+  SupportsPEFT
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this method supports parameter-efficient fine-tuning (PEFT).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool SupportsPEFT { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_SupportsPEFT_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, this method can be combined with LoRA, QLoRA, or other PEFT techniques
+to reduce memory requirements during fine-tuning.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_ComputeKLDivergence_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeKLDivergence*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_ComputeKLDivergence_System_Double___System_Double___" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeKLDivergence(System.Double[],System.Double[])">
+  ComputeKLDivergence(double[], double[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L239"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the KL divergence between two probability distributions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual double ComputeKLDivergence(double[] policyProbs, double[] referenceProbs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>policyProbs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The policy probabilities.</p>
+</dd>
+    <dt><code>referenceProbs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>The reference probabilities.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The KL divergence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbability_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeLogProbability*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbability_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeLogProbability(AiDotNet.Interfaces.IFullModel{`0,`1,`2},`1,`2)">
+  ComputeLogProbability(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the log probability of an output given an input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual double ComputeLogProbability(IFullModel&lt;T, TInput, TOutput&gt; model, TInput input, TOutput output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to use for computation.</p>
+</dd>
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input.</p>
+</dd>
+    <dt><code>output</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The output to compute log probability for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The log probability.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbabilityFromPrediction_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeLogProbabilityFromPrediction*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbabilityFromPrediction__2__2_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ComputeLogProbabilityFromPrediction(`2,`2)">
+  ComputeLogProbabilityFromPrediction(TOutput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes log probability from a prediction and target output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual double ComputeLogProbabilityFromPrediction(TOutput prediction, TOutput target)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prediction</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model's prediction.</p>
+</dd>
+    <dt><code>target</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The target output.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The log probability.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_CreateBatches_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.CreateBatches*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_CreateBatches_AiDotNet_Models_Options_FineTuningData__0__1__2__System_Int32_System_Boolean_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.CreateBatches(AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Int32,System.Boolean)">
+  CreateBatches(FineTuningData&lt;T, TInput, TOutput&gt;, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates batches from the training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual IEnumerable&lt;FineTuningData&lt;T, TInput, TOutput&gt;&gt; CreateBatches(FineTuningData&lt;T, TInput, TOutput&gt; data, int batchSize, bool shuffle = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The full training data.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The batch size.</p>
+</dd>
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to shuffle the data before batching.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>An enumerable of data batches.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_Deserialize_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_EvaluateAsync_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.EvaluateAsync*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_EvaluateAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.EvaluateAsync(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Threading.CancellationToken)">
+  EvaluateAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the fine-tuning quality of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task&lt;FineTuningMetrics&lt;T&gt;&gt; EvaluateAsync(IFullModel&lt;T, TInput, TOutput&gt; model, FineTuningData&lt;T, TInput, TOutput&gt; evaluationData, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fine-tuned model to evaluate.</p>
+</dd>
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Evaluation dataset.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token for cancellation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Models.Options.FineTuningMetrics-1.html">FineTuningMetrics</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Metrics describing the fine-tuning quality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_EvaluateAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different fine-tuning methods have different evaluation metrics:
+</p>
+<ul><li><span class="term">Preference methods</span>Win rate against reference, preference accuracy</li><li><span class="term">RL methods</span>Reward scores, KL divergence from base model</li><li><span class="term">Safety methods</span>Harmlessness scores, refusal rates</li></ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_FineTuneAsync_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.FineTuneAsync*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_FineTuneAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.FineTuneAsync(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Threading.CancellationToken)">
+  FineTuneAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fine-tunes a model using the configured method and provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; FineTuneAsync(IFullModel&lt;T, TInput, TOutput&gt; baseModel, FineTuningData&lt;T, TInput, TOutput&gt; trainingData, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The pre-trained model to fine-tune.</p>
+</dd>
+    <dt><code>trainingData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training data appropriate for this fine-tuning method.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token for cancellation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>The fine-tuned model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_FineTuneAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method applies the fine-tuning algorithm to adapt the base model. The specific
+behavior depends on the method category:
+</p>
+<ul><li><span class="term">SFT</span>Uses labeled examples from trainingData</li><li><span class="term">Preference-based (DPO, etc.)</span>Uses preference pairs from trainingData</li><li><span class="term">RL-based (RLHF, PPO)</span>Uses reward model and training data</li></ul>
+<p><b>For Beginners:</b> This is where the actual training happens. You give it a model
+and training data, and it returns an improved model that's better at the specific task.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_GetOptions_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_GetOptions" data-uid="AiDotNet.FineTuning.FineTuningBase`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration options for this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningOptions&lt;T&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningOptions-1.html">FineTuningOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_LoadModel_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_LoadModel_System_String_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to load a model directly from disk.
+It combines file I/O operations with deserialization.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Open&quot; in a document editor.
+Instead of manually reading from a file and then calling Deserialize(), this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the specified file does not exist.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while reading from the file or when the file contains corrupted or invalid model data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_LogProgress_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LogProgress*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_LogProgress_System_Int32_System_Int32_System_Double_System_String_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LogProgress(System.Int32,System.Int32,System.Double,System.String)">
+  LogProgress(int, int, double, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs training progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void LogProgress(int step, int totalSteps, double loss, string? additionalInfo = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current step.</p>
+</dd>
+    <dt><code>totalSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of steps.</p>
+</dd>
+    <dt><code>loss</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The current loss.</p>
+</dd>
+    <dt><code>additionalInfo</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional additional information to log.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_LogSigmoid_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LogSigmoid*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_LogSigmoid_System_Double_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.LogSigmoid(System.Double)">
+  LogSigmoid(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the log sigmoid function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static double LogSigmoid(double x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The log sigmoid output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_Reset_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Reset*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Reset" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the fine-tuning method state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_SaveModel_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_SaveModel_System_String_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method provides a convenient way to save the model directly to disk.
+It combines serialization with file I/O operations.</p>
+<p><b>For Beginners:</b> This is like clicking &quot;Save As&quot; in a document editor.
+Instead of manually calling Serialize() and then writing to a file, this method does both steps for you.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when an I/O error occurs while writing to the file.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.unauthorizedaccessexception">UnauthorizedAccessException</a></dt>
+    <dd><p>Thrown when the caller does not have the required permission to write to the specified file path.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_Serialize_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Serialize" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_FineTuningBase_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_Sigmoid_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_Sigmoid_System_Double_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.Sigmoid(System.Double)">
+  Sigmoid(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the sigmoid function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static double Sigmoid(double x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The sigmoid output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_UpdateMetrics_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.UpdateMetrics*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_UpdateMetrics_System_Double_System_Int32_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.UpdateMetrics(System.Double,System.Int32)">
+  UpdateMetrics(double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates training metrics with batch results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void UpdateMetrics(double batchLoss, int step)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchLoss</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The loss for the current batch.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current training step.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_FineTuningBase_3_ValidateTrainingData_" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ValidateTrainingData*"></a>
+
+  <h3 id="AiDotNet_FineTuning_FineTuningBase_3_ValidateTrainingData_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.FineTuning.FineTuningBase`3.ValidateTrainingData(AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  ValidateTrainingData(FineTuningData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the training data is appropriate for this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateTrainingData(FineTuningData&lt;T, TInput, TOutput&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training data to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if the data is invalid for this method.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/FineTuningBase.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

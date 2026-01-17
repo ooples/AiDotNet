@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class KernelRidgeRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class KernelRidgeRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Kernel Ridge Regression, which combines ridge regression with the kernel trick to model non-linear relationships in data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_KernelRidgeRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.KernelRidgeRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_KernelRidgeRegressionOptions" data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions" class="text-break">
+Class KernelRidgeRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KernelRidgeRegressionOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Kernel Ridge Regression, which combines ridge regression with the kernel trick
+to model non-linear relationships in data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class KernelRidgeRegressionOptions : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">KernelRidgeRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Kernel Ridge Regression (KRR) extends standard ridge regression by applying the "kernel trick" to
+implicitly map input features into a higher-dimensional space where linear relationships can better
+capture complex patterns in the data. This allows the model to learn non-linear relationships while
+still maintaining the computational benefits and regularization of ridge regression.
+</p>
+<p><b>For Beginners:</b> Kernel Ridge Regression is a powerful technique that helps your model
+capture complex, non-linear patterns in your data.
+<p>Imagine you have data points that can't be fit well with a straight line. For example, the relationship
+between a car's speed and its fuel efficiency might be more of a U-shape (very efficient at moderate
+speeds, less efficient at very low or very high speeds). Kernel Ridge Regression can help model these
+curved relationships.</p>
+<p>The &quot;kernel trick&quot; is like giving your model special glasses that let it see your data transformed in
+a way that makes complex patterns easier to find. Instead of trying to fit a straight line to a curve,
+it transforms the problem so that a straight line in the transformed space corresponds to a curve in
+the original space.</p>
+<p>The &quot;ridge&quot; part helps prevent overfitting by keeping the model from becoming too complex, similar to
+how guardrails keep a car on the road.</p>
+<p>This class inherits from NonLinearRegressionOptions, so all the general non-linear regression settings
+are also available. The additional settings specific to Kernel Ridge Regression let you fine-tune how
+the algorithm balances fitting the data versus keeping the model simple.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_DecompositionType_" data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_DecompositionType" data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KernelRidgeRegressionOptions.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of matrix decomposition used to solve the kernel ridge regression equations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to Cholesky.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different matrix decomposition methods offer different trade-offs between numerical stability,
+computational efficiency, and applicability to specific types of kernel matrices. Cholesky
+decomposition is generally faster but requires the kernel matrix to be positive definite, while
+SVD (Singular Value Decomposition) is more robust but computationally more expensive.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical method used to solve the
+equations in Kernel Ridge Regression. The default value (Cholesky) works well for most cases and
+is computationally efficient.
+<p>Think of matrix decomposition like solving a complex puzzle. There are different strategies to
+solve the puzzle, each with its own advantages:</p>
+<ul>
+<li><p>Cholesky decomposition (the default) is like a fast, efficient strategy that works well for
+most standard puzzles. It's quick but might struggle with certain unusual puzzle types.</p>
+</li>
+<li><p>SVD (Singular Value Decomposition) is like a more thorough, methodical strategy that can handle
+even the most challenging puzzles, but takes longer to complete.</p>
+</li>
+<li><p>QR decomposition falls somewhere in between, offering a balance of robustness and efficiency.</p>
+</li>
+</ul>
+<p>Most beginners should stick with the default Cholesky decomposition. You might consider changing
+this setting if:</p>
+<ul>
+<li>You encounter numerical stability issues (error messages about matrix decomposition)</li>
+<li>You're working with a very large dataset and need to optimize performance</li>
+<li>You're using a specialized kernel function that creates unusual kernel matrices</li>
+</ul>
+<p>In these cases, trying a different decomposition type might help resolve issues or improve
+performance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_LambdaKRR_" data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions.LambdaKRR*"></a>
+
+  <h3 id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_LambdaKRR" data-uid="AiDotNet.Models.Options.KernelRidgeRegressionOptions.LambdaKRR">
+  LambdaKRR
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KernelRidgeRegressionOptions.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the regularization parameter (lambda) for Kernel Ridge Regression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LambdaKRR { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The regularization parameter, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_KernelRidgeRegressionOptions_LambdaKRR_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the strength of regularization applied to the model. Higher values result in
+stronger regularization, which helps prevent overfitting but may cause underfitting if set too high.
+Lower values allow the model to fit the training data more closely but may lead to overfitting if
+set too low.
+</p>
+<p><b>For Beginners:</b> This setting controls how much the model prioritizes simplicity versus
+fitting the training data perfectly. With the default value of 1.0, the model tries to balance these
+two goals.
+<p>Think of it like adjusting the tension on a spring:</p>
+<ul>
+<li>Higher values (e.g., 10.0) create more tension, pulling the model toward simplicity. This helps
+prevent overfitting (where the model memorizes the training data but performs poorly on new data),
+but if set too high, the model might be too simple to capture important patterns (underfitting).</li>
+<li>Lower values (e.g., 0.1) reduce the tension, allowing the model to fit the training data more
+closely. This can help capture complex patterns, but if set too low, the model might start
+fitting to noise in the data (overfitting).</li>
+</ul>
+<p>Finding the right value often requires experimentation. You might start with the default of 1.0 and
+then try values that are 10 times larger (10.0) or smaller (0.1) to see how they affect performance.
+Many practitioners use techniques like cross-validation to find the optimal value for their specific
+dataset.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/KernelRidgeRegressionOptions.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

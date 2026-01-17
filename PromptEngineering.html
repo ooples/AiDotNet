@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Prompt Engineering and LLM Tools Framework | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Prompt Engineering and LLM Tools Framework | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PromptEngineering.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="prompt-engineering-and-llm-tools-framework">Prompt Engineering and LLM Tools Framework</h1>
+
+<h2 id="overview">Overview</h2>
+<p>The AiDotNet Prompt Engineering framework provides comprehensive infrastructure for working with Large Language Models (LLMs), including prompt templates, tool/function calling, in-context learning, prompt optimization, and chain construction.</p>
+<p>This framework enables:</p>
+<ul>
+<li><strong>LLM application development</strong> with production-ready components</li>
+<li><strong>Automated prompt optimization</strong> for better performance</li>
+<li><strong>Multi-step complex workflows</strong> using chains</li>
+<li><strong>Tool-augmented LLM systems</strong> with function calling</li>
+<li><strong>Few-shot learning</strong> with intelligent example selection</li>
+</ul>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#prompt-templates">Prompt Templates</a></li>
+<li><a href="#tool-function-calling">Tool/Function Calling</a></li>
+<li><a href="#few-shot-learning">Few-Shot Learning</a></li>
+<li><a href="#prompt-optimization">Prompt Optimization</a></li>
+<li><a href="#chain-construction">Chain Construction</a></li>
+<li><a href="#quick-start-examples">Quick Start Examples</a></li>
+</ol>
+<hr>
+<h2 id="prompt-templates">Prompt Templates</h2>
+<p>Prompt templates provide structured ways to create prompts with variable substitution, examples, and formatting.</p>
+<h3 id="template-types">Template Types</h3>
+<h4 id="1-simple-template">1. Simple Template</h4>
+<p>Basic variable substitution for straightforward prompts.</p>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Templates;
+
+var template = new SimplePromptTemplate(&quot;Translate {text} to {language}&quot;);
+
+var prompt = template.Format(new Dictionary&lt;string, string&gt;
+{
+    [&quot;text&quot;] = &quot;Hello world&quot;,
+    [&quot;language&quot;] = &quot;Spanish&quot;
+});
+// Result: &quot;Translate Hello world to Spanish&quot;
+</code></pre>
+<h4 id="2-few-shot-template">2. Few-Shot Template</h4>
+<p>Include examples to guide model behavior.</p>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.PromptEngineering.FewShot;
+
+// Create example selector
+var selector = new RandomExampleSelector&lt;double&gt;();
+selector.AddExample(new FewShotExample
+{
+    Input = &quot;I loved this product!&quot;,
+    Output = &quot;Positive&quot;
+});
+selector.AddExample(new FewShotExample
+{
+    Input = &quot;Terrible experience.&quot;,
+    Output = &quot;Negative&quot;
+});
+
+// Create few-shot template
+var template = new FewShotPromptTemplate&lt;double&gt;(
+    template: &quot;Classify sentiment:\n\n{examples}\n\nText: {text}\nSentiment:&quot;,
+    exampleSelector: selector,
+    exampleCount: 2
+);
+
+var prompt = template.Format(new Dictionary&lt;string, string&gt;
+{
+    [&quot;text&quot;] = &quot;This is amazing!&quot;
+});
+</code></pre>
+<h4 id="3-chat-template">3. Chat Template</h4>
+<p>Structure conversations with role-based messages.</p>
+<pre><code class="lang-csharp">var template = new ChatPromptTemplate()
+    .AddSystemMessage(&quot;You are a helpful math tutor&quot;)
+    .AddUserMessage(&quot;What is 2 + 2?&quot;)
+    .AddAssistantMessage(&quot;2 + 2 equals 4&quot;)
+    .AddUserMessage(&quot;What about 5 + 3?&quot;);
+
+var prompt = template.Format(new Dictionary&lt;string, string&gt;());
+</code></pre>
+<h3 id="using-the-factory">Using the Factory</h3>
+<pre><code class="lang-csharp">using AiDotNet.Factories;
+using AiDotNet.Enums;
+
+var template = PromptTemplateFactory.Create(
+    PromptTemplateType.Simple,
+    &quot;Summarize {document}&quot;
+);
+</code></pre>
+<p>For Few-Shot templates, use the generic factory overload so your selector type matches:</p>
+<pre><code class="lang-csharp">using AiDotNet.Factories;
+using AiDotNet.Enums;
+using AiDotNet.PromptEngineering.FewShot;
+
+var selector = new RandomExampleSelector&lt;double&gt;();
+selector.AddExample(new FewShotExample { Input = &quot;Hello&quot;, Output = &quot;Hola&quot; });
+selector.AddExample(new FewShotExample { Input = &quot;Goodbye&quot;, Output = &quot;Adios&quot; });
+
+var template = PromptTemplateFactory.Create&lt;double&gt;(
+    PromptTemplateType.FewShot,
+    &quot;Translate English to Spanish.\n\n{examples}\n\nNow: {query}&quot;,
+    selector,
+    exampleCount: 2
+);
+</code></pre>
+<hr>
+<h2 id="toolfunction-calling">Tool/Function Calling</h2>
+<p>Enable LLMs to use external functions and APIs.</p>
+<h3 id="creating-a-custom-tool">Creating a Custom Tool</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Tools;
+using System.Text.Json;
+
+public class CalculatorTool : FunctionToolBase
+{
+    public CalculatorTool() : base(
+        name: &quot;calculator&quot;,
+        description: &quot;Performs basic arithmetic operations&quot;,
+        parameterSchema: JsonDocument.Parse(&quot;&quot;&quot;
+        {
+            &quot;type&quot;: &quot;object&quot;,
+            &quot;properties&quot;: {
+                &quot;operation&quot;: {
+                    &quot;type&quot;: &quot;string&quot;,
+                    &quot;enum&quot;: [&quot;add&quot;, &quot;subtract&quot;, &quot;multiply&quot;, &quot;divide&quot;]
+                },
+                &quot;a&quot;: { &quot;type&quot;: &quot;number&quot; },
+                &quot;b&quot;: { &quot;type&quot;: &quot;number&quot; }
+            },
+            &quot;required&quot;: [&quot;operation&quot;, &quot;a&quot;, &quot;b&quot;]
+        }
+        &quot;&quot;&quot;))
+    {
+    }
+
+    protected override string ExecuteCore(JsonDocument arguments)
+    {
+        var op = arguments.RootElement.GetProperty(&quot;operation&quot;).GetString();
+        var a = arguments.RootElement.GetProperty(&quot;a&quot;).GetDouble();
+        var b = arguments.RootElement.GetProperty(&quot;b&quot;).GetDouble();
+
+        return op switch
+        {
+            &quot;add&quot; =&gt; (a + b).ToString(),
+            &quot;subtract&quot; =&gt; (a - b).ToString(),
+            &quot;multiply&quot; =&gt; (a * b).ToString(),
+            &quot;divide&quot; =&gt; (a / b).ToString(),
+            _ =&gt; &quot;Unknown operation&quot;
+        };
+    }
+}
+</code></pre>
+<h3 id="using-the-tool-registry">Using the Tool Registry</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Tools;
+
+var registry = new ToolRegistry();
+registry.RegisterTool(new CalculatorTool());
+
+// Execute a tool
+var args = JsonDocument.Parse(&quot;&quot;&quot;
+{
+    &quot;operation&quot;: &quot;add&quot;,
+    &quot;a&quot;: 15,
+    &quot;b&quot;: 27
+}
+&quot;&quot;&quot;);
+
+var result = registry.ExecuteTool(&quot;calculator&quot;, args);
+// Result: &quot;42&quot;
+
+// Get tools description for LLM prompt
+var toolsDescription = registry.GenerateToolsDescription();
+</code></pre>
+<hr>
+<h2 id="few-shot-learning">Few-Shot Learning</h2>
+<p>Intelligently select examples to include in prompts.</p>
+<h3 id="selection-strategies">Selection Strategies</h3>
+<h4 id="random-selection">Random Selection</h4>
+<pre><code class="lang-csharp">var selector = new RandomExampleSelector&lt;double&gt;(seed: 42);
+</code></pre>
+<h4 id="fixed-order-selection">Fixed Order Selection</h4>
+<pre><code class="lang-csharp">var selector = new FixedExampleSelector&lt;double&gt;();
+</code></pre>
+<h3 id="adding-examples">Adding Examples</h3>
+<pre><code class="lang-csharp">selector.AddExample(new FewShotExample
+{
+    Input = &quot;What is the capital of France?&quot;,
+    Output = &quot;The capital of France is Paris.&quot;,
+    Metadata = new Dictionary&lt;string, string&gt;
+    {
+        [&quot;category&quot;] = &quot;geography&quot;,
+        [&quot;difficulty&quot;] = &quot;easy&quot;
+    }
+});
+
+// Select examples for a query
+var examples = selector.SelectExamples(&quot;What is the capital of Spain?&quot;, count: 3);
+</code></pre>
+<hr>
+<h2 id="prompt-optimization">Prompt Optimization</h2>
+<p>Automatically improve prompts for better performance.</p>
+<h3 id="discrete-search-optimizer">Discrete Search Optimizer</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Optimization;
+
+var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
+
+// Define evaluation function (returns accuracy score)
+double EvaluatePrompt(string prompt)
+{
+    // Test prompt on validation set
+    int correct = 0;
+    foreach (var testCase in validationSet)
+    {
+        var result = model.Generate(prompt + testCase.Input);
+        if (result.Trim() == testCase.Expected)
+            correct++;
+    }
+    return correct / (double)validationSet.Count;
+}
+
+// Optimize
+var optimizedTemplate = optimizer.Optimize(
+    initialPrompt: &quot;Classify the sentiment:&quot;,
+    evaluationFunction: EvaluatePrompt,
+    maxIterations: 50
+);
+
+// View optimization history
+var history = optimizer.GetOptimizationHistory();
+foreach (var entry in history)
+{
+    Console.WriteLine($&quot;Iteration {entry.Iteration}: Score = {entry.Score}&quot;);
+}
+</code></pre>
+<h3 id="async-optimization">Async Optimization</h3>
+<pre><code class="lang-csharp">async Task&lt;double&gt; EvaluatePromptAsync(string prompt)
+{
+    // Async evaluation (e.g., API calls)
+    var results = await TestWithAPIAsync(prompt);
+    return CalculateAccuracy(results);
+}
+
+var optimized = await optimizer.OptimizeAsync(
+    initialPrompt: &quot;Classify sentiment:&quot;,
+    evaluationFunction: EvaluatePromptAsync,
+    maxIterations: 50
+);
+</code></pre>
+<hr>
+<h2 id="chain-construction">Chain Construction</h2>
+<p>Compose multiple LLM operations into workflows.</p>
+<h3 id="sequential-chain">Sequential Chain</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Chains;
+
+var chain = new SequentialChain&lt;string, string&gt;(
+    &quot;DocumentProcessing&quot;,
+    &quot;Processes documents through multiple steps&quot;
+);
+
+// Add steps
+chain.AddStep(&quot;ExtractKeywords&quot;, text =&gt;
+{
+    // Extract keywords from text
+    return ExtractKeywords(text);
+});
+
+chain.AddStep(&quot;Summarize&quot;, keywords =&gt;
+{
+    // Generate summary from keywords
+    return GenerateSummary(keywords);
+});
+
+chain.AddStep(&quot;Translate&quot;, summary =&gt;
+{
+    // Translate to target language
+    return Translate(summary, &quot;es&quot;);
+});
+
+// Run chain
+var result = chain.Run(&quot;Long article text...&quot;);
+</code></pre>
+<h3 id="async-chain">Async Chain</h3>
+<pre><code class="lang-csharp">chain.AddStepAsync(&quot;FetchData&quot;, async (input, ct) =&gt;
+{
+    var data = await FetchFromAPIAsync(input.ToString(), ct);
+    return data;
+});
+
+var result = await chain.RunAsync(&quot;input&quot;, CancellationToken.None);
+</code></pre>
+<hr>
+<h2 id="quick-start-examples">Quick Start Examples</h2>
+<h3 id="example-1-sentiment-classification-with-few-shot-learning">Example 1: Sentiment Classification with Few-Shot Learning</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Templates;
+using AiDotNet.PromptEngineering.FewShot;
+
+// Create example selector
+var selector = new RandomExampleSelector&lt;double&gt;();
+selector.AddExample(new FewShotExample
+{
+    Input = &quot;I absolutely loved this product! Best purchase ever!&quot;,
+    Output = &quot;Positive&quot;
+});
+selector.AddExample(new FewShotExample
+{
+    Input = &quot;Terrible quality, complete waste of money.&quot;,
+    Output = &quot;Negative&quot;
+});
+selector.AddExample(new FewShotExample
+{
+    Input = &quot;It's okay, nothing special but it works.&quot;,
+    Output = &quot;Neutral&quot;
+});
+
+// Create few-shot template
+var template = new FewShotPromptTemplate&lt;double&gt;(
+    template: &quot;Classify the sentiment of customer reviews.\n\n{examples}\n\nReview: {review}\nSentiment:&quot;,
+    exampleSelector: selector,
+    exampleCount: 2
+);
+
+// Use template
+var prompt = template.Format(new Dictionary&lt;string, string&gt;
+{
+    [&quot;review&quot;] = &quot;This exceeded my expectations!&quot;
+});
+
+// Send prompt to your LLM...
+</code></pre>
+<h3 id="example-2-tool-augmented-research-assistant">Example 2: Tool-Augmented Research Assistant</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Tools;
+using AiDotNet.PromptEngineering.Chains;
+
+// Create tools
+var registry = new ToolRegistry();
+registry.RegisterTool(new SearchTool());
+registry.RegisterTool(new CalculatorTool());
+registry.RegisterTool(new WikipediaTool());
+
+// Create chain
+var researchChain = new SequentialChain&lt;string, string&gt;(
+    &quot;ResearchChain&quot;,
+    &quot;Researches topics using multiple tools&quot;
+);
+
+researchChain.AddStep(&quot;Search&quot;, query =&gt;
+{
+    var searchArgs = CreateSearchArgs(query);
+    return registry.ExecuteTool(&quot;search&quot;, searchArgs);
+});
+
+researchChain.AddStep(&quot;Analyze&quot;, searchResults =&gt;
+{
+    // Analyze search results and extract key info
+    return AnalyzeResults(searchResults);
+});
+
+researchChain.AddStep(&quot;Synthesize&quot;, analysis =&gt;
+{
+    // Create final answer
+    return SynthesizeAnswer(analysis);
+});
+
+// Use chain
+var answer = researchChain.Run(&quot;What is the population of Tokyo?&quot;);
+</code></pre>
+<h3 id="example-3-prompt-optimization-for-question-answering">Example 3: Prompt Optimization for Question Answering</h3>
+<pre><code class="lang-csharp">using AiDotNet.PromptEngineering.Optimization;
+
+var optimizer = new DiscreteSearchOptimizer&lt;double&gt;();
+
+// Add custom variations
+optimizer.AddInstructionVariations(
+    &quot;Answer the question concisely: &quot;,
+    &quot;Provide a detailed answer to: &quot;,
+    &quot;Based on the context, answer: &quot;
+);
+
+// Evaluation function
+double Evaluate(string promptTemplate)
+{
+    double totalScore = 0;
+    foreach (var qa in testSet)
+    {
+        var prompt = promptTemplate + $&quot;\n\nContext: {qa.Context}\nQuestion: {qa.Question}\nAnswer:&quot;;
+        var answer = llm.Generate(prompt);
+        totalScore += CalculateSimilarity(answer, qa.ExpectedAnswer);
+    }
+    return totalScore / testSet.Count;
+}
+
+// Optimize
+var best = optimizer.Optimize(
+    initialPrompt: &quot;Answer the question:&quot;,
+    evaluationFunction: Evaluate,
+    maxIterations: 100
+);
+
+Console.WriteLine($&quot;Best prompt: {best.Template}&quot;);
+</code></pre>
+<hr>
+<h2 id="architecture">Architecture</h2>
+<h3 id="component-organization">Component Organization</h3>
+<pre><code>src/
+├── Enums/
+│   ├── PromptTemplateType.cs
+│   ├── ChainType.cs
+│   ├── FewShotSelectionStrategy.cs
+│   └── PromptOptimizationStrategy.cs
+├── Interfaces/
+│   ├── IPromptTemplate.cs
+│   ├── IFunctionTool.cs
+│   ├── IChain.cs
+│   ├── IFewShotExampleSelector.cs
+│   └── IPromptOptimizer.cs
+├── PromptEngineering/
+│   ├── Templates/
+│   │   ├── PromptTemplateBase.cs
+│   │   ├── SimplePromptTemplate.cs
+│   │   ├── FewShotPromptTemplate.cs
+│   │   └── ChatPromptTemplate.cs
+│   ├── Tools/
+│   │   ├── FunctionToolBase.cs
+│   │   └── ToolRegistry.cs
+│   ├── Chains/
+│   │   ├── ChainBase.cs
+│   │   └── SequentialChain.cs
+│   ├── FewShot/
+│   │   ├── FewShotExampleSelectorBase.cs
+│   │   ├── RandomExampleSelector.cs
+│   │   └── FixedExampleSelector.cs
+│   └── Optimization/
+│       ├── PromptOptimizerBase.cs
+│       └── DiscreteSearchOptimizer.cs
+└── Factories/
+    └── PromptTemplateFactory.cs
+</code></pre>
+<hr>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-prompt-template-design">1. Prompt Template Design</h3>
+<ul>
+<li>Keep templates focused on a single task</li>
+<li>Use descriptive variable names</li>
+<li>Validate inputs before formatting</li>
+<li>Include clear instructions in the prompt</li>
+</ul>
+<h3 id="2-tool-implementation">2. Tool Implementation</h3>
+<ul>
+<li>Provide comprehensive parameter schemas</li>
+<li>Handle errors gracefully</li>
+<li>Return informative error messages</li>
+<li>Validate arguments before execution</li>
+</ul>
+<h3 id="3-few-shot-examples">3. Few-Shot Examples</h3>
+<ul>
+<li>Use diverse, high-quality examples</li>
+<li>Ensure examples match your use case</li>
+<li>Keep examples concise</li>
+<li>Update examples based on performance</li>
+</ul>
+<h3 id="4-prompt-optimization">4. Prompt Optimization</h3>
+<ul>
+<li>Use representative validation sets</li>
+<li>Define clear evaluation metrics</li>
+<li>Start with reasonable initial prompts</li>
+<li>Monitor optimization progress</li>
+</ul>
+<h3 id="5-chain-construction">5. Chain Construction</h3>
+<ul>
+<li>Keep individual steps focused</li>
+<li>Handle errors at each step</li>
+<li>Use async operations for I/O</li>
+<li>Validate inputs and outputs</li>
+</ul>
+<hr>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<ul>
+<li><strong>Template Caching</strong>: Reuse template instances when possible</li>
+<li><strong>Example Selection</strong>: Balance accuracy vs. speed (semantic similarity is slower than random)</li>
+<li><strong>Optimization</strong>: More iterations = better results but higher cost</li>
+<li><strong>Chain Execution</strong>: Use async operations for network I/O</li>
+<li><strong>Tool Calls</strong>: Cache tool results when appropriate</li>
+</ul>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="template-variables-not-replaced">Template Variables Not Replaced</h3>
+<ul>
+<li>Ensure variable names match exactly (case-sensitive)</li>
+<li>Check that all required variables are provided</li>
+<li>Use <code>Validate()</code> before <code>Format()</code></li>
+</ul>
+<h3 id="tool-execution-failures">Tool Execution Failures</h3>
+<ul>
+<li>Verify parameter schema matches arguments</li>
+<li>Check that required fields are provided</li>
+<li>Review tool implementation for errors</li>
+</ul>
+<h3 id="poor-optimization-results">Poor Optimization Results</h3>
+<ul>
+<li>Increase <code>maxIterations</code></li>
+<li>Improve evaluation function</li>
+<li>Add more variation types</li>
+<li>Check validation set quality</li>
+</ul>
+<hr>
+<h2 id="future-enhancements">Future Enhancements</h2>
+<p>Planned additions to the framework:</p>
+<ul>
+<li><strong>Semantic Similarity Selector</strong>: Using embeddings for example selection</li>
+<li><strong>MMR Selector</strong>: Maximum marginal relevance for balanced selection</li>
+<li><strong>Conditional Chains</strong>: Branching logic based on results</li>
+<li><strong>Parallel Chains</strong>: Execute multiple paths simultaneously</li>
+<li><strong>Map-Reduce Chains</strong>: Process collections efficiently</li>
+<li><strong>Gradient-Based Optimization</strong>: Advanced prompt optimization</li>
+<li><strong>Ensemble Optimization</strong>: Combine multiple prompts</li>
+</ul>
+<hr>
+<h2 id="contributing">Contributing</h2>
+<p>When extending the framework:</p>
+<ol>
+<li>Follow existing patterns (Base class + Interface)</li>
+<li>Include comprehensive XML documentation</li>
+<li>Add &quot;For Beginners&quot; sections to remarks</li>
+<li>Write unit tests for new components</li>
+<li>Update this documentation</li>
+</ol>
+<hr>
+<h2 id="license">License</h2>
+<p>This framework is part of AiDotNet and follows the same license.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PromptEngineering.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

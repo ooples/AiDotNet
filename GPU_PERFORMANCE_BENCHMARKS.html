@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>GPU Performance Benchmarks - Phase B | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="GPU Performance Benchmarks - Phase B | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_PERFORMANCE_BENCHMARKS.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="gpu-performance-benchmarks---phase-b">GPU Performance Benchmarks - Phase B</h1>
+
+<h2 id="overview">Overview</h2>
+<p>This document describes the performance benchmarking infrastructure for AiDotNet's GPU acceleration (Phase B implementation).</p>
+<h2 id="benchmark-suite">Benchmark Suite</h2>
+<h3 id="location">Location</h3>
+<p><code>/tests/AiDotNet.Tests/Benchmarks/GpuAccelerationBenchmarks.cs</code></p>
+<h3 id="operations-tested">Operations Tested</h3>
+<p>The benchmark suite validates GPU acceleration across all Phase B epics:</p>
+<h4 id="epic-2-matrix-operations">Epic 2: Matrix Operations</h4>
+<ul>
+<li><strong>GEMM</strong> (General Matrix Multiply) - <code>MatrixMultiply</code>
+<ul>
+<li>Small: 128×128 matrices</li>
+<li>Large: 2048×2048 matrices</li>
+</ul>
+</li>
+<li><strong>GEMV</strong> (General Matrix-Vector) - <code>MatrixVectorMultiply</code>
+<ul>
+<li>Large: 2048×2048 matrix × 2048 vector</li>
+</ul>
+</li>
+</ul>
+<h4 id="epic-3-tensor-operations">Epic 3: Tensor Operations</h4>
+<ul>
+<li><strong>Conv2D</strong> (2D Convolution)
+<ul>
+<li>Input: 4×64×56×56 (batch, channels, height, width)</li>
+<li>Kernels: 128×64×3×3</li>
+</ul>
+</li>
+<li><strong>MaxPool2D</strong> (Max Pooling)
+<ul>
+<li>Input: 4×128×28×28</li>
+<li>Pool size: 2×2, stride: 2</li>
+</ul>
+</li>
+</ul>
+<h4 id="epic-4-integration">Epic 4: Integration</h4>
+<ul>
+<li><strong>ConvolutionalLayer</strong> forward pass (combines Conv2D + bias + activation)</li>
+<li><strong>PoolingLayer</strong> forward pass (direct pooling operation)</li>
+<li><strong>Vector Operations</strong> (optimizer updates)
+<ul>
+<li>Element-wise add, multiply on 1M element vectors</li>
+</ul>
+</li>
+</ul>
+<h2 id="running-benchmarks">Running Benchmarks</h2>
+<h3 id="method-1-benchmarkdotnet-cli">Method 1: BenchmarkDotNet CLI</h3>
+<pre><code class="lang-bash">cd tests/AiDotNet.Tests
+dotnet run -c Release --filter &quot;*GpuAccelerationBenchmarks*&quot;
+</code></pre>
+<h3 id="method-2-programmatic-execution">Method 2: Programmatic Execution</h3>
+<pre><code class="lang-csharp">using BenchmarkDotNet.Running;
+using AiDotNet.Tests.Benchmarks;
+
+var summary = BenchmarkRunner.Run&lt;GpuAccelerationBenchmarks&gt;();
+Console.WriteLine(summary);
+</code></pre>
+<h3 id="method-3-specific-benchmark">Method 3: Specific Benchmark</h3>
+<pre><code class="lang-bash">dotnet run -c Release --filter &quot;*GEMM_Large_GPU*&quot;
+</code></pre>
+<h2 id="expected-results">Expected Results</h2>
+<h3 id="small-operations-below-adaptive-thresholds">Small Operations (Below Adaptive Thresholds)</h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Size</th>
+<th>CPU</th>
+<th>GPU</th>
+<th>Winner</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GEMM</td>
+<td>128×128</td>
+<td>~0.5ms</td>
+<td>~2ms</td>
+<td><strong>CPU</strong></td>
+</tr>
+<tr>
+<td>Reason</td>
+<td></td>
+<td>No overhead</td>
+<td>GPU launch overhead</td>
+<td>Adaptive routing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key Insight</strong>: Adaptive execution automatically routes small operations to CPU, avoiding GPU overhead.</p>
+<h3 id="large-operations-above-adaptive-thresholds">Large Operations (Above Adaptive Thresholds)</h3>
+<table>
+<thead>
+<tr>
+<th>Operation</th>
+<th>Size</th>
+<th>CPU Time</th>
+<th>GPU Time</th>
+<th>Speedup</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GEMM</strong></td>
+<td>2048×2048</td>
+<td>~5000ms</td>
+<td>~10ms</td>
+<td><strong>500x</strong></td>
+<td>O(n³) benefits most from parallelism</td>
+</tr>
+<tr>
+<td><strong>GEMV</strong></td>
+<td>2048×2048</td>
+<td>~50ms</td>
+<td>~0.5ms</td>
+<td><strong>100x</strong></td>
+<td>O(n²) moderate parallelism</td>
+</tr>
+<tr>
+<td><strong>Conv2D</strong></td>
+<td>4×64×56×56</td>
+<td>~3000ms</td>
+<td>~15ms</td>
+<td><strong>200x</strong></td>
+<td>Most critical CNN operation</td>
+</tr>
+<tr>
+<td><strong>MaxPool2D</strong></td>
+<td>4×128×28×28</td>
+<td>~200ms</td>
+<td>~5ms</td>
+<td><strong>40x</strong></td>
+<td>Simpler operation, less speedup</td>
+</tr>
+<tr>
+<td><strong>Vector Ops</strong></td>
+<td>1M elements</td>
+<td>~10ms</td>
+<td>~0.2ms</td>
+<td><strong>50x</strong></td>
+<td>Limited by memory bandwidth</td>
+</tr>
+</tbody>
+</table>
+<h3 id="layer-forward-passes">Layer Forward Passes</h3>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Operation</th>
+<th>CPU</th>
+<th>GPU</th>
+<th>Speedup</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ConvolutionalLayer</td>
+<td>Forward</td>
+<td>~3000ms</td>
+<td>~15ms</td>
+<td><strong>200x</strong></td>
+</tr>
+<tr>
+<td>PoolingLayer</td>
+<td>Forward</td>
+<td>~200ms</td>
+<td>~5ms</td>
+<td><strong>40x</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Impact</strong>: Training a CNN is 100-200x faster on GPU due to convolution dominance.</p>
+<h3 id="memory-usage">Memory Usage</h3>
+<ul>
+<li><strong>GPU Operations</strong>: Minimal allocations due to memory pooling (Gen 0: &lt;10 collections)</li>
+<li><strong>CPU Operations</strong>: More frequent allocations (Gen 0: 100+ collections)</li>
+</ul>
+<h2 id="comparison-to-pytorchtensorflow">Comparison to PyTorch/TensorFlow</h2>
+<h3 id="methodology">Methodology</h3>
+<p>Direct benchmarking against PyTorch/TensorFlow requires Python interop. However, we can estimate comparative performance:</p>
+<h4 id="directgpu-vs-cublascudnn">DirectGpu vs cuBLAS/cuDNN</h4>
+<p>Run the DirectGpu benchmarks to compare against vendor libraries on your hardware.</p>
+<h4 id="key-differences">Key Differences</h4>
+<p><strong>AiDotNet Advantages</strong>:</p>
+<ul>
+<li>✅ Pure .NET implementation (no Python interop)</li>
+<li>✅ Adaptive CPU/GPU execution (automatic optimization)</li>
+<li>✅ Memory pooling (reduces allocation overhead)</li>
+<li>✅ Type-safe at compile time</li>
+</ul>
+<p><strong>PyTorch/TensorFlow Advantages</strong>:</p>
+<ul>
+<li>✅ Highly optimized cuDNN implementations (years of optimization)</li>
+<li>✅ Larger ecosystem and community</li>
+<li>✅ More mature profiling tools</li>
+</ul>
+<p><strong>Expected Performance</strong>: AiDotNet should achieve <strong>30-80% of PyTorch/TensorFlow performance</strong> for equivalent operations, which is excellent for a pure .NET implementation.</p>
+<h2 id="performance-optimization-tips">Performance Optimization Tips</h2>
+<h3 id="1-use-appropriate-thresholds">1. Use Appropriate Thresholds</h3>
+<pre><code class="lang-csharp">// For high-end GPU (RTX 4090, A100)
+var engine = new GpuEngine(AdaptiveThresholds.HighEndGpu);
+
+// For integrated graphics
+var engine = new GpuEngine(AdaptiveThresholds.LowEndGpu);
+
+// For testing (force all operations to GPU)
+var engine = new GpuEngine(AdaptiveThresholds.AlwaysGpu);
+</code></pre>
+<h3 id="2-batch-operations">2. Batch Operations</h3>
+<pre><code class="lang-csharp">// BAD: Sequential single operations
+for (int i = 0; i &lt; 100; i++)
+{
+    var result = engine.MatrixMultiply(a, b);
+}
+
+// GOOD: Batched operations
+var results = engine.BatchMatMul(batchedA, batchedB);
+</code></pre>
+<h3 id="3-reuse-engines">3. Reuse Engines</h3>
+<pre><code class="lang-csharp">// BAD: Creating new engine per operation
+var result1 = new GpuEngine().MatrixMultiply(a, b);
+var result2 = new GpuEngine().MatrixMultiply(c, d); // Expensive!
+
+// GOOD: Reuse single engine instance
+var engine = new GpuEngine();
+var result1 = engine.MatrixMultiply(a, b);
+var result2 = engine.MatrixMultiply(c, d);
+</code></pre>
+<h2 id="interpreting-results">Interpreting Results</h2>
+<h3 id="speedup-calculation">Speedup Calculation</h3>
+<pre><code>Speedup = CPU Time / GPU Time
+</code></pre>
+<h3 id="when-gpu-is-slower">When GPU is Slower</h3>
+<p>If GPU shows slower performance:</p>
+<ol>
+<li><strong>Check operation size</strong>: Below adaptive threshold?</li>
+<li><strong>Check memory transfers</strong>: Are you transferring data in a loop?</li>
+<li><strong>Check GPU health</strong>: Is GPU overheating or throttling?</li>
+<li><strong>Check GPU availability</strong>: Is CUDA/OpenCL properly installed?</li>
+</ol>
+<h3 id="memory-diagnostics">Memory Diagnostics</h3>
+<p>BenchmarkDotNet automatically reports:</p>
+<ul>
+<li><strong>Gen 0/1/2 collections</strong>: Lower is better</li>
+<li><strong>Allocated bytes</strong>: Lower is better</li>
+<li><strong>Memory pools</strong>: Check that GPU engine reuses buffers</li>
+</ul>
+<h2 id="continuous-benchmarking">Continuous Benchmarking</h2>
+<h3 id="regression-detection">Regression Detection</h3>
+<p>Run benchmarks before/after changes:</p>
+<pre><code class="lang-bash"># Baseline
+dotnet run -c Release --filter &quot;*GpuAccelerationBenchmarks*&quot; &gt; baseline.txt
+
+# After changes
+dotnet run -c Release --filter &quot;*GpuAccelerationBenchmarks*&quot; &gt; current.txt
+
+# Compare
+diff baseline.txt current.txt
+</code></pre>
+<h3 id="cicd-integration">CI/CD Integration</h3>
+<p>Add to your CI pipeline:</p>
+<pre><code class="lang-yaml">- name: Run GPU Benchmarks
+  run: |
+    dotnet run -c Release --project tests/AiDotNet.Tests --filter &quot;*GpuAccelerationBenchmarks*&quot;
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="gpu-not-available">GPU Not Available</h3>
+<p>If GPU benchmarks return <code>null</code>:</p>
+<ol>
+<li>Verify CUDA/OpenCL installation</li>
+<li>Check GPU drivers are up to date</li>
+<li>Verify <code>GpuEngine</code> initialization succeeds</li>
+<li>Check DirectGpu backend availability (CUDA/OpenCL) for your GPU</li>
+</ol>
+<h3 id="unexpected-performance">Unexpected Performance</h3>
+<p>If results differ from expected:</p>
+<ol>
+<li><strong>Ensure Release build</strong>: Debug builds are 10-100x slower</li>
+<li><strong>Close background applications</strong>: GPU might be busy</li>
+<li><strong>Check CPU/GPU temperature</strong>: Thermal throttling affects performance</li>
+<li><strong>Verify adaptive thresholds</strong>: Might be routing incorrectly</li>
+</ol>
+<h2 id="references">References</h2>
+<ul>
+<li><a href="https://benchmarkdotnet.org/">BenchmarkDotNet Documentation</a></li>
+<li><a href="https://www.khronos.org/opencl/">OpenCL Documentation</a></li>
+<li><a href="https://developer.nvidia.com/cuda-toolkit">CUDA Documentation</a></li>
+<li>Phase B Implementation: See Epic 1-4 user stories in issue #496</li>
+</ul>
+<hr>
+<p><strong>Last Updated</strong>: 2025-01-17
+<strong>Phase</strong>: B - GPU Production Implementation
+<strong>Status</strong>: US-GPU-017 Complete</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/GPU_PERFORMANCE_BENCHMARKS.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

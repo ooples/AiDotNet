@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BinarySpikingActivation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BinarySpikingActivation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Binary Spiking activation function for neural networks, particularly for spiking neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActivationFunctions_BinarySpikingActivation_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActivationFunctions.BinarySpikingActivation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1">
+
+
+
+  <h1 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1" class="text-break">
+Class BinarySpikingActivation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActivationFunctions.html">ActivationFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Binary Spiking activation function for neural networks, particularly for spiking neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BinarySpikingActivation&lt;T&gt; : ActivationFunctionBase&lt;T&gt;, IActivationFunction&lt;T&gt;, IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html">ActivationFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">BinarySpikingActivation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_NumOps">ActivationFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Engine">ActivationFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_SupportsGpuTraining">ActivationFunctionBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.ForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.BackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Binary Spiking activation models how real neurons in your brain generate electrical pulses.
+<p>Unlike standard activation functions that output continuous values, Binary Spiking:</p>
+<ul>
+<li>Outputs only 1 (spike/fire) or 0 (no spike)</li>
+<li>Neurons &quot;fire&quot; only when their input exceeds a threshold</li>
+<li>After firing, neurons typically have a &quot;refractory period&quot; before they can fire again</li>
+</ul>
+<p>This activation creates the discrete, all-or-nothing behavior of biological neurons:</p>
+<ul>
+<li>Input below threshold ? Output = 0 (neuron remains silent)</li>
+<li>Input at or above threshold ? Output = 1 (neuron fires a spike)</li>
+</ul>
+<p>Common uses include:</p>
+<ul>
+<li>Spiking Neural Networks (SNNs)</li>
+<li>Neuromorphic computing systems</li>
+<li>Models that process temporal information</li>
+<li>Energy-efficient neural networks for specialized hardware</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.#ctor">
+  BinarySpikingActivation()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Binary Spiking activation function with default parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BinarySpikingActivation()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a Binary Spiking activation with standard settings.
+<p>The default settings:</p>
+<ul>
+<li>Threshold = 1.0: Neurons fire when their input reaches or exceeds 1.0</li>
+<li>Derivative Slope = 1.0: Controls how quickly the function changes around the threshold</li>
+<li>Derivative Width = 0.2: Sets the size of the region where learning can occur</li>
+</ul>
+<p>These settings work well for most spiking neural networks, but you can customize them
+with the other constructor if you have specific requirements.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor__0__0__0_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.#ctor(`0,`0,`0)">
+  BinarySpikingActivation(T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Binary Spiking activation function with custom parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BinarySpikingActivation(T threshold, T derivativeSlope, T derivativeWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd><p>The firing threshold for neurons.</p>
+</dd>
+    <dt><code>derivativeSlope</code> <span class="xref">T</span></dt>
+    <dd><p>The slope of the approximated derivative used during training.</p>
+</dd>
+    <dt><code>derivativeWidth</code> <span class="xref">T</span></dt>
+    <dd><p>The width of the region around the threshold where the derivative is non-zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1__ctor__0__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor lets you customize the spiking behavior of neurons.
+<p>You can adjust:</p>
+<ul>
+<li>Threshold: How much input is needed before neurons fire (higher = harder to activate)</li>
+<li>Derivative Slope: Affects how quickly neurons learn (higher = faster but potentially unstable learning)</li>
+<li>Derivative Width: Controls how precise inputs need to be (smaller = more precise targeting)</li>
+</ul>
+<p>Customizing these parameters can help optimize for different types of data or learning tasks.
+For example, a lower threshold might be better for detecting subtle patterns, while
+a higher threshold could help filter out noise.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_SupportsJitCompilation_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_SupportsJitCompilation" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because TensorOperations.SurrogateSpike provides surrogate gradient support for spiking networks.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Binary spiking supports JIT compilation using surrogate gradients. The forward pass produces
+hard spikes (0 or 1), while the backward pass uses a sigmoid surrogate for gradient flow.
+This enables training of spiking neural networks with standard backpropagation.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Activate(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Activate(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Activate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Activate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Activate__0_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Activate(`0)">
+  Activate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Activate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_ApplyToGraph_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with surrogate spike activation applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps to TensorOperations&lt;T&gt;.SurrogateSpike(input) which uses the
+straight-through estimator pattern: hard spikes in forward pass, sigmoid surrogate
+gradients in backward pass.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if input is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Derivative(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the Binary Spiking function for a tensor input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Derivative(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor at which to calculate the derivative.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing the approximate derivatives.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates sensitivity information for multi-dimensional data.
+<p>For each element in the input tensor, it computes how sensitive that element's output
+is to small changes in the input value. The result has the same shape as the input,
+with each position containing the derivative at that position.</p>
+<p>This helps the network learn efficiently when working with structured data like
+images or sequences in spiking neural networks.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Derivative(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative (gradient) of the Binary Spiking function for a vector input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Derivative(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector at which to calculate the derivative.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A diagonal Jacobian matrix containing the approximate derivatives.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how sensitive each output is to small changes in each input.
+<p>Since each output only depends on its corresponding input (not on other inputs),
+the result is a diagonal matrix where:</p>
+<ul>
+<li>Diagonal elements show how quickly each neuron's output changes near the threshold</li>
+<li>Off-diagonal elements are zero (one neuron's output doesn't depend on other neurons' inputs)</li>
+</ul>
+<p>This information helps the neural network learn by showing which weights need adjusting
+and in what direction to adjust them during training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative__0_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.Derivative(`0)">
+  Derivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the approximate derivative of the Binary Spiking function for a single value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Derivative(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value at which to calculate the derivative.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>An approximation of the derivative at the input point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_Derivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The true derivative of a step function is zero almost everywhere, with an
+infinite spike at the threshold - which isn't useful for learning. Instead, we use an approximation.
+<p>This method returns:</p>
+<ul>
+<li>A positive value when the input is near the threshold (within the derivative width)</li>
+<li>Zero when the input is far from the threshold</li>
+</ul>
+<p>This approximation allows the neural network to learn even though the actual function
+has a &quot;jump&quot; at the threshold. It's like creating a small &quot;hill&quot; around the threshold
+that guides the learning process.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_GetThreshold_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.GetThreshold*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_GetThreshold" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.GetThreshold">
+  GetThreshold()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the firing threshold value used by this activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetThreshold()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The current threshold value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_GetThreshold_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method returns the current threshold that determines when neurons fire.
+<p>The threshold is the minimum input value needed for a neuron to generate a spike.
+Having access to this value can be useful for:</p>
+<ul>
+<li>Debugging network behavior</li>
+<li>Adjusting the threshold dynamically during training</li>
+<li>Understanding how sensitive your neurons are</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_SupportsScalarOperations_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.SupportsScalarOperations*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_SupportsScalarOperations" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.SupportsScalarOperations">
+  SupportsScalarOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this activation function can operate on individual scalar values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsScalarOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns true as Binary Spiking can be applied to individual values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_WithThreshold_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.WithThreshold*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_WithThreshold__0_" data-uid="AiDotNet.ActivationFunctions.BinarySpikingActivation`1.WithThreshold(`0)">
+  WithThreshold(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the Binary Spiking activation with a different threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BinarySpikingActivation&lt;T&gt; WithThreshold(T newThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newThreshold</code> <span class="xref">T</span></dt>
+    <dd><p>The new threshold value to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActivationFunctions.BinarySpikingActivation-1.html">BinarySpikingActivation</a>&lt;T&gt;</dt>
+    <dd><p>A new BinarySpikingActivation instance with the updated threshold.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_BinarySpikingActivation_1_WithThreshold__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method creates a version of this activation function with a different threshold.
+<p>Since the original activation function is immutable (can't be changed after creation),
+this method gives you a way to get a new version with different settings.</p>
+<p>This is useful when:</p>
+<ul>
+<li>You want to try different thresholds without modifying the original</li>
+<li>You need to adjust sensitivity during training</li>
+<li>You're implementing adaptive spiking networks where thresholds change over time</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/BinarySpikingActivation.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

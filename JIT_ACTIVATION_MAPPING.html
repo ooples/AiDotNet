@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>JIT Activation Mapping Reference | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="JIT Activation Mapping Reference | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_ACTIVATION_MAPPING.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="jit-activation-mapping-reference">JIT Activation Mapping Reference</h1>
+
+<p>This document provides a complete reference for all activation functions available in AiDotNet, their JIT compilation support status, and how to use them in your layers.</p>
+<h2 id="quick-reference">Quick Reference</h2>
+<p><strong>Total Activations</strong>: 37
+<strong>Production-Ready</strong>: 10
+<strong>Available (Pending Integration)</strong>: 27</p>
+<hr>
+<h2 id="production-ready-activations-10">Production-Ready Activations (10)</h2>
+<p>These activations are fully integrated into DenseLayer and ready for use in JIT compilation.</p>
+<h3 id="relu-family-1">ReLU Family (1)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>IEngine Method</th>
+<th>Parameters</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ReLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.ReLU(node)</code></td>
+<td><code>IEngine&lt;T&gt;.ReLU(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example:</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (ScalarActivation is ReLUActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (ScalarActivation is ReLUActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.ReLU(input);
+</code></pre>
+<p><strong>Forward Function</strong>: <code>f(x) = max(0, x)</code></p>
+<p><strong>Use Cases</strong>: Default activation for hidden layers in most neural networks.</p>
+<hr>
+<h3 id="sigmoid-family-5">Sigmoid Family (5)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>IEngine Method</th>
+<th>Parameters</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SigmoidActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Sigmoid(node)</code></td>
+<td><code>IEngine&lt;T&gt;.Sigmoid(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td><code>TanhActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Tanh(node)</code></td>
+<td><code>IEngine&lt;T&gt;.Tanh(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td><code>SwishActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Swish(node)</code></td>
+<td><code>IEngine&lt;T&gt;.Swish(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td><code>SiLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.SiLU(node)</code></td>
+<td><code>IEngine&lt;T&gt;.SiLU(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td><code>MishActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Mish(node)</code></td>
+<td><code>IEngine&lt;T&gt;.Mish(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example (Sigmoid):</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (ScalarActivation is SigmoidActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (ScalarActivation is SigmoidActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.Sigmoid(input);
+</code></pre>
+<p><strong>Forward Functions</strong>:</p>
+<ul>
+<li><strong>Sigmoid</strong>: <code>f(x) = 1 / (1 + e^(-x))</code></li>
+<li><strong>Tanh</strong>: <code>f(x) = (e^x - e^(-x)) / (e^x + e^(-x))</code></li>
+<li><strong>Swish</strong>: <code>f(x) = x * sigmoid(x)</code> (also known as SiLU)</li>
+<li><strong>SiLU</strong>: Same as Swish</li>
+<li><strong>Mish</strong>: <code>f(x) = x * tanh(softplus(x))</code></li>
+</ul>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li><strong>Sigmoid</strong>: Binary classification output layers, LSTM gates</li>
+<li><strong>Tanh</strong>: RNN hidden states, centered outputs (-1 to 1)</li>
+<li><strong>Swish/SiLU</strong>: Modern alternative to ReLU with smooth gradients</li>
+<li><strong>Mish</strong>: Self-regularized activation, good for deep networks</li>
+</ul>
+<hr>
+<h3 id="modern-activations-2">Modern Activations (2)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>IEngine Method</th>
+<th>Parameters</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GELUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.GELU(node)</code></td>
+<td><code>IEngine&lt;T&gt;.GELU(tensor)</code></td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+<tr>
+<td><code>ELUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.ELU(node, alpha)</code></td>
+<td><code>IEngine&lt;T&gt;.ELU(tensor, alpha)</code></td>
+<td><code>alpha</code> (default: 1.0)</td>
+<td>✅ Ready</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example (GELU):</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (ScalarActivation is GELUActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (ScalarActivation is GELUActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.GELU(input);
+</code></pre>
+<p><strong>Usage Example (ELU with parameter):</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (ScalarActivation is ELUActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (ScalarActivation is ELUActivation&lt;T&gt; elu)
+    return TensorOperations&lt;T&gt;.ELU(input, elu.Alpha);
+</code></pre>
+<p><strong>Forward Functions</strong>:</p>
+<ul>
+<li><strong>GELU</strong>: <code>f(x) = x * Φ(x)</code> where Φ is the cumulative distribution function of the standard normal distribution</li>
+<li><strong>ELU</strong>: <code>f(x) = x if x &gt; 0, else alpha * (e^x - 1)</code></li>
+</ul>
+<p><strong>Use Cases</strong>:</p>
+<ul>
+<li><strong>GELU</strong>: Used in Transformers (BERT, GPT), superior to ReLU for NLP tasks</li>
+<li><strong>ELU</strong>: Reduces vanishing gradient problem, smooth negative values</li>
+</ul>
+<hr>
+<h3 id="vector-activations-1">Vector Activations (1)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>IEngine Method</th>
+<th>Parameters</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Softmax(node, axis)</code></td>
+<td><code>IEngine&lt;T&gt;.Softmax(tensor, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td>✅ Ready</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example:</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (VectorActivation is SoftmaxActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (VectorActivation is SoftmaxActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.Softmax(input);
+</code></pre>
+<p><strong>Forward Function</strong>: <code>f(x_i) = e^(x_i) / Σ(e^(x_j))</code></p>
+<p><strong>Use Cases</strong>: Multi-class classification output layers, attention mechanisms.</p>
+<hr>
+<h3 id="identity-1">Identity (1)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>IEngine Method</th>
+<th>Parameters</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IdentityActivation&lt;T&gt;</code></td>
+<td><code>input</code> (no-op)</td>
+<td>N/A</td>
+<td>None</td>
+<td>✅ Ready</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Usage Example:</strong></p>
+<pre><code class="lang-csharp">// In CanActivationBeJitted()
+if (ScalarActivation is IdentityActivation&lt;T&gt;)
+    return true;
+
+// In ApplyActivationToGraph()
+if (ScalarActivation is IdentityActivation&lt;T&gt;)
+    return input;  // No transformation
+</code></pre>
+<p><strong>Forward Function</strong>: <code>f(x) = x</code></p>
+<p><strong>Use Cases</strong>: Linear layers, skip connections, output layers for regression.</p>
+<hr>
+<h2 id="available-activations---pending-integration-27">Available Activations - Pending Integration (27)</h2>
+<p>These activations have TensorOperations methods implemented but are not yet integrated into layer implementations. To use them, follow the pattern shown in the &quot;Production-Ready&quot; section above.</p>
+<h3 id="relu-family-7">ReLU Family (7)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>Parameters</th>
+<th>Forward Function</th>
+<th>IEngine Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>LeakyReLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.LeakyReLU(node, negativeSlope)</code></td>
+<td><code>negativeSlope</code> (default: 0.01)</td>
+<td><code>f(x) = max(negativeSlope*x, x)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>SELUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.SELU(node)</code></td>
+<td>None</td>
+<td><code>f(x) = scale * (max(0,x) + min(0, alpha*(e^x-1)))</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>CELUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.CELU(node, alpha)</code></td>
+<td><code>alpha</code> (default: 1.0)</td>
+<td><code>f(x) = max(0,x) + min(0, alpha*(e^(x/alpha)-1))</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>PReLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.PReLU(node, alpha)</code></td>
+<td><code>alpha</code> (default: 0.25)</td>
+<td><code>f(x) = max(alpha*x, x)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>RReLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.RReLU(node, lower, upper)</code></td>
+<td><code>lower</code> (0.125), <code>upper</code> (0.333)</td>
+<td><code>f(x) = max(a*x, x)</code> where a ~ U(lower, upper)</td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>ThresholdedReLUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.ThresholdedReLU(node, threshold)</code></td>
+<td><code>threshold</code> (default: 1.0)</td>
+<td><code>f(x) = x if x &gt; threshold, else 0</code></td>
+<td>✅ Integrated</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Example (LeakyReLU):</strong></p>
+<pre><code class="lang-csharp">// Add to CanActivationBeJitted()
+if (ScalarActivation is LeakyReLUActivation&lt;T&gt;)
+    return true;
+
+// Add to ApplyActivationToGraph()
+if (ScalarActivation is LeakyReLUActivation&lt;T&gt; leakyRelu)
+    return TensorOperations&lt;T&gt;.LeakyReLU(input, leakyRelu.NegativeSlope);
+</code></pre>
+<hr>
+<h3 id="sigmoid-family-9">Sigmoid Family (9)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>Parameters</th>
+<th>Forward Function</th>
+<th>IEngine Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>HardSigmoidActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.HardSigmoid(node)</code></td>
+<td>None</td>
+<td><code>f(x) = clip((x+1)/2, 0, 1)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>HardTanhActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.HardTanh(node)</code></td>
+<td>None</td>
+<td><code>f(x) = clip(x, -1, 1)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>ScaledTanhActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.ScaledTanh(node, alpha, beta)</code></td>
+<td><code>alpha</code> (1.0), <code>beta</code> (1.0)</td>
+<td><code>f(x) = alpha * tanh(beta * x)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>SoftplusActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Softplus(node)</code></td>
+<td>None</td>
+<td><code>f(x) = log(1 + e^x)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>SoftsignActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Softsign(node)</code></td>
+<td>None</td>
+<td><code>f(x) = x / (1 + abs(x))</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>BentIdentityActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.BentIdentity(node)</code></td>
+<td>None</td>
+<td><code>f(x) = (sqrt(x^2 + 1) - 1)/2 + x</code></td>
+<td>✅ Integrated</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Example (Softplus):</strong></p>
+<pre><code class="lang-csharp">// Add to CanActivationBeJitted()
+if (ScalarActivation is SoftplusActivation&lt;T&gt;)
+    return true;
+
+// Add to ApplyActivationToGraph()
+if (ScalarActivation is SoftplusActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.Softplus(input);
+</code></pre>
+<hr>
+<h3 id="softmax-family-3">Softmax Family (3)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>Parameters</th>
+<th>Forward Function</th>
+<th>IEngine Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SoftminActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Softmin(node, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td><code>f(x_i) = e^(-x_i) / Σ(e^(-x_j))</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>LogSoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.LogSoftmax(node, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td><code>f(x_i) = log(e^(x_i) / Σ(e^(x_j)))</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>LogSoftminActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.LogSoftmin(node, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td><code>f(x_i) = log(e^(-x_i) / Σ(e^(-x_j)))</code></td>
+<td>✅ Integrated</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Example (LogSoftmax):</strong></p>
+<pre><code class="lang-csharp">// Add to CanActivationBeJitted() - check VectorActivation
+if (VectorActivation is LogSoftmaxActivation&lt;T&gt;)
+    return true;
+
+// Add to ApplyActivationToGraph() - check VectorActivation
+if (VectorActivation is LogSoftmaxActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.LogSoftmax(input);
+</code></pre>
+<hr>
+<h3 id="special-activations-8">Special Activations (8)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>Parameters</th>
+<th>Forward Function</th>
+<th>IEngine Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SignActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Sign(node)</code></td>
+<td>None</td>
+<td><code>f(x) = 1 if x &gt; 0, -1 if x &lt; 0, 0 if x == 0</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>GaussianActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Gaussian(node)</code></td>
+<td>None</td>
+<td><code>f(x) = e^(-x^2)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>ISRUActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.ISRU(node, alpha)</code></td>
+<td><code>alpha</code> (default: 1.0)</td>
+<td><code>f(x) = x / sqrt(1 + alpha*x^2)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>LiSHTActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.LiSHT(node)</code></td>
+<td>None</td>
+<td><code>f(x) = x * tanh(x)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>SQRBFActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.SQRBF(node, center, width)</code></td>
+<td><code>center</code> (0.0), <code>width</code> (1.0)</td>
+<td><code>f(x) = e^(-((x-center)/width)^2)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>SquashActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Squash(node)</code></td>
+<td>None</td>
+<td><code>f(x) = (norm^2 / (1 + norm^2)) * (x / norm)</code></td>
+<td>✅ Integrated</td>
+</tr>
+<tr>
+<td><code>BinarySpikingActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.BinarySpiking(node, threshold)</code></td>
+<td><code>threshold</code> (default: 0.0)</td>
+<td><code>f(x) = 1 if x &gt; threshold, else 0</code></td>
+<td>✅ Integrated</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Example (Gaussian):</strong></p>
+<pre><code class="lang-csharp">// Add to CanActivationBeJitted()
+if (ScalarActivation is GaussianActivation&lt;T&gt;)
+    return true;
+
+// Add to ApplyActivationToGraph()
+if (ScalarActivation is GaussianActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.Gaussian(input);
+</code></pre>
+<hr>
+<h3 id="complex-activations---placeholder-status-6">Complex Activations - Placeholder Status (6)</h3>
+<p>These activations have placeholder implementations in TensorOperations. Full implementation requires complex algorithms and will be completed in the gradient computation phase.</p>
+<table>
+<thead>
+<tr>
+<th>Activation Class</th>
+<th>TensorOperations Method</th>
+<th>Parameters</th>
+<th>Description</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SparsemaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Sparsemax(node, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td>Projects onto simplex, produces sparse outputs</td>
+<td>⚠️ Placeholder</td>
+</tr>
+<tr>
+<td><code>SphericalSoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.SphericalSoftmax(node, axis)</code></td>
+<td><code>axis</code> (default: -1)</td>
+<td>Normalizes to unit sphere</td>
+<td>⚠️ Placeholder</td>
+</tr>
+<tr>
+<td><code>GumbelSoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.GumbelSoftmax(node, temp, axis)</code></td>
+<td><code>temp</code> (1.0), <code>axis</code> (-1)</td>
+<td>Differentiable sampling</td>
+<td>⚠️ Placeholder</td>
+</tr>
+<tr>
+<td><code>TaylorSoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.TaylorSoftmax(node, order, axis)</code></td>
+<td><code>order</code> (2), <code>axis</code> (-1)</td>
+<td>Taylor approximation of softmax</td>
+<td>⚠️ Placeholder</td>
+</tr>
+<tr>
+<td><code>HierarchicalSoftmaxActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.HierarchicalSoftmax(node)</code></td>
+<td>None</td>
+<td>Tree-structured softmax</td>
+<td>⚠️ Placeholder</td>
+</tr>
+<tr>
+<td><code>MaxoutActivation&lt;T&gt;</code></td>
+<td><code>TensorOperations&lt;T&gt;.Maxout(node, numPieces)</code></td>
+<td><code>numPieces</code> (default: 2)</td>
+<td>Learnable piecewise linear</td>
+<td>⚠️ Placeholder</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Note</strong>: These activations currently throw <code>NotImplementedException</code> for backward pass. Do not use in production until fully implemented.</p>
+<hr>
+<h2 id="backward-pass-status">Backward Pass Status</h2>
+<p><strong>Current Status</strong>: Placeholder implementations only</p>
+<p>All TensorOperations activation methods currently have placeholder backward functions:</p>
+<pre><code class="lang-csharp">backward: (gradOutput) =&gt;
+{
+    throw new NotImplementedException(&quot;Backward pass for [Activation] not yet implemented&quot;);
+}
+</code></pre>
+<p><strong>Future Work</strong>: Gradient computation will be implemented in a future phase. This includes:</p>
+<ul>
+<li>Analytical gradient formulas for all 37 activations</li>
+<li>Efficient backward pass implementations</li>
+<li>Support for training with JIT-compiled graphs</li>
+</ul>
+<p><strong>Current Limitation</strong>: JIT compilation is only suitable for <strong>inference</strong> (forward pass only). For <strong>training</strong>, use eager mode until backward pass is implemented.</p>
+<hr>
+<h2 id="activation-selection-guide">Activation Selection Guide</h2>
+<h3 id="for-image-classification-cnns">For Image Classification (CNNs)</h3>
+<p><strong>Recommended</strong>:</p>
+<ul>
+<li>Hidden layers: <code>ReLUActivation&lt;T&gt;</code> (fast, effective)</li>
+<li>Modern alternative: <code>GELUActivation&lt;T&gt;</code> (smoother gradients)</li>
+<li>Output layer: <code>SoftmaxActivation&lt;T&gt;</code> (multi-class)</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre><code class="lang-csharp">var conv1 = new ConvolutionalLayer&lt;float&gt;(filters: 32, kernelSize: 3, activation: new ReLUActivation&lt;float&gt;());
+var conv2 = new ConvolutionalLayer&lt;float&gt;(filters: 64, kernelSize: 3, activation: new ReLUActivation&lt;float&gt;());
+var dense = new DenseLayer&lt;float&gt;(inputSize: 1024, outputSize: 10, activation: new SoftmaxActivation&lt;float&gt;());
+</code></pre>
+<h3 id="for-natural-language-processing-transformers">For Natural Language Processing (Transformers)</h3>
+<p><strong>Recommended</strong>:</p>
+<ul>
+<li>Hidden layers: <code>GELUActivation&lt;T&gt;</code> (used in BERT, GPT)</li>
+<li>Alternative: <code>SwishActivation&lt;T&gt;</code> or <code>MishActivation&lt;T&gt;</code></li>
+<li>Output layer: <code>SoftmaxActivation&lt;T&gt;</code> (classification) or <code>IdentityActivation&lt;T&gt;</code> (regression)</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre><code class="lang-csharp">var feedForward = new DenseLayer&lt;float&gt;(inputSize: 768, outputSize: 3072, activation: new GELUActivation&lt;float&gt;());
+var output = new DenseLayer&lt;float&gt;(inputSize: 3072, outputSize: 768, activation: new IdentityActivation&lt;float&gt;());
+</code></pre>
+<h3 id="for-recurrent-networks-rnns-lstms-grus">For Recurrent Networks (RNNs, LSTMs, GRUs)</h3>
+<p><strong>Recommended</strong>:</p>
+<ul>
+<li>Gates: <code>SigmoidActivation&lt;T&gt;</code> (LSTM/GRU gates)</li>
+<li>Hidden state: <code>TanhActivation&lt;T&gt;</code> (LSTM/GRU hidden state)</li>
+<li>Output layer: <code>SoftmaxActivation&lt;T&gt;</code> (classification)</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre><code class="lang-csharp">// LSTM uses both Sigmoid (for gates) and Tanh (for cell state)
+var lstm = new LSTMLayer&lt;float&gt;(inputSize: 100, hiddenSize: 128);
+// Gates internally use Sigmoid, cell state uses Tanh
+</code></pre>
+<h3 id="for-generative-models-gans-vaes">For Generative Models (GANs, VAEs)</h3>
+<p><strong>Recommended</strong>:</p>
+<ul>
+<li>Generator hidden: <code>LeakyReLUActivation&lt;T&gt;</code> or <code>ELUActivation&lt;T&gt;</code> (avoid dying ReLU)</li>
+<li>Generator output: <code>TanhActivation&lt;T&gt;</code> (normalize to [-1, 1])</li>
+<li>Discriminator: <code>LeakyReLUActivation&lt;T&gt;</code> (stable gradients)</li>
+</ul>
+<p><strong>Example</strong>:</p>
+<pre><code class="lang-csharp">var genHidden = new DenseLayer&lt;float&gt;(inputSize: 100, outputSize: 256, activation: new LeakyReLUActivation&lt;float&gt;());
+var genOutput = new DenseLayer&lt;float&gt;(inputSize: 256, outputSize: 784, activation: new TanhActivation&lt;float&gt;());
+</code></pre>
+<hr>
+<h2 id="integration-checklist">Integration Checklist</h2>
+<p>When adding JIT support for an activation to your layer:</p>
+<ul>
+<li>[ ] Check if activation is in &quot;Production-Ready&quot; list</li>
+<li>[ ] If not, check &quot;Available Activations - Pending Integration&quot; list</li>
+<li>[ ] Add activation type check to <code>CanActivationBeJitted()</code></li>
+<li>[ ] Add activation mapping to <code>ApplyActivationToGraph()</code></li>
+<li>[ ] Handle parameterized activations correctly (extract parameters)</li>
+<li>[ ] Update <code>SupportsJitCompilation</code> property</li>
+<li>[ ] Update XML documentation with supported activations</li>
+<li>[ ] Test with sample data</li>
+<li>[ ] Verify JIT compilation succeeds</li>
+<li>[ ] Benchmark performance</li>
+</ul>
+<hr>
+<h2 id="see-also">See Also</h2>
+<ul>
+<li><a href="JIT_COMPILATION_PATTERN_GUIDE.html">JIT_COMPILATION_PATTERN_GUIDE.md</a> - Complete implementation guide</li>
+<li><a href="JIT_ROADMAP.html">JIT_ROADMAP.md</a> - Current status and future work</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_ACTIVATION_MAPPING.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

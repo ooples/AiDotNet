@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IPromptCompressor | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IPromptCompressor | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for compressing prompts to reduce token counts and API costs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IPromptCompressor.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IPromptCompressor%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IPromptCompressor">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IPromptCompressor" data-uid="AiDotNet.Interfaces.IPromptCompressor" class="text-break">
+Interface IPromptCompressor  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for compressing prompts to reduce token counts and API costs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IPromptCompressor</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IPromptCompressor_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A prompt compressor reduces the length of prompts while preserving their semantic meaning.
+This is valuable for reducing API costs, fitting within context windows, and optimizing
+performance. Different compression strategies include redundancy removal, summarization,
+and caching-based approaches.
+</p>
+<p><b>For Beginners:</b> A prompt compressor makes your prompts shorter without losing meaning.
+<p>Why compress prompts?</p>
+<ul>
+<li>Save money: Shorter prompts = fewer tokens = lower costs</li>
+<li>Fit limits: Some models have maximum token limits</li>
+<li>Faster: Shorter prompts process faster</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">var compressor = new RedundancyCompressor();
+
+string longPrompt = @"
+    Please analyze the following document and provide a summary.
+    The document that you need to analyze is provided below.
+    When you analyze the document, focus on the main points.
+    Here is the document to analyze: [document text]";
+
+var result = compressor.CompressWithMetrics(longPrompt, new CompressionOptions { TargetReduction = 0.3 });
+
+Console.WriteLine($"Original: {result.OriginalTokenCount} tokens");
+Console.WriteLine($"Compressed: {result.CompressedTokenCount} tokens");
+Console.WriteLine($"Savings: {result.CompressionRatio:P0}");
+
+// Output:
+// Original: 80 tokens
+// Compressed: 45 tokens
+// Savings: 44%</code></pre>
+<p>The compressed version might be:
+&quot;Analyze this document and summarize the main points: [document text]&quot;</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptCompressor_Name_" data-uid="AiDotNet.Interfaces.IPromptCompressor.Name*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptCompressor_Name" data-uid="AiDotNet.Interfaces.IPromptCompressor.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this compressor implementation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptCompressor_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A human-readable identifier for this compressor, useful for logging
+and debugging which compressor is being used.
+</p>
+<p><b>For Beginners:</b> The name of this specific compressor.
+Examples: "RedundancyCompressor", "SummarizationCompressor", "CachingCompressor"
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptCompressor_Compress_" data-uid="AiDotNet.Interfaces.IPromptCompressor.Compress*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptCompressor_Compress_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.Interfaces.IPromptCompressor.Compress(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  Compress(string, CompressionOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt to reduce its token count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Compress(string prompt, CompressionOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The compressed prompt string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptCompressor_Compress_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Applies compression techniques to reduce the prompt's token count while
+preserving its semantic meaning and effectiveness for the target task.
+</p>
+<p><b>For Beginners:</b> This takes your prompt and makes it shorter.
+<p>Example:</p>
+<pre><code class="lang-csharp">var compressed = compressor.Compress(
+    "Please kindly help me to translate the following text from English to Spanish",
+    new CompressionOptions());
+
+// Result: "Translate from English to Spanish"</code></pre>
+<p>The compressor removes:</p>
+<ul>
+<li>Redundant words (&quot;please kindly help me to&quot;)</li>
+<li>Unnecessary phrases (&quot;the following&quot;)</li>
+<li>Verbose constructions</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptCompressor_CompressAsync_" data-uid="AiDotNet.Interfaces.IPromptCompressor.CompressAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptCompressor_CompressAsync_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IPromptCompressor.CompressAsync(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions,System.Threading.CancellationToken)">
+  CompressAsync(string, CompressionOptions?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;string&gt; CompressAsync(string prompt, CompressionOptions? options = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that resolves to the compressed prompt string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptCompressor_CompressAsync_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Async version of Compress for non-blocking compression, particularly useful
+for summarization-based compression that may call external LLM APIs.
+</p>
+<p><b>For Beginners:</b> Same as Compress, but doesn't block your program.
+Important for compressors that use AI to summarize (which takes time).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptCompressor_CompressWithMetrics_" data-uid="AiDotNet.Interfaces.IPromptCompressor.CompressWithMetrics*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptCompressor_CompressWithMetrics_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions_" data-uid="AiDotNet.Interfaces.IPromptCompressor.CompressWithMetrics(System.String,AiDotNet.PromptEngineering.Compression.CompressionOptions)">
+  CompressWithMetrics(string, CompressionOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a prompt and returns detailed metrics about the compression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">CompressionResult CompressWithMetrics(string prompt, CompressionOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to compress.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionOptions.html">CompressionOptions</a></dt>
+    <dd><p>Options controlling compression behavior.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Compression.CompressionResult.html">CompressionResult</a></dt>
+    <dd><p>A CompressionResult containing the compressed prompt and metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptCompressor_CompressWithMetrics_System_String_AiDotNet_PromptEngineering_Compression_CompressionOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In addition to compressing the prompt, this method returns detailed metrics
+including original and compressed token counts, compression ratio, and
+information about what was changed.
+</p>
+<p><b>For Beginners:</b> Like Compress, but also tells you what changed.
+<p>Example:</p>
+<pre><code class="lang-csharp">var result = compressor.CompressWithMetrics(longPrompt, options);
+
+Console.WriteLine($"Original tokens: {result.OriginalTokenCount}");
+Console.WriteLine($"Compressed tokens: {result.CompressedTokenCount}");
+Console.WriteLine($"Tokens saved: {result.TokensSaved}");
+Console.WriteLine($"Compression ratio: {result.CompressionRatio:P0}");
+Console.WriteLine($"Estimated savings: ${result.EstimatedCostSavings}");</code></pre>
+<p>This is useful for:</p>
+<ul>
+<li>Tracking cost savings</li>
+<li>Debugging compression issues</li>
+<li>Reporting to stakeholders</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptCompressor.cs/#L48" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

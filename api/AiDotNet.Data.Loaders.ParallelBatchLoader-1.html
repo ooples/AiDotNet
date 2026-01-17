@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ParallelBatchLoader&lt;TBatch&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ParallelBatchLoader&lt;TBatch&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides parallel batch loading with multiple workers for improved throughput.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_ParallelBatchLoader_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.ParallelBatchLoader%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1" class="text-break">
+Class ParallelBatchLoader&lt;TBatch&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides parallel batch loading with multiple workers for improved throughput.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ParallelBatchLoader&lt;TBatch&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TBatch</code></dt>
+    <dd><p>The type of batch produced.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ParallelBatchLoader&lt;TBatch&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ParallelBatchLoader uses multiple worker threads to prepare batches in parallel,
+similar to PyTorch's DataLoader with num_workers &gt; 0. This can significantly
+improve training throughput when batch preparation is CPU-bound.
+</p>
+<p><b>For Beginners:</b> Training neural networks often involves:
+1. Loading data from disk
+2. Preprocessing (augmentation, normalization)
+3. GPU training
+<p>With single-threaded loading, the GPU waits while data is prepared.
+With parallel loading, multiple workers prepare batches simultaneously,
+keeping the GPU constantly fed with data.</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">var parallelLoader = new ParallelBatchLoader&lt;(Matrix&lt;float&gt;, Vector&lt;float&gt;)&gt;(
+    batchProvider: dataLoader.GetBatches(32),
+    numWorkers: 4,
+    prefetchCount: 2
+);
+
+await foreach (var batch in parallelLoader.GetBatchesAsync())
+{
+    await model.TrainOnBatchAsync(batch);
+}</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_ParallelBatchLoader_1__ctor_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1__ctor_System_Func_System_Collections_Generic_IEnumerable_System_Int32___System_Func_System_Int32____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.#ctor(System.Func{System.Collections.Generic.IEnumerable{System.Int32}},System.Func{System.Int32[],`0},System.Int32,System.Nullable{System.Int32},System.Nullable{System.Int32})">
+  ParallelBatchLoader(Func&lt;IEnumerable&lt;int&gt;&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ParallelBatchLoader class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ParallelBatchLoader(Func&lt;IEnumerable&lt;int&gt;&gt; indexProvider, Func&lt;int[], TBatch&gt; batchFactory, int batchSize, int? numWorkers = null, int? prefetchCount = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indexProvider</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;&gt;</dt>
+    <dd><p>Function that provides indices for each epoch.</p>
+</dd>
+    <dt><code>batchFactory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[], TBatch&gt;</dt>
+    <dd><p>Function that creates a batch from an array of sample indices.
+The factory receives all indices for a single batch and should aggregate them
+into a single batch (e.g., by stacking samples into a matrix).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>numWorkers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of parallel workers. Default is processor count.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of batches to prefetch. Default is 2 * numWorkers.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_ParallelBatchLoader_1__ctor_System_Func_System_Collections_Generic_IEnumerable_System_Int32___System_Func_System_Int32____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The batchFactory function is responsible for:
+<ul><li>Loading samples at the given indices from the dataset</li><li>Aggregating them into a single batch structure</li><li>Applying any preprocessing or augmentation</li></ul>
+
+<p>
+Example batchFactory for Matrix/Vector data:
+<pre><code class="lang-csharp">batchFactory: indices =&gt; {
+    var xBatch = new Matrix&lt;float&gt;(indices.Length, numFeatures);
+    var yBatch = new Vector&lt;float&gt;(indices.Length);
+    for (int i = 0; i &lt; indices.Length; i++) {
+        int idx = indices[i];
+        for (int j = 0; j &lt; numFeatures; j++)
+            xBatch[i, j] = dataset.X[idx, j];
+        yBatch[i] = dataset.Y[idx];
+    }
+    return (xBatch, yBatch);
+}</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_NumWorkers_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.NumWorkers*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_NumWorkers" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.NumWorkers">
+  NumWorkers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parallel workers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumWorkers { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_PrefetchCount_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.PrefetchCount*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_PrefetchCount" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.PrefetchCount">
+  PrefetchCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the prefetch count.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrefetchCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_Dispose_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_Dispose" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the parallel batch loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_GetBatchesAsync_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.GetBatchesAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_ParallelBatchLoader_1_GetBatchesAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Loaders.ParallelBatchLoader`1.GetBatchesAsync(System.Threading.CancellationToken)">
+  GetBatchesAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Iterates through batches using parallel workers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IAsyncEnumerable&lt;TBatch&gt; GetBatchesAsync(CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.iasyncenumerable-1">IAsyncEnumerable</a>&lt;TBatch&gt;</dt>
+    <dd><p>Async enumerable of batches.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/ParallelBatchLoader.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

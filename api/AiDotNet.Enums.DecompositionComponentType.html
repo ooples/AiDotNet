@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum DecompositionComponentType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum DecompositionComponentType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the different components that can be extracted when decomposing a time series.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_DecompositionComponentType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.DecompositionComponentType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.DecompositionComponentType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_DecompositionComponentType" data-uid="AiDotNet.Enums.DecompositionComponentType" class="text-break">
+Enum DecompositionComponentType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/DecompositionComponentType.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the different components that can be extracted when decomposing a time series.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum DecompositionComponentType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_DecompositionComponentType_Cycle"><code>Cycle = 3</code></dt>
+  <dd><p>Repeating patterns with a variable or changing period, unlike the fixed periods of seasonal components.</p>
+<p>
+<b>For Beginners:</b> The Cycle component represents repeating patterns that don't have a fixed time period.
+<p>Unlike seasonality (which occurs at fixed intervals like every December), cycles have varying lengths:</p>
+<ul>
+<li>Business cycles (boom and bust) might last 2-10 years</li>
+<li>Housing market cycles might expand and contract over varying timeframes</li>
+<li>Sunspot activity follows cycles of approximately 11 years, but the exact length varies</li>
+</ul>
+<p>Think of cycles as repeating patterns where you can't precisely predict when the next one will occur.</p>
+<p>Identifying cycles helps you understand medium to long-term patterns that aren't tied to the calendar.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_IMF"><code>IMF = 6</code></dt>
+  <dd><p>Intrinsic Mode Functions - components extracted using Empirical Mode Decomposition (EMD) methods.</p>
+<p>
+<b>For Beginners:</b> IMF stands for Intrinsic Mode Function, which is a special type of component extracted 
+using a technique called Empirical Mode Decomposition (EMD).
+<p>Unlike traditional decomposition that separates data into trend, seasonality, and residuals, EMD breaks
+down the data into a collection of IMFs, each representing oscillations at different time scales.</p>
+<p>Think of IMFs as layers of waves with different frequencies:</p>
+<ul>
+<li>Lower-order IMFs (IMF1, IMF2) capture fast oscillations (high-frequency components)</li>
+<li>Higher-order IMFs capture slower oscillations (low-frequency components)</li>
+<li>The final residual typically represents the overall trend</li>
+</ul>
+<p>EMD and IMFs are particularly useful for:</p>
+<ul>
+<li>Analyzing non-linear and non-stationary time series</li>
+<li>Data where patterns change over time</li>
+<li>Complex signals with multiple overlapping cycles</li>
+</ul>
+<p>This approach is more advanced but can reveal patterns that traditional decomposition methods might miss.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_Irregular"><code>Irregular = 5</code></dt>
+  <dd><p>Random, unpredictable fluctuations in the data (similar to Residual but used in specific decomposition methods).</p>
+<p>
+The Irregular component represents random variations that can't be attributed to trend, seasonality, or cycles.
+<p>This term is often used in specific decomposition methods (especially X-12-ARIMA and SEATS) and is
+functionally similar to the Residual component.</p>
+<p>Think of it as the unpredictable &quot;noise&quot; in your data after accounting for all identifiable patterns.</p>
+<p>Analyzing the irregular component helps you:</p>
+<ul>
+<li>Identify outliers or unusual events</li>
+<li>Assess the volatility or unpredictability in your data</li>
+<li>Evaluate how well your decomposition has captured the systematic patterns</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_Residual"><code>Residual = 2</code></dt>
+  <dd><p>The irregular variation or &quot;noise&quot; remaining after other components have been extracted.</p>
+<p>
+The Residual component (sometimes called "noise" or "error") represents the random, unpredictable fluctuations 
+in your data that can't be explained by trend, seasonality, or cycles.
+<p>Think of it as the &quot;unexplained&quot; part of your data - the random ups and downs that don't follow any pattern.</p>
+<p>Examples of what might cause residuals:</p>
+<ul>
+<li>Unexpected events (like a surprise promotion causing a sales spike)</li>
+<li>Measurement errors</li>
+<li>Random consumer behavior</li>
+<li>Small factors that individually aren't significant enough to model</li>
+</ul>
+<p>Analyzing residuals helps you:</p>
+<ul>
+<li>Check if your decomposition captured all important patterns</li>
+<li>Identify unusual events or outliers</li>
+<li>Assess the randomness and unpredictability in your data</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_Seasonal"><code>Seasonal = 1</code></dt>
+  <dd><p>Repeating patterns or cycles with a fixed, known period (e.g., daily, weekly, monthly, yearly).</p>
+<p>
+The Seasonal component captures regular, predictable patterns that repeat at fixed intervals.
+<p>Think of it as patterns that occur at specific times, like:</p>
+<ul>
+<li>Higher retail sales during December holidays</li>
+<li>Higher ice cream sales in summer months</li>
+<li>Higher website traffic during business hours</li>
+<li>Lower energy usage on weekends</li>
+</ul>
+<p>The key characteristic of seasonality is that it happens at known, fixed intervals (daily, weekly, monthly, quarterly, yearly).</p>
+<p>Identifying seasonality helps you plan for predictable fluctuations and adjust your forecasts accordingly.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_Trend"><code>Trend = 0</code></dt>
+  <dd><p>The long-term progression or general direction of the time series.</p>
+<p>
+The Trend component represents the long-term movement in the data, showing whether values are generally 
+increasing, decreasing, or staying stable over time.
+<p>Think of it as the &quot;big picture&quot; direction of your data when you ignore short-term fluctuations.</p>
+<p>Examples:</p>
+<ul>
+<li>Population growth showing a steady increase over decades</li>
+<li>A company's revenue gradually increasing year over year</li>
+<li>Global temperature rising slowly over many years</li>
+</ul>
+<p>Identifying the trend helps you understand the fundamental direction of your data and make long-term forecasts.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_DecompositionComponentType_TrendCycle"><code>TrendCycle = 4</code></dt>
+  <dd><p>A combined component that includes both the long-term trend and cyclical patterns.</p>
+<p>
+<b>For Beginners:</b> The TrendCycle component combines the long-term trend and cyclical patterns into a single component.
+<p>This is often used when:</p>
+<ul>
+<li>It's difficult to separate the trend from cycles</li>
+<li>You're more interested in the overall direction including medium-term fluctuations</li>
+<li>The decomposition method doesn't distinguish between trends and cycles</li>
+</ul>
+<p>Think of it as the &quot;smoothed&quot; version of your data with short-term seasonality and noise removed,
+but keeping both the long-term direction and medium-term fluctuations.</p>
+<p>For example, in economic data, the TrendCycle might show both the general economic growth (trend)
+and the business cycles of expansion and recession together.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_DecompositionComponentType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Time series decomposition is like breaking down a complex song into its individual instruments.
+<p>When analyzing data that changes over time (like stock prices, temperature readings, or website traffic),
+it's often helpful to separate the data into simpler components to better understand what's happening.</p>
+<p>For example, retail sales data might contain:</p>
+<ul>
+<li>A general upward trend due to business growth</li>
+<li>Seasonal patterns (higher sales during holidays)</li>
+<li>Random fluctuations due to unpredictable factors</li>
+</ul>
+<p>Decomposing the data helps you see each of these patterns separately, making it easier to:</p>
+<ul>
+<li>Understand what's driving changes in your data</li>
+<li>Make better forecasts</li>
+<li>Identify unusual events or anomalies</li>
+</ul>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/DecompositionComponentType.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

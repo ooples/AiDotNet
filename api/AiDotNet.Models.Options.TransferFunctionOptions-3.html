@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TransferFunctionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TransferFunctionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Transfer Function models, which model the dynamic relationship between input (exogenous) and output (endogenous) time series.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TransferFunctionOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TransferFunctionOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TransferFunctionOptions_3" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3" class="text-break">
+Class TransferFunctionOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Transfer Function models, which model the dynamic relationship
+between input (exogenous) and output (endogenous) time series.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TransferFunctionOptions&lt;T, TInput, TOutput&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">TransferFunctionOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TransferFunctionOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Transfer Function models extend ARIMA (AutoRegressive Integrated Moving Average) models by incorporating 
+the effects of one or more input (exogenous) time series on an output (endogenous) time series. They are 
+particularly useful for modeling systems where there is a known causal relationship between input and output 
+variables, with possible lagged effects. The transfer function component captures how changes in the input 
+series affect the output series over time, while the ARIMA component models the autocorrelation structure 
+of the output series. These models are widely used in fields such as economics, engineering, and environmental 
+science for applications like dynamic system modeling, intervention analysis, and forecasting with leading 
+indicators. This class provides configuration options for controlling the order of various components in the 
+Transfer Function model.
+</p>
+<p><b>For Beginners:</b> Transfer Function models help you understand how one time series affects another over time.
+<p>When analyzing relationships between time series:</p>
+<ul>
+<li>Simple regression assumes immediate effects (X affects Y at the same time point)</li>
+<li>But in reality, effects often occur with delays (X affects Y after several time periods)</li>
+<li>The effect might also be distributed over multiple time periods</li>
+</ul>
+<p>Transfer Function models solve this by:</p>
+<ul>
+<li>Capturing how input variables affect output variables over time</li>
+<li>Modeling both immediate and delayed effects</li>
+<li>Accounting for the autocorrelation in the output series itself</li>
+<li>Combining elements of regression and time series analysis</li>
+</ul>
+<p>This approach is useful for:</p>
+<ul>
+<li>Understanding how marketing campaigns affect sales over time</li>
+<li>Modeling how temperature changes affect energy consumption</li>
+<li>Analyzing how policy changes impact economic indicators</li>
+</ul>
+<p>This class lets you configure the structure of the Transfer Function model.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TransferFunctionOptions_3_AROrder_" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.AROrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TransferFunctionOptions_3_AROrder" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.AROrder">
+  AROrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the AutoRegressive (AR) component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AROrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TransferFunctionOptions_3_AROrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the order of the AutoRegressive (AR) component in the Transfer Function model. 
+The AR component models the dependency of the current value of the output series on its own past values. 
+An AR order of p means that the current value depends on the p previous values. A higher order allows the 
+model to capture more complex autocorrelation patterns but increases the risk of overfitting and the 
+number of parameters to estimate. The default value of 1 provides a simple AR component suitable for many 
+applications, capturing first-order autocorrelation. The optimal value depends on the autocorrelation 
+structure of the output series after accounting for the effects of the input series.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past values of the output series influence the current value.
+<p>The AutoRegressive (AR) order:</p>
+<ul>
+<li>Determines how many previous values of the output series affect the current value</li>
+<li>Helps the model capture patterns where past values predict future values</li>
+<li>Higher values can model more complex temporal dependencies</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the immediate previous value of the output series</li>
+<li>This is sufficient for many time series with simple autocorrelation patterns</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2 or 3): Can capture more complex patterns of autocorrelation</li>
+<li>Lower values (e.g., 0): Ignore autocorrelation in the output series</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the output series shows significant autocorrelation at multiple lags</li>
+<li>Decrease it or set to 0 when the output series doesn't show significant autocorrelation</li>
+<li>Consider using autocorrelation and partial autocorrelation functions to guide selection</li>
+</ul>
+<p>For example, in quarterly economic data that shows seasonal patterns,
+you might increase this to 4 to capture year-over-year effects.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TransferFunctionOptions_3_InputLagOrder_" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.InputLagOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TransferFunctionOptions_3_InputLagOrder" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.InputLagOrder">
+  InputLagOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the input lag in the transfer function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InputLagOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TransferFunctionOptions_3_InputLagOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum lag of the input series that affects the output series in the Transfer 
+Function model. An input lag order of r means that the current value of the output series can be affected 
+by the input series values from the current time point up to r time points in the past. A higher order 
+allows the model to capture longer-term effects of the input series but increases the number of parameters 
+to estimate. The default value of 1 allows for immediate and one-period lagged effects, suitable for many 
+applications where the input series has a relatively quick impact on the output series. The optimal value 
+depends on the expected time delay between changes in the input series and their effects on the output series.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past values of the input series can affect the output series.
+<p>The input lag order:</p>
+<ul>
+<li>Determines how many previous values of the input series can affect the current output</li>
+<li>Helps the model capture delayed effects between input and output</li>
+<li>Higher values allow for longer-term effects to be modeled</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the current and immediate previous value of the input series</li>
+<li>This is appropriate when input variables have a quick effect on the output</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 3 or 4): Can capture effects that take several time periods to manifest</li>
+<li>Lower values (e.g., 0): Only immediate effects are considered</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you expect the input series to have delayed effects on the output</li>
+<li>Decrease it when you expect only immediate or short-term effects</li>
+<li>Consider domain knowledge about the expected time delay between cause and effect</li>
+</ul>
+<p>For example, in marketing analysis where advertising might affect sales for
+several months, you might increase this to 3-6 to capture these delayed effects.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TransferFunctionOptions_3_MAOrder_" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.MAOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TransferFunctionOptions_3_MAOrder" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.MAOrder">
+  MAOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the Moving Average (MA) component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MAOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TransferFunctionOptions_3_MAOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the order of the Moving Average (MA) component in the Transfer Function model. 
+The MA component models the dependency of the current value of the output series on past random shocks 
+or errors. An MA order of q means that the current value depends on the q previous random shocks. A 
+higher order allows the model to capture more complex patterns in the error terms but increases the risk 
+of overfitting and the number of parameters to estimate. The default value of 1 provides a simple MA 
+component suitable for many applications, capturing first-order effects of random shocks. The optimal 
+value depends on the structure of the error terms after accounting for the AR component and the effects 
+of the input series.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past random shocks influence the current value.
+<p>The Moving Average (MA) order:</p>
+<ul>
+<li>Determines how many previous random shocks (errors) affect the current value</li>
+<li>Helps the model capture the lingering effects of unexpected events</li>
+<li>Higher values can model more complex patterns in the error terms</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers the immediate previous random shock</li>
+<li>This is sufficient for many time series with simple error structures</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2 or 3): Can capture more complex patterns in the error terms</li>
+<li>Lower values (e.g., 0): Ignore the effects of past random shocks</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the autocorrelation of residuals shows significant patterns</li>
+<li>Decrease it or set to 0 when the residuals appear to be white noise</li>
+<li>Consider using autocorrelation of residuals to guide selection</li>
+</ul>
+<p>For example, in financial time series where shocks often have lingering effects,
+you might increase this to 2 or 3 to capture these patterns.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TransferFunctionOptions_3_Optimizer_" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.Optimizer*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TransferFunctionOptions_3_Optimizer" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.Optimizer">
+  Optimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer used for parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IOptimizer&lt;T, TInput, TOutput&gt;? Optimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>An instance of a class implementing IOptimizer&lt;T&gt;, or null to use the default optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TransferFunctionOptions_3_Optimizer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the optimization algorithm used to estimate the parameters of the Transfer Function 
+model. Different optimizers have different strengths and weaknesses in terms of convergence speed, ability 
+to escape local optima, and sensitivity to initial conditions. The default value of null indicates that a 
+default optimizer appropriate for the specific model implementation should be used. Common optimization 
+algorithms for Transfer Function models include maximum likelihood estimation, least squares, and variants 
+of gradient descent. The optimal choice depends on the specific characteristics of the data and the desired 
+trade-off between estimation accuracy and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting determines the algorithm used to find the best model parameters.
+<p>The optimizer:</p>
+<ul>
+<li>Controls how the model finds the optimal parameter values</li>
+<li>Different optimizers have different strengths and weaknesses</li>
+<li>Can significantly affect both the quality of results and computation time</li>
+</ul>
+<p>The default value of null means:</p>
+<ul>
+<li>The system will choose an appropriate default optimizer</li>
+<li>This is suitable for most applications</li>
+</ul>
+<p>Common optimizer types include:</p>
+<ul>
+<li>Gradient-based: Fast but may get stuck in local optima</li>
+<li>Evolutionary: Better at finding global optima but slower</li>
+<li>Bayesian: Efficient for expensive objective functions</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Specify a different optimizer when the default doesn't converge well</li>
+<li>Choose based on whether you prioritize speed or solution quality</li>
+<li>This is an advanced setting that most users can leave as default</li>
+</ul>
+<p>For example, if the default optimizer struggles with your complex model,
+you might specify a more robust optimizer that's less likely to get
+stuck in local optima.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TransferFunctionOptions_3_OutputLagOrder_" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.OutputLagOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TransferFunctionOptions_3_OutputLagOrder" data-uid="AiDotNet.Models.Options.TransferFunctionOptions`3.OutputLagOrder">
+  OutputLagOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the output lag in the transfer function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OutputLagOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A non-negative integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TransferFunctionOptions_3_OutputLagOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the order of the denominator polynomial in the transfer function, which determines 
+how the effect of the input series on the output series depends on past values of the output series itself. 
+An output lag order of s means that the effect of the input series on the current output depends on the s 
+previous values of the output. A higher order allows the model to capture more complex dynamic relationships 
+but increases the risk of overfitting and the number of parameters to estimate. The default value of 1 
+provides a simple dynamic relationship suitable for many applications. The optimal value depends on the 
+complexity of the dynamic relationship between the input and output series.
+</p>
+<p><b>For Beginners:</b> This setting controls how the effect of inputs depends on past outputs.
+<p>The output lag order:</p>
+<ul>
+<li>Determines how the effect of inputs depends on previous output values</li>
+<li>Helps model feedback mechanisms where effects compound or diminish over time</li>
+<li>Higher values allow for more complex dynamic relationships</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The effect of inputs depends on the immediate previous output value</li>
+<li>This creates a simple dynamic relationship suitable for many systems</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2 or 3): Can model more complex feedback mechanisms</li>
+<li>Lower values (e.g., 0): Effects of inputs don't depend on previous outputs</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when modeling systems with complex feedback mechanisms</li>
+<li>Decrease it or set to 0 for simpler systems with more direct effects</li>
+<li>Consider domain knowledge about how the system responds to inputs over time</li>
+</ul>
+<p>For example, in economic systems where effects often compound over time,
+you might increase this to 2 to capture how the impact of policy changes
+depends on the previous state of the economy.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TransferFunctionOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

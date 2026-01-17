@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BayesianRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BayesianRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Bayesian regression algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_BayesianRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.BayesianRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_BayesianRegressionOptions_1" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1" class="text-break">
+Class BayesianRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Bayesian regression algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BayesianRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type used by the regression model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">BayesianRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Bayesian regression is a statistical approach that applies Bayes' theorem to regression analysis.
+Unlike traditional regression which produces point estimates, Bayesian regression provides probability
+distributions for the model parameters, allowing for uncertainty quantification in predictions.
+</p>
+<p><b>For Beginners:</b> Bayesian regression is like traditional regression (finding relationships between 
+variables) but with an added layer of confidence information. Instead of just saying "we think y = 2x + 3," 
+Bayesian regression says "we think y = 2x + 3, and we're 90% confident that the 2 is between 1.8 and 2.2." 
+This approach is especially useful when you have limited data or want to incorporate prior knowledge about 
+what the relationship might be. It helps you understand not just what the relationship is, but also how certain 
+you can be about that relationship.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Alpha_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Alpha" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the alpha parameter, which controls the precision of the prior distribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The alpha value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In Bayesian statistics, alpha is a hyperparameter for the prior distribution that represents
+your initial belief about the model parameters before seeing any data.
+</p>
+<p><b>For Beginners:</b> Think of alpha as how strongly you believe in your initial guess before 
+seeing any data. A higher value (greater than 1.0) means you're more confident in your prior beliefs, 
+while a lower value means you're more willing to let the data speak for itself. The default value of 1.0 
+represents a balanced approach that doesn't strongly favor either prior beliefs or the observed data. If you're 
+unsure, it's best to start with this default value.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Beta_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Beta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Beta" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Beta">
+  Beta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the beta parameter, which controls the precision of the likelihood function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The beta value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Beta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Beta represents the precision (inverse of variance) of the noise in the observed data.
+Higher values indicate lower noise levels and more confidence in the observed data.
+</p>
+<p><b>For Beginners:</b> Beta represents how much you trust your data measurements. A higher beta value 
+(greater than 1.0) means you believe your data has less noise or random error, so the algorithm will fit more 
+closely to the observed points. A lower value suggests your data might be noisy, so the algorithm will create 
+a smoother fit that doesn't necessarily pass through every data point. The default value of 1.0 provides a 
+balanced approach for most datasets.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Coef0_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Coef0*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Coef0" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Coef0">
+  Coef0
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the independent term (coef0) in Polynomial and Sigmoid kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Coef0 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The coef0 value, defaulting to 0.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Coef0_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter is only significant for Polynomial and Sigmoid kernels. For the Polynomial kernel,
+it controls the degree of homogeneity. For the Sigmoid kernel, it defines the vertical shift.
+</p>
+<p><b>For Beginners:</b> This is an additional parameter that affects how Polynomial and Sigmoid kernels work. 
+For Polynomial kernels, it adds a constant term to the equation (like the "+c" in "y = x² + x + c"). 
+For Sigmoid kernels, it shifts the S-curve up or down. The default value of 0.0 works well in most cases. 
+You can safely ignore this parameter if you're using the Linear or RBF kernel types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used for solving linear systems.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The decomposition type, defaulting to Lu.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Matrix decomposition is a numerical method used to solve the linear algebra problems that arise
+during Bayesian regression. Different decomposition methods offer trade-offs between
+numerical stability, computational efficiency, and applicability to different types of matrices.
+</p>
+<p><b>For Beginners:</b> This is a technical setting about how the math is solved behind the scenes. 
+The default LU decomposition works well for most problems. Other options include:
+<ul><li>Cholesky: Faster but requires positive definite matrices</li><li>QR: More stable for ill-conditioned problems</li><li>SVD: Most stable but slowest option</li></ul>
+Unless you're experiencing numerical issues or working with very large datasets, you can leave this at the default value.
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Gamma_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Gamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Gamma" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.Gamma">
+  Gamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gamma parameter used in RBF, Polynomial, and Sigmoid kernels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Gamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The gamma value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_Gamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Gamma defines how far the influence of a single training example reaches, with low values meaning 'far'
+and high values meaning 'close'. It can be seen as the inverse of the radius of influence of samples
+selected by the model as support vectors.
+</p>
+<p><b>For Beginners:</b> Gamma controls how much influence each data point has on its surroundings. 
+Think of it like the radius of influence around each point. A high gamma value means each point only influences 
+predictions very close to it (creating a more complex, potentially wiggly model). A low gamma means each point 
+influences a wider area (creating a smoother model). This parameter only matters when using non-linear kernels 
+like RBF, Polynomial, or Sigmoid. The default value of 1.0 is a good starting point, but you might need to 
+adjust it based on your specific data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_KernelType_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.KernelType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_KernelType" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.KernelType">
+  KernelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of kernel function to use in the regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public KernelType KernelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.KernelType.html">KernelType</a></dt>
+    <dd><p>The kernel type, defaulting to Linear.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_KernelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The kernel function determines how the algorithm measures similarity between data points,
+which affects how it generalizes from observed data points to make predictions.
+</p>
+<p><b>For Beginners:</b> The kernel type determines what kind of relationship the model can find between 
+your variables. The default Linear kernel looks for straight-line relationships (like y = mx + b). Other options include:
+<ul><li>RBF (Radial Basis Function): Can find complex, curvy relationships</li><li>Polynomial: Can find relationships with curves like y = x² + 2x + 1</li><li>Sigmoid: Useful for S-shaped relationships</li></ul>
+If you're not sure which to use, start with Linear for simplicity, then try RBF if you suspect the relationship 
+might be more complex than a straight line.
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_LaplacianGamma_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.LaplacianGamma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_LaplacianGamma" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.LaplacianGamma">
+  LaplacianGamma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gamma parameter for the Laplacian kernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LaplacianGamma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The Laplacian gamma value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_LaplacianGamma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter is only used when the KernelType is set to Laplacian. It controls the
+width of the exponential function in the Laplacian kernel.
+</p>
+<p><b>For Beginners:</b> This is similar to the regular Gamma parameter, but specifically for the Laplacian kernel 
+(if you choose to use it). The Laplacian kernel is less commonly used than RBF but can be better for certain types of data. 
+A higher value creates a more complex model that fits training data more closely, while a lower value creates a smoother model. 
+The default value of 1.0 is a good starting point if you decide to use the Laplacian kernel. This parameter is ignored if 
+you're using any other kernel type.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_BayesianRegressionOptions_1_PolynomialDegree_" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.PolynomialDegree*"></a>
+
+  <h3 id="AiDotNet_Models_Options_BayesianRegressionOptions_1_PolynomialDegree" data-uid="AiDotNet.Models.Options.BayesianRegressionOptions`1.PolynomialDegree">
+  PolynomialDegree
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degree of the Polynomial kernel.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PolynomialDegree { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The polynomial degree, defaulting to 3.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_BayesianRegressionOptions_1_PolynomialDegree_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter is only used when the KernelType is set to Polynomial. It determines the highest
+power in the polynomial equation.
+</p>
+<p><b>For Beginners:</b> If you're using the Polynomial kernel, this sets the highest power in your equation. 
+For example, a value of 3 (the default) allows the model to find relationships up to cubic terms (like y = ax³ + bx² + cx + d). 
+A higher degree can capture more complex relationships but risks overfitting to your training data. A value of 1 would 
+be equivalent to a linear model, while 2 would allow quadratic relationships. This parameter is ignored if you're not 
+using the Polynomial kernel type.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/BayesianRegressionOptions.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

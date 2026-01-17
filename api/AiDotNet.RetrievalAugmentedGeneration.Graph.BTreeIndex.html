@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BTreeIndex | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BTreeIndex | AiDotNet Documentation ">
+      
+      <meta name="description" content="Simple file-based index for mapping string keys to file offsets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex" class="text-break">
+Class BTreeIndex  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.html">Graph</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Simple file-based index for mapping string keys to file offsets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BTreeIndex : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BTreeIndex</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides a persistent index structure that maps string keys (e.g., node IDs)
+to byte offsets in data files. The index is stored on disk and reloaded on restart,
+enabling fast lookups without scanning entire data files.
+</p>
+<p><b>For Beginners:</b> Think of this like a book's index at the back.
+<p>Without an index:</p>
+<ul>
+<li>To find &quot;photosynthesis&quot;, you'd read every page from start to finish</li>
+<li>Very slow for large books (or large data files)</li>
+</ul>
+<p>With an index:</p>
+<ul>
+<li>Look up &quot;photosynthesis&quot; → find it's on page 157</li>
+<li>Jump directly to page 157</li>
+<li>Much faster!</li>
+</ul>
+<p>This class does the same for graph data:</p>
+<ul>
+<li>Key: &quot;node_alice_001&quot;</li>
+<li>Value: byte offset 45678 in nodes.dat file</li>
+<li>We can jump directly to byte 45678 to read Alice's data</li>
+</ul>
+<p>The index itself is stored in a file so it survives application restarts.</p>
+
+<p>
+<b>Implementation Note:</b> This is a simplified index using a sorted dictionary.
+For production systems with millions of entries, consider implementing a true
+B-Tree structure with splitting/merging nodes, or use an embedded database like
+SQLite or LevelDB.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex__ctor_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.#ctor(System.String)">
+  BTreeIndex(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.html">BTreeIndex</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BTreeIndex(string indexFilePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indexFilePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the index file on disk.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Count_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Count*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Count" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Count">
+  Count
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of entries in the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Add_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Add*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Add_System_String_System_Int64_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Add(System.String,System.Int64)">
+  Add(string, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds or updates a key-offset mapping in the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(string key, long offset)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to index (e.g., node ID).</p>
+</dd>
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The byte offset in the data file.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Add_System_String_System_Int64__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This adds an entry to the index.
+<p>Example:</p>
+<ul>
+<li>index.Add(&quot;alice&quot;, 1024)</li>
+<li>This means: &quot;Alice's data starts at byte 1024 in the file&quot;</li>
+</ul>
+<p>If &quot;alice&quot; already exists, it updates to the new offset.
+The index is marked as &quot;dirty&quot; and will be saved to disk later.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Clear_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Clear*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Clear" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all entries from the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Contains_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Contains*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Contains_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Contains(System.String)">
+  Contains(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a key exists in the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Contains(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the key exists; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Dispose_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Dispose*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Dispose" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the index, ensuring all changes are saved to disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Dispose_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Dispose*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Dispose_System_Boolean_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources used by the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if called from Dispose(), false if called from finalizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Flush_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Flush*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Flush" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Flush">
+  Flush()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the index to disk if it has been modified.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Flush()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Flush_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method writes the index to disk in a simple text format:
+- Each line: "key|offset"
+- Example: "alice|1024"
+<p>The file is only written if changes have been made (_isDirty flag).
+This is called automatically by Dispose() to ensure data isn't lost.</p>
+
+<p><b>For Beginners:</b> This saves the index to a file.
+<p>Think of it like saving your work:</p>
+<ul>
+<li>You've been adding entries to the index (in memory)</li>
+<li>Flush() writes everything to disk</li>
+<li>Now the index survives if the program crashes or restarts</li>
+</ul>
+<p>Format example (nodes_index.db):</p>
+<pre><code>alice|1024
+bob|2048
+charlie|3072
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Get_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Get*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Get_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Get(System.String)">
+  Get(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the file offset associated with a key.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long Get(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to look up.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The byte offset if found; otherwise, -1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Get_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This looks up where data is stored.
+<p>Example:</p>
+<ul>
+<li>var offset = index.Get(&quot;alice&quot;)</li>
+<li>Returns: 1024 (meaning Alice's data is at byte 1024)</li>
+<li>Or returns -1 if &quot;alice&quot; is not in the index</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_GetAllKeys_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.GetAllKeys*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_GetAllKeys" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.GetAllKeys">
+  GetAllKeys()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all keys in the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;string&gt; GetAllKeys()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Collection of all keys.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Remove_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Remove*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Remove_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Graph.BTreeIndex.Remove(System.String)">
+  Remove(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes a key from the index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Remove(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The key to remove.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the key was found and removed; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Graph_BTreeIndex_Remove_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This removes an entry from the index.
+<p>Example:</p>
+<ul>
+<li>index.Remove(&quot;alice&quot;)</li>
+<li>Now we can no longer look up where Alice's data is</li>
+<li>The actual data file is NOT modified - just the index</li>
+</ul>
+<p>Note: For production systems, you'd typically mark entries as deleted
+rather than removing them, to avoid fragmenting the data file.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Graph/BTreeIndex.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

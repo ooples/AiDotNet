@@ -1,0 +1,4394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Tensor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Tensor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a multi-dimensional array of numeric values used in machine learning and AI computations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Tensor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Tensor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1" class="text-break">
+Class Tensor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a multi-dimensional array of numeric values used in machine learning and AI computations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Tensor&lt;T&gt; : TensorBase&lt;T&gt;, IEnumerable&lt;T&gt;, IEnumerable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the tensor elements (e.g., float, double, int).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html">TensorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">Tensor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1__data">TensorBase&lt;T&gt;._data</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1__numOps">TensorBase&lt;T&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Engine">TensorBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Shape">TensorBase&lt;T&gt;.Shape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Length">TensorBase&lt;T&gt;.Length</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Rank">TensorBase&lt;T&gt;.Rank</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_ToArray">TensorBase&lt;T&gt;.ToArray()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_CopyFromArray__0___">TensorBase&lt;T&gt;.CopyFromArray(T[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Item_System_Int32___">TensorBase&lt;T&gt;.this[int[]]</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_ValidateIndices_System_Int32___">TensorBase&lt;T&gt;.ValidateIndices(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_GetFlatIndex_System_Int32___">TensorBase&lt;T&gt;.GetFlatIndex(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Transform__1_System_Func__0___0__">TensorBase&lt;T&gt;.Transform&lt;TResult&gt;(Func&lt;T, TResult&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_Transform__1_System_Func__0_System_Int32_____0__">TensorBase&lt;T&gt;.Transform&lt;TResult&gt;(Func&lt;T, int[], TResult&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_GetIndices_System_Int32_System_Int32___">TensorBase&lt;T&gt;.GetIndices(int, int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_AsSpan">TensorBase&lt;T&gt;.AsSpan()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_GetFlat_System_Int32_">TensorBase&lt;T&gt;.GetFlat(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_SetFlat_System_Int32__0_">TensorBase&lt;T&gt;.SetFlat(int, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html#AiDotNet_Tensors_LinearAlgebra_TensorBase_1_ToString">TensorBase&lt;T&gt;.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.TensorExtensions.html#AiDotNet_Extensions_TensorExtensions_ConcatenateTensors__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">TensorExtensions.ConcatenateTensors&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.TensorExtensions.html#AiDotNet_Extensions_TensorExtensions_ConvertToMatrix__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__">TensorExtensions.ConvertToMatrix&lt;T&gt;(Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.TensorExtensions.html#AiDotNet_Extensions_TensorExtensions_ForEachPosition__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__System_Func_System_Int32_____0_System_Boolean__">TensorExtensions.ForEachPosition&lt;T&gt;(Tensor&lt;T&gt;, Func&lt;int[], T, bool&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.TensorExtensions.html#AiDotNet_Extensions_TensorExtensions_TensorEquals__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">TensorExtensions.TensorEquals&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.TensorExtensions.html#AiDotNet_Extensions_TensorExtensions_Unflatten__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">TensorExtensions.Unflatten&lt;T&gt;(Tensor&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.JitCompiler.IR.TensorShapeExtensions.html#AiDotNet_JitCompiler_IR_TensorShapeExtensions_GetShape__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__">TensorShapeExtensions.GetShape&lt;T&gt;(Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_System_Collections_Generic_IEnumerable___0__">DataPipelineExtensions.ToPipeline&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.EnumerableExtensions.html#AiDotNet_Extensions_EnumerableExtensions_RandomElement__1_System_Collections_Generic_IEnumerable___0__">EnumerableExtensions.RandomElement&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A tensor is a mathematical object that can represent data in multiple dimensions. 
+Think of it as a container that can hold numbers in an organized way:
+- A 1D tensor is like a list of numbers (a vector)
+- A 2D tensor is like a table of numbers (a matrix)
+- A 3D tensor is like a cube of numbers
+- And so on for higher dimensions
+<p>Tensors are fundamental building blocks for many AI algorithms, especially in neural networks.
+For example, in image processing, a color image can be represented as a 3D tensor:</p>
+<ul>
+<li>First dimension: height (rows of pixels)</li>
+<li>Second dimension: width (columns of pixels)</li>
+<li>Third dimension: color channels (red, green, blue)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor(System.Int32[])">
+  Tensor(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with the specified dimensions, initialized with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor(int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor creates an empty tensor with the shape you specify.
+All elements will be initialized to their default values (usually 0).
+<p>For example:</p>
+<ul>
+<li>new Tensor&lt;float&gt;([5]) creates a vector with 5 zeros</li>
+<li>new Tensor&lt;float&gt;([2, 3]) creates a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 matrix of zeros</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Tensor(int[], Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with the specified dimensions using data from a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor(int[] dimensions, Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix containing the data to populate the tensor with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor creates a tensor using a matrix as the data source.
+<p>This is especially useful when:</p>
+<ul>
+<li>You already have your data organized in a matrix format</li>
+<li>You're converting between matrix operations and tensor operations</li>
+<li>You're building higher-dimensional tensors from multiple matrices</li>
+</ul>
+<p>The matrix's dimensions must be compatible with the tensor dimensions you specify.
+For a rank-2 tensor (a matrix), the dimensions should match exactly.
+For higher-rank tensors, the matrix is &quot;reshaped&quot; to fit the specified dimensions.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the matrix dimensions don't match the specified tensor dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Tensor(int[], Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with the specified dimensions and pre-populated data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor(int[] dimensions, Vector&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the data to populate the tensor with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor creates a tensor with a specific shape and fills it with
+the values you provide in the data parameter.
+<p>The data is stored in &quot;row-major order,&quot; which means we fill the tensor one row at a time.
+For a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 matrix, the data would be arranged as:
+[row1-col1, row1-col2, row1-col3, row2-col1, row2-col2, row2-col3]</p>
+<p>The length of your data must match the total number of elements needed for the tensor's shape.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1__ctor__0___System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.#ctor(`0[],System.Int32[])">
+  Tensor(T[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with the specified dimensions using a raw array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor(T[] data, int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[]</dt>
+    <dd><p>The data to populate the tensor with.</p>
+</dd>
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Item_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Item*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Item_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Item(System.Int32)">
+  this[int]
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the value at the specified flat (linear) index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T this[int flatIndex] { get; set; }</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>flatIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The flat index into the tensor's underlying storage (0 to Length-1).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value at the specified flat index.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Item_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This indexer allows you to access tensor elements using a single
+index that treats the tensor as a 1D array. The flat index corresponds to row-major ordering
+where the last dimension varies fastest.
+<p>For example, for a 2x3 tensor:</p>
+<ul>
+<li>Index 0 corresponds to [0,0]</li>
+<li>Index 1 corresponds to [0,1]</li>
+<li>Index 2 corresponds to [0,2]</li>
+<li>Index 3 corresponds to [1,0]</li>
+<li>And so on...</li>
+</ul>
+<p>This is useful when you need to iterate through all elements without worrying about dimensions.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Add(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Add(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2512"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds another tensor to this tensor element-wise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Add(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the sum of this tensor and the other tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adds two tensors together by adding their corresponding elements.
+Both tensors must have exactly the same shape for this to work.
+<p>For example, if you have two 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 matrices:</p>
+<pre><code>A = [[1, 2, 3],     B = [[5, 6, 7],
+     [4, 5, 6]]          [8, 9, 10]]
+</code></pre>
+<p>Then A.Add(B) would result in:</p>
+<pre><code>[[1+5, 2+6, 3+7],    [[6, 8, 10],
+ [4+8, 5+9, 6+10]] =  [12, 14, 16]]
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Add(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Add(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L575"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a vector to the last dimension of a 3D tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Add(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the addition.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Add_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method is specifically designed for 3D tensors and adds the vector to each slice along the last dimension.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensor rank is not 3 or vector length doesn't match the last dimension.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_AddInPlace_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.AddInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_AddInPlace_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.AddInPlace(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  AddInPlace(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2530"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds another tensor to this tensor in-place, modifying this tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddInPlace(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_AddInPlace_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Zero-allocation SIMD-accelerated addition.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastAdd_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastAdd_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastAdd(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  BroadcastAdd(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2559"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two tensors with broadcasting support, following NumPy/PyTorch broadcasting rules.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; BroadcastAdd(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to add. Can have different shape if broadcastable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise sum with broadcasting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastAdd_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Broadcasting allows tensors of different shapes to be added together by automatically expanding
+dimensions of size 1 to match the other tensor. This follows NumPy/PyTorch broadcasting semantics.
+</p>
+<p><b>For Beginners:</b> Broadcasting lets you add tensors of different shapes.
+<p>For example:</p>
+<ul>
+<li>[4, 3, 2] + [2] broadcasts the [2] across all positions</li>
+<li>[4, 3, 2] + [1, 3, 1] broadcasts along dimensions 0 and 2</li>
+<li>[batch, channels, H, W] + [1, channels, 1, 1] adds per-channel bias</li>
+</ul>
+<p>The rule is: dimensions are compatible if they're equal or one of them is 1.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when shapes are not broadcastable.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastDivide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastDivide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastDivide_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastDivide(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  BroadcastDivide(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2772"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides this tensor by another tensor with NumPy-style broadcasting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; BroadcastDivide(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise quotient with broadcasting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastDivide_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Broadcasting allows tensors of different shapes to be divided by automatically
+expanding the smaller tensor. For example, [B,H,W,C] / [B,1,1,C] broadcasts the [B,1,1,C]
+tensor across the spatial dimensions.
+</p>
+<p>
+The rule is: dimensions are compatible if they're equal or one of them is 1.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastMultiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  BroadcastMultiply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2694"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this tensor by another tensor with NumPy-style broadcasting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; BroadcastMultiply(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise product with broadcasting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Broadcasting allows tensors of different shapes to be multiplied together by automatically
+expanding the smaller tensor. For example, [B,H,W,C] * [B,1,1,C] broadcasts the [B,1,1,C]
+tensor across the spatial dimensions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastSubtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastSubtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastSubtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.BroadcastSubtract(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  BroadcastSubtract(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2628"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another tensor from this tensor with NumPy-style broadcasting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; BroadcastSubtract(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise difference with broadcasting.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_BroadcastSubtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Broadcasting allows tensors of different shapes to be subtracted by automatically
+expanding the smaller tensor. For example, [B,H,W,C] - [B,1,1,C] broadcasts the [B,1,1,C]
+tensor across the spatial dimensions.
+</p>
+<p>
+The rule is: dimensions are compatible if they're equal or one of them is 1.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Cast_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Cast*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Cast__1" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Cast``1">
+  Cast&lt;TOut&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the tensor to a different numeric type (precision casting).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;TOut&gt; Cast&lt;TOut&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;TOut&gt;</dt>
+    <dd><p>A new tensor with the same shape but elements converted to the target type.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TOut</code></dt>
+    <dd><p>The target numeric type to convert to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Cast__1_examples">Examples</h4>
+  <pre><code class="lang-csharp">// Convert FP32 tensor to FP16 for forward pass
+Tensor&lt;float&gt; weights = new Tensor&lt;float&gt;([100, 50]);
+Tensor&lt;Half&gt; weightsHalf = weights.Cast&lt;Half&gt;();
+
+// Convert FP16 gradients back to FP32 for accumulation
+Tensor&lt;Half&gt; gradientsHalf = layer.Backward(outputGradient);
+Tensor&lt;float&gt; gradients = gradientsHalf.Cast&lt;float&gt;();</code></pre>
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Cast__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts all values in the tensor from one numeric type to another.
+This is essential for mixed-precision training where we need to convert between:
+- float (32-bit) and Half (16-bit) for memory efficiency
+- Half (16-bit) and double (64-bit) for numerical stability
+<p>For example:</p>
+<ul>
+<li>Converting from float to Half reduces memory usage by 50%</li>
+<li>Converting from Half to float allows more precise accumulation</li>
+<li>Converting from Half to double provides maximum numerical precision</li>
+</ul>
+<p>In mixed-precision training:</p>
+<ul>
+<li>Forward/backward passes often use FP16 (Half) for speed</li>
+<li>Gradient accumulation uses FP32 (float) for stability</li>
+<li>Master weights are kept in FP32</li>
+</ul>
+
+<p><b>Technical Details:</b> The conversion uses the INumericOperations interface to handle
+type conversions. The specific conversion path depends on the source and target types:
+- Half ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ float: Lossless, expands precision
+- float ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ Half: May lose precision and overflow
+- float ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ double: Lossless, expands precision
+- double ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ float: May lose precision
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Clone_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Clone" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the same shape and values as this tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Concatenate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Concatenate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Concatenate_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Concatenate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0}[],System.Int32)">
+  Concatenate(Tensor&lt;T&gt;[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Concatenates multiple tensors along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; Concatenate(Tensor&lt;T&gt;[] tensors, int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The array of tensors to concatenate.</p>
+</dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to concatenate the tensors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the same rank as the input tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Concatenate_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Think of concatenation as joining multiple arrays together. For example, if you have two 
+tensors representing images (each with shape [3, 4, 4] for 3 color channels and 4x4 pixels), concatenating them along 
+axis 0 would give you a tensor with shape [6, 4, 4] - essentially stacking the images on top of each other.</p>
+<p>The "axis" parameter determines which dimension to join along. Axis 0 is typically the batch dimension, 
+axis 1 might be rows, axis 2 might be columns, and so on.</p>
+<p>All input tensors must have the same shape except along the concatenation axis.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have incompatible shapes or the axis is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateDefault_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateDefault*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateDefault_System_Int32____0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateDefault(System.Int32[],`0)">
+  CreateDefault(int[], T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2048"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor with all elements initialized to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; CreateDefault(int[] shape, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the tensor to create.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to fill the tensor with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor filled with the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateDefault_System_Int32____0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a new tensor where every element has the same value.</p>
+<p>For example, CreateDefault([2, 3], 1.0) would create a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor filled with the value 1.0, like this:
+[[1.0, 1.0, 1.0],
+ [1.0, 1.0, 1.0]]</p>
+<p>This is useful when you need a starting tensor with a specific value, such as zeros or ones.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateIdentity_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateIdentity*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateIdentity_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateIdentity(System.Int32)">
+  CreateIdentity(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L495"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an identity matrix as a 2D tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; CreateIdentity(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the square identity matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new 2D tensor representing an identity matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateIdentity_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An identity matrix is a square matrix with 1s on the diagonal
+and 0s everywhere else. When you multiply any matrix by the identity matrix, you get
+the original matrix back - it's like multiplying by 1 for numbers.
+<p>For example, a 3x3 identity matrix looks like:
+[[1, 0, 0],
+[0, 1, 0],
+[0, 0, 1]]</p>
+<p>Identity matrices are used in:</p>
+<ul>
+<li>Neural network weight initialization</li>
+<li>Skip connections and residual networks</li>
+<li>Regularization terms</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when size is less than 1.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance(System.Int32[])">
+  CreateInstance(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3501"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the tensor with the specified shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override TensorBase&lt;T&gt; CreateInstance(int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the new tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html">TensorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified shape.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance__0___System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance(`0[],System.Int32[])">
+  CreateInstance(T[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3517"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the tensor with the specified data and shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override TensorBase&lt;T&gt; CreateInstance(T[] data, int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[]</dt>
+    <dd><p>The data to populate the new tensor with.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the new tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html">TensorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified data and shape.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance__0___System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a new tensor with the given data and shape.
+It's useful when you want to create a tensor from existing data, such as when reshaping or
+performing operations that result in new tensors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance__1_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateInstance``1(System.Int32[])">
+  CreateInstance&lt;TResult&gt;(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3542"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the tensor with the specified shape and a different element type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override TensorBase&lt;TResult&gt; CreateInstance&lt;TResult&gt;(params int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the new tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.TensorBase-1.html">TensorBase</a>&lt;TResult&gt;</dt>
+    <dd><p>A new tensor with the specified shape and element type.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type of elements in the new tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateInstance__1_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is used when you need to create a new tensor with a different
+data type than the current tensor. This is common in operations that change the data type,
+such as converting a tensor of integers to a tensor of floating-point numbers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateOnes_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateOnes*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateOnes_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateOnes(System.Int32[])">
+  CreateOnes(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L443"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor filled with ones with the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; CreateOnes(params int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor filled with ones.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateOnes_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a tensor where every element is 1.
+Ones tensors are commonly used in neural networks for:
+- Creating mask tensors
+- Computing (1 - x) operations in gating mechanisms
+- Bias initialization
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are null or empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateRandom_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateRandom_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateRandom(System.Int32[])">
+  CreateRandom(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L409"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor with random values of the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; CreateRandom(params int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The dimensions of the tensor to create.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor filled with random values between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateRandom_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a new tensor with the specified shape and fills it with random values
+between 0 and 1. Random initialization is a common practice in machine learning to give the algorithm
+a starting point before training. The dimensions parameter determines the shape of the tensor - for example,
+[3,4] would create a 3x4 matrix (2D tensor), while [2,3,4] would create a 3D tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are null or empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateZeros_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateZeros*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateZeros_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.CreateZeros(System.Int32[])">
+  CreateZeros(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L465"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor filled with zeros with the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; CreateZeros(params int[] dimensions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimensions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the size of each dimension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor filled with zeros.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_CreateZeros_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a tensor where every element is 0.
+Zero tensors are commonly used in neural networks for:
+- Initializing accumulators
+- Padding operations
+- Creating empty output tensors before filling them
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions are null or empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Divide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Divide__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Divide(`0)">
+  Divide(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of this tensor by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Divide(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with each element divided by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Divide__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Uses SIMD-accelerated operations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DivideInPlace_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.DivideInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DivideInPlace__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.DivideInPlace(`0)">
+  DivideInPlace(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of this tensor by a scalar value in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideInPlace(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DivideInPlace__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Zero-allocation SIMD-accelerated division.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DotProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.DotProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DotProduct_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.DotProduct(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DotProduct(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L681"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product of this tensor with another tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DotProduct(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The other tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The scalar dot product result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_DotProduct_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The dot product is a way to multiply two tensors together to get a single number.
+It works by multiplying corresponding elements and then adding all those products together.</p>
+<p>For example, if you have two tensors [1,2,3] and [4,5,6], the dot product would be:
+(1ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4) + (2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â5) + (3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â6) = 4 + 10 + 18 = 32</p>
+<p>Both tensors must have identical shapes for this operation.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseMultiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ElementwiseMultiply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication with another tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ElementwiseMultiply(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to multiply with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise product.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method multiplies each element in this tensor with the corresponding element in the 
+other tensor. This is different from matrix multiplication!</p>
+<p>For example, if tensor A is [[2, 3], [4, 5]] and tensor B is [[1, 2], [3, 4]], then A.ElementwiseMultiply(B) 
+would result in [[2, 6], [12, 20]].</p>
+<p>Element-wise multiplication is sometimes called the Hadamard product and is often used in neural networks 
+for operations like applying masks or gates to feature maps.</p>
+<p>Both tensors must have identical shapes for this operation.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseMultiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ElementwiseMultiply(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2071"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication of two tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; ElementwiseMultiply(Tensor&lt;T&gt; a, Tensor&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The first tensor.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise product of the input tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Element-wise multiplication means that each element in the first tensor 
+is multiplied by the corresponding element in the second tensor at the same position. 
+For example, if you have two 2x2 tensors, the element at position [0,0] in the first tensor 
+will be multiplied by the element at position [0,0] in the second tensor, and so on.
+This is different from matrix multiplication which involves more complex operations.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseSubtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseSubtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseSubtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ElementwiseSubtract(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ElementwiseSubtract(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L554"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction with another tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ElementwiseSubtract(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise difference.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ElementwiseSubtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method subtracts each element in the second tensor from the corresponding 
+element in the first tensor. Both tensors must have exactly the same shape.</p>
+<p>For example, if you have tensor A with values [[1,2],[3,4]] and tensor B with values [[5,6],[7,8]],
+the result will be [[-4,-4],[-4,-4]] (each element of A minus the corresponding element of B).</p>
+<p>This creates a new tensor and doesn't modify the original tensors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Empty_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Empty" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2436"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty tensor with no dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>An empty tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An empty tensor is a tensor with no elements. It's like an empty array or list.
+This is different from a tensor filled with zeros, which would have a specific shape and contain zero values.
+Empty tensors are useful as placeholders or when you need to build a tensor incrementally.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Fill_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Fill__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Fill(`0)">
+  Fill(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L699"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the entire tensor with a specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to fill the tensor with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Fill__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method replaces all elements in the tensor with the same value.
+It's like painting all cells in a spreadsheet with the same color.</p>
+<p><b>Performance:</b> Uses vectorized Fill operation for SIMD acceleration (5-15x faster with AVX2).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromColumnMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromColumnMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromColumnMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromColumnMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FromColumnMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor from a matrix using column-major order (Fortran/MATLAB layout).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromColumnMatrix(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the same values as the matrix in column-major order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromColumnMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Column-major order means the matrix is stored column by column.
+For a 2x3 matrix [[1,2,3],[4,5,6]], the internal storage is [1,4,2,5,3,6].</p>
+<p><b>Warning:</b> This layout is different from Tensor's native row-major order.
+Using this method will result in a tensor where element access via indices will
+return values as if the matrix was transposed. Only use this if you specifically
+need column-major compatibility (e.g., interop with Fortran or MATLAB libraries).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FromMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2362"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor from a matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromMatrix(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The source matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with shape [matrix.Rows, matrix.Columns] containing the matrix's data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a matrix (a 2D grid of values) into a tensor.</p>
+<p>A matrix is a two-dimensional grid of values, like a spreadsheet with rows and columns.
+This method transforms that grid into a tensor structure, which can handle more dimensions
+and provides additional operations.</p>
+<p>The resulting tensor will have a rank of 2 (two dimensions) with the first dimension
+being the number of rows and the second dimension being the number of columns from the original matrix.</p>
+<p>For example, if you have a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 matrix representing student test scores (3 students, 4 tests),
+this method would convert it to a tensor with the same structure but with the ability to perform
+more advanced operations on the data.</p>
+<p>Internally, the matrix is converted to a row-major flattened vector before being stored
+in the tensor's internal data array. This matches Tensor's row-major storage order.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromRowMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromRowMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromRowMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromRowMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  FromRowMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor from a matrix using row-major order (standard C# memory layout).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromRowMatrix(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the same values as the matrix in row-major order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromRowMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Row-major order means the matrix is stored row by row.
+For a 2x3 matrix [[1,2,3],[4,5,6]], the internal storage is [1,2,3,4,5,6].</p>
+<p>This is the standard layout for C# arrays and is consistent with Tensor's
+internal storage and the ToMatrix() method.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromScalar_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromScalar__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromScalar(`0)">
+  FromScalar(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2416"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with a single scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromScalar(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to store in the tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing only the specified scalar value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromScalar__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a tensor with just one number in it.
+It's useful when you need to convert a single value into a tensor format.</p>
+<p>The resulting tensor has a shape of [1], meaning it's a one-dimensional
+tensor with a single element. This is the simplest possible tensor.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  FromVector(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a tensor from a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromVector(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The source vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with shape [vector.Length] containing the vector's data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a vector (a simple list of values) into a tensor.</p>
+<p>A vector is a one-dimensional collection of values. This method wraps that collection
+in a tensor structure, which allows you to perform more complex operations on the data.</p>
+<p>The resulting tensor will have a rank of 1 (one dimension) and its length will be
+the same as the original vector's length.</p>
+<p>For example, if you have a vector of 10 temperature readings and want to apply
+tensor operations to it, you would first convert it to a tensor using this method.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.FromVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32[])">
+  FromVector(Vector&lt;T&gt;, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor from a vector with an optional specified shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; FromVector(Vector&lt;T&gt; vector, int[]? shape = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The source vector containing the tensor data.</p>
+</dd>
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Optional shape for the resulting tensor. If not provided, creates a 1D tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the data from the vector and the specified shape.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a tensor using the data from the provided vector. The elements are copied in row-major order,
+which means the rightmost indices vary the fastest. If a shape is provided, the method verifies that the total
+number of elements in the tensor (product of shape dimensions) matches the length of the vector.
+</p>
+<p><b>For Beginners:</b> This method converts a simple list of numbers (vector) into a
+multi-dimensional array (tensor). Think of it like transforming a long line of numbers into
+a grid, cube, or even higher-dimensional structure.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the vector is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the shape is invalid or incompatible with the vector's length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetComplex_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetComplex*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetComplex_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetComplex(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GetComplex(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L524"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complex value from a tensor at the specified index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Complex&lt;T&gt; GetComplex(Tensor&lt;T&gt; tensor, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to retrieve the value from.</p>
+</dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the value to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The value at the specified index as a complex number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetComplex_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Complex numbers have two parts: a real part and an imaginary part.
+This method retrieves a value from the tensor and converts it to a complex number.
+If the value is already a complex number, it's returned as is.
+If not, it creates a complex number where the real part is the original value and the imaginary part is zero.
+Complex numbers are used in many advanced AI algorithms, especially those involving signal processing or quantum computing.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetEnumerator_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetEnumerator*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetEnumerator" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetEnumerator">
+  GetEnumerator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an enumerator that iterates through all elements in the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerator&lt;T&gt; GetEnumerator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerator-1">IEnumerator</a>&lt;T&gt;</dt>
+    <dd><p>An enumerator for the tensor's elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetEnumerator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to loop through all values in the tensor
+one by one, regardless of its shape. This is useful when you want to process each element
+without worrying about the tensor's dimensions.
+<p>For example, you can use it in a foreach loop:</p>
+<pre><code class="lang-csharp">foreach (var value in myTensor)
+{
+    // Process each value
+}</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetFlatIndexValue_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetFlatIndexValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetFlatIndexValue_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetFlatIndexValue(System.Int32)">
+  GetFlatIndexValue(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1913"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves the value at a specific position in the flattened tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetFlatIndexValue(int flatIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>flatIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index in the flattened (1D) representation of the tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value at the specified flat index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetFlatIndexValue_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you access a value using a single index number,
+even if your tensor has multiple dimensions.</p>
+<p>Think of it as if all the values in your tensor were laid out in a single line,
+and you're picking one value from that line using its position number.</p>
+<p>For example, in a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor (2 rows, 3 columns), the flat indices would map like this:
+[0,0]=0, [0,1]=1, [0,2]=2, [1,0]=3, [1,1]=4, [1,2]=5</p>
+<p>So if you want the value at row 1, column 0, you could use either the multi-dimensional
+access with [1,0] or the flat index access with 3.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetRow_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetRow*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetRow_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetRow(System.Int32)">
+  GetRow(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2009"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a row vector from the tensor at the specified row index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetRow(int rowIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the values from the specified row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetRow_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a single row from your tensor.</p>
+<p>In a 2D tensor (like a table or spreadsheet), this would extract an entire row of data
+(a horizontal line going from left to right).</p>
+<p>For example, in a dataset where each row represents a sample or observation,
+this method would extract all features for a single sample.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the row index is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSlice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSlice(System.Int32)">
+  GetSlice(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a slice from the tensor at the specified batch index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetSlice(int batchIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the batch to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the extracted slice.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> In machine learning, data is often organized in batches. A batch is simply a group of 
+similar items processed together for efficiency.</p>
+<p>This method extracts a single item (slice) from a batch of data. For example, if you have a tensor with 
+shape [32, 784] representing 32 images with 784 features each, GetSlice(5) would return the 6th image (index 5)
+as a tensor with shape [784].</p>
+<p>Think of it like taking one cookie (the slice) from a tray of cookies (the batch).</p>
+<p>This method assumes the first dimension is the batch dimension.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSlice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSlice(System.Int32,System.Int32)">
+  GetSlice(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1046"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a slice of the tensor's data as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetSlice(int start, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting index in the flattened data.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to include in the slice.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the requested slice of data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSlice_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a portion of the tensor's data as a simple vector.
+It works directly with the flattened (one-dimensional) representation of the tensor.
+<p>Think of it like cutting out a section from the tensor's internal storage.
+This is useful when you need to access a continuous segment of the tensor's data
+without worrying about its multi-dimensional structure.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSliceAlongDimension_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSliceAlongDimension*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSliceAlongDimension_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSliceAlongDimension(System.Int32,System.Int32)">
+  GetSliceAlongDimension(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a slice of the tensor along a specified dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetSliceAlongDimension(int index, int dimension)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index along the dimension to slice.</p>
+</dd>
+    <dt><code>dimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimension to slice along (0-indexed).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified dimension removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSliceAlongDimension_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a "slice" of data from a multi-dimensional tensor
+along any dimension you specify.</p>
+<p>For example, if you have a tensor with shape [batchSize, timeSteps, features] and want to
+get all the data for a specific time step (keeping the batch dimension), you would use
+GetSliceAlongDimension(timeStepIndex, 1).</p>
+<p>This is particularly useful for:
+<ul><li>LSTM/RNN processing: iterating through time steps while keeping batch dimension</li><li>Multi-head attention: extracting specific heads or positions</li><li>Any operation that needs to extract along a non-batch dimension</li></ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when index or dimension is out of bounds.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSubTensor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSubTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSubTensor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetSubTensor(System.Int32,System.Int32,System.Int32,System.Int32,System.Int32,System.Int32)">
+  GetSubTensor(int, int, int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1397"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a sub-tensor from a 4D tensor (typically used for image data).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; GetSubTensor(int batch, int channel, int startHeight, int startWidth, int height, int width)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The batch index.</p>
+</dd>
+    <dt><code>channel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The channel index.</p>
+</dd>
+    <dt><code>startHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting height position.</p>
+</dd>
+    <dt><code>startWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting width position.</p>
+</dd>
+    <dt><code>height</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The height of the sub-tensor to extract.</p>
+</dd>
+    <dt><code>width</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The width of the sub-tensor to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the extracted sub-region.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetSubTensor_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a smaller region from a 4D tensor, similar to cropping an image.</p>
+<p>4D tensors are commonly used for image data, where:
+- The first dimension (batch) represents multiple images in a set
+- The second dimension (channel) represents color channels (like Red, Green, Blue)
+- The third and fourth dimensions (height, width) represent the image dimensions</p>
+<p>For example, if you have a collection of color photos and want to extract just the faces from each photo,
+you could use this method to "crop" the relevant portion from each image.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when any of the indices or dimensions are outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetVector_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.GetVector(System.Int32)">
+  GetVector(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1434"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a vector from the tensor at the specified index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetVector(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the vector to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the data at the specified index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_GetVector_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a single row from your tensor as a vector.</p>
+<p>Think of a tensor as a multi-dimensional table. If it's a 2D tensor (like a spreadsheet),
+this method would extract an entire row of data at the position you specify.</p>
+<p>For example, in a dataset where each row represents a data sample (like information about 
+a person), this method would extract all the information for a single sample.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the tensor has fewer than 2 dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MatrixMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MatrixMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MatrixMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MatrixMultiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  MatrixMultiply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1557"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs matrix multiplication between two tensors with support for N-dimensional batched operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; MatrixMultiply(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second tensor to multiply with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the matrix multiplication.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MatrixMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method supports both 2D matrix multiplication and N-dimensional batched matrix multiplication
+following NumPy-style broadcasting semantics. For tensors with shapes [..., M, K] and [..., K, N],
+the result has shape [..., M, N].
+</p>
+<p>
+<b>For Beginners:</b> Matrix multiplication is a fundamental operation in linear algebra and machine learning.
+</p>
+<p>
+For two matrices A and B to be multiplied:
+</p>
+<p>
+- The number of columns in A must equal the number of rows in B
+- The result will have dimensions: (rows of A) x (columns of B)
+</p>
+<p>
+For batched operations, shape [2, 3, 4] @ [2, 4, 5] results in [2, 3, 5].
+</p>
+<p>
+This is different from element-wise multiplication where corresponding elements are simply multiplied together.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when either tensor has fewer than 2 dimensions or when the inner dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Max_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Max" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Max">
+  Max()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1079"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in the tensor and its corresponding index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T maxVal, int maxIndex) Max()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.bestloss">BestLoss</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.iteration">Iteration</a>)</dt>
+    <dd><p>A tuple containing the maximum value and its index in the flattened tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Max_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method finds the largest value in your tensor and tells you where it is.</p>
+<p>It returns two pieces of information:
+1. The maximum value itself
+2. The position (index) where that value is located</p>
+<p>The position is given as a "flat index," which means the tensor is treated as if it were
+a single long list of values, regardless of its original dimensions.</p>
+<p>For example, in a tensor of test scores, this could help you find the highest score
+and which test it was from.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MaxOverAxis_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MaxOverAxis*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MaxOverAxis_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MaxOverAxis(System.Int32)">
+  MaxOverAxis(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3441"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum values along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; MaxOverAxis(int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to find maximum values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified axis removed, containing maximum values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MaxOverAxis_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method finds the largest value along a specific dimension of your tensor.
+For example, if you have a 2D tensor representing test scores for multiple students across multiple subjects,
+finding the max along axis 0 would give you the highest score for each subject across all students,
+while finding the max along axis 1 would give you each student's highest score across all subjects.</p>
+<p>The resulting tensor has one fewer dimension than the original tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the axis is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Mean_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Mean*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Mean" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Mean">
+  Mean()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1790"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the arithmetic mean (average) of all values in the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Mean()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The mean value of all elements in the tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Mean_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates the average of all values in your tensor.</p>
+<p>It works by:
+1. Adding up all the values in the tensor
+2. Dividing the sum by the total number of values</p>
+<p>The mean is a common statistical measure that represents the "center" or "typical value" of your data.</p>
+<p>For example, if your tensor contains temperature readings over time, the mean would give you
+the average temperature for the entire period.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MeanOverAxis_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MeanOverAxis*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MeanOverAxis_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MeanOverAxis(System.Int32)">
+  MeanOverAxis(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3474"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the mean values along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; MeanOverAxis(int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to compute the mean.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified axis removed, containing mean values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MeanOverAxis_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates the average value along a specific dimension of your tensor.
+For example, if you have a 2D tensor representing test scores for multiple students across multiple subjects,
+calculating the mean along axis 0 would give you the average score for each subject across all students,
+while calculating the mean along axis 1 would give you each student's average score across all subjects.</p>
+<p>The resulting tensor has one fewer dimension than the original tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the axis is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Multiply(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies a 3D tensor with a matrix along the last dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Multiply(Matrix&lt;T&gt; matrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to multiply with the tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the multiplication.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operation performs matrix multiplication between each 2D slice of the 3D tensor
+and the provided matrix. Think of it as applying the same transformation (represented by the matrix)
+to each 2D slice of your 3D data.</p>
+<p>The resulting tensor will have the same first two dimensions as the original tensor,
+but the third dimension will match the number of columns in the matrix.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the tensor is not 3D or when the matrix rows don't match the last dimension of the tensor.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Multiply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2849"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this tensor by another tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Multiply(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the multiplication.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tensor multiplication follows specific rules from linear algebra.
+For 2D tensors (matrices), this performs matrix multiplication where:
+- The number of columns in the first tensor must equal the number of rows in the second tensor
+- The result will have dimensions [rows of first tensor, columns of second tensor]
+<p>For example, multiplying a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor by a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor results in a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor.
+This is different from element-wise multiplication, which would require both tensors to have the same shape.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Multiply(`0)">
+  Multiply(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies all elements in the tensor by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Multiply(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with all elements multiplied by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Multiply__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method multiplies every value in your tensor by a single number.</p>
+<p>A "scalar" is just a fancy word for a single number (as opposed to a vector, matrix, or tensor).</p>
+<p>For example, if you have a tensor of measurements in inches and want to convert to centimeters,
+you could multiply by 2.54 (since 1 inch = 2.54 cm).</p>
+<p>This is useful for scaling, normalizing, or converting units in your data. It's like
+adjusting the volume on a stereo - one control affects all the sound.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MultiplyInPlace_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MultiplyInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MultiplyInPlace__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.MultiplyInPlace(`0)">
+  MultiplyInPlace(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this tensor by a scalar value in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyInPlace(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_MultiplyInPlace__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Zero-allocation SIMD-accelerated multiplication.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_PointwiseMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.PointwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_PointwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.PointwiseMultiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  PointwiseMultiply(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication with broadcasting support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; PointwiseMultiply(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to multiply with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the element-wise product.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_PointwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method multiplies each element in this tensor with the corresponding element in the other tensor.</p>
+<p>Broadcasting allows tensors of different shapes to be multiplied together by automatically expanding
+smaller dimensions to match larger ones. For example, you can multiply a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor with a 1ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor
+(which will be treated as if it were repeated 3 times).</p>
+<p>This is particularly useful in machine learning when applying the same operation across multiple
+data points or features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Reshape_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Reshape*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Reshape_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Reshape(System.Int32[])">
+  Reshape(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new tensor with the same data but a different shape.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Reshape(params int[] newShape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newShape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The new shape for the tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified shape containing the same data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Reshape_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method changes how your data is organized without changing the actual values.</p>
+<p>Think of it like rearranging items in a container - the items stay the same, but their organization changes.
+The total number of elements must remain the same.</p>
+<p>For example, you could reshape a 4ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor (4 rows, 3 columns) into a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â6 tensor (2 rows, 6 columns).
+Both shapes contain exactly 12 elements.</p>
+<p>This is useful when you need to transform your data to fit a specific algorithm's requirements
+or to view the same data from a different perspective.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the total number of elements in the new shape doesn't match the original tensor.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Scale_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Scale*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Scale__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Scale(`0)">
+  Scale(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L781"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scales the tensor by multiplying each element by a factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Scale(T factor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>factor</code> <span class="xref">T</span></dt>
+    <dd><p>The scaling factor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with scaled values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Scale__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Scaling a tensor means multiplying every number in it by the same value.
+For example, scaling [1,2,3] by 2 gives you [2,4,6].</p>
+<p>This method creates a new tensor and does not modify the original.</p>
+<p><b>Performance:</b> Uses vectorized MultiplyScalar operation for SIMD acceleration (5-15x faster with AVX2).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndex_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetFlatIndex*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndex_System_Int32__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetFlatIndex(System.Int32,`0)">
+  SetFlatIndex(int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1957"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the value at the specified flat index in the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetFlatIndex(int flatIndex, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>flatIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The flat (linear) index into the tensor's data.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndex_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A tensor can have multiple dimensions (like a cube or hypercube), 
+but internally it's stored as a one-dimensional array. The flat index treats the tensor as this 
+one-dimensional array, allowing you to access any element with a single number regardless of 
+the tensor's actual shape. Think of it as numbering all cells in a spreadsheet from 0 to N-1 
+in row-by-row order.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the flat index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndexValue_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetFlatIndexValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndexValue_System_Int32__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetFlatIndexValue(System.Int32,`0)">
+  SetFlatIndexValue(int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1985"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the value at a specific position in the flattened tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetFlatIndexValue(int flatIndex, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>flatIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index in the flattened (1D) representation of the tensor.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to set at the specified position.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetFlatIndexValue_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you change a value using a single index number,
+even if your tensor has multiple dimensions.</p>
+<p>Think of it as if all the values in your tensor were laid out in a single line,
+and you're changing one value in that line using its position number.</p>
+<p>For example, in a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor (2 rows, 3 columns), the flat indices would map like this:
+[0,0]=0, [0,1]=1, [0,2]=2, [1,0]=3, [1,1]=4, [1,2]=5</p>
+<p>So if you want to change the value at row 1, column 0, you could use either the multi-dimensional
+access with [1,0] or the flat index access with 3.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetRow_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetRow*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetRow_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetRow(System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetRow(int, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the values of a row in the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetRow(int rowIndex, Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row to set.</p>
+</dd>
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector containing the values to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetRow_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method replaces an entire row in your tensor with new values.</p>
+<p>A tensor can be thought of as a multi-dimensional array. In a 2D tensor, each row represents 
+a horizontal line of data (going from left to right).</p>
+<p>For example, if your tensor represents a dataset where each row is a data sample,
+this method would replace one sample with new data.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the tensor has fewer than 2 dimensions.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the vector length doesn't match the second dimension of the tensor.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice(System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetSlice(int, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L648"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a slice of the tensor at the specified index along the first dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSlice(int index, Tensor&lt;T&gt; slice)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index along the first dimension.</p>
+</dd>
+    <dt><code>slice</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor slice to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you replace a portion of your tensor with new values.
+<p>Imagine a 3D tensor as a stack of 2D matrices. Using SetSlice(2, newMatrix) would replace
+the 3rd matrix in the stack with your new matrix. The new matrix must have the same shape
+as the slice you're replacing.</p>
+<p>For example, if you have a tensor with shape [4, 5, 6]:</p>
+<ul>
+<li>It contains 4 slices, each with shape [5, 6]</li>
+<li>SetSlice(2, newSlice) would replace the 3rd slice (index 2)</li>
+<li>The newSlice must have shape [5, 6] to fit correctly</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice(System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetSlice(int, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a slice of the tensor's data from a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSlice(int start, Vector&lt;T&gt; slice)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting index in the flattened data.</p>
+</dd>
+    <dt><code>slice</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector containing the data to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method replaces a portion of the tensor's data with values from a vector.
+It works directly with the flattened (one-dimensional) representation of the tensor.
+<p>Think of it like pasting a section of data into the tensor's internal storage.
+This is useful when you need to update a continuous segment of the tensor's data
+without worrying about its multi-dimensional structure.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSlice(System.Int32,System.Int32,AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetSlice(int, int, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a slice of the tensor at the specified index along the specified dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSlice(int dimension, int index, Tensor&lt;T&gt; slice)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The dimension along which to set the slice.</p>
+</dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index along the specified dimension.</p>
+</dd>
+    <dt><code>slice</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor slice to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSlice_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a more flexible version of the SetSlice method that lets you
+replace a slice along any dimension, not just the first one.
+<p>For example, with a 3D tensor of shape [4, 5, 6]:</p>
+<ul>
+<li>SetSlice(0, 2, newSlice) would replace the slice at index 2 along dimension 0, requiring newSlice to have shape [5, 6]</li>
+<li>SetSlice(1, 3, newSlice) would replace the slice at index 3 along dimension 1, requiring newSlice to have shape [4, 6]</li>
+<li>SetSlice(2, 4, newSlice) would replace the slice at index 4 along dimension 2, requiring newSlice to have shape [4, 5]</li>
+</ul>
+<p>Think of it like cutting through your data from different angles and replacing that slice with new data.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the dimension or index is out of range.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the slice shape doesn't match the expected shape.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSubTensor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSubTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSubTensor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SetSubTensor(System.Int32[],AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetSubTensor(int[], Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a sub-tensor at the specified indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSubTensor(int[] indices, Tensor&lt;T&gt; subTensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The starting indices for the sub-tensor.</p>
+</dd>
+    <dt><code>subTensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The sub-tensor to insert.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SetSubTensor_System_Int32___AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you replace a portion of your tensor with another smaller tensor.
+Think of it like pasting a small image into a specific location of a larger image. The indices parameter
+specifies where in the larger tensor you want to place the smaller one.</p>
+<p>This method replaces a portion of the tensor with the provided sub-tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when indices length doesn't match sub-tensor rank.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice(System.Int32)">
+  Slice(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L750"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a slice along the first dimension of the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Slice(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index to slice at.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor with one fewer dimension than the original.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Think of a tensor as a multi-dimensional array. If you have a 3D tensor 
+(like a cube of numbers), slicing it at a specific index along the first dimension gives you a 2D tensor 
+(like a single sheet from that cube). This method lets you extract that sheet.</p>
+<p>This method reduces the dimensionality of the tensor by fixing the first dimension
+to the specified index. For example, slicing a 3D tensor gives a 2D tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice(System.Int32,System.Int32,System.Int32,System.Int32)">
+  Slice(int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1814"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a 2D slice from a 2D tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Slice(int startRow, int startCol, int endRow, int endCol)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting row index (inclusive).</p>
+</dd>
+    <dt><code>startCol</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting column index (inclusive).</p>
+</dd>
+    <dt><code>endRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The ending row index (exclusive).</p>
+</dd>
+    <dt><code>endCol</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The ending column index (exclusive).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the specified slice.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method works only on 2D tensors (matrices) and extracts a rectangular region.
+Think of it like selecting a range of cells in a spreadsheet. The parameters define the top-left corner
+(startRow, startCol) and the bottom-right corner (endRow-1, endCol-1) of the selection.
+Note that the end indices are exclusive, meaning they point to the position just after the last element you want.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the tensor is not 2D.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when slice parameters are invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Slice(System.Int32,System.Int32,System.Nullable{System.Int32})">
+  Slice(int, int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3354"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a slice of the tensor along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Slice(int axis, int start, int? end = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to slice.</p>
+</dd>
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting index of the slice.</p>
+</dd>
+    <dt><code>end</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The ending index of the slice (exclusive). If null, slices to the end of the axis.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the specified slice.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Slice_System_Int32_System_Int32_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you take a "slice" or section of your tensor along any dimension.
+For example, if your tensor represents a stack of images (3D tensor), you could extract images 5 through 10
+by using axis=0, start=5, end=11. Or you could extract just the middle portion of each image by slicing
+along the height or width dimensions.</p>
+<p>This method creates a new tensor that is a subset of the original tensor along the specified axis.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when axis or indices are invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Stack_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Stack*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Stack_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Stack(AiDotNet.Tensors.LinearAlgebra.Tensor{`0}[],System.Int32)">
+  Stack(Tensor&lt;T&gt;[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L846"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stacks multiple tensors along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; Stack(Tensor&lt;T&gt;[] tensors, int axis = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>The array of tensors to stack.</p>
+</dd>
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to stack the tensors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with an additional dimension.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Stack_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Stacking tensors is like putting sheets of paper on top of each other to make a stack.
+The "axis" parameter tells the method which direction to stack them.</p>
+<p>For example:
+- If you have three 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensors (like three rectangular sheets of paper) and stack them with axis=0,
+  you'll get a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 tensor (like a stack of three sheets).
+- If you stack them with axis=1, you'll get a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 tensor (like sheets arranged side by side).
+- If you stack them with axis=2, you'll get a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 tensor (like sheets arranged in a grid).</p>
+<p>All input tensors must have the same shape. The resulting tensor will have rank+1 dimensions.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes or the axis is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubTensor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SubTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubTensor_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SubTensor(System.Int32[])">
+  SubTensor(params int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L323"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a sub-tensor by fixing the first N dimensions to specific indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; SubTensor(params int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The indices to fix for the first dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor with reduced dimensionality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubTensor_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Think of a tensor as a multi-dimensional array. This method allows you to "slice" the tensor
+by fixing some of its dimensions to specific values. For example, if you have a 3D tensor representing a video
+(width x height x time), fixing the time dimension to a specific value would give you a single 2D frame from that video.
+The indices parameter specifies which values to fix for each dimension, starting from the first dimension.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the number of indices exceeds tensor dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Subtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Subtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Subtract(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Subtract(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L959"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another tensor from this tensor element-wise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Subtract(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the subtraction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Subtract_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method subtracts each element in the "other" tensor from the corresponding element 
+in this tensor.</p>
+<p>For example, if tensor A is [[5, 6], [7, 8]] and tensor B is [[1, 2], [3, 4]], then A.Subtract(B) would result 
+in [[4, 4], [4, 4]].</p>
+<p>Both tensors must have identical shapes for this operation to work.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubtractInPlace_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SubtractInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubtractInPlace_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SubtractInPlace(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SubtractInPlace(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L979"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another tensor from this tensor in-place, modifying this tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractInPlace(Tensor&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to subtract.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SubtractInPlace_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Zero-allocation SIMD-accelerated subtraction.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensors have different shapes.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Sum_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Sum_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Sum(System.Int32[])">
+  Sum(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1003"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of tensor elements along specified axes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Sum(int[]? axes = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The axes along which to sum. If null or empty, sums all elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the sum results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Sum_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adds up values along specific dimensions of your tensor.</p>
+<p>Think of a tensor as a multi-dimensional array. For example, a 2D tensor is like a table with rows and columns:</p>
+<p>- Summing along axis 0 (rows) would give you the total for each column</p>
+<p>- Summing along axis 1 (columns) would give you the total for each row</p>
+<p>If you don't specify any axes, it will simply add up all numbers in the tensor and return a single value.</p>
+<p>This is useful for calculating totals or averages across specific dimensions of your data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SumOverAxis_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SumOverAxis*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SumOverAxis_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.SumOverAxis(System.Int32)">
+  SumOverAxis(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3408"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum along the specified axis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; SumOverAxis(int axis)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>axis</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The axis along which to compute the sum.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the specified axis removed, containing sum values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_SumOverAxis_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adds up all values along a specific dimension of your tensor.
+For example, if you have a 2D tensor representing sales data for multiple products across multiple months,
+summing along axis 0 would give you the total sales for each product across all months,
+while summing along axis 1 would give you the total sales across all products for each month.</p>
+<p>The resulting tensor has one fewer dimension than the original tensor.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the axis is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ToMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToMatrix" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ToMatrix">
+  ToMatrix()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L1876"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a 2D tensor to a Matrix object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; ToMatrix()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A Matrix object containing the same data as the tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to convert a 2D tensor to a Matrix object,
+which might have specialized methods for matrix operations.</p>
+<p>A 2D tensor and a matrix are conceptually the same thing - a rectangular grid of numbers.
+This method simply changes the representation from one class to another, making it easier to
+use matrix-specific operations if needed.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the tensor is not 2-dimensional.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ToVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToVector" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.ToVector">
+  ToVector()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a multi-dimensional tensor into a one-dimensional vector by placing all elements in a single row.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ToVector()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all elements of the tensor in row-major order.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_ToVector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Flattening a tensor means converting it from a multi-dimensional structure
+into a 1D structure (a single line of values). This method takes all the values from your tensor
+and puts them into a vector (a one-dimensional array), reading in row-major order.
+</p>
+<p>
+For example, if you have a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2 tensor:
+[[[1, 2], [3, 4]],
+ [[5, 6], [7, 8]]]
+The flattened vector would be: [1, 2, 3, 4, 5, 6, 7, 8]
+</p>
+<p>
+This is commonly used in machine learning when you need to feed a multi-dimensional structure 
+(like an image or a 3D volume) into an algorithm that only accepts 1D inputs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transform_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transform*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transform_System_Func__0_System_Int32__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transform(System.Func{`0,System.Int32,`0})">
+  Transform(Func&lt;T, int, T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a transformation function to each element of the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Transform(Func&lt;T, int, T&gt; transformer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>transformer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd><p>A function that takes an element value and its index and returns a new value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the transformed values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transform_System_Func__0_System_Int32__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you apply a custom function to every element in the tensor.
+The function receives both the element's value and its position (index).</p>
+<p>For example, you could use this to square every element, add a constant to specific positions,
+or apply any other mathematical operation to the tensor's elements.</p>
+<p>This creates a new tensor and doesn't modify the original tensor.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transpose*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transpose">
+  Transpose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3071"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transposes the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Transpose()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor that is the transpose of this tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Transposing a tensor means swapping its dimensions.
+<p>For different tensor ranks:</p>
+<ul>
+<li>1D tensors: Returns a copy (transpose has no effect on vectors)</li>
+<li>2D tensors: Swaps rows and columns (standard matrix transpose)</li>
+<li>N-D tensors: Reverses all dimensions (e.g., shape [2,3,4] becomes [4,3,2])</li>
+</ul>
+<p>For example, if you have a 2x3 matrix:</p>
+<pre><code>A = [[1, 2, 3],
+     [4, 5, 6]]
+</code></pre>
+<p>Then A.Transpose() would result in a 3x2 matrix:</p>
+<pre><code>[[1, 4],
+ [2, 5],
+ [3, 6]]
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transpose*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose_System_Int32___" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.Transpose(System.Int32[])">
+  Transpose(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L911"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transposes the tensor by rearranging its dimensions according to the specified permutation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Transpose(int[] permutation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>permutation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array specifying the new order of dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with rearranged dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_Transpose_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Transposing a tensor means rearranging its dimensions.</p>
+<p>For example, with a 2D tensor (matrix), transposing swaps rows and columns.
+For higher-dimensional tensors, you can specify exactly how you want to rearrange the dimensions.</p>
+<p>The permutation array indicates the new positions of each dimension:</p>
+<ul>
+<li>For a 3D tensor with shape [2,3,4], a permutation [2,0,1] would result in a tensor with shape [4,2,3]</li>
+<li>The value at position i in the permutation array indicates which dimension of the original tensor
+should be placed at position i in the result</li>
+</ul>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the permutation array length doesn't match the tensor rank or contains invalid values.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_TransposeLast2D_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.TransposeLast2D*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_TransposeLast2D" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.TransposeLast2D">
+  TransposeLast2D()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L3113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Swaps the last two dimensions of the tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TransposeLast2D()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the last two dimensions swapped.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_TransposeLast2D_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is commonly used in batch matrix operations where
+you want to transpose the matrix part of a tensor while keeping batch dimensions intact.
+<p>For example, for a tensor with shape [batch, rows, cols], this will produce
+a tensor with shape [batch, cols, rows].</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  operator +(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two tensors element-wise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; operator +(Tensor&lt;T&gt; left, Tensor&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The first tensor.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the sum of the two tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator adds two tensors together by adding their corresponding elements.
+Both tensors must have exactly the same shape for this to work.
+<p>For example, if you have two 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 matrices:</p>
+<pre><code>A = [[1, 2, 3],     B = [[5, 6, 7],
+     [4, 5, 6]]          [8, 9, 10]]
+</code></pre>
+<p>Then A + B would result in:</p>
+<pre><code>[[1+5, 2+6, 3+7],    [[6, 8, 10],
+ [4+8, 5+9, 6+10]] =  [12, 14, 16]]
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Tensor`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  operator *(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L2485"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; operator *(Tensor&lt;T&gt; left, Tensor&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The first tensor.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the result of the multiplication.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Tensor_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tensor multiplication follows specific rules from linear algebra.
+For 2D tensors (matrices), this performs matrix multiplication where:
+- The number of columns in the first tensor must equal the number of rows in the second tensor
+- The result will have dimensions [rows of first tensor, columns of second tensor]
+<p>For example, multiplying a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â3 tensor by a 3ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor results in a 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â4 tensor.
+This is different from element-wise multiplication, which would require both tensors to have the same shape.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Tensor.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

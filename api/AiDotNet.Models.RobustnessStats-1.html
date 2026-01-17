@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RobustnessStats&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RobustnessStats&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents adversarial robustness diagnostics aggregated over a dataset.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_RobustnessStats_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.RobustnessStats%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.RobustnessStats`1">
+
+
+
+  <h1 id="AiDotNet_Models_RobustnessStats_1" data-uid="AiDotNet.Models.RobustnessStats`1" class="text-break">
+Class RobustnessStats&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents adversarial robustness diagnostics aggregated over a dataset.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class RobustnessStats&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">RobustnessStats&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_RobustnessStats_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This container is designed to integrate with the existing AiDotNet evaluation pipeline by living alongside
+<a class="xref" href="AiDotNet.Statistics.ErrorStats-1.html">ErrorStats&lt;T&gt;</a> and <a class="xref" href="AiDotNet.Statistics.PredictionStats-1.html">PredictionStats&lt;T&gt;</a> within <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats&lt;T, TInput, TOutput&gt;</a>.
+It stores metrics related to model robustness against adversarial attacks and certified defenses.
+</p>
+<p><b>For Beginners:</b> This stores summary robustness metrics (like accuracy under attack)
+for an entire dataset, helping you understand how well your model resists adversarial perturbations.
+<p>Key concepts:</p>
+<ul>
+<li><strong>Clean Accuracy</strong>: How accurate the model is on unmodified inputs</li>
+<li><strong>Adversarial Accuracy</strong>: How accurate the model is when inputs are perturbed by attacks</li>
+<li><strong>Certified Accuracy</strong>: The fraction of samples with provably correct predictions within a perturbation radius</li>
+<li><strong>Attack Success Rate</strong>: How often an attacker can fool the model</li>
+<li><strong>Average Perturbation Size</strong>: How much inputs need to be changed to fool the model</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AdditionalMetrics_" data-uid="AiDotNet.Models.RobustnessStats`1.AdditionalMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AdditionalMetrics" data-uid="AiDotNet.Models.RobustnessStats`1.AdditionalMetrics">
+  AdditionalMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a dictionary of additional robustness metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; AdditionalMetrics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AdditionalMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This stores any extra metrics that don't fit the standard
+properties, allowing for extensibility without changing the class structure.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AdversarialAccuracy_" data-uid="AiDotNet.Models.RobustnessStats`1.AdversarialAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AdversarialAccuracy" data-uid="AiDotNet.Models.RobustnessStats`1.AdversarialAccuracy">
+  AdversarialAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the accuracy of the model on adversarially perturbed inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdversarialAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AdversarialAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how often the model still makes correct predictions
+when inputs have been modified by an adversarial attack. Lower values mean the model is
+more vulnerable to attacks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AttackSuccessRate_" data-uid="AiDotNet.Models.RobustnessStats`1.AttackSuccessRate*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AttackSuccessRate" data-uid="AiDotNet.Models.RobustnessStats`1.AttackSuccessRate">
+  AttackSuccessRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the fraction of inputs for which the attack successfully fooled the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AttackSuccessRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AttackSuccessRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is 1 - AdversarialAccuracy for correctly classified clean inputs.
+A high attack success rate means the model is easy to fool.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AttackType_" data-uid="AiDotNet.Models.RobustnessStats`1.AttackType*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AttackType" data-uid="AiDotNet.Models.RobustnessStats`1.AttackType">
+  AttackType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the type of attack used for adversarial robustness evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string AttackType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AttackType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Different attacks have different strengths:
+- FGSM: Fast but weak
+- PGD: Slower but stronger
+- C&amp;W: Slowest but often finds smallest perturbations
+- AutoAttack: Ensemble of attacks for reliable evaluation
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AverageCertifiedRadius_" data-uid="AiDotNet.Models.RobustnessStats`1.AverageCertifiedRadius*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AverageCertifiedRadius" data-uid="AiDotNet.Models.RobustnessStats`1.AverageCertifiedRadius">
+  AverageCertifiedRadius
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the average certified robustness radius across samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AverageCertifiedRadius { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AverageCertifiedRadius_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the average "safety zone" around inputs where predictions
+are guaranteed to stay the same. Larger radii mean stronger certified robustness.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_AveragePerturbationSize_" data-uid="AiDotNet.Models.RobustnessStats`1.AveragePerturbationSize*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_AveragePerturbationSize" data-uid="AiDotNet.Models.RobustnessStats`1.AveragePerturbationSize">
+  AveragePerturbationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the average size of perturbations needed to create successful adversarial examples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AveragePerturbationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_AveragePerturbationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how much the input needs to be changed on average
+to fool the model. Larger values suggest the model is more robust (harder to fool with
+small changes).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_CertifiedAccuracy_" data-uid="AiDotNet.Models.RobustnessStats`1.CertifiedAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_CertifiedAccuracy" data-uid="AiDotNet.Models.RobustnessStats`1.CertifiedAccuracy">
+  CertifiedAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the certified accuracy at the specified perturbation radius.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CertifiedAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_CertifiedAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the fraction of predictions that are mathematically
+guaranteed to be correct even if the input is perturbed within a certain radius.
+Unlike adversarial accuracy (which tests specific attacks), certified accuracy provides
+provable guarantees against ALL possible perturbations within the radius.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_CleanAccuracy_" data-uid="AiDotNet.Models.RobustnessStats`1.CleanAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_CleanAccuracy" data-uid="AiDotNet.Models.RobustnessStats`1.CleanAccuracy">
+  CleanAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the accuracy of the model on clean (unperturbed) inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CleanAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_CleanAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the normal accuracy you would measure without any attacks.
+It serves as a baseline to compare against adversarial accuracy.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_EvaluationEpsilon_" data-uid="AiDotNet.Models.RobustnessStats`1.EvaluationEpsilon*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_EvaluationEpsilon" data-uid="AiDotNet.Models.RobustnessStats`1.EvaluationEpsilon">
+  EvaluationEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the perturbation radius (epsilon) used for robustness evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EvaluationEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_EvaluationEpsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the maximum allowed perturbation size used when
+evaluating robustness. For image data, this is often around 8/255 ≈ 0.031 for L-infinity
+attacks (imperceptible pixel changes).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_IsEvaluated_" data-uid="AiDotNet.Models.RobustnessStats`1.IsEvaluated*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_IsEvaluated" data-uid="AiDotNet.Models.RobustnessStats`1.IsEvaluated">
+  IsEvaluated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether robustness evaluation has been performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsEvaluated { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_NormType_" data-uid="AiDotNet.Models.RobustnessStats`1.NormType*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_NormType" data-uid="AiDotNet.Models.RobustnessStats`1.NormType">
+  NormType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the norm type used for measuring perturbation size (e.g., &quot;L2&quot;, &quot;Linf&quot;).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string NormType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_RobustnessScore_" data-uid="AiDotNet.Models.RobustnessStats`1.RobustnessScore*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_RobustnessScore" data-uid="AiDotNet.Models.RobustnessStats`1.RobustnessScore">
+  RobustnessScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a combined robustness score (0-1) that balances clean and adversarial performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RobustnessScore { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_RobustnessStats_1_RobustnessScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a single number that summarizes overall robustness.
+Higher values indicate better robustness. The default formula is:
+(CleanAccuracy + AdversarialAccuracy) / 2</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_RobustnessStats_1_Empty_" data-uid="AiDotNet.Models.RobustnessStats`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Models_RobustnessStats_1_Empty" data-uid="AiDotNet.Models.RobustnessStats`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty <a class="xref" href="AiDotNet.Models.RobustnessStats-1.html">RobustnessStats&lt;T&gt;</a> instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RobustnessStats&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.RobustnessStats-1.html">RobustnessStats</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/RobustnessStats.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

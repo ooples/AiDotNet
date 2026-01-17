@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ComplexWaveletFunctionBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ComplexWaveletFunctionBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all complex wavelet function implementations providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1" class="text-break">
+Class ComplexWaveletFunctionBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all complex wavelet function implementations providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class ComplexWaveletFunctionBase&lt;T&gt; : IWaveletFunction&lt;Complex&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for the real and imaginary parts (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ComplexWaveletFunctionBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.ComplexGaussianWavelet-1.html">ComplexGaussianWavelet&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.ComplexMorletWavelet-1.html">ComplexMorletWavelet&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract base class provides shared infrastructure for complex wavelet function implementations,
+including numeric operations support for both the underlying type T and complex operations.
+All complex wavelet functions in the library should inherit from this base class to ensure
+consistent behavior and reduce code duplication.
+</p>
+<p><b>For Beginners:</b> This is a foundation class that all complex wavelets build upon.
+<p>Think of this base class like a blueprint that ensures all complex wavelets have:</p>
+<ul>
+<li>Access to mathematical operations for both real and complex numbers</li>
+<li>A consistent structure that makes them work together</li>
+<li>Shared utilities that every complex wavelet needs</li>
+</ul>
+<p>Complex wavelets work with complex numbers (numbers with real and imaginary parts),
+which allows them to capture both amplitude and phase information in signals.
+This is especially useful for analyzing oscillatory patterns.</p>
+
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_NumOps" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the underlying numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This field holds an implementation of numeric operations that can work with the generic type T.
+It provides methods for basic arithmetic operations, comparisons, and conversions that are used
+throughout the wavelet calculations.
+</p>
+<p><b>For Beginners:</b> This is a helper that lets us do math with different number types.
+<p>Because wavelet classes can work with different types of numbers (like float, double, or decimal),
+we need a special helper that knows how to:</p>
+<ul>
+<li>Add, subtract, multiply, and divide these numbers</li>
+<li>Compare them (greater than, less than, etc.)</li>
+<li>Convert between different number formats</li>
+</ul>
+<p>This allows the wavelet code to work with whatever number type you choose,
+without having to write separate code for each number type.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Complex__0__" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Calculate(AiDotNet.Tensors.LinearAlgebra.Complex{`0})">
+  Calculate(Complex&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the complex wavelet function value at the specified complex point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Complex&lt;T&gt; Calculate(Complex&lt;T&gt; z)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>z</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The complex input point at which to calculate the wavelet value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;</dt>
+    <dd><p>The calculated complex wavelet function value at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Calculate_AiDotNet_Tensors_LinearAlgebra_Complex__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the value of the complex wavelet function at the given complex input point.
+Each complex wavelet type has its own unique shape and mathematical definition.
+</p>
+<p><b>For Beginners:</b> This method tells you what complex value the wavelet has at a specific point.
+<p>Different complex wavelet functions have different shapes. When you ask for the value
+at a specific complex position, this method returns the complex value of the
+wavelet function at that point, containing both real and imaginary components.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Convolve_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Convolve*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Convolve_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Convolve(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}},AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  Convolve(Vector&lt;Complex&lt;T&gt;&gt;, Vector&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs convolution of a complex input signal with a complex filter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;Complex&lt;T&gt;&gt; Convolve(Vector&lt;Complex&lt;T&gt;&gt; input, Vector&lt;Complex&lt;T&gt;&gt; kernel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The complex input signal vector.</p>
+</dd>
+    <dt><code>kernel</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The complex filter vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The convolved complex signal vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Convolve_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This protected method provides convolution functionality for derived complex wavelet classes.
+Convolution is a fundamental operation in wavelet transforms.
+</p>
+<p><b>For Beginners:</b> This helper method slides a filter over a signal and computes weighted sums.
+<p>For complex signals, convolution involves complex multiplication:
+(a + bi) * (c + di) = (ac - bd) + (ad + bc)i</p>
+<p>The result captures how well the filter matches the signal at each position.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  Decompose(Vector&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes a complex input signal using the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract (Vector&lt;Complex&lt;T&gt;&gt; approximation, Vector&lt;Complex&lt;T&gt;&gt; detail) Decompose(Vector&lt;Complex&lt;T&gt;&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The complex input signal to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0--,aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0---.approximation">approximation</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0--,aidotnet.tensors.linearalgebra.vector-aidotnet.tensors.linearalgebra.complex--0---.detail">detail</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail coefficients of the decomposed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the wavelet transform for complex signals, decomposing the input into
+approximation coefficients (low-frequency components) and detail coefficients (high-frequency components).
+</p>
+<p><b>For Beginners:</b> This method breaks down your complex data into two parts.
+<p>When decomposing a complex signal:</p>
+<ul>
+<li>The approximation captures the overall trend or &quot;big picture&quot;</li>
+<li>The detail captures the sharp changes and fine features</li>
+</ul>
+<p>For complex signals, both the amplitude and phase information are preserved
+throughout the decomposition, which is important for applications like
+radar, communications, and audio processing.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Downsample_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Downsample*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Downsample_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___System_Int32_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.Downsample(AiDotNet.Tensors.LinearAlgebra.Vector{AiDotNet.Tensors.LinearAlgebra.Complex{`0}},System.Int32)">
+  Downsample(Vector&lt;Complex&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downsamples a complex signal by keeping only every nth sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static Vector&lt;Complex&lt;T&gt;&gt; Downsample(Vector&lt;Complex&lt;T&gt;&gt; input, int factor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The complex input signal vector.</p>
+</dd>
+    <dt><code>factor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The downsampling factor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The downsampled complex signal vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_Downsample_AiDotNet_Tensors_LinearAlgebra_Vector_AiDotNet_Tensors_LinearAlgebra_Complex__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This protected method provides downsampling functionality for derived complex wavelet classes.
+Downsampling is used in wavelet decomposition to reduce the data size at each level.
+</p>
+<p><b>For Beginners:</b> This method reduces the sampling rate by keeping only every nth sample.
+<p>For example, with factor 2:</p>
+<ul>
+<li>Original: [a, b, c, d, e, f]</li>
+<li>Result: [a, c, e]</li>
+</ul>
+<p>For complex signals, both real and imaginary parts are kept together.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complex scaling coefficients used in the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;Complex&lt;T&gt;&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A vector containing the complex scaling coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the scaling coefficients (also called low-pass filter coefficients)
+used to calculate the approximation (low-frequency) components of the signal during decomposition.
+</p>
+<p><b>For Beginners:</b> These coefficients define how to calculate averages in the transform.
+<p>The scaling coefficients:</p>
+<ul>
+<li>Are used to create the &quot;approximation&quot; part when decomposing a signal</li>
+<li>Act like an averaging or smoothing filter</li>
+<li>Are specific to each type of wavelet</li>
+<li>For complex wavelets, these are complex-valued coefficients</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.ComplexWaveletFunctionBase`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complex wavelet coefficients used in the wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Vector&lt;Complex&lt;T&gt;&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A vector containing the complex wavelet coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_ComplexWaveletFunctionBase_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the wavelet coefficients (also called high-pass filter coefficients)
+used to calculate the detail (high-frequency) components of the signal during decomposition.
+</p>
+<p><b>For Beginners:</b> These coefficients define how to detect details in the transform.
+<p>The wavelet coefficients:</p>
+<ul>
+<li>Are used to create the &quot;detail&quot; part when decomposing a signal</li>
+<li>Act like a difference or edge-detection filter</li>
+<li>Are specific to each type of wavelet</li>
+<li>For complex wavelets, these capture both amplitude and phase variations</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/ComplexWaveletFunctionBase.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

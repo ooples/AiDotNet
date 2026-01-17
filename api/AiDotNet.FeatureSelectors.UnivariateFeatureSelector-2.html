@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class UnivariateFeatureSelector&lt;T, TInput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class UnivariateFeatureSelector&lt;T, TInput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A feature selector that ranks features using univariate statistical tests and selects the top K features.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2.md&amp;value=---%0Auid%3A%20AiDotNet.FeatureSelectors.UnivariateFeatureSelector%602%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2">
+
+
+
+  <h1 id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2" data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2" class="text-break">
+Class UnivariateFeatureSelector&lt;T, TInput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/UnivariateFeatureSelector.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FeatureSelectors.html">FeatureSelectors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A feature selector that ranks features using univariate statistical tests and selects the top K features.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class UnivariateFeatureSelector&lt;T, TInput&gt; : FeatureSelectorBase&lt;T, TInput&gt;, IFeatureSelector&lt;T, TInput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (Matrix, Tensor, etc.).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html">FeatureSelectorBase</a>&lt;T, TInput&gt;</div>
+      <div><span class="xref">UnivariateFeatureSelector&lt;T, TInput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureSelector-2.html">IFeatureSelector</a>&lt;T, TInput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_NumOps">FeatureSelectorBase&lt;T, TInput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_Engine">FeatureSelectorBase&lt;T, TInput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_HigherDimensionStrategy">FeatureSelectorBase&lt;T, TInput&gt;.HigherDimensionStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_DimensionWeights">FeatureSelectorBase&lt;T, TInput&gt;.DimensionWeights</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_SelectFeatures__1_">FeatureSelectorBase&lt;T, TInput&gt;.SelectFeatures(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_SelectFeatureIndices__1_System_Int32_System_Int32_">FeatureSelectorBase&lt;T, TInput&gt;.SelectFeatureIndices(TInput, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FeatureSelectors.FeatureSelectorBase-2.html#AiDotNet_FeatureSelectors_FeatureSelectorBase_2_ExtractFeatureVector__1_System_Int32_System_Int32_">FeatureSelectorBase&lt;T, TInput&gt;.ExtractFeatureVector(TInput, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This feature selector evaluates each feature independently by measuring
+its statistical relationship with the target variable. It then keeps only the features with
+the strongest relationships.
+</p>
+<p>
+Think of it like choosing team members by testing each person individually at a specific skill,
+then picking the top performers. This selector doesn't consider how features work together - it
+evaluates each one on its own merits.
+</p>
+<p>
+The selector supports three types of statistical tests:
+- Chi-Squared: Best for categorical features
+- ANOVA F-Value: Best for continuous features with categorical targets
+- Mutual Information: Works well for any type of feature
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2__ctor_" data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2.#ctor*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Enums_UnivariateScoringFunction_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy_" data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Enums.UnivariateScoringFunction,System.Nullable{System.Int32},AiDotNet.Enums.FeatureExtractionStrategy)">
+  UnivariateFeatureSelector(Vector&lt;T&gt;, UnivariateScoringFunction, int?, FeatureExtractionStrategy)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/UnivariateFeatureSelector.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the UnivariateFeatureSelector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public UnivariateFeatureSelector(Vector&lt;T&gt; target, UnivariateScoringFunction scoringFunction = UnivariateScoringFunction.FValue, int? k = null, FeatureExtractionStrategy higherDimensionStrategy = FeatureExtractionStrategy.Mean)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target variable for evaluating feature relevance.</p>
+</dd>
+    <dt><code>scoringFunction</code> <a class="xref" href="AiDotNet.Enums.UnivariateScoringFunction.html">UnivariateScoringFunction</a></dt>
+    <dd><p>The scoring function to use (default: FValue for ANOVA F-test).</p>
+</dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The number of top features to select. If null, selects 50% of features.</p>
+</dd>
+    <dt><code>higherDimensionStrategy</code> <a class="xref" href="AiDotNet.Enums.FeatureExtractionStrategy.html">FeatureExtractionStrategy</a></dt>
+    <dd><p>Strategy for extracting features from higher-dimensional tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Enums_UnivariateScoringFunction_System_Nullable_System_Int32__AiDotNet_Enums_FeatureExtractionStrategy__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a new univariate feature selector with your chosen settings.
+</p>
+<p>
+The target parameter should be a vector containing the values you're trying to predict (like house prices
+or classification labels). Each element corresponds to one sample in your dataset.
+</p>
+<p>
+The scoringFunction determines which statistical test to use:
+- ChiSquared: Use when both features and target are categorical
+- FValue: Use when features are continuous and target is categorical (default)
+- MutualInformation: Use for any combination of feature and target types
+</p>
+<p>
+The k parameter controls how many features to keep. For example, if you have 100 features and set k=10,
+only the 10 highest-scoring features will be selected. If you don't specify k, it defaults to keeping
+half of your features.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2_SelectFeatureIndices_" data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2.SelectFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2_SelectFeatureIndices__1_System_Int32_System_Int32_" data-uid="AiDotNet.FeatureSelectors.UnivariateFeatureSelector`2.SelectFeatureIndices(`1,System.Int32,System.Int32)">
+  SelectFeatureIndices(TInput, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/UnivariateFeatureSelector.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines which features to select based on univariate statistical scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;int&gt; SelectFeatureIndices(TInput allFeatures, int numSamples, int numFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>allFeatures</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data containing all features.</p>
+</dd>
+    <dt><code>numSamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of samples in the dataset.</p>
+</dd>
+    <dt><code>numFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of features.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of indices of the selected features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FeatureSelectors_UnivariateFeatureSelector_2_SelectFeatureIndices__1_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method:
+1. Calculates a statistical score for each feature measuring its relationship with the target
+2. Ranks features by their scores (higher scores = stronger relationship)
+3. Selects the top K features with the highest scores
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FeatureSelectors/UnivariateFeatureSelector.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TTestResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TTestResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of a t-test, which is a statistical hypothesis test used to determine if there is a significant difference between the means of two groups.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_TTestResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.TTestResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.TTestResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_TTestResult_1" data-uid="AiDotNet.Models.Results.TTestResult`1" class="text-break">
+Class TTestResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of a t-test, which is a statistical hypothesis test used to determine if there is a significant
+difference between the means of two groups.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TTestResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for statistical values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TTestResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_TTestResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The t-test is one of the most commonly used statistical tests for comparing means. This class stores the results of 
+such a test, including the t-statistic, degrees of freedom, p-value, and whether the result is statistically significant. 
+The t-test is used when the test statistic follows a t-distribution under the null hypothesis, which typically occurs 
+when comparing means from normally distributed populations with unknown variances. The class uses generic type parameter 
+T to support different numeric types for the statistical values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> This class stores the results of a t-test, which helps determine if the difference between two groups is statistically significant.
+<p>For example, you might use a t-test to answer questions like:</p>
+<ul>
+<li>Is there a significant difference in test scores between two teaching methods?</li>
+<li>Does a new medication significantly change blood pressure compared to a placebo?</li>
+<li>Are the average sales before and after a marketing campaign significantly different?</li>
+</ul>
+<p>The t-test works by:</p>
+<ol>
+<li>Calculating a t-statistic based on the difference between group means</li>
+<li>Determining how likely this t-statistic would occur by chance</li>
+<li>Producing a p-value that represents this probability</li>
+</ol>
+<p>This test is particularly useful when:</p>
+<ul>
+<li>You're comparing means between two groups</li>
+<li>Your data approximately follows a normal distribution</li>
+<li>You have relatively small sample sizes</li>
+</ul>
+<p>This class stores all the information about the test results, helping you interpret whether
+the observed difference is statistically significant.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1__ctor_" data-uid="AiDotNet.Models.Results.TTestResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1__ctor__0_System_Int32__0__0_" data-uid="AiDotNet.Models.Results.TTestResult`1.#ctor(`0,System.Int32,`0,`0)">
+  TTestResult(T, int, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the TTestResult class with the specified test statistics and parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TTestResult(T tStatistic, int degreesOfFreedom, T pValue, T significanceLevel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tStatistic</code> <span class="xref">T</span></dt>
+    <dd><p>The t-statistic value.</p>
+</dd>
+    <dt><code>degreesOfFreedom</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The degrees of freedom for the t-test.</p>
+</dd>
+    <dt><code>pValue</code> <span class="xref">T</span></dt>
+    <dd><p>The p-value associated with the t-test.</p>
+</dd>
+    <dt><code>significanceLevel</code> <span class="xref">T</span></dt>
+    <dd><p>The significance level used for the test.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1__ctor__0_System_Int32__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new TTestResult instance with the specified test statistics and parameters. It initializes 
+all properties of the class and calculates the IsSignificant property by comparing the p-value to the significance 
+level. The IsSignificant property is set to true if the p-value is less than the significance level, indicating that 
+the test result is statistically significant. This constructor provides a convenient way to create a complete 
+TTestResult object in a single step after performing a t-test.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with all the t-test statistics and parameters.
+<p>When a new TTestResult is created with this constructor:</p>
+<ul>
+<li>All the test statistics and parameters are set to the values you provide</li>
+<li>The IsSignificant property is automatically calculated by comparing the p-value to the significance level</li>
+</ul>
+<p>This constructor is useful because:</p>
+<ul>
+<li>It creates a complete result object in one step</li>
+<li>It automatically determines statistical significance</li>
+<li>It ensures all the related test information is kept together</li>
+</ul>
+<p>The IsSignificant calculation uses MathHelper to compare the p-value to the significance level,
+which works regardless of what numeric type T is (float, double, decimal, etc.).</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1_DegreesOfFreedom_" data-uid="AiDotNet.Models.Results.TTestResult`1.DegreesOfFreedom*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1_DegreesOfFreedom" data-uid="AiDotNet.Models.Results.TTestResult`1.DegreesOfFreedom">
+  DegreesOfFreedom
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degrees of freedom for the t-test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DegreesOfFreedom { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the degrees of freedom.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1_DegreesOfFreedom_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the degrees of freedom for the t-test, which is a parameter that determines the shape of 
+the t-distribution used to calculate the p-value. The degrees of freedom is typically related to the sample sizes 
+of the groups being compared. For an independent samples t-test, it is often calculated as the sum of the sample 
+sizes minus 2, though more complex formulas may be used for Welch's t-test or other variants. For a paired t-test, 
+it is typically the number of pairs minus 1. As the degrees of freedom increases, the t-distribution approaches the 
+normal distribution.
+</p>
+<p><b>For Beginners:</b> This value helps determine the shape of the t-distribution used to calculate the p-value.
+<p>The degrees of freedom:</p>
+<ul>
+<li>Is related to your sample size</li>
+<li>Affects the critical values used to determine significance</li>
+<li>Influences how conservative the test is</li>
+</ul>
+<p>For common t-tests:</p>
+<ul>
+<li>Independent samples t-test: df = n1 + n2 - 2 (where n1 and n2 are the sample sizes)</li>
+<li>Paired t-test: df = n - 1 (where n is the number of pairs)</li>
+<li>Welch's t-test: uses a more complex formula that accounts for unequal variances</li>
+</ul>
+<p>As degrees of freedom increase:</p>
+<ul>
+<li>The t-distribution becomes closer to a normal distribution</li>
+<li>The test becomes more powerful (better at detecting real differences)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1_IsSignificant_" data-uid="AiDotNet.Models.Results.TTestResult`1.IsSignificant*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1_IsSignificant" data-uid="AiDotNet.Models.Results.TTestResult`1.IsSignificant">
+  IsSignificant
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the t-test result is statistically significant.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSignificant { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the result is statistically significant; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1_IsSignificant_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the t-test result is statistically significant at the specified significance level. 
+A result is considered significant if the p-value is less than the significance level. Statistical significance 
+suggests that the observed difference between the groups is unlikely to have occurred by chance alone, leading to 
+the rejection of the null hypothesis that the means are equal. This property provides a convenient boolean indicator 
+of significance without requiring the user to compare the p-value to the significance level.
+</p>
+<p><b>For Beginners:</b> This tells you whether your result is statistically significant or not.
+<p>The significance indicator:</p>
+<ul>
+<li>Provides a simple yes/no answer about statistical significance</li>
+<li>True means the difference between groups is statistically significant</li>
+<li>False means the difference could reasonably be due to random chance</li>
+</ul>
+<p>This is determined by:</p>
+<ul>
+<li>Comparing the p-value to the significance level</li>
+</ul>
+<p>This value makes it easy to interpret your results without having to manually
+check if the p-value is below the significance threshold. It's particularly
+useful when automating analysis or presenting results to non-statisticians.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1_PValue_" data-uid="AiDotNet.Models.Results.TTestResult`1.PValue*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1_PValue" data-uid="AiDotNet.Models.Results.TTestResult`1.PValue">
+  PValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the p-value associated with the t-test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated p-value.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1_PValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the p-value of the t-test, which is the probability of observing a t-statistic as extreme 
+as, or more extreme than, the one calculated from the sample data, assuming the null hypothesis is true. The null 
+hypothesis typically states that there is no difference between the means of the groups being compared. A small 
+p-value (typically = 0.05) suggests that the observed difference is unlikely under the null hypothesis, leading to 
+its rejection in favor of the alternative hypothesis that the means differ. The p-value is calculated from the 
+t-statistic and the degrees of freedom using the cumulative distribution function of the t-distribution.
+</p>
+<p><b>For Beginners:</b> This value tells you how likely your results could occur by random chance.
+<p>The p-value:</p>
+<ul>
+<li>Ranges from 0 to 1</li>
+<li>Smaller values indicate stronger evidence against the null hypothesis</li>
+<li>Represents the probability of seeing your results (or more extreme) if the groups are actually the same</li>
+</ul>
+<p>Common interpretation:</p>
+<ul>
+<li>p = 0.05: Results are statistically significant (commonly used threshold)</li>
+<li>p = 0.01: Results are highly significant</li>
+<li>p &gt; 0.05: Results are not statistically significant</li>
+</ul>
+<p>For example, a p-value of 0.03 means there's only a 3% chance of seeing a difference
+as large as yours if the groups truly have the same mean, suggesting the difference
+is likely real and not due to random chance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1_SignificanceLevel_" data-uid="AiDotNet.Models.Results.TTestResult`1.SignificanceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1_SignificanceLevel" data-uid="AiDotNet.Models.Results.TTestResult`1.SignificanceLevel">
+  SignificanceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the significance level used for the test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SignificanceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The significance level, typically 0.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1_SignificanceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the significance level used for the t-test, which is the threshold p-value below which the 
+result is considered statistically significant. Common values are 0.05 (5%), 0.01 (1%), and 0.001 (0.1%). The 
+significance level represents the probability of rejecting the null hypothesis when it is actually true (Type I error). 
+A lower significance level reduces the risk of Type I errors but increases the risk of Type II errors (failing to 
+reject a false null hypothesis).
+</p>
+<p><b>For Beginners:</b> This value is the threshold that determines when a result is considered statistically significant.
+<p>The significance level:</p>
+<ul>
+<li>Is typically set to 0.05 (5%) by convention</li>
+<li>Represents your tolerance for false positives</li>
+<li>Lower values (like 0.01) make the test more conservative</li>
+<li>Higher values (like 0.10) make the test more lenient</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It directly determines whether a result is considered &quot;significant&quot;</li>
+<li>It represents the risk you're willing to take of finding a difference when none exists</li>
+</ul>
+<p>For example, with a significance level of 0.05, you're accepting a 5% chance of
+incorrectly concluding there's a difference when there's actually none.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_TTestResult_1_TStatistic_" data-uid="AiDotNet.Models.Results.TTestResult`1.TStatistic*"></a>
+
+  <h3 id="AiDotNet_Models_Results_TTestResult_1_TStatistic" data-uid="AiDotNet.Models.Results.TTestResult`1.TStatistic">
+  TStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the t-statistic value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TStatistic { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated t-statistic.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_TTestResult_1_TStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the t-statistic, which is a measure of the difference between the groups being compared, 
+scaled by the variability in the data. The t-statistic is calculated by dividing the difference between the means 
+by the standard error of the difference. A larger absolute value of the t-statistic indicates a greater difference 
+between the groups relative to the variability within the groups. The sign of the t-statistic indicates the direction 
+of the difference (positive if the first group mean is larger, negative if the second group mean is larger).
+</p>
+<p><b>For Beginners:</b> This value measures how different your groups are, taking into account the variability in your data.
+<p>The t-statistic:</p>
+<ul>
+<li>Measures the size of the difference between groups relative to the variation within groups</li>
+<li>Larger absolute values indicate stronger evidence of a real difference</li>
+<li>The sign (+ or -) indicates which group has the higher mean</li>
+</ul>
+<p>For example, a t-statistic of 2.5 suggests the difference between groups is 2.5 times
+larger than what you might expect from random variation alone.</p>
+<p>This value is important because:</p>
+<ul>
+<li>It's used to calculate the p-value</li>
+<li>It indicates both the direction and magnitude of the effect</li>
+<li>It can be compared to critical values from t-distribution tables</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/TTestResult.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

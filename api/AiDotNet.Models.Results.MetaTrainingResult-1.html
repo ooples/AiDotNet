@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaTrainingResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaTrainingResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Results from a complete meta-training run with history tracking.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_MetaTrainingResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.MetaTrainingResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.MetaTrainingResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_MetaTrainingResult_1" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1" class="text-break">
+Class MetaTrainingResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Results from a complete meta-training run with history tracking.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MetaTrainingResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaTrainingResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_MetaTrainingResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class aggregates metrics across an entire meta-training session, tracking how performance
+evolves over many meta-iterations. It combines the functionality of what were previously separate
+"Metrics" and "Metadata" classes into a unified Result pattern consistent with the codebase.
+</p>
+<p><b>For Beginners:</b> Meta-training is the process of training your model to be good at
+learning new tasks quickly. This happens over many iterations:
+<ol>
+<li>Sample a batch of tasks</li>
+<li>Adapt to each task (inner loop)</li>
+<li>Update meta-parameters based on how well adaptations worked (outer loop)</li>
+<li>Repeat for many iterations</li>
+</ol>
+<p>This result tracks:</p>
+<ul>
+<li><b>Learning curves:</b> How loss and accuracy change over iterations</li>
+<li><b>Final performance:</b> The end results after training</li>
+<li><b>Training time:</b> How long it took</li>
+<li><b>Convergence:</b> Whether training successfully improved the model</li>
+</ul>
+<p>Use this to:</p>
+<ul>
+<li>Monitor training progress</li>
+<li>Diagnose training issues</li>
+<li>Compare different meta-learning configurations</li>
+<li>Report results in papers or documentation</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1__ctor_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_TimeSpan_System_Collections_Generic_Dictionary_System_String__0__" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.TimeSpan,System.Collections.Generic.Dictionary{System.String,`0})">
+  MetaTrainingResult(Vector&lt;T&gt;, Vector&lt;T&gt;, TimeSpan, Dictionary&lt;string, T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with complete training history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaTrainingResult(Vector&lt;T&gt; lossHistory, Vector&lt;T&gt; accuracyHistory, TimeSpan trainingTime, Dictionary&lt;string, T&gt;? additionalMetrics = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lossHistory</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Meta-loss values from each training iteration.</p>
+</dd>
+    <dt><code>accuracyHistory</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Accuracy values from each training iteration.</p>
+</dd>
+    <dt><code>trainingTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>Total time taken for training.</p>
+</dd>
+    <dt><code>additionalMetrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Optional algorithm-specific metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_TimeSpan_System_Collections_Generic_Dictionary_System_String__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor follows the established pattern of accepting raw data and deriving
+computed properties from it. The history vectors should contain one value per training
+iteration, in chronological order.
+</p>
+<p><b>For Beginners:</b> Call this at the end of training to package all your
+training history together. The constructor automatically calculates derived metrics
+like FinalLoss, InitialLoss, etc.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when lossHistory or accuracyHistory is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when vectors have different lengths or are empty.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_AccuracyHistory_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.AccuracyHistory*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_AccuracyHistory" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.AccuracyHistory">
+  AccuracyHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the accuracy history across all iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; AccuracyHistory { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector where each element is the average accuracy for that iteration.
+Higher values indicate better meta-learning performance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_AdditionalMetrics_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.AdditionalMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_AdditionalMetrics" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.AdditionalMetrics">
+  AdditionalMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets algorithm-specific metrics collected during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; AdditionalMetrics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary of custom metrics with generic T values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_AdditionalMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Common additional metrics include:
+- "best_loss": Lowest loss achieved during training
+- "best_accuracy": Highest accuracy achieved during training
+- "gradient_norm_avg": Average gradient magnitude
+- "tasks_per_second": Training throughput
+- "convergence_iteration": When loss stabilized
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_FinalAccuracy_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FinalAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_FinalAccuracy" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FinalAccuracy">
+  FinalAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the final accuracy after training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalAccuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The accuracy from the last iteration, representing final training performance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_FinalLoss_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FinalLoss*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_FinalLoss" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FinalLoss">
+  FinalLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the final meta-loss after training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalLoss { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The meta-loss from the last iteration, representing final training performance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_InitialAccuracy_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.InitialAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_InitialAccuracy" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.InitialAccuracy">
+  InitialAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the initial accuracy before training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T InitialAccuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The accuracy from the first iteration, representing baseline performance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_InitialLoss_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.InitialLoss*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_InitialLoss" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.InitialLoss">
+  InitialLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the initial meta-loss before training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T InitialLoss { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The meta-loss from the first iteration, representing baseline performance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_LossHistory_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.LossHistory*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_LossHistory" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.LossHistory">
+  LossHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the meta-loss history across all iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; LossHistory { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector where each element is the meta-loss for that iteration.
+Lower values indicate better meta-learning performance.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_LossHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Use this for:
+- Plotting learning curves
+- Detecting convergence or divergence
+- Implementing early stopping
+- Comparing training runs
+<p>The meta-loss measures how well the model adapts across tasks in the outer loop.
+It should generally decrease over training.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_TotalIterations_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.TotalIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_TotalIterations" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.TotalIterations">
+  TotalIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of meta-training iterations completed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalIterations { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The count of outer loop updates performed during training.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_TotalIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Each iteration represents one complete cycle of:
+- Sample tasks → Adapt to each → Update meta-parameters
+<p>More iterations generally lead to better meta-learning, but with diminishing returns.
+Typical values: 10,000-60,000 for research, 1,000-10,000 for practice.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_TrainingTime_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.TrainingTime*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_TrainingTime" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.TrainingTime">
+  TrainingTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total time taken for meta-training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TrainingTime { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>The elapsed time from start to finish of training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_CalculateAccuracyImprovement_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.CalculateAccuracyImprovement*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_CalculateAccuracyImprovement" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.CalculateAccuracyImprovement">
+  CalculateAccuracyImprovement()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the total improvement in accuracy from start to finish.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateAccuracyImprovement()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The difference between final and initial accuracy (positive means improvement).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_CalculateLossImprovement_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.CalculateLossImprovement*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_CalculateLossImprovement" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.CalculateLossImprovement">
+  CalculateLossImprovement()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the total improvement in loss from start to finish.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateLossImprovement()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The difference between initial and final loss (positive means improvement).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_CalculateLossImprovement_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how much the model improved during training.
+<ul>
+<li>Positive value: Loss decreased (good!)</li>
+<li>Zero: No improvement (needs investigation)</li>
+<li>Negative value: Loss increased (training problem)</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>Initial loss: 2.5</li>
+<li>Final loss: 0.8</li>
+<li>Improvement: 1.7 (68% reduction)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_FindBestAccuracy_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FindBestAccuracy*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_FindBestAccuracy" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FindBestAccuracy">
+  FindBestAccuracy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best (highest) accuracy achieved during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T BestAccuracy, int Iteration) FindBestAccuracy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.bestloss">BestLoss</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.iteration">Iteration</a>)</dt>
+    <dd><p>A tuple containing the best accuracy value and the iteration it occurred at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_FindBestLoss_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FindBestLoss*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_FindBestLoss" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.FindBestLoss">
+  FindBestLoss()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best (lowest) loss achieved during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T BestLoss, int Iteration) FindBestLoss()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.bestloss">BestLoss</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.int32-.iteration">Iteration</a>)</dt>
+    <dd><p>A tuple containing the best loss value and the iteration it occurred at.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_FindBestLoss_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> The best loss might occur before the final iteration,
+especially if:
+- Learning rate is too high (oscillation)
+- Training ran too long (overfitting to training tasks)
+- Need early stopping or learning rate decay
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_GenerateReport_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.GenerateReport*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_GenerateReport" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.GenerateReport">
+  GenerateReport()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a comprehensive training report.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateReport()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A formatted string summarizing training results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_GenerateReport_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a human-readable summary of your training run
+that you can print, log, or include in documentation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaTrainingResult_1_HasConverged_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.HasConverged*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaTrainingResult_1_HasConverged_System_Int32_System_Double_" data-uid="AiDotNet.Models.Results.MetaTrainingResult`1.HasConverged(System.Int32,System.Double)">
+  HasConverged(int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if training converged based on loss stabilization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasConverged(int windowSize = 100, double varianceThreshold = 0.001)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>windowSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of recent iterations to analyze (default: 100).</p>
+</dd>
+    <dt><code>varianceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum variance to consider converged (default: 0.001).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if loss variance in recent window is below threshold.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaTrainingResult_1_HasConverged_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Use this to:
+- Implement automatic early stopping
+- Validate training completion
+- Diagnose non-convergent runs
+<p>Convergence means the loss has stabilized and further training is unlikely to help.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaTrainingResult.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,1104 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class JitCompiler | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class JitCompiler | AiDotNet Documentation ">
+      
+      <meta name="description" content="Just-In-Time compiler for computation graphs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_JitCompiler.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.JitCompiler%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.JitCompiler">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_JitCompiler" data-uid="AiDotNet.JitCompiler.JitCompiler" class="text-break">
+Class JitCompiler  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Just-In-Time compiler for computation graphs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class JitCompiler : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">JitCompiler</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_JitCompiler_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The JitCompiler is the main entry point for JIT compilation in AiDotNet. It provides
+a high-level API for compiling computation graphs to optimized executable code.
+The compiler automatically handles:
+- IR graph construction from ComputationNode graphs
+- Optimization passes (constant folding, dead code elimination, operation fusion)
+- Code generation and compilation
+- Caching of compiled graphs for reuse
+</p>
+<p><b>For Beginners:</b> This compiles your neural network graphs to run much faster.
+<p>Think of it like this:</p>
+<ul>
+<li>Without JIT: Your model runs by interpreting each operation step-by-step (slow)</li>
+<li>With JIT: Your model is compiled to optimized machine code (fast!)</li>
+</ul>
+<p>How to use:</p>
+<ol>
+<li>Create a JitCompiler instance (once)</li>
+<li>Pass your computation graph to Compile()</li>
+<li>Get back a compiled function</li>
+<li>Call that function with your inputs (runs 5-10x faster!)</li>
+</ol>
+<p>Example:
+var jit = new JitCompiler();
+var compiled = jit.Compile(myGraph, inputs);
+var results = compiled(inputTensors);  // Fast execution!</p>
+<p>The JIT compiler:</p>
+<ul>
+<li>Automatically optimizes your graph</li>
+<li>Caches compiled code for reuse</li>
+<li>Handles all the complexity internally</li>
+<li>Just works!</li>
+</ul>
+<p>Expected speedup: 5-10x for typical neural networks</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler__ctor_" data-uid="AiDotNet.JitCompiler.JitCompiler.#ctor*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler__ctor" data-uid="AiDotNet.JitCompiler.JitCompiler.#ctor">
+  JitCompiler()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.JitCompiler.JitCompiler.html">JitCompiler</a> class with default options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public JitCompiler()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new JIT compiler with standard optimization passes enabled:
+- Constant folding
+- Dead code elimination
+- Operation fusion
+</p>
+<p><b>For Beginners:</b> Creates a JIT compiler ready to use.
+<p>The compiler is created with good default settings:</p>
+<ul>
+<li>All standard optimizations enabled</li>
+<li>Caching enabled for fast repeated compilation</li>
+<li>Ready to compile graphs immediately</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler__ctor_" data-uid="AiDotNet.JitCompiler.JitCompiler.#ctor*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler__ctor_AiDotNet_JitCompiler_JitCompilerOptions_" data-uid="AiDotNet.JitCompiler.JitCompiler.#ctor(AiDotNet.JitCompiler.JitCompilerOptions)">
+  JitCompiler(JitCompilerOptions)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.JitCompiler.JitCompiler.html">JitCompiler</a> class with custom options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public JitCompiler(JitCompilerOptions options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.JitCompiler.JitCompilerOptions.html">JitCompilerOptions</a></dt>
+    <dd><p>Configuration options for the compiler.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler__ctor_AiDotNet_JitCompiler_JitCompilerOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new JIT compiler with specified options. This allows you to:
+- Enable/disable specific optimizations
+- Configure caching behavior
+- Control compilation settings
+</p>
+<p><b>For Beginners:</b> Creates a JIT compiler with custom settings.
+<p>Use this if you want to:</p>
+<ul>
+<li>Turn off certain optimizations for debugging</li>
+<li>Disable caching for testing</li>
+<li>Customize compilation behavior</li>
+</ul>
+<p>For most users, the default constructor is fine!</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_TensorPool_" data-uid="AiDotNet.JitCompiler.JitCompiler.TensorPool*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_TensorPool" data-uid="AiDotNet.JitCompiler.JitCompiler.TensorPool">
+  TensorPool
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L752"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the tensor memory pool if memory pooling is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorPool? TensorPool { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.Memory.TensorPool.html">TensorPool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_TensorPool_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Access the memory pool for manual buffer management.
+<p>Usually you don't need to use this directly - the JIT compiler manages memory
+automatically. But if you want fine-grained control over memory allocation
+in your code, you can use this pool.</p>
+<p>Example:
+if (jit.TensorPool != null)
+{
+var buffer = jit.TensorPool.Rent&lt;float&gt;(1000);
+// Use buffer...
+jit.TensorPool.Return(buffer);
+}</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_AnalyzeCompatibility_" data-uid="AiDotNet.JitCompiler.JitCompiler.AnalyzeCompatibility*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_AnalyzeCompatibility__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.AnalyzeCompatibility``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  AnalyzeCompatibility&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L795"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a computation graph to determine JIT compatibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public JitCompatibilityResult AnalyzeCompatibility&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.JitCompatibilityResult.html">JitCompatibilityResult</a></dt>
+    <dd><p>A compatibility result describing which operations are supported.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_AnalyzeCompatibility__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this before compiling to see if your graph is JIT-compatible.
+<p>This method:</p>
+<ul>
+<li>Walks through your entire computation graph</li>
+<li>Checks each operation against the supported list</li>
+<li>Reports which operations will be JIT-compiled vs. need fallback</li>
+<li>Tells you if hybrid mode is available</li>
+</ul>
+<p>Example:
+var compat = jit.AnalyzeCompatibility(output, inputs);
+if (compat.IsFullySupported)
+{
+Console.WriteLine(&quot;Graph can be fully JIT compiled!&quot;);
+}
+else
+{
+Console.WriteLine($&quot;Partial support: {compat.SupportedPercentage:F0}%&quot;);
+foreach (var unsupported in compat.UnsupportedOperations)
+{
+Console.WriteLine($&quot;  - {unsupported}&quot;);
+}
+}</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_ClearCache_" data-uid="AiDotNet.JitCompiler.JitCompiler.ClearCache*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_ClearCache" data-uid="AiDotNet.JitCompiler.JitCompiler.ClearCache">
+  ClearCache()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the compiled graph cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearCache()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_ClearCache_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This clears all cached compiled graphs.
+<p>Use this when:</p>
+<ul>
+<li>You want to free memory</li>
+<li>You're testing and want fresh compilations</li>
+<li>You've changed compilation settings</li>
+</ul>
+<p>After clearing, the next Compile() will be slower but subsequent
+calls with the same graph will be fast again (cached).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_ClearTensorPool_" data-uid="AiDotNet.JitCompiler.JitCompiler.ClearTensorPool*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_ClearTensorPool" data-uid="AiDotNet.JitCompiler.JitCompiler.ClearTensorPool">
+  ClearTensorPool()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L1509"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the tensor memory pool, releasing all cached buffers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearTensorPool()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_CompileBackwardWithStats_" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileBackwardWithStats*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_CompileBackwardWithStats__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileBackwardWithStats``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  CompileBackwardWithStats&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compiles the backward pass and returns compilation statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; CompiledBackward, CompilationStats Stats) CompileBackwardWithStats&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to compute gradients for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,aidotnet.jitcompiler.compilationstats-.compiledfunc">CompiledFunc</a>, <a class="xref" href="AiDotNet.JitCompiler.CompilationStats.html">CompilationStats</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,aidotnet.jitcompiler.compilationstats-.stats">Stats</a>)</dt>
+    <dd><p>A tuple of (compiled backward function, compilation statistics).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_CompileBackwardWithStats__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Compiles gradient computation and shows optimization details.
+<p>Use this to:</p>
+<ul>
+<li>See how much the backward pass was optimized</li>
+<li>Understand what optimizations were applied</li>
+<li>Debug gradient computation issues</li>
+<li>Monitor compilation performance</li>
+</ul>
+<p>The statistics tell you:</p>
+<ul>
+<li>How many gradient operations were generated</li>
+<li>How many operations after optimization</li>
+<li>What optimizations were applied (fusion of backward ops!)</li>
+<li>Cache hit information</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if outputNode or inputs is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_CompileBackward_" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileBackward*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_CompileBackward__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileBackward``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  CompileBackward&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L356"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; CompileBackward&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_CompileWithFallback_" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithFallback*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_CompileWithFallback__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithFallback``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  CompileWithFallback&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L669"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compiles a computation graph with automatic fallback to interpreted execution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; Func, bool WasJitCompiled, string? Message) CompileWithFallback&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,system.boolean,system.string-.func">Func</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,system.boolean,system.string-.wasjitcompiled">WasJitCompiled</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,system.boolean,system.string-.message">Message</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>The executable function (JIT compiled or interpreted fallback)</li>
+<li>Whether JIT compilation succeeded</li>
+<li>Any warning or error message</li>
+</ul>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_CompileWithFallback__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the most robust way to compile a graph.
+<p>It tries JIT compilation first. If that fails, it automatically falls back
+to interpreted execution (slower but always works).</p>
+<p>You get the best performance when JIT works, and guaranteed execution when it doesn't.</p>
+<p>Example:
+var (func, wasJitted, message) = jit.CompileWithFallback(output, inputs);
+if (!wasJitted)
+{
+Console.WriteLine($&quot;Using interpreted fallback: {message}&quot;);
+}
+// func is always usable!
+var result = func(inputTensors);</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_CompileWithStats_" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithStats*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_CompileWithStats__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithStats``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  CompileWithStats&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compiles a computation graph and returns compilation statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; CompiledFunc, CompilationStats Stats) CompileWithStats&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,aidotnet.jitcompiler.compilationstats-.compiledfunc">CompiledFunc</a>, <a class="xref" href="AiDotNet.JitCompiler.CompilationStats.html">CompilationStats</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.func-aidotnet.tensors.linearalgebra.tensor---0-[],aidotnet.tensors.linearalgebra.tensor---0-[]-,aidotnet.jitcompiler.compilationstats-.stats">Stats</a>)</dt>
+    <dd><p>A tuple of (compiled function, compilation statistics).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_CompileWithStats__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This compiles your graph and tells you what optimizations were applied.
+<p>Use this when you want to:</p>
+<ul>
+<li>See how much the graph was optimized</li>
+<li>Debug compilation issues</li>
+<li>Understand what the JIT compiler is doing</li>
+</ul>
+<p>The statistics tell you:</p>
+<ul>
+<li>How many operations were in the original graph</li>
+<li>How many operations after optimization</li>
+<li>What optimizations were applied</li>
+<li>How much speedup to expect</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if outputNode or inputs is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_CompileWithUnsupportedHandling_" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithUnsupportedHandling*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_CompileWithUnsupportedHandling__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.CompileWithUnsupportedHandling``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  CompileWithUnsupportedHandling&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L1049"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compiles a computation graph with intelligent handling of unsupported operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public HybridCompilationResult&lt;T&gt; CompileWithUnsupportedHandling&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.HybridCompilationResult-1.html">HybridCompilationResult</a>&lt;T&gt;</dt>
+    <dd><p>A result containing the compiled function, whether JIT was used,
+compatibility information, and any warnings.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_CompileWithUnsupportedHandling__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the recommended way to compile graphs with mixed support.
+<p>This method automatically:</p>
+<ol>
+<li>Analyzes your graph for JIT compatibility</li>
+<li>Based on UnsupportedLayerHandling setting:
+<ul>
+<li>Throw: Fails if any operation is unsupported</li>
+<li>Fallback: Uses interpreted execution if anything is unsupported</li>
+<li>Hybrid: JIT-compiles what it can, interprets the rest</li>
+<li>Skip: Ignores unsupported operations (dangerous!)</li>
+</ul>
+</li>
+<li>Returns a function that always works, plus useful diagnostics</li>
+</ol>
+<p>Example:
+var result = jit.CompileWithUnsupportedHandling(output, inputs);
+if (!result.IsFullyJitCompiled)
+{
+Console.WriteLine($&quot;Hybrid mode: {result.Compatibility.SupportedPercentage:F0}% JIT compiled&quot;);
+}
+var predictions = result.CompiledFunc(inputTensors);</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_Compile_" data-uid="AiDotNet.JitCompiler.JitCompiler.Compile*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_Compile__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.JitCompiler.Compile``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  Compile&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt; Compile&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_Dispose_" data-uid="AiDotNet.JitCompiler.JitCompiler.Dispose*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_Dispose" data-uid="AiDotNet.JitCompiler.JitCompiler.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L1517"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases all resources used by the JIT compiler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_GetCacheStats_" data-uid="AiDotNet.JitCompiler.JitCompiler.GetCacheStats*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_GetCacheStats" data-uid="AiDotNet.JitCompiler.JitCompiler.GetCacheStats">
+  GetCacheStats()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L533"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about the compilation cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CacheStats GetCacheStats()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.CacheStats.html">CacheStats</a></dt>
+    <dd><p>Cache statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_GetCacheStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many graphs are cached.
+<p>Useful for:</p>
+<ul>
+<li>Monitoring memory usage</li>
+<li>Understanding cache efficiency</li>
+<li>Debugging caching behavior</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_GetSupportedOperationTypes_" data-uid="AiDotNet.JitCompiler.JitCompiler.GetSupportedOperationTypes*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_GetSupportedOperationTypes" data-uid="AiDotNet.JitCompiler.JitCompiler.GetSupportedOperationTypes">
+  GetSupportedOperationTypes()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L877"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the set of operation types that are fully supported by the JIT compiler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static HashSet&lt;OperationType&gt; GetSupportedOperationTypes()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.hashset-1">HashSet</a>&lt;<a class="xref" href="AiDotNet.Enums.OperationType.html">OperationType</a>&gt;</dt>
+    <dd><p>A set of supported operation type enums.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_GetSupportedOperationTypes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you which operations can be JIT compiled.
+<p>Supported operations include:</p>
+<ul>
+<li>Basic math: Add, Subtract, Multiply, Divide, Power, Negate</li>
+<li>Math functions: Exp, Log, Sqrt</li>
+<li>Activations: ReLU, Sigmoid, Tanh, Softmax</li>
+<li>Matrix ops: MatMul, Transpose</li>
+<li>Convolutions: Conv2D, ConvTranspose2D, DepthwiseConv2D</li>
+<li>Pooling: MaxPool2D, AvgPool2D</li>
+<li>Normalization: LayerNorm, BatchNorm</li>
+<li>And more...</li>
+</ul>
+<p>If your operation isn't listed, it will need fallback execution.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_GetTensorPoolStats_" data-uid="AiDotNet.JitCompiler.JitCompiler.GetTensorPoolStats*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_GetTensorPoolStats" data-uid="AiDotNet.JitCompiler.JitCompiler.GetTensorPoolStats">
+  GetTensorPoolStats()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L758"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about the tensor memory pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorPoolStats? GetTensorPoolStats()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.Memory.TensorPoolStats.html">TensorPoolStats</a></dt>
+    <dd><p>Pool statistics, or null if memory pooling is disabled.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_JitCompiler_JitCompiler_TryCompile_" data-uid="AiDotNet.JitCompiler.JitCompiler.TryCompile*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_JitCompiler_TryCompile__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor___0____AiDotNet_Tensors_LinearAlgebra_Tensor___0______System_String__" data-uid="AiDotNet.JitCompiler.JitCompiler.TryCompile``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[],AiDotNet.Tensors.LinearAlgebra.Tensor{``0}[]}@,System.String@)">
+  TryCompile&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;, out Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt;?, out string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Attempts to compile a computation graph without throwing exceptions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TryCompile&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs, out Func&lt;Tensor&lt;T&gt;[], Tensor&lt;T&gt;[]&gt;? compiledFunc, out string? error)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+    <dt><code>compiledFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[], <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]&gt;</dt>
+    <dd><p>When this method returns true, contains the compiled function.</p>
+</dd>
+    <dt><code>error</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>When this method returns false, contains the error message.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if compilation succeeded, false otherwise.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for tensor elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_JitCompiler_TryCompile__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor___0____AiDotNet_Tensors_LinearAlgebra_Tensor___0______System_String___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a safe version of Compile that won't crash your program.
+<p>Instead of throwing an exception when something goes wrong, it returns false
+and tells you what went wrong through the error parameter.</p>
+<p>Example:
+if (jit.TryCompile(output, inputs, out var compiled, out var error))
+{
+// Use compiled function
+var result = compiled(inputTensors);
+}
+else
+{
+// Handle error gracefully
+Console.WriteLine($&quot;JIT compilation failed: {error}&quot;);
+// Fall back to interpreted execution
+}</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/JitCompiler.cs/#L51" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

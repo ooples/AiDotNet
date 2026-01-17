@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IModelCompressionStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IModelCompressionStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for model compression strategies used to reduce model size while preserving accuracy.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IModelCompressionStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IModelCompressionStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IModelCompressionStrategy_1" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1" class="text-break">
+Interface IModelCompressionStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for model compression strategies used to reduce model size while preserving accuracy.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IModelCompressionStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Model compression is the process of making AI models smaller and faster
+without significantly hurting their performance.
+<p>Think of it like compressing a video file - you want to reduce the file size so it's easier to
+store and share, but you still want the video to look good. Similarly, model compression reduces
+the memory needed to store an AI model and can make it run faster, which is especially important
+for deploying models on mobile devices or in the cloud where storage and processing costs matter.</p>
+<p>Different compression strategies work in different ways:</p>
+<ul>
+<li>Some group similar values together (clustering)</li>
+<li>Some remove less important parts (pruning)</li>
+<li>Some use clever encoding schemes to store data more efficiently (quantization, Huffman coding)</li>
+</ul>
+<p>This interface supports ALL types of neural network data:</p>
+<ul>
+<li>Vectors (1D): Bias terms, embeddings</li>
+<li>Matrices (2D): Fully connected layer weights</li>
+<li>Tensors (N-D): Convolutional filters, attention weights</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CalculateCompressionRatio_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CalculateCompressionRatio*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CalculateCompressionRatio_System_Int64_System_Int64_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CalculateCompressionRatio(System.Int64,System.Int64)">
+  CalculateCompressionRatio(long, long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the compression ratio achieved.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">double CalculateCompressionRatio(long originalSize, long compressedSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>originalSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The original size in bytes.</p>
+</dd>
+    <dt><code>compressedSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The compressed size in bytes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The compression ratio (original size / compressed size).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CalculateCompressionRatio_System_Int64_System_Int64__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The compression ratio tells you how much smaller the compressed model is
+compared to the original. It's calculated as: original size ÷ compressed size.</p>
+<p>For example:</p>
+<ul>
+<li>A ratio of 2.0 means the compressed model is half the size (50% reduction)</li>
+<li>A ratio of 10.0 means it's one-tenth the size (90% reduction)</li>
+<li>A ratio of 50.0 means it's one-fiftieth the size (98% reduction)</li>
+</ul>
+<p>Higher compression ratios are better (more compression), but you need to balance this with
+accuracy - extreme compression might hurt model performance. The goal is to find the sweet
+spot where you get significant size reduction without losing too much accuracy.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Compress_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.Compress*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Compress_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.Compress(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Compress(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses the given model weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Vector&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata) Compress(Vector&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The original model weights to compress.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.interfaces.icompressionmetadata--0--.compressedweights">compressedWeights</a>, <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.interfaces.icompressionmetadata--0--.metadata">metadata</a>)</dt>
+    <dd><p>A tuple containing the compressed weights and compression metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Compress_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes the original weights from your AI model and compresses them
+to use less memory. The weights are the learned parameters that make your model work - they're like
+the knowledge the model has gained during training.</p>
+<p>The method returns two things:</p>
+<ol>
+<li>The compressed weights (smaller in size)</li>
+<li>Metadata about the compression (information needed to decompress later)</li>
+</ol>
+<p>For example, if you have 1 million weight values, compression might reduce them to 100,000 values
+plus some additional information about how to reconstruct the original values when needed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressMatrix_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CompressMatrix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CompressMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  CompressMatrix(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses a 2D matrix of weights (e.g., fully connected layer).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Matrix&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata) CompressMatrix(Matrix&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The original weight matrix to compress.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.interfaces.icompressionmetadata--0--.compressedweights">compressedWeights</a>, <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.matrix--0-,aidotnet.interfaces.icompressionmetadata--0--.metadata">metadata</a>)</dt>
+    <dd><p>A tuple containing the compressed weights and compression metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Matrices are 2D arrays of numbers, commonly used for
+fully connected (dense) layer weights in neural networks.
+<p>For example, a layer connecting 100 inputs to 50 outputs has a 100x50 weight matrix.
+Compressing these matrices can significantly reduce model size.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressTensor_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CompressTensor*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressTensor_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.CompressTensor(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  CompressTensor(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compresses an N-dimensional tensor of weights (e.g., convolutional filters).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Tensor&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata) CompressTensor(Tensor&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The original weight tensor to compress.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.interfaces.icompressionmetadata--0--.compressedweights">compressedWeights</a>, <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.interfaces.icompressionmetadata--0--.metadata">metadata</a>)</dt>
+    <dd><p>A tuple containing the compressed weights and compression metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_CompressTensor_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tensors are multi-dimensional arrays, essential for
+convolutional layers and attention mechanisms.
+<p>A convolutional filter might be 4D: [num_filters, channels, height, width].
+For example, 64 filters with 3 channels and 3x3 kernels = [64, 3, 3, 3].
+Compressing these tensors enables efficient storage of complex models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Decompress_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.Decompress*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Decompress_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.Decompress(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  Decompress(Vector&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decompresses the compressed weights back to their original form.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; Decompress(Vector&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weights.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The metadata needed for decompression.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The decompressed weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_Decompress_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ICompressionMetadata__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method reverses the compression process, reconstructing the original
+(or very close to original) weights from the compressed version.</p>
+<p>Think of it like unzipping a ZIP file - you take the compressed data and the instructions for
+how it was compressed (metadata), and produce the usable weights that the model can work with.</p>
+<p>Some compression methods are &quot;lossy&quot; (you don't get exactly the original values back, like JPEG
+image compression), while others are &quot;lossless&quot; (you get exact values back, like ZIP compression).</p>
+<p>The metadata parameter contains the information needed to reverse the compression, such as:</p>
+<ul>
+<li>Cluster centers (for weight clustering)</li>
+<li>Huffman trees (for Huffman encoding)</li>
+<li>Scaling factors (for quantization)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_DecompressMatrix_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.DecompressMatrix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_DecompressMatrix_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.DecompressMatrix(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  DecompressMatrix(Matrix&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decompresses the compressed matrix weights back to their original form.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Matrix&lt;T&gt; DecompressMatrix(Matrix&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weight matrix.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The metadata needed for decompression.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The decompressed weight matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_DecompressTensor_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.DecompressTensor*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_DecompressTensor_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.DecompressTensor(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  DecompressTensor(Tensor&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decompresses the compressed tensor weights back to their original form.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; DecompressTensor(Tensor&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weight tensor.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The metadata needed for decompression.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The decompressed weight tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  GetCompressedSize(Matrix&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size in bytes of the compressed matrix representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long GetCompressedSize(Matrix&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weight matrix.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The compression metadata.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The total size in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  GetCompressedSize(Tensor&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size in bytes of the compressed tensor representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long GetCompressedSize(Tensor&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weight tensor.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The compression metadata.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The total size in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ICompressionMetadata__0__" data-uid="AiDotNet.Interfaces.IModelCompressionStrategy`1.GetCompressedSize(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ICompressionMetadata{`0})">
+  GetCompressedSize(Vector&lt;T&gt;, ICompressionMetadata&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size in bytes of the compressed representation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long GetCompressedSize(Vector&lt;T&gt; compressedWeights, ICompressionMetadata&lt;T&gt; metadata)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>compressedWeights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The compressed weights.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="AiDotNet.Interfaces.ICompressionMetadata-1.html">ICompressionMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The compression metadata.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>The total size in bytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IModelCompressionStrategy_1_GetCompressedSize_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ICompressionMetadata__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates the total memory required to store the compressed model,
+including both the compressed weights and any metadata needed for decompression.</p>
+<p>It's important to include the metadata size because some compression schemes save space on weights
+but require substantial metadata. For example, Huffman encoding needs to store the encoding tree.</p>
+<p>The total size = compressed weights size + metadata size</p>
+<p>This gives you an accurate picture of the actual memory savings you'll achieve.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IModelCompressionStrategy.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

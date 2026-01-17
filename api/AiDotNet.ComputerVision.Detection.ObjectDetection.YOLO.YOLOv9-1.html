@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class YOLOv9&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class YOLOv9&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="YOLOv9 object detector with Programmable Gradient Information (PGI).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1" class="text-break">
+Class YOLOv9&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.html">ObjectDetection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.html">YOLO</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>YOLOv9 object detector with Programmable Gradient Information (PGI).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class YOLOv9&lt;T&gt; : ObjectDetectorBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html">ObjectDetectorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">YOLOv9&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_NumOps">ObjectDetectorBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Options">ObjectDetectorBase&lt;T&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Backbone">ObjectDetectorBase&lt;T&gt;.Backbone</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Neck">ObjectDetectorBase&lt;T&gt;.Neck</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Nms">ObjectDetectorBase&lt;T&gt;.Nms</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_IsTrainingMode">ObjectDetectorBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_WeightDownloader">ObjectDetectorBase&lt;T&gt;.WeightDownloader</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ClassNames">ObjectDetectorBase&lt;T&gt;.ClassNames</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ObjectDetectorBase&lt;T&gt;.Detect(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ObjectDetectorBase&lt;T&gt;.DetectBatch(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_DetectBatch_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_">ObjectDetectorBase&lt;T&gt;.DetectBatch(Tensor&lt;T&gt;, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchOutputs_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_">ObjectDetectorBase&lt;T&gt;.ExtractBatchOutputs(List&lt;Tensor&lt;T&gt;&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_SetTrainingMode_System_Boolean_">ObjectDetectorBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_LoadPretrainedWeightsAsync_System_Threading_CancellationToken_">ObjectDetectorBase&lt;T&gt;.LoadPretrainedWeightsAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetParameterCount">ObjectDetectorBase&lt;T&gt;.GetParameterCount()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ObjectDetectorBase&lt;T&gt;.Preprocess(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ResizeImage_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_">ObjectDetectorBase&lt;T&gt;.ResizeImage(Tensor&lt;T&gt;, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_Normalize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ObjectDetectorBase&lt;T&gt;.Normalize(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_ExtractBatchItem_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_">ObjectDetectorBase&lt;T&gt;.ExtractBatchItem(Tensor&lt;T&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase-1.html#AiDotNet_ComputerVision_Detection_ObjectDetection_ObjectDetectorBase_1_GetCocoClassNames">ObjectDetectorBase&lt;T&gt;.GetCocoClassNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> YOLOv9 introduces Programmable Gradient Information (PGI)
+and Generalized Efficient Layer Aggregation Network (GELAN) to address information
+loss during feature transformation, achieving state-of-the-art performance.</p>
+<p>Key features:
+- PGI: Programmable Gradient Information for better gradient flow
+- GELAN: Generalized ELAN for efficient feature aggregation
+- Auxiliary reversible branch for improved training
+- Better information preservation through the network
+</p>
+<p>Reference: Wang et al., "YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", 2024</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1__ctor_AiDotNet_Models_Options_ObjectDetectionOptions__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.#ctor(AiDotNet.Models.Options.ObjectDetectionOptions{`0})">
+  YOLOv9(ObjectDetectionOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new YOLOv9 detector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public YOLOv9(ObjectDetectionOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.ObjectDetectionOptions-1.html">ObjectDetectionOptions</a>&lt;T&gt;</dt>
+    <dd><p>Detection options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Name_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Name*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Name" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Name of this detector architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Detect_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Detect*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Detect_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double)">
+  Detect(Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects objects in an image with custom thresholds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override DetectionResult&lt;T&gt; Detect(Tensor&lt;T&gt; image, double confidenceThreshold, double nmsThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor.</p>
+</dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum confidence to keep a detection.</p>
+</dd>
+    <dt><code>nmsThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>IoU threshold for NMS.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.DetectionResult-1.html">DetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Detection results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Forward_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Forward*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs forward pass through the network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;Tensor&lt;T&gt;&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Raw network outputs before post-processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_GetHeadParameterCount_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.GetHeadParameterCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_GetHeadParameterCount" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.GetHeadParameterCount">
+  GetHeadParameterCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the detection head.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override long GetHeadParameterCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd><p>Number of parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_LoadWeightsAsync_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.LoadWeightsAsync*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_LoadWeightsAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.LoadWeightsAsync(System.String,System.Threading.CancellationToken)">
+  LoadWeightsAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads pre-trained weights from a file or URL.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pathOrUrl</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Local file path or URL to weights.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_PostProcess_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.PostProcess*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_PostProcess_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.PostProcess(System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32,System.Int32,System.Double,System.Double)">
+  PostProcess(List&lt;Tensor&lt;T&gt;&gt;, int, int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Post-processes raw network outputs into detections.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;Detection&lt;T&gt;&gt; PostProcess(List&lt;Tensor&lt;T&gt;&gt; outputs, int imageWidth, int imageHeight, double confidenceThreshold, double nmsThreshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Raw network outputs.</p>
+</dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Original image width.</p>
+</dd>
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Original image height.</p>
+</dd>
+    <dt><code>confidenceThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum confidence threshold.</p>
+</dd>
+    <dt><code>nmsThreshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>NMS IoU threshold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ComputerVision.Detection.ObjectDetection.Detection-1.html">Detection</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of detections after NMS.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_SaveWeights_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.SaveWeights*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_ObjectDetection_YOLO_YOLOv9_1_SaveWeights_System_String_" data-uid="AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9`1.SaveWeights(System.String)">
+  SaveWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves model weights to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SaveWeights(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>File path to save weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/ObjectDetection/YOLO/YOLOv9.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

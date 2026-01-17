@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PhysicsInformedLoss&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PhysicsInformedLoss&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Loss function for Physics-Informed Neural Networks (PINNs). Combines data loss, PDE residual loss, boundary condition loss, and initial condition loss.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PhysicsInformed_PhysicsInformedLoss_1.md&amp;value=---%0Auid%3A%20AiDotNet.PhysicsInformed.PhysicsInformedLoss%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1">
+
+
+
+  <h1 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1" class="text-break">
+Class PhysicsInformedLoss&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PhysicsInformed.html">PhysicsInformed</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Loss function for Physics-Informed Neural Networks (PINNs).
+Combines data loss, PDE residual loss, boundary condition loss, and initial condition loss.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PhysicsInformedLoss&lt;T&gt; : LossFunctionBase&lt;T&gt;, ILossFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html">LossFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">PhysicsInformedLoss&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_NumOps">LossFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_Engine">LossFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLossAndGradientGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LossFunctionBase&lt;T&gt;.CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_ValidateVectorLengths_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LossFunctionBase&lt;T&gt;.ValidateVectorLengths(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeGradient__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeGradient&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeLoss__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeLoss&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+Traditional neural networks learn from data alone. Physics-Informed Neural Networks (PINNs)
+additionally enforce that the solution satisfies physical laws (PDEs) and constraints.</p>
+<p>This loss function has multiple components:</p>
+<ol>
+<li>Data Loss: Measures how well predictions match observed data points</li>
+<li>PDE Residual Loss: Measures how much the PDE is violated at collocation points</li>
+<li>Boundary Loss: Ensures boundary conditions are satisfied</li>
+<li>Initial Condition Loss: Ensures initial conditions are satisfied (for time-dependent problems)</li>
+</ol>
+<p>The total loss is a weighted sum:
+L_total = λ_data * L_data + λ_pde * L_pde + λ_bc * L_bc + λ_ic * L_ic</p>
+<p>Why This Works:
+By minimizing this loss, the network learns to:</p>
+<ul>
+<li>Fit the available data</li>
+<li>Obey physical laws everywhere (not just at data points)</li>
+<li>Satisfy boundary and initial conditions
+This often requires far less data than traditional deep learning!</li>
+</ul>
+<p>Key Innovation:
+PINNs can solve PDEs in regions where we have NO data, as long as the physics is known.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1__ctor_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1__ctor_AiDotNet_PhysicsInformed_Interfaces_IPDESpecification__0__AiDotNet_PhysicsInformed_Interfaces_IBoundaryCondition__0____AiDotNet_PhysicsInformed_Interfaces_IInitialCondition__0__System_Nullable_System_Double__System_Nullable_System_Double__System_Nullable_System_Double__System_Nullable_System_Double__" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.#ctor(AiDotNet.PhysicsInformed.Interfaces.IPDESpecification{`0},AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition{`0}[],AiDotNet.PhysicsInformed.Interfaces.IInitialCondition{`0},System.Nullable{System.Double},System.Nullable{System.Double},System.Nullable{System.Double},System.Nullable{System.Double})">
+  PhysicsInformedLoss(IPDESpecification&lt;T&gt;?, IBoundaryCondition&lt;T&gt;[]?, IInitialCondition&lt;T&gt;?, double?, double?, double?, double?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Physics-Informed loss function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PhysicsInformedLoss(IPDESpecification&lt;T&gt;? pdeSpecification = null, IBoundaryCondition&lt;T&gt;[]? boundaryConditions = null, IInitialCondition&lt;T&gt;? initialCondition = null, double? dataWeight = null, double? pdeWeight = null, double? boundaryWeight = null, double? initialWeight = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pdeSpecification</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IPDESpecification-1.html">IPDESpecification</a>&lt;T&gt;</dt>
+    <dd><p>The PDE that the solution must satisfy.</p>
+</dd>
+    <dt><code>boundaryConditions</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IBoundaryCondition-1.html">IBoundaryCondition</a>&lt;T&gt;[]</dt>
+    <dd><p>Boundary conditions for the problem.</p>
+</dd>
+    <dt><code>initialCondition</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.IInitialCondition-1.html">IInitialCondition</a>&lt;T&gt;</dt>
+    <dd><p>Initial condition for time-dependent problems.</p>
+</dd>
+    <dt><code>dataWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Weight for data loss component.</p>
+</dd>
+    <dt><code>pdeWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Weight for PDE residual loss component.</p>
+</dd>
+    <dt><code>boundaryWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Weight for boundary condition loss.</p>
+</dd>
+    <dt><code>initialWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Weight for initial condition loss.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_Name_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.Name*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_Name" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the loss function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_CalculateDerivative_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.CalculateDerivative*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_CalculateDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.CalculateDerivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L588"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative (gradient) of the loss function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; CalculateDerivative(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values from the model.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the derivatives of the loss with respect to each prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_CalculateLoss_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.CalculateLoss*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_CalculateLoss_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.CalculateLoss(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateLoss(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L573"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the loss between predicted and actual values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T CalculateLoss(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values from the model.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputeDerivative_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputeDerivative__0____0___" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputeDerivative(`0[],`0[])">
+  ComputeDerivative(T[], T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L558"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the derivative of the loss with respect to predictions.
+Required by the ILossFunction interface.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] ComputeDerivative(T[] predictions, T[] targets)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> T[]</dt>
+    <dd></dd>
+    <dt><code>targets</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputeLoss_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputeLoss*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputeLoss__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___0___" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputeLoss(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0},`0[])">
+  ComputeLoss(T[], T[]?, PDEDerivatives&lt;T&gt;, T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the total physics-informed loss (compatibility wrapper).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeLoss(T[] predictions, T[]? targets, PDEDerivatives&lt;T&gt; derivatives, T[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> T[]</dt>
+    <dd></dd>
+    <dt><code>targets</code> T[]</dt>
+    <dd></dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>inputs</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputeLoss__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This overload is domain-specific and intentionally separate from <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction&lt;T&gt;</a>.
+Prefer <a class="xref" href="AiDotNet.PhysicsInformed.PhysicsInformedLoss-1.html#AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputePhysicsLoss__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___0___">ComputePhysicsLoss(T[], T[]?, PDEDerivatives&lt;T&gt;, T[])</a> for clarity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputePhysicsLoss_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputePhysicsLoss*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputePhysicsLoss__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___0___" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputePhysicsLoss(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0},`0[])">
+  ComputePhysicsLoss(T[], T[]?, PDEDerivatives&lt;T&gt;, T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the total physics-informed loss for PINN training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputePhysicsLoss(T[] predictions, T[]? targets, PDEDerivatives&lt;T&gt; derivatives, T[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> T[]</dt>
+    <dd><p>Network predictions.</p>
+</dd>
+    <dt><code>targets</code> T[]</dt>
+    <dd><p>Target values (may be null if no data available).</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>Derivatives needed for PDE computation.</p>
+</dd>
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>Input points where predictions were made.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The total loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputePhysicsLossGradients_" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputePhysicsLossGradients*"></a>
+
+  <h3 id="AiDotNet_PhysicsInformed_PhysicsInformedLoss_1_ComputePhysicsLossGradients__0____0___AiDotNet_PhysicsInformed_Interfaces_PDEDerivatives__0___0___" data-uid="AiDotNet.PhysicsInformed.PhysicsInformedLoss`1.ComputePhysicsLossGradients(`0[],`0[],AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives{`0},`0[])">
+  ComputePhysicsLossGradients(T[], T[]?, PDEDerivatives&lt;T&gt;, T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the physics-informed loss and its gradients with respect to outputs and derivatives.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PhysicsLossGradient&lt;T&gt; ComputePhysicsLossGradients(T[] predictions, T[]? targets, PDEDerivatives&lt;T&gt; derivatives, T[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictions</code> T[]</dt>
+    <dd><p>Network predictions.</p>
+</dd>
+    <dt><code>targets</code> T[]</dt>
+    <dd><p>Target values (may be null if no data available).</p>
+</dd>
+    <dt><code>derivatives</code> <a class="xref" href="AiDotNet.PhysicsInformed.Interfaces.PDEDerivatives-1.html">PDEDerivatives</a>&lt;T&gt;</dt>
+    <dd><p>Derivatives needed for PDE computation.</p>
+</dd>
+    <dt><code>inputs</code> T[]</dt>
+    <dd><p>Input points where predictions were made.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PhysicsInformed.PhysicsLossGradient-1.html">PhysicsLossGradient</a>&lt;T&gt;</dt>
+    <dd><p>The loss and gradients for this sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PhysicsInformed/PhysicsInformedLoss.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SignActivation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SignActivation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Sign activation function, which returns -1 for negative inputs, 1 for positive inputs, and 0 for zero.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActivationFunctions_SignActivation_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActivationFunctions.SignActivation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActivationFunctions.SignActivation`1">
+
+
+
+  <h1 id="AiDotNet_ActivationFunctions_SignActivation_1" data-uid="AiDotNet.ActivationFunctions.SignActivation`1" class="text-break">
+Class SignActivation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActivationFunctions.html">ActivationFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Sign activation function, which returns -1 for negative inputs, 1 for positive inputs, and 0 for zero.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SignActivation&lt;T&gt; : ActivationFunctionBase&lt;T&gt;, IActivationFunction&lt;T&gt;, IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html">ActivationFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SignActivation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_NumOps">ActivationFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Engine">ActivationFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ActivationFunctionBase&lt;T&gt;.Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_SupportsGpuTraining">ActivationFunctionBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.ForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">ActivationFunctionBase&lt;T&gt;.BackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActivationFunctions_SignActivation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Sign function is a simple non-linear activation function that categorizes inputs into three distinct outputs:
+-1 (negative), 0 (zero), or 1 (positive). Unlike smooth activation functions, Sign has sharp transitions.
+</p>
+<p>
+<b>For Beginners:</b> The Sign function is like a simple categorizer that looks at a number and tells you if it's 
+negative (-1), zero (0), or positive (1). It's one of the simplest activation functions and is useful when 
+you want your neural network to make clear-cut decisions rather than produce probabilities or continuous values.
+However, because it has sharp "jumps" in its output and its derivative is zero almost everywhere, it's rarely 
+used in modern neural networks that rely on gradient-based learning.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_SupportsJitCompilation_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_SupportsJitCompilation" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because TensorOperations.Sign provides surrogate gradient support for training.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sign supports JIT compilation using surrogate gradients. The forward pass produces
+the hard sign function (-1, 0, or 1), while the backward pass uses a sigmoid surrogate
+for gradient flow. This enables training despite the discontinuous nature of the sign function.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Activate(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L150"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sign activation function to each element in a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Activate(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the Sign function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method processes each element in the tensor individually using the scalar Activate method.
+</p>
+<p>
+<b>For Beginners:</b> A tensor is like a multi-dimensional array or a container for data with multiple dimensions.
+This method applies the Sign function to every single number in that container, regardless of its position
+or how many dimensions the container has. Each number is independently converted to -1, 0, or 1 based on
+whether it's negative, zero, or positive.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Activate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sign activation function to each element in a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Activate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the Sign function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method applies the Sign function to a whole list of numbers at once.
+It processes each number in the list individually using the same Sign function and returns
+a new list with all the transformed values (-1, 0, or 1 for each element).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Activate__0_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Activate(`0)">
+  Activate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sign activation function to a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Activate(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to activate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>-1 if input is negative, 1 if input is positive, 0 if input is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Activate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method looks at a single number and returns:</p>
+<ul>
+<li>-1 if the number is negative (less than zero)</li>
+<li>1 if the number is positive (greater than zero)</li>
+<li>0 if the number is exactly zero</li>
+</ul>
+<p>It's like a simple judge that categorizes numbers into three groups based on their sign.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_ApplyToGraph_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L240"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with Sign activation applied using surrogate gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps to TensorOperations&lt;T&gt;.Sign(input) which uses the
+straight-through estimator pattern: hard sign in forward pass, sigmoid surrogate
+gradients in backward pass.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if input is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Derivative(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the Sign function for a tensor input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Derivative(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of zeros representing the derivative of the Sign function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a tensor of derivatives by applying the vector derivative method to each "slice" of the input tensor.
+The resulting tensor has an additional dimension that represents the Jacobian matrices for each input vector.
+</p>
+<p>
+<b>For Beginners:</b> This method handles the derivative calculation for multi-dimensional data (tensors).
+It processes the data in batches, where each batch contains multiple vectors. For each vector, it calculates
+a matrix of derivatives (which for the Sign function is all zeros). The result is a higher-dimensional tensor
+that contains all these matrices. This is a more advanced operation that's used when working with batches of
+data in neural networks, particularly in deep learning frameworks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Derivative(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Jacobian matrix of the Sign function for a vector input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Derivative(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of zeros, as the Sign function's derivative is 0 almost everywhere.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Jacobian matrix represents how each output element changes with respect to each input element.
+For the Sign function, this matrix contains all zeros since the derivative is 0 almost everywhere.
+</p>
+<p>
+<b>For Beginners:</b> This method creates a matrix (a grid of numbers) that represents how sensitive each 
+output is to changes in the input. For the Sign function, this matrix is filled with zeros because 
+small changes to the input almost never change the output. This is another reason why the Sign function 
+isn't commonly used in neural networks that learn through backpropagation - it doesn't provide useful 
+information about how to adjust the network's weights.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative__0_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.Derivative(`0)">
+  Derivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the Sign function for a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Derivative(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to calculate the derivative for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Always returns 0, as the Sign function's derivative is 0 everywhere except at 0, where it's undefined.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SignActivation_1_Derivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Mathematically, the derivative of the Sign function is 0 everywhere except at x=0, 
+where it's undefined (technically, it's the Dirac delta function). For practical purposes,
+this implementation returns 0 for all inputs.
+</p>
+<p>
+<b>For Beginners:</b> The derivative tells us how much the output changes when we slightly change the input.
+For the Sign function, the output doesn't change at all when you make small changes to the input
+(except exactly at zero). This is why we return 0 for all inputs. This property makes the Sign function
+problematic for gradient-based learning algorithms like backpropagation, as there's no useful gradient
+information to guide the learning process.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SignActivation_1_SupportsScalarOperations_" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.SupportsScalarOperations*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SignActivation_1_SupportsScalarOperations" data-uid="AiDotNet.ActivationFunctions.SignActivation`1.SupportsScalarOperations">
+  SupportsScalarOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this activation function supports scalar operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsScalarOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns true as Sign supports scalar operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SignActivation.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>iMAML (implicit Model-Agnostic Meta-Learning) Usage Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="iMAML (implicit Model-Agnostic Meta-Learning) Usage Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/MetaLearning/iMAML_Usage_Guide.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="imaml-implicit-model-agnostic-meta-learning-usage-guide">iMAML (implicit Model-Agnostic Meta-Learning) Usage Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<p>iMAML is a memory-efficient variant of MAML that uses implicit differentiation to compute meta-gradients. Instead of backpropagating through all adaptation steps, it uses the implicit function theorem to directly compute gradients at the adapted parameters, significantly reducing memory requirements.</p>
+<h2 id="key-features">Key Features</h2>
+<ul>
+<li><strong>Constant Memory Complexity</strong>: O(N) space regardless of adaptation steps</li>
+<li><strong>True Second-Order Optimization</strong>: No need for explicit backpropagation through inner loop</li>
+<li><strong>Configurable Hessian-Vector Products</strong>: Finite differences or automatic differentiation</li>
+<li><strong>Preconditioned Conjugate Gradient Solver</strong>: Jacobi, LBFGS, or no preconditioning</li>
+<li><strong>Adaptive Learning Rates</strong>: Adam-style optimization for inner loop</li>
+<li><strong>Line Search Support</strong>: Optional for optimal step size finding</li>
+</ul>
+<h2 id="basic-usage">Basic Usage</h2>
+<h3 id="1-creating-an-imaml-algorithm">1. Creating an iMAML Algorithm</h3>
+<pre><code class="lang-csharp">using AiDotNet.MetaLearning.Algorithms;
+using AiDotNet.Models.Options;
+
+// Create iMAML options with sensible defaults
+var options = new iMAMLAlgorithmOptions&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
+{
+    // Base model configuration
+    BaseModel = yourNeuralNetwork,
+    LossFunction = new MeanSquaredErrorLoss&lt;double&gt;(),
+
+    // Learning rates
+    InnerLearningRate = 0.01,
+    OuterLearningRate = 0.001,
+
+    // Adaptation configuration
+    AdaptationSteps = 5,
+
+    // iMAML specific settings
+    LambdaRegularization = 1.0,
+    ConjugateGradientIterations = 10,
+    ConjugateGradientTolerance = 1e-8,
+
+    // Hessian-vector product method
+    HessianVectorProductMethod = HessianVectorProductMethod.FiniteDifferences,
+    FiniteDifferencesEpsilon = 1e-5,
+
+    // Preconditioning
+    CGPreconditioningMethod = CGPreconditioningMethod.Jacobi,
+
+    // Adaptive learning rates
+    UseAdaptiveInnerLearningRate = true,
+    MinInnerLearningRate = 1e-6,
+    MaxInnerLearningRate = 0.1,
+
+    // Line search (optional)
+    EnableLineSearch = false,
+    LineSearchMaxIterations = 20
+};
+
+// Create iMAML algorithm instance
+var imaml = new iMAMLAlgorithm&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(options);
+</code></pre>
+<h3 id="2-preparing-tasks">2. Preparing Tasks</h3>
+<pre><code class="lang-csharp">using AiDotNet.MetaLearning.Data;
+
+// Create a task with support set (training examples) and query set (test examples)
+var supportInput = Matrix&lt;double&gt;.Random(numSupportExamples, numFeatures, -1, 1);
+var supportOutput = Vector&lt;double&gt;.Random(numSupportExamples, -1, 1);
+var queryInput = Matrix&lt;double&gt;.Random(numQueryExamples, numFeatures, -1, 1);
+var queryOutput = Vector&lt;double&gt;.Random(numQueryExamples, -1, 1);
+
+var task = new Task&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+    supportInput: supportInput,
+    supportOutput: supportOutput,
+    queryInput: queryInput,
+    queryOutput: queryOutput,
+    numWays: 5,           // Number of classes
+    numShots: 1,          // Examples per class in support set
+    numQueryPerClass: 15, // Query examples per class
+    taskId: &quot;task-001&quot;
+);
+
+// Create a batch of tasks
+var taskBatch = new TaskBatch&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(tasks);
+</code></pre>
+<h3 id="3-meta-training">3. Meta-Training</h3>
+<pre><code class="lang-csharp">// Meta-train on a batch of tasks
+var metaLoss = imaml.MetaTrain(taskBatch);
+Console.WriteLine($&quot;Meta-training loss: {metaLoss:F6}&quot;);
+
+// Meta-train for multiple epochs
+for (int epoch = 0; epoch &lt; 100; epoch++)
+{
+    var batch = sampleTasks(batchSize: 4);
+    var loss = imaml.MetaTrain(batch);
+
+    if (epoch % 10 == 0)
+    {
+        Console.WriteLine($&quot;Epoch {epoch}: Meta-loss = {loss:F6}&quot;);
+    }
+}
+</code></pre>
+<h3 id="4-adapting-to-new-tasks">4. Adapting to New Tasks</h3>
+<pre><code class="lang-csharp">// Adapt the meta-model to a new task
+var adaptedModel = imaml.Adapt(newTask);
+
+// Use the adapted model for predictions
+var predictions = adaptedModel.Predict(testInput);
+</code></pre>
+<h2 id="advanced-configuration">Advanced Configuration</h2>
+<h3 id="choosing-hessian-vector-product-method">Choosing Hessian-Vector Product Method</h3>
+<pre><code class="lang-csharp">// For better accuracy (but more computation)
+options.HessianVectorProductMethod = HessianVectorProductMethod.AutomaticDifferentiation;
+
+// For better stability and speed (recommended for most cases)
+options.HessianVectorProductMethod = HessianVectorProductMethod.FiniteDifferences;
+options.FiniteDifferencesEpsilon = 1e-5;
+</code></pre>
+<h3 id="configuring-preconditioning">Configuring Preconditioning</h3>
+<pre><code class="lang-csharp">// Jacobi preconditioning (good default)
+options.CGPreconditioningMethod = CGPreconditioningMethod.Jacobi;
+
+// No preconditioning (faster but may need more iterations)
+options.CGPreconditioningMethod = CGPreconditioningMethod.None;
+
+// LBFGS preconditioning (for large problems)
+options.CGPreconditioningMethod = CGPreconditioningMethod.LBFGS;
+</code></pre>
+<h3 id="adaptive-learning-rates">Adaptive Learning Rates</h3>
+<pre><code class="lang-csharp">// Enable Adam-style adaptive learning rates
+options.UseAdaptiveInnerLearningRate = true;
+
+// Configure bounds
+options.MinInnerLearningRate = 1e-7;
+options.MaxInnerLearningRate = 0.05;
+
+// Custom hyperparameters
+// (accessed through AdaptiveLearningRateState in extended implementation)
+</code></pre>
+<h3 id="line-search">Line Search</h3>
+<pre><code class="lang-csharp">// Enable line search for optimal step sizes
+options.EnableLineSearch = true;
+options.LineSearchReduction = 0.5;
+options.LineSearchMinStep = 1e-10;
+options.LineSearchMaxIterations = 20;
+</code></pre>
+<h2 id="performance-tips">Performance Tips</h2>
+<h3 id="1-memory-efficiency">1. Memory Efficiency</h3>
+<ul>
+<li>iMAML's memory usage is constant regardless of adaptation steps</li>
+<li>Use larger adaptation steps without memory concerns</li>
+<li>Monitor memory with <code>MemoryDiagnoser</code> in benchmarks</li>
+</ul>
+<h3 id="2-computational-efficiency">2. Computational Efficiency</h3>
+<ul>
+<li>Use finite differences for Hessian-vector products (default)</li>
+<li>Adjust CG iterations based on problem size</li>
+<li>Consider Jacobi preconditioning for better convergence</li>
+</ul>
+<h3 id="3-convergence-speed">3. Convergence Speed</h3>
+<ul>
+<li>Use adaptive learning rates in the inner loop</li>
+<li>Enable line search for difficult tasks</li>
+<li>Tune regularization strength (λ) based on task complexity</li>
+</ul>
+<h2 id="comparison-with-maml">Comparison with MAML</h2>
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>MAML</th>
+<th>iMAML</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Memory Complexity</td>
+<td>O(K·N)</td>
+<td>O(N)</td>
+</tr>
+<tr>
+<td>Backpropagation</td>
+<td>Through inner loop</td>
+<td>Implicit only</td>
+</tr>
+<tr>
+<td>Adaptation Steps</td>
+<td>Limited by memory</td>
+<td>Unlimited</td>
+</tr>
+<tr>
+<td>Convergence Speed</td>
+<td>Fast</td>
+<td>Slightly slower</td>
+</tr>
+<tr>
+<td>Implementation</td>
+<td>Simpler</td>
+<td>More complex</td>
+</tr>
+</tbody>
+</table>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-when-to-use-imaml">1. When to Use iMAML</h3>
+<ul>
+<li>Tasks requiring many adaptation steps</li>
+<li>Large models with many parameters</li>
+<li>Memory-constrained environments</li>
+<li>When second-order accuracy is important</li>
+</ul>
+<h3 id="2-hyperparameter-tuning">2. Hyperparameter Tuning</h3>
+<ul>
+<li><strong>λ (Lambda Regularization)</strong>: Start with 1.0, increase if unstable</li>
+<li><strong>CG Iterations</strong>: 10-20 is usually sufficient</li>
+<li><strong>CG Tolerance</strong>: 1e-8 is a good balance of precision/speed</li>
+<li><strong>Epsilon</strong>: 1e-5 for finite differences, 1e-7 for automatic</li>
+</ul>
+<h3 id="3-common-pitfalls">3. Common Pitfalls</h3>
+<ul>
+<li>Don't set λ too high (over-regularization)</li>
+<li>Don't use too few CG iterations (poor convergence)</li>
+<li>Monitor for numerical instability with very small epsilon</li>
+</ul>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="poor-convergence">Poor Convergence</h3>
+<ol>
+<li>Increase λ regularization</li>
+<li>Check CG tolerance and iterations</li>
+<li>Verify Hessian-vector product method</li>
+<li>Try adaptive learning rates</li>
+</ol>
+<h3 id="memory-issues">Memory Issues</h3>
+<ol>
+<li>Ensure you're using iMAML, not MAML</li>
+<li>Check for unintended model copying</li>
+<li>Monitor GC pressure</li>
+</ol>
+<h3 id="numerical-instability">Numerical Instability</h3>
+<ol>
+<li>Increase epsilon for finite differences</li>
+<li>Use adaptive learning rates</li>
+<li>Check gradient magnitudes</li>
+</ol>
+<h2 id="example-full-training-loop">Example: Full Training Loop</h2>
+<pre><code class="lang-csharp">using AiDotNet.MetaLearning.Training;
+
+// Create trainer
+var trainerOptions = new MetaTrainerOptions
+{
+    NumEpochs = 100,
+    TasksPerEpoch = 100,
+    MetaBatchSize = 4,
+    NumWays = 5,
+    NumShots = 1,
+    NumQueryPerClass = 15,
+    ValInterval = 5,
+    ValTasks = 50,
+    LogInterval = 1,
+    CheckpointInterval = 10,
+    CheckpointDir = &quot;./checkpoints&quot;,
+    EarlyStoppingPatience = 20,
+    Verbose = true
+};
+
+var trainer = new MetaTrainer&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+    algorithm: imaml,
+    trainDataset: trainEpisodicDataset,
+    valDataset: valEpisodicDataset,
+    options: trainerOptions
+);
+
+// Train the model
+var trainingHistory = trainer.Train();
+
+// Access training metrics
+foreach (var metrics in trainingHistory)
+{
+    Console.WriteLine($&quot;Epoch {metrics.Epoch}: Train = {metrics.TrainLoss:F6}, &quot; +
+                     $&quot;Val = {(metrics.ValLoss?.ToString(&quot;F6&quot;) ?? &quot;N/A&quot;)}&quot;);
+}
+</code></pre>
+<h2 id="references">References</h2>
+<ul>
+<li>Rajeswaran, A., Finn, C., Kakade, S. M., &amp; Levine, S. (2019). Meta-learning with implicit gradients.</li>
+<li>Original MAML paper: Model-Agnostic Meta-Learning for Fast Adaptation of Deep Networks</li>
+</ul>
+<h2 id="api-reference">API Reference</h2>
+<p>See the XML documentation in the source code for complete API details.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/MetaLearning/iMAML_Usage_Guide.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

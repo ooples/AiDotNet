@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SparseGaussianProcess&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SparseGaussianProcess&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A sparse implementation of Gaussian Process regression that uses inducing points to reduce computational complexity.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_GaussianProcesses_SparseGaussianProcess_1.md&amp;value=---%0Auid%3A%20AiDotNet.GaussianProcesses.SparseGaussianProcess%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1">
+
+
+
+  <h1 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1" class="text-break">
+Class SparseGaussianProcess&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.GaussianProcesses.html">GaussianProcesses</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A sparse implementation of Gaussian Process regression that uses inducing points to reduce computational complexity.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SparseGaussianProcess&lt;T&gt; : IGaussianProcess&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SparseGaussianProcess&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGaussianProcess-1.html">IGaussianProcess</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> A Gaussian Process is a flexible machine learning method that can model complex relationships in data.
+<p>The &quot;sparse&quot; version solves a common problem with Gaussian Processes - they can be very slow with large datasets.
+Instead of using all data points for predictions (which can be computationally expensive),
+this implementation selects a smaller set of representative points called &quot;inducing points&quot;
+that capture the essential patterns in your data.</p>
+<p>Think of it like summarizing a book: instead of reading every word (standard GP),
+you read just the chapter summaries (sparse GP) to get the main ideas more efficiently.</p>
+<p>This approach makes Gaussian Processes practical for larger datasets while maintaining most of their predictive power.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1__ctor_" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1__ctor_AiDotNet_Interfaces_IKernelFunction__0__AiDotNet_Enums_MatrixDecompositionType_" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.#ctor(AiDotNet.Interfaces.IKernelFunction{`0},AiDotNet.Enums.MatrixDecompositionType)">
+  SparseGaussianProcess(IKernelFunction&lt;T&gt;, MatrixDecompositionType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the SparseGaussianProcess class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseGaussianProcess(IKernelFunction&lt;T&gt; kernel, MatrixDecompositionType decompositionType = MatrixDecompositionType.Cholesky)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</dt>
+    <dd><p>The kernel function to use for measuring similarity between data points.</p>
+</dd>
+    <dt><code>decompositionType</code> <a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition method to use for numerical stability.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1__ctor_AiDotNet_Interfaces_IKernelFunction__0__AiDotNet_Enums_MatrixDecompositionType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor sets up the sparse Gaussian Process model with your chosen kernel function.
+<p>The kernel function is like a &quot;similarity measure&quot; - it determines how the model understands
+the relationships between different data points. Different kernels are suited for different types of data:</p>
+<ul>
+<li>RBF/Gaussian kernel: Good for smooth data</li>
+<li>Periodic kernel: Good for repeating patterns</li>
+<li>Linear kernel: Good for linear relationships</li>
+</ul>
+<p>The decompositionType parameter is a technical detail about how the math is handled internally
+for numerical stability. For most users, the default (Cholesky) works well.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Fit_" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.Fit*"></a>
+
+  <h3 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Fit(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the Gaussian Process model on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fit(Matrix&lt;T&gt; X, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix where each row is a data point and each column is a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values corresponding to each input data point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method "teaches" the model using your training data.
+<p>The training process involves:</p>
+<ol>
+<li>Selecting a smaller set of representative points (inducing points) from your data</li>
+<li>Computing how these points relate to each other and to all your data</li>
+<li>Storing this information in an efficient way for making predictions later</li>
+</ol>
+<p>The algorithm used (FITC - Fully Independent Training Conditional) is a mathematical approach
+that balances accuracy with computational efficiency.</p>
+<p>After calling this method, your model is ready to make predictions on new data points.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Predict_" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.Predict*"></a>
+
+  <h3 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Predict_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.Predict(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Predict(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a prediction for a new input point, returning both the mean prediction and its variance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T mean, T variance) Predict(Vector&lt;T&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input feature vector to predict for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd><p>A tuple containing the predicted mean value and the variance (uncertainty) of the prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_Predict_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method uses your trained model to make predictions on new data points.
+<p>What makes Gaussian Processes special is that they don't just give you a prediction -
+they also tell you how confident they are about that prediction through the variance value.</p>
+<p>The mean is the model's best guess at the correct answer.
+The variance tells you how certain the model is:</p>
+<ul>
+<li>Low variance = high confidence (the model is pretty sure about its prediction)</li>
+<li>High variance = low confidence (the model is uncertain about its prediction)</li>
+</ul>
+<p>This is especially useful in scenarios where knowing the uncertainty is important,
+like in scientific experiments, medical diagnoses, or financial forecasting.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_UpdateKernel_" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.UpdateKernel*"></a>
+
+  <h3 id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_UpdateKernel_AiDotNet_Interfaces_IKernelFunction__0__" data-uid="AiDotNet.GaussianProcesses.SparseGaussianProcess`1.UpdateKernel(AiDotNet.Interfaces.IKernelFunction{`0})">
+  UpdateKernel(IKernelFunction&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the kernel function used by the model and retrains if data is available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateKernel(IKernelFunction&lt;T&gt; kernel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</dt>
+    <dd><p>The new kernel function to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_GaussianProcesses_SparseGaussianProcess_1_UpdateKernel_AiDotNet_Interfaces_IKernelFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method lets you change how the model measures similarity between data points.
+<p>Different kernel functions capture different types of patterns in your data. If you find that
+your model isn't performing well, you might want to try a different kernel that better matches
+the underlying patterns in your data.</p>
+<p>For example:</p>
+<ul>
+<li>If your data has seasonal patterns, you might switch to a periodic kernel</li>
+<li>If your data has long-term trends, you might use an RBF kernel with a larger length scale</li>
+</ul>
+<p>When you update the kernel, the model will automatically retrain itself if you've already
+provided training data.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/GaussianProcesses/SparseGaussianProcess.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

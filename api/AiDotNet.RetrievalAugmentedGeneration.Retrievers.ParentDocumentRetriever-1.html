@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ParentDocumentRetriever&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ParentDocumentRetriever&lt;T&gt; | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1" class="text-break">
+Class ParentDocumentRetriever&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Retrievers/ParentDocumentRetriever.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.html">Retrievers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"></div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ParentDocumentRetriever&lt;T&gt; : RetrieverBase&lt;T&gt;, IRetriever&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ParentDocumentRetriever&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IRetriever-1.html">IRetriever</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_NumOps">RetrieverBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_DefaultTopK">RetrieverBase&lt;T&gt;.DefaultTopK</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_Retrieve_System_String_">RetrieverBase&lt;T&gt;.Retrieve(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_Retrieve_System_String_System_Int32_">RetrieverBase&lt;T&gt;.Retrieve(string, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_Retrieve_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__">RetrieverBase&lt;T&gt;.Retrieve(string, int, Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_ValidateQuery_System_String_">RetrieverBase&lt;T&gt;.ValidateQuery(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_ValidateTopK_System_Int32_">RetrieverBase&lt;T&gt;.ValidateTopK(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_ValidateMetadataFilters_System_Collections_Generic_Dictionary_System_String_System_Object__">RetrieverBase&lt;T&gt;.ValidateMetadataFilters(Dictionary&lt;string, object&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html#AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase_1_PostProcessResults_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___System_Int32_">RetrieverBase&lt;T&gt;.PostProcessResults(IEnumerable&lt;Document&lt;T&gt;&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1__ctor_AiDotNet_Interfaces_IDocumentStore__0__AiDotNet_Interfaces_IEmbeddingModel__0__System_Int32_System_Int32_System_Boolean_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1.#ctor(AiDotNet.Interfaces.IDocumentStore{`0},AiDotNet.Interfaces.IEmbeddingModel{`0},System.Int32,System.Int32,System.Boolean)">
+  ParentDocumentRetriever(IDocumentStore&lt;T&gt;, IEmbeddingModel&lt;T&gt;, int, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Retrievers/ParentDocumentRetriever.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever-1.html">ParentDocumentRetriever&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ParentDocumentRetriever(IDocumentStore&lt;T&gt; documentStore, IEmbeddingModel&lt;T&gt; embeddingModel, int chunkSize, int parentSize, bool includeNeighboringChunks)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>documentStore</code> <a class="xref" href="AiDotNet.Interfaces.IDocumentStore-1.html">IDocumentStore</a>&lt;T&gt;</dt>
+    <dd><p>The document store containing chunked documents with parent metadata.</p>
+</dd>
+    <dt><code>embeddingModel</code> <a class="xref" href="AiDotNet.Interfaces.IEmbeddingModel-1.html">IEmbeddingModel</a>&lt;T&gt;</dt>
+    <dd><p>The embedding model used to convert text queries into vector embeddings.</p>
+</dd>
+    <dt><code>chunkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Character length of child chunks used for matching (typically 128-512 characters).</p>
+</dd>
+    <dt><code>parentSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Character length of parent documents returned (typically 1024-4096 characters).</p>
+</dd>
+    <dt><code>includeNeighboringChunks</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to include adjacent chunks around the matched chunk (expands context boundaries).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1__ctor_AiDotNet_Interfaces_IDocumentStore__0__AiDotNet_Interfaces_IEmbeddingModel__0__System_Int32_System_Int32_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This configures how the retriever balances precision vs. context.
+<p>Recommended configurations:</p>
+<p>Technical Documentation:</p>
+<ul>
+<li>chunkSize: 256 (1-2 paragraphs)</li>
+<li>parentSize: 2048 (full section)</li>
+<li>includeNeighboringChunks: true (add context before/after)</li>
+</ul>
+<p>Research Papers:</p>
+<ul>
+<li>chunkSize: 512 (paragraph or two)</li>
+<li>parentSize: 4096 (entire subsection)</li>
+<li>includeNeighboringChunks: false (rely on section boundaries)</li>
+</ul>
+<p>General Content:</p>
+<ul>
+<li>chunkSize: 128 (few sentences)</li>
+<li>parentSize: 1024 (multiple paragraphs)</li>
+<li>includeNeighboringChunks: true (smooth transitions)</li>
+</ul>
+<p>The includeNeighboringChunks parameter is helpful when chunk boundaries might split important context.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when documentStore or embeddingModel is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when chunkSize or parentSize is less than or equal to zero.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when parentSize is less than chunkSize.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1_RetrieveCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1.RetrieveCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1_RetrieveCore_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.Retrievers.ParentDocumentRetriever`1.RetrieveCore(System.String,System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  RetrieveCore(string, int, Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Retrievers/ParentDocumentRetriever.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves parent documents by matching against child chunks and reconstructing full parent context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IEnumerable&lt;Document&lt;T&gt;&gt; RetrieveCore(string query, int topK, Dictionary&lt;string, object&gt; metadataFilters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated search query (non-empty).</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The validated number of parent documents to return (positive integer).</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>The validated metadata filters for document selection.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Parent documents ordered by their best child chunk's relevance score (highest first).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_Retrievers_ParentDocumentRetriever_1_RetrieveCore_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements a hierarchical retrieval pipeline:
+1. Oversampling: Retrieves topK * 3 child chunks to ensure sufficient parent document coverage
+2. Parent Grouping: Groups chunks by parent_id metadata field
+3. Score Aggregation: Assigns each parent the MAXIMUM score of its child chunks (best match wins)
+4. Optional Expansion: If includeNeighboringChunks=true, concatenates all matching chunks for each parent
+5. Deduplication: Returns unique parent documents (multiple chunks may belong to same parent)
+<p>The retriever expects chunks to have metadata:</p>
+<ul>
+<li>&quot;parent_id&quot;: Identifier of the parent document</li>
+<li>&quot;chunk_index&quot;: Position of this chunk within parent (optional)</li>
+<li>&quot;chunk_start&quot;: Character offset where chunk begins (optional)</li>
+</ul>
+<p>Parent documents are reconstructed by combining chunk content and filtering chunk-specific metadata.</p>
+
+<p><b>For Beginners:</b> Here's how the retrieval process works:
+<p>Step 1: Find the best matching small chunks</p>
+<ul>
+<li>Query: &quot;neural network backpropagation&quot;</li>
+<li>Matches: [Chunk 5 from Doc A (score=0.9), Chunk 12 from Doc A (score=0.7), Chunk 3 from Doc B (score=0.8)]</li>
+</ul>
+<p>Step 2: Group chunks by parent document</p>
+<ul>
+<li>Doc A: Chunk 5 (0.9), Chunk 12 (0.7)</li>
+<li>Doc B: Chunk 3 (0.8)</li>
+</ul>
+<p>Step 3: Assign parent score = best child score</p>
+<ul>
+<li>Doc A: 0.9 (from Chunk 5)</li>
+<li>Doc B: 0.8 (from Chunk 3)</li>
+</ul>
+<p>Step 4: Return parent documents (full context!)</p>
+<ul>
+<li>Doc A: Complete section on backpropagation including introduction, math, examples</li>
+<li>Doc B: Complete chapter on neural network training</li>
+</ul>
+<p>This gives your LLM ALL the context it needs to provide a complete answer!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when query is null or whitespace.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when topK is less than or equal to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/Retrievers/ParentDocumentRetriever.cs/#L68" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

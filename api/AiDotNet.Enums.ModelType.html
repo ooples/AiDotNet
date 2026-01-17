@@ -1,0 +1,1839 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum ModelType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum ModelType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the types of machine learning models available in the AiDotNet library.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_ModelType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.ModelType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.ModelType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_ModelType" data-uid="AiDotNet.Enums.ModelType" class="text-break">
+Enum ModelType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ModelType.cs/#L14"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the types of machine learning models available in the AiDotNet library.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum ModelType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_ModelType_A2CAgent"><code>A2CAgent = 136</code></dt>
+  <dd><p>Advantage Actor-Critic - a foundational policy gradient algorithm.</p>
+<p>
+<b>For Beginners:</b> A2C learns both a policy (actor) and a value function (critic).
+The critic helps the actor learn more efficiently by providing better feedback.
+It's like having a coach (critic) give you targeted advice rather than just "good" or "bad".
+<p>Strengths: Foundation for many modern RL algorithms, good for parallel training</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_A3CAgent"><code>A3CAgent = 137</code></dt>
+  <dd><p>Asynchronous Advantage Actor-Critic - parallel version of A2C.</p>
+<p>
+<b>For Beginners:</b> A3C runs multiple agents in parallel, each learning from different
+experiences simultaneously. It's like having multiple students learn the same subject
+independently, then sharing their knowledge. This speeds up learning significantly.
+<p>Used by: Early DeepMind research, parallel game playing
+Strengths: Efficient parallel training, works on CPU without GPUs</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ARIMAModel"><code>ARIMAModel = 124</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ARIMAXModel"><code>ARIMAXModel = 101</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ARMAModel"><code>ARMAModel = 102</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ARModel"><code>ARModel = 103</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_AdaBoostClassifier"><code>AdaBoostClassifier = 168</code></dt>
+  <dd><p>AdaBoost classifier that focuses on hard examples.</p>
+<p>
+<b>For Beginners:</b> AdaBoost (Adaptive Boosting) trains a sequence of weak classifiers, giving more weight
+to examples that previous classifiers got wrong. This forces the ensemble to focus on the hardest cases.
+It's effective and less prone to overfitting than some other boosting methods.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_AdaBoostR2"><code>AdaBoostR2 = 10</code></dt>
+  <dd><p>A boosting algorithm specifically designed for regression problems.</p>
+<p>
+<b>For Beginners:</b> AdaBoost-R2 is a specialized version of boosting for predicting numeric values.
+It works by giving more attention to the data points that are hardest to predict correctly.
+With each round of training, it adjusts to focus more on the difficult cases, similar to
+how a teacher might give extra attention to students who are struggling with certain concepts.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_AttentionNetwork"><code>AttentionNetwork = 52</code></dt>
+  <dd><p>A neural network architecture that uses attention mechanisms to focus on relevant parts of the input.</p>
+<p>
+<b>For Beginners:</b> Attention Networks are designed to focus on the most important parts of the input 
+when making predictions. Imagine reading a long document and highlighting the key phrases - that's 
+similar to what an attention network does. It learns which parts of the input are most relevant for 
+the task at hand. This makes them particularly effective for tasks where some input elements are more 
+important than others, such as in language translation, image captioning, or analyzing time series data 
+where certain time steps might be more crucial than others.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_AutoML"><code>AutoML = 1</code></dt>
+  <dd><p>An automated machine learning model that automatically selects and trains the best model.</p>
+<p>
+<b>For Beginners:</b> AutoML (Automated Machine Learning) automates the process of selecting and
+configuring the best machine learning model for your data. Instead of manually trying different
+models, AutoML experiments with various algorithms, evaluates them, and chooses the one that
+performs best. It's like having an AI assistant that tests different approaches and picks the
+winner for you, saving you time and expertise.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Autoencoder"><code>Autoencoder = 49</code></dt>
+  <dd><p>A type of neural network that learns to encode data into a compressed representation and then decode it.</p>
+<p>
+<b>For Beginners:</b> Autoencoders are neural networks that try to copy their input to their output. This 
+might seem pointless, but there's a catch: they have to go through a narrow "bottleneck" in the middle. 
+This forces the network to learn a compressed representation of the data. It's like learning to describe 
+a movie in just a few words, then trying to recreate the whole movie from those words. This can be used 
+for dimensionality reduction, feature learning, and generating new data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_AuxiliaryClassifierGAN"><code>AuxiliaryClassifierGAN = 74</code></dt>
+  
+  <dd><p>An Auxiliary Classifier GAN that includes class information in generation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_BaggingClassifier"><code>BaggingClassifier = 170</code></dt>
+  <dd><p>Bagging classifier that combines predictions from multiple base estimators.</p>
+<p>
+<b>For Beginners:</b> Bagging (Bootstrap Aggregating) trains multiple copies of any base classifier on
+random subsets of the data, then combines their predictions. It's a general technique that can
+improve stability and accuracy of any classifier that tends to overfit.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_BayesianRegression"><code>BayesianRegression = 29</code></dt>
+  <dd><p>A probabilistic approach that updates predictions as new data becomes available.</p>
+<p>
+<b>For Beginners:</b> Bayesian Regression starts with an initial guess about relationships in your data, 
+then updates this guess as it sees more data. It's like having a theory about something, then 
+gradually refining your theory as you gather more evidence. A key advantage is that it doesn't 
+just give predictions but also tells you how confident it is in those predictions.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_BayesianStructuralTimeSeriesModel"><code>BayesianStructuralTimeSeriesModel = 104</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_BernoulliNaiveBayes"><code>BernoulliNaiveBayes = 158</code></dt>
+  <dd><p>Bernoulli Naive Bayes classifier for binary features.</p>
+<p>
+<b>For Beginners:</b> Bernoulli Naive Bayes works with binary (yes/no) features. Instead of counting how many times
+a word appears, it only cares whether the word appears at all. This is useful for text classification when
+you want to focus on the presence or absence of features rather than their frequency.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_BigGAN"><code>BigGAN = 78</code></dt>
+  
+  <dd><p>A BigGAN that uses large batch sizes for high-fidelity image generation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_Blip"><code>Blip = 111</code></dt>
+  
+  <dd><p>BLIP (Bootstrapped Language-Image Pre-training) for vision-language tasks.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_Blip2"><code>Blip2 = 112</code></dt>
+  
+  <dd><p>BLIP-2 (Bootstrapped Language-Image Pre-training 2) with Q-Former architecture.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_CQLAgent"><code>CQLAgent = 140</code></dt>
+  <dd><p>Conservative Q-Learning - offline RL algorithm that avoids out-of-distribution actions.</p>
+<p>
+<b>For Beginners:</b> CQL is designed for offline RL (learning from fixed datasets without interaction).
+It penalizes Q-values for actions not seen in the dataset, preventing the agent from being overconfident
+about unfamiliar actions. Useful for learning from historical data.
+<p>Strengths: Safe offline learning, works with fixed datasets, prevents distributional shift</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_CapsuleNetwork"><code>CapsuleNetwork = 56</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_CategoricalNaiveBayes"><code>CategoricalNaiveBayes = 160</code></dt>
+  <dd><p>Categorical Naive Bayes classifier for categorical features.</p>
+<p>
+<b>For Beginners:</b> Categorical Naive Bayes handles features that have distinct categories (like color: red/blue/green,
+or size: small/medium/large). Unlike Multinomial NB which counts occurrences, Categorical NB directly models
+the probability of each category appearing.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ClassifierChain"><code>ClassifierChain = 179</code></dt>
+  <dd><p>Classifier Chain for multi-label classification.</p>
+<p>
+<b>For Beginners:</b> Classifier Chain handles multi-label problems (where items can have multiple labels)
+by training classifiers in sequence, each using predictions from previous classifiers as features.
+This captures dependencies between labels, like "if it's labeled 'beach', it's more likely to also be labeled 'summer'".
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Clip"><code>Clip = 110</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_Clustering"><code>Clustering = 183</code></dt>
+  <dd><p>A clustering algorithm that groups similar data points together.</p>
+<p>
+<b>For Beginners:</b> Clustering algorithms find natural groups in data without being told
+what groups to look for. Unlike classification (which learns from labeled examples),
+clustering discovers patterns on its own.
+<p>Common clustering algorithms:</p>
+<ul>
+<li>K-Means: Divides data into k spherical clusters</li>
+<li>DBSCAN: Finds clusters of arbitrary shape based on density</li>
+<li>Hierarchical: Creates a tree of nested clusters</li>
+<li>GMM: Models clusters as Gaussian distributions</li>
+</ul>
+<p>Applications:</p>
+<ul>
+<li>Customer segmentation</li>
+<li>Image segmentation</li>
+<li>Anomaly detection</li>
+<li>Document grouping</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ComplementNaiveBayes"><code>ComplementNaiveBayes = 159</code></dt>
+  <dd><p>Complement Naive Bayes classifier designed for imbalanced datasets.</p>
+<p>
+<b>For Beginners:</b> Complement Naive Bayes is a variation designed to work better with imbalanced datasets
+where some classes have many more examples than others. Instead of modeling each class directly,
+it models the "complement" (everything except that class), which can provide more stable estimates.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ConditionalGAN"><code>ConditionalGAN = 73</code></dt>
+  
+  <dd><p>A Conditional GAN that generates data conditioned on additional information.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_ConditionalInferenceTree"><code>ConditionalInferenceTree = 13</code></dt>
+  <dd><p>A decision tree that uses statistical tests to make splitting decisions.</p>
+<p>
+<b>For Beginners:</b> Conditional Inference Tree is a type of decision tree that uses statistics to
+decide how to split the data. This makes it less biased toward features with many possible values.
+For example, a regular decision tree might favor using "zip code" over "temperature" just because
+there are more possible zip codes, even if temperature is actually more important. Conditional
+Inference Trees help avoid this problem.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ConvolutionalNeuralNetwork"><code>ConvolutionalNeuralNetwork = 47</code></dt>
+  <dd><p>A type of neural network particularly effective for processing grid-like data such as images.</p>
+<p>
+<b>For Beginners:</b> Convolutional Neural Networks are specialized for processing data with a grid-like 
+structure, such as images. They use a mathematical operation called convolution to scan over the input, 
+detecting features like edges, textures, and shapes. This is similar to how our eyes focus on different 
+parts of an image. CNNs are highly effective for tasks like image classification, object detection, 
+and even some types of time series analysis.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_CycleGAN"><code>CycleGAN = 79</code></dt>
+  
+  <dd><p>A CycleGAN for unpaired image-to-image translation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_DCGAN"><code>DCGAN = 70</code></dt>
+  
+  <dd><p>A Deep Convolutional GAN that uses convolutional layers with specific architectural guidelines.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_DDPGAgent"><code>DDPGAgent = 134</code></dt>
+  <dd><p>Deep Deterministic Policy Gradient - an actor-critic algorithm for continuous action spaces.</p>
+<p>
+<b>For Beginners:</b> DDPG learns policies for continuous control (like adjusting steering angle
+or motor torque) rather than discrete choices (like "left" or "right"). It's the RL equivalent
+of precision control versus binary decisions.
+<p>Used by: Robotic control, autonomous vehicles, continuous resource allocation
+Strengths: Handles continuous actions well, deterministic policies</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DGCNN"><code>DGCNN = 151</code></dt>
+  <dd><p>Dynamic Graph CNN for point cloud processing with dynamic edge convolutions.</p>
+<p>
+<b>For Beginners:</b> DGCNN constructs graphs dynamically in feature space and applies
+edge convolutions. Unlike fixed graph methods, it recomputes nearest neighbors after
+each layer, allowing the network to learn better representations.
+<p>DGCNN is useful for:</p>
+<ul>
+<li>Point cloud classification with high accuracy</li>
+<li>Part segmentation</li>
+<li>3D shape analysis</li>
+</ul>
+<p>Strengths: Dynamic graph construction, captures both local and global features</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DecisionTransformer"><code>DecisionTransformer = 142</code></dt>
+  <dd><p>Decision Transformer - treats RL as a sequence modeling problem using transformers.</p>
+<p>
+<b>For Beginners:</b> Decision Transformer uses the transformer architecture (from language models)
+to predict actions conditioned on desired returns. Instead of learning values or policies directly,
+it learns to generate action sequences that lead to target rewards.
+<p>Strengths: Leverages powerful transformer architecture, good offline performance, can condition on returns</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DecisionTree"><code>DecisionTree = 8</code></dt>
+  <dd><p>A tree-based model that makes decisions by splitting data based on feature values.</p>
+<p>
+<b>For Beginners:</b> Decision Tree works like a flowchart of yes/no questions. For example,
+to predict if someone will buy ice cream: "Is temperature &gt; 75°F? If yes, is it a weekend?
+If no, is there a special event?" and so on. It's easy to understand but can be less
+accurate than more complex models.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DecisionTreeClassifier"><code>DecisionTreeClassifier = 165</code></dt>
+  <dd><p>Decision Tree classifier using recursive partitioning.</p>
+<p>
+<b>For Beginners:</b> Decision Tree Classifier works like a flowchart of yes/no questions to classify data.
+It's easy to understand and interpret (you can visualize the tree), handles both numeric and categorical
+features, and requires minimal data preprocessing. However, single trees can overfit and are sensitive
+to small changes in the data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DeepBeliefNetwork"><code>DeepBeliefNetwork = 53</code></dt>
+  <dd><p>A probabilistic generative model composed of multiple layers of stochastic latent variables.</p>
+<p>
+<b>For Beginners:</b> Deep Belief Networks are like a tower of pattern recognizers stacked on top of each other. 
+Each layer learns to identify patterns in the output of the layer below it. The network starts by learning 
+simple patterns in the raw data, then progressively learns more complex and abstract patterns in higher layers. 
+</p>
+<p>
+For example, if analyzing images:
+- The bottom layer might learn to detect edges and simple shapes
+- Middle layers might recognize more complex features like eyes, noses, or wheels
+- Top layers might identify complete objects or scenes
+<p>This layer-by-layer approach allows Deep Belief Networks to learn meaningful representations of data
+even when you don't have a lot of labeled examples, making them powerful for tasks like feature learning,
+dimensionality reduction, and generating new data similar to the training set.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DeepBoltzmannMachine"><code>DeepBoltzmannMachine = 46</code></dt>
+  <dd><p>A generative stochastic neural network that can learn a probability distribution over its inputs.</p>
+<p>
+<b>For Beginners:</b> Deep Boltzmann Machine is a type of neural network that learns to recognize patterns 
+in data by trying to recreate the input data from scratch. Imagine it as an artist trying to paint a 
+picture after only glancing at it briefly. By doing this repeatedly, the network learns the important 
+features and relationships in the data. This makes it useful for tasks like feature detection, 
+dimensionality reduction, and generating new data similar to the training set.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DeepQNetwork"><code>DeepQNetwork = 65</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_DepthEstimation"><code>DepthEstimation = 195</code></dt>
+  <dd><p>Monocular Depth Estimation model for predicting depth from single images.</p>
+<p>
+<b>For Beginners:</b> Depth Estimation models predict how far each pixel is from the camera
+using only a single image, enabling 3D understanding without stereo cameras.
+<p>Examples: MiDaS, Depth Anything, ZoeDepth</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DifferentiableNeuralComputer"><code>DifferentiableNeuralComputer = 63</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_DiffusionNet"><code>DiffusionNet = 155</code></dt>
+  <dd><p>DiffusionNet for learning on 3D surfaces using diffusion-based message passing.</p>
+<p>
+<b>For Beginners:</b> DiffusionNet processes 3D meshes using heat diffusion as a building block.
+It learns features by simulating how heat would spread across the surface, which naturally
+captures surface geometry and is robust to mesh discretization.
+<p>DiffusionNet is useful for:</p>
+<ul>
+<li>Mesh segmentation</li>
+<li>Shape correspondence</li>
+<li>Surface-based learning tasks</li>
+</ul>
+<p>Strengths: Robust to mesh quality, captures intrinsic geometry, state-of-the-art on surfaces</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DoubleDQN"><code>DoubleDQN = 66</code></dt>
+  <dd><p>Double Deep Q-Network - addresses overestimation bias in DQN.</p>
+<p>
+<b>For Beginners:</b> Double DQN fixes a problem in standard DQN where Q-values are often
+too optimistic. It uses two networks to make more realistic value estimates - one picks
+the best action, another evaluates it. This leads to more stable and accurate learning.
+<p>Strengths: More accurate Q-values, better final performance, same complexity as DQN</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DreamerAgent"><code>DreamerAgent = 145</code></dt>
+  <dd><p>Dreamer - model-based RL that learns a world model and plans in latent space.</p>
+<p>
+<b>For Beginners:</b> Dreamer learns a model of the environment (how the world works), then
+"dreams" about possible futures to plan actions. This allows learning from imagined experiences,
+making it very sample-efficient.
+<p>Strengths: Very sample-efficient, learns world models, can plan ahead</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DuelingDQN"><code>DuelingDQN = 67</code></dt>
+  <dd><p>Dueling Deep Q-Network - separates value and advantage estimation.</p>
+<p>
+<b>For Beginners:</b> Dueling DQN splits Q-values into two parts: the value of being in a state
+(how good is this situation?) and the advantage of each action (how much better is this action
+than average?). This makes learning more efficient, especially when many actions have similar values.
+<p>Strengths: Faster learning, better performance, especially useful when actions don't always matter</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_DynamicRegressionWithARIMAErrors"><code>DynamicRegressionWithARIMAErrors = 105</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_EchoStateNetwork"><code>EchoStateNetwork = 64</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ElasticNetRegression"><code>ElasticNetRegression = 20</code></dt>
+  <dd><p>Elastic Net Regression (combined L1 and L2 regularization) for balanced feature selection and stability.</p>
+<p>
+<b>For Beginners:</b> Elastic Net combines the best of Ridge and Lasso regression.
+<p>It uses both L1 (Lasso) and L2 (Ridge) penalties, controlled by the L1Ratio parameter:</p>
+<ul>
+<li>L1Ratio = 1.0: Pure Lasso (maximum feature selection)</li>
+<li>L1Ratio = 0.0: Pure Ridge (maximum stability)</li>
+<li>L1Ratio = 0.5: Balanced mix (default)</li>
+</ul>
+<p>Key benefits over Lasso alone:</p>
+<ul>
+<li>Groups correlated features together instead of picking one arbitrarily</li>
+<li>Can select more than n features when n samples are available</li>
+<li>More stable when features are highly correlated</li>
+</ul>
+<p>Use Elastic Net when:</p>
+<ul>
+<li>You want feature selection AND have correlated features</li>
+<li>Lasso's behavior on correlated features is problematic</li>
+<li>You're not sure whether Ridge or Lasso is better for your problem</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ExponentialSmoothingModel"><code>ExponentialSmoothingModel = 106</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ExpressionTree"><code>ExpressionTree = 30</code></dt>
+  <dd><p>A tree-like structure that represents mathematical expressions.</p>
+<p>
+<b>For Beginners:</b> Expression Tree represents mathematical formulas as tree structures that can be 
+manipulated and evolved. Each branch and leaf represents part of a formula (like addition, 
+multiplication, or variables). This approach is often used in genetic programming to "evolve" 
+mathematical formulas that fit your data, similar to how natural selection works in nature.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ExtraTreesClassifier"><code>ExtraTreesClassifier = 169</code></dt>
+  <dd><p>Extra Trees (Extremely Randomized Trees) classifier with added randomness.</p>
+<p>
+<b>For Beginners:</b> Extra Trees is similar to Random Forest but adds even more randomness when building trees.
+Instead of finding the best split for each feature, it chooses splits randomly. This makes it faster
+to train and can reduce overfitting, though it may need more trees to achieve the same accuracy.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ExtremeLearningMachine"><code>ExtremeLearningMachine = 62</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_ExtremelyRandomizedTrees"><code>ExtremelyRandomizedTrees = 11</code></dt>
+  <dd><p>A variation of Random Forest that introduces more randomness in how trees are built.</p>
+<p>
+<b>For Beginners:</b> Extremely Randomized Trees is similar to Random Forest but adds even more
+randomness when building each tree. This extra randomness can help prevent overfitting
+(when a model learns the training data too specifically and performs poorly on new data).
+Think of it as deliberately introducing some "noise" to make the model more flexible.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_FeedForwardNetwork"><code>FeedForwardNetwork = 96</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_Flamingo"><code>Flamingo = 114</code></dt>
+  <dd><p>Flamingo model for in-context visual learning with few-shot capabilities.</p>
+<p>
+<b>For Beginners:</b> Flamingo can learn new visual tasks from just a few examples.
+Show it a few image-text pairs, and it learns the pattern to apply to new images.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_FrameInterpolation"><code>FrameInterpolation = 185</code></dt>
+  <dd><p>Frame Interpolation model for generating intermediate frames.</p>
+<p>
+<b>For Beginners:</b> Frame Interpolation models generate new frames between existing ones to increase
+video frame rate (e.g., 30fps to 60fps) or create slow-motion effects. They estimate motion between
+frames and synthesize intermediate frames.
+<p>Examples: RIFE, FILM, VFIMamba</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GARCHModel"><code>GARCHModel = 107</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_GRUNeuralNetwork"><code>GRUNeuralNetwork = 108</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_GaussianNaiveBayes"><code>GaussianNaiveBayes = 156</code></dt>
+  <dd><p>Gaussian Naive Bayes classifier for continuous features.</p>
+<p>
+<b>For Beginners:</b> Gaussian Naive Bayes assumes features follow a Gaussian (normal) distribution.
+It's fast, simple, and works well when features are continuous measurements like height, weight, or temperature.
+The "naive" assumption is that all features are independent of each other given the class.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GaussianProcessRegression"><code>GaussianProcessRegression = 21</code></dt>
+  <dd><p>A probabilistic model that provides uncertainty estimates along with predictions.</p>
+<p>
+<b>For Beginners:</b> Gaussian Process Regression doesn't just predict a value - it gives you a range
+of possible values with their probabilities. It's like a weather forecast that says "80% chance
+of rain" instead of just "it will rain." This is very useful when understanding the uncertainty
+of predictions is important, such as in scientific research or risk assessment.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GaussianSplatting"><code>GaussianSplatting = 154</code></dt>
+  <dd><p>3D Gaussian Splatting for real-time radiance field rendering.</p>
+<p>
+<b>For Beginners:</b> 3D Gaussian Splatting represents scenes as millions of 3D Gaussians
+that can be efficiently rasterized. Unlike NeRF's ray marching, it uses tile-based
+rasterization for real-time rendering at high quality.
+<p>Gaussian Splatting is useful for:</p>
+<ul>
+<li>Real-time novel view synthesis</li>
+<li>High-quality 3D reconstruction</li>
+<li>AR/VR applications requiring fast rendering</li>
+</ul>
+<p>Strengths: Real-time rendering (100+ FPS), high quality, explicit 3D representation</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GeneralizedAdditiveModelRegression"><code>GeneralizedAdditiveModelRegression = 36</code></dt>
+  <dd><p>A flexible model that combines multiple simple functions to capture complex patterns.</p>
+<p>
+<b>For Beginners:</b> Generalized Additive Model Regression builds complex relationships by adding together 
+simpler ones. Instead of forcing a specific shape (like a straight line or curve), it lets each 
+input variable affect the output in its own way. For example, temperature might have a curved 
+relationship with ice cream sales, while day of week has a different pattern. GAMs combine these 
+separate patterns to create a flexible overall model.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GenerativeAdversarialNetwork"><code>GenerativeAdversarialNetwork = 69</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_GeneticAlgorithmRegression"><code>GeneticAlgorithmRegression = 32</code></dt>
+  <dd><p>A model that uses principles inspired by natural evolution to find optimal solutions.</p>
+<p>
+<b>For Beginners:</b> Genetic Algorithm Regression mimics evolution to find the best model. It starts 
+with many random models, keeps the best ones ("survival of the fittest"), combines them to create 
+"offspring" models, and occasionally introduces random changes ("mutations"). Over many generations, 
+this process tends to discover increasingly better models, even for complex problems where traditional 
+approaches might struggle.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GradientBoosting"><code>GradientBoosting = 9</code></dt>
+  <dd><p>An ensemble technique that builds models sequentially, with each new model correcting errors from previous ones.</p>
+<p>
+<b>For Beginners:</b> Gradient Boosting builds a series of models, where each new model focuses on
+fixing the mistakes of previous models. It's like having a team where each member specializes
+in handling the cases that the rest of the team struggles with. This approach often produces
+very accurate predictions but requires careful tuning to avoid overfitting.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GradientBoostingClassifier"><code>GradientBoostingClassifier = 167</code></dt>
+  <dd><p>Gradient Boosting classifier that builds trees sequentially.</p>
+<p>
+<b>For Beginners:</b> Gradient Boosting builds trees one at a time, with each new tree correcting errors
+made by previous trees. This sequential approach often achieves higher accuracy than Random Forest
+but requires more careful tuning and can be slower to train.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_GraphNeuralNetwork"><code>GraphNeuralNetwork = 61</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_HTMNetwork"><code>HTMNetwork = 86</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_HopfieldNetwork"><code>HopfieldNetwork = 60</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_IQLAgent"><code>IQLAgent = 141</code></dt>
+  <dd><p>Implicit Q-Learning - another offline RL approach using expectile regression.</p>
+<p>
+<b>For Beginners:</b> IQL avoids explicitly computing policy constraints, making it simpler and
+more stable than some other offline RL methods. It learns Q-values and policies separately,
+which can be more robust.
+<p>Strengths: Simple, stable, good offline RL performance</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ImageBind"><code>ImageBind = 116</code></dt>
+  <dd><p>ImageBind for binding 6+ modalities (image, text, audio, video, thermal, depth, IMU).</p>
+<p>
+<b>For Beginners:</b> ImageBind connects ALL types of data in a shared space.
+Search audio by text, match thermal images to photos, or find videos from motion data!
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_InfoGAN"><code>InfoGAN = 75</code></dt>
+  
+  <dd><p>An Information Maximizing GAN that learns disentangled representations.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_InstantNGP"><code>InstantNGP = 153</code></dt>
+  <dd><p>Instant Neural Graphics Primitives with multiresolution hash encoding.</p>
+<p>
+<b>For Beginners:</b> Instant-NGP dramatically accelerates NeRF training using multiresolution
+hash encoding. Instead of slow positional encoding, it uses learned hash tables at multiple
+resolutions, enabling real-time training and rendering.
+<p>Instant-NGP is useful for:</p>
+<ul>
+<li>Real-time 3D reconstruction</li>
+<li>Fast NeRF training (seconds instead of hours)</li>
+<li>Interactive 3D scene editing</li>
+</ul>
+<p>Strengths: 1000x faster than vanilla NeRF, compact representation, real-time rendering</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_InterventionAnalysisModel"><code>InterventionAnalysisModel = 117</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_IsotonicRegression"><code>IsotonicRegression = 22</code></dt>
+  <dd><p>A non-parametric regression technique that preserves the order of data points.</p>
+<p>
+<b>For Beginners:</b> Isotonic Regression finds a non-decreasing (always flat or going up) or non-increasing
+(always flat or going down) line that best fits your data. It's useful when you know your output
+should never decrease as your input increases (or vice versa). For example, the risk of heart disease
+generally increases with age, so a model that sometimes shows risk decreasing with age would be illogical.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_KNearestNeighbors"><code>KNearestNeighbors = 27</code></dt>
+  <dd><p>A model that predicts based on the average of the k closest data points.</p>
+<p>
+<b>For Beginners:</b> K-Nearest Neighbors makes predictions by looking at the most similar examples 
+in your data. To predict a house price, it might find the 5 most similar houses (in terms of 
+size, location, etc.) and average their prices. It's like asking "What happened in similar 
+situations?" rather than trying to find a mathematical formula. Simple to understand but can 
+be slow with large datasets.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_KNeighborsClassifier"><code>KNeighborsClassifier = 164</code></dt>
+  <dd><p>K-Nearest Neighbors classifier based on similarity to training examples.</p>
+<p>
+<b>For Beginners:</b> K-Nearest Neighbors (KNN) classifies new samples by looking at the k most similar
+training examples and taking a majority vote. It's simple, intuitive, and makes no assumptions
+about the data distribution. The downside is that it can be slow for large datasets since it
+needs to compare against all training examples.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_KernelRidgeRegression"><code>KernelRidgeRegression = 17</code></dt>
+  <dd><p>Combines ridge regression with kernel methods to handle non-linear relationships.</p>
+<p>
+<b>For Beginners:</b> Kernel Ridge Regression is like Support Vector Regression but with a different
+mathematical approach. It uses "kernels" (special mathematical functions) to transform your data
+into a space where complex relationships become simpler. This allows it to capture non-linear patterns
+while still maintaining some of the simplicity and efficiency of linear models.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_KnowledgeDistillation"><code>KnowledgeDistillation = 148</code></dt>
+  <dd><p>A model trained through knowledge distillation - compressing a larger teacher model into a smaller student.</p>
+<p>
+<b>For Beginners:</b> Knowledge Distillation is like having a student learn from an expert teacher.
+The "teacher" is a large, accurate model, and the "student" is a smaller, faster model that learns
+to mimic the teacher's behavior while being much more efficient to deploy.
+<p>Real-world analogy: An expert chef (teacher) trains an apprentice (student). The apprentice learns
+not just the recipes (hard labels), but also the chef's intuitions, techniques, and reasoning process
+(soft targets). This deeper knowledge transfer helps the apprentice become highly skilled.</p>
+<p>How it works:</p>
+<ul>
+<li>Teacher model provides &quot;soft&quot; predictions (probabilities) that reveal relationships between classes</li>
+<li>Student learns from both soft predictions and true labels</li>
+<li>Result: Student model that's 40-90% smaller but retains 90-97% of teacher's accuracy</li>
+</ul>
+<p>Key benefits:</p>
+<ul>
+<li><strong>Model Compression</strong>: Deploy on mobile, edge devices, browsers</li>
+<li><strong>Faster Inference</strong>: 2-10x speedup with minimal accuracy loss</li>
+<li><strong>Lower Costs</strong>: Reduced compute and memory requirements</li>
+<li><strong>Better Calibration</strong>: Improved confidence estimates</li>
+</ul>
+<p>Success stories:</p>
+<ul>
+<li>DistilBERT: 40% smaller than BERT, 97% performance, 60% faster</li>
+<li>MobileNet: Distilled from ResNet, runs on smartphones</li>
+<li>TinyBERT: 7.5x smaller, suitable for edge deployment</li>
+</ul>
+<p>Use ConfigureKnowledgeDistillation() on PredictionModelBuilder to enable this technique.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LLaVA"><code>LLaVA = 113</code></dt>
+  <dd><p>LLaVA (Large Language and Vision Assistant) for visual instruction following.</p>
+<p>
+<b>For Beginners:</b> LLaVA connects a vision encoder with a large language model,
+enabling conversational AI about images. Think of it as giving ChatGPT the ability to see!
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LSTMNeuralNetwork"><code>LSTMNeuralNetwork = 85</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_LassoRegression"><code>LassoRegression = 19</code></dt>
+  <dd><p>Lasso Regression (L1 regularized linear regression) that can eliminate unimportant features.</p>
+<p>
+<b>For Beginners:</b> Lasso Regression performs automatic feature selection by shrinking some
+coefficients exactly to zero.
+<p>Unlike Ridge Regression which only shrinks coefficients, Lasso can completely eliminate features:</p>
+<ul>
+<li>L1 regularization can set coefficients to exactly zero</li>
+<li>Creates sparse models with fewer non-zero coefficients</li>
+<li>Useful for identifying the most important features</li>
+</ul>
+<p>Lasso uses coordinate descent optimization (iterative). Use it when:</p>
+<ul>
+<li>You have many features and want to identify the most important ones</li>
+<li>You want a simpler, more interpretable model</li>
+<li>You suspect only a subset of features actually matter</li>
+</ul>
+<p>Note: Lasso may arbitrarily select one feature from a group of correlated features.
+Consider ElasticNet for better handling of correlated features.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Linear"><code>Linear = 97</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_LinearDiscriminantAnalysis"><code>LinearDiscriminantAnalysis = 175</code></dt>
+  <dd><p>Linear Discriminant Analysis classifier that finds linear combinations of features.</p>
+<p>
+<b>For Beginners:</b> LDA finds the directions in the feature space that best separate the classes.
+It's both a classifier and a dimensionality reduction technique. It assumes features follow
+a Gaussian distribution with equal covariance for all classes, making it fast and effective
+when these assumptions hold.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LinearSupportVectorClassifier"><code>LinearSupportVectorClassifier = 162</code></dt>
+  <dd><p>Linear Support Vector Classifier optimized for large-scale data.</p>
+<p>
+<b>For Beginners:</b> Linear SVC is a faster version of SVC that only uses linear boundaries (straight lines/planes).
+While less flexible than kernel SVC, it's much faster and works well when you have many features
+or when a linear boundary is sufficient (which is often the case for high-dimensional data).
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LiquidStateMachine"><code>LiquidStateMachine = 59</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_LocallyWeightedRegression"><code>LocallyWeightedRegression = 25</code></dt>
+  <dd><p>A model that gives more weight to nearby data points when making predictions.</p>
+<p>
+<b>For Beginners:</b> Locally Weighted Regression makes predictions by focusing more on data points 
+that are similar to what you're trying to predict. It's like asking for restaurant recommendations 
+and giving more weight to opinions from people with similar taste to yours. This approach is 
+flexible and can capture complex patterns without requiring a specific mathematical formula.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LogisticRegression"><code>LogisticRegression = 42</code></dt>
+  <dd><p>A model for predicting binary outcomes (yes/no, true/false, 0/1).</p>
+<p>
+<b>For Beginners:</b> Logistic Regression predicts the probability of something being in a particular category. 
+Despite its name, it's used for classification, not regression. For example, it can predict whether 
+an email is spam (1) or not spam (0), or the probability a customer will make a purchase. It works by 
+transforming a linear model into probability values between 0 and 1 using a special S-shaped curve 
+called the logistic function.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_LongShortTermMemory"><code>LongShortTermMemory = 50</code></dt>
+  <dd><p>A neural network architecture that excels at processing sequential data with long-term dependencies.</p>
+<p>
+<b>For Beginners:</b> Long Short-Term Memory networks are a special kind of Recurrent Neural Network 
+capable of learning long-term dependencies. They're like a more sophisticated form of memory, able to 
+remember information for long periods of time. This makes them particularly good at tasks like language 
+translation, speech recognition, or any task where you need to consider context from much earlier in a sequence.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_M5ModelTree"><code>M5ModelTree = 14</code></dt>
+  <dd><p>A tree model that uses linear regression at its leaf nodes.</p>
+<p>
+<b>For Beginners:</b> M5 Model Tree combines decision trees with linear regression. Instead of making
+a single prediction at each leaf (end point) of the tree, it fits a small linear regression model.
+This is like first sorting your data into groups using yes/no questions, then finding the best
+straight-line fit for each group separately. This approach often works well for problems with
+numeric outputs.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MADDPGAgent"><code>MADDPGAgent = 143</code></dt>
+  <dd><p>Multi-Agent DDPG - extends DDPG to multi-agent cooperative/competitive settings.</p>
+<p>
+<b>For Beginners:</b> MADDPG allows multiple agents to learn simultaneously in shared environments.
+Each agent has its own policy but can observe others during training. Used for cooperative tasks
+(team coordination) or competitive tasks (games, negotiations).
+<p>Strengths: Handles multi-agent scenarios, centralized training with decentralized execution</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MAModel"><code>MAModel = 125</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_MemoryNetwork"><code>MemoryNetwork = 84</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_MeshCNN"><code>MeshCNN = 91</code></dt>
+  <dd><p>MeshCNN neural network for processing 3D triangle meshes.</p>
+<p>
+<b>For Beginners:</b> MeshCNN processes 3D shapes represented as triangle meshes
+directly, without converting to voxels or point clouds. It learns from the
+connectivity of triangles through edge-based convolutions.
+<p>MeshCNN is useful for:</p>
+<ul>
+<li>Shape classification from mesh data</li>
+<li>Mesh segmentation (labeling different parts)</li>
+<li>Learning from CAD models and 3D scans</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MixtureOfExperts"><code>MixtureOfExperts = 130</code></dt>
+  <dd><p>A neural network architecture that employs multiple specialist networks (experts) with learned routing.</p>
+<p>
+<b>For Beginners:</b> Mixture-of-Experts is like having a team of specialists rather than one generalist.
+<p>Imagine a hospital with different specialists:</p>
+<ul>
+<li>A cardiologist handles heart problems</li>
+<li>A neurologist handles brain issues</li>
+<li>A pediatrician handles children's health</li>
+<li>A triage system (gating network) directs patients to the right specialist(s)</li>
+</ul>
+<p>In a MoE neural network:</p>
+<ul>
+<li>Multiple &quot;expert&quot; networks specialize in different patterns</li>
+<li>A &quot;gating network&quot; learns to route inputs to the best expert(s)</li>
+<li>Only a few experts process each input (sparse activation), making it efficient</li>
+<li>Final predictions combine outputs from selected experts</li>
+</ul>
+<p>Key advantages:</p>
+<ul>
+<li>Increased model capacity without proportional compute cost</li>
+<li>Different experts specialize in different aspects of the problem</li>
+<li>Scalable to very large models</li>
+<li>Efficient through sparse expert activation</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MuZeroAgent"><code>MuZeroAgent = 146</code></dt>
+  <dd><p>MuZero - combines tree search with learned models, mastering games without knowing rules.</p>
+<p>
+<b>For Beginners:</b> MuZero (from DeepMind) learns to play games at superhuman levels without
+being told the rules. It learns a model of the game dynamics and uses tree search (like AlphaZero)
+to plan. Famous for mastering Chess, Go, Shogi, and Atari.
+<p>Strengths: State-of-the-art game playing, model-based planning, no need for known dynamics</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultiOutputClassifier"><code>MultiOutputClassifier = 180</code></dt>
+  <dd><p>Multi-output classifier for predicting multiple targets independently.</p>
+<p>
+<b>For Beginners:</b> Multi-Output Classifier trains one classifier per target variable, treating each
+target independently. It's useful when you need to predict multiple related but independent outputs
+from the same input features.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultilayerPerceptronRegression"><code>MultilayerPerceptronRegression = 45</code></dt>
+  <dd><p>A specific type of neural network with multiple layers of neurons.</p>
+<p>
+<b>For Beginners:</b> Multilayer Perceptron Regression is a specific type of neural network with at least 
+three layers: an input layer, one or more hidden layers, and an output layer. Each neuron connects 
+to all neurons in the next layer, creating a densely connected network. This structure allows the 
+model to learn complex patterns by transforming the data through successive layers, with each layer 
+learning increasingly abstract features. It's like having a team of specialists who each focus on 
+different aspects of a problem before combining their insights.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultinomialLogisticRegression"><code>MultinomialLogisticRegression = 41</code></dt>
+  <dd><p>A model for predicting categorical outcomes with more than two possible values.</p>
+<p>
+<b>For Beginners:</b> Multinomial Logistic Regression predicts which category something belongs to when 
+there are multiple possibilities. For example, predicting if a customer will choose small, medium, 
+or large size, or if an email is spam, personal, or work-related. It gives you the probability for 
+each possible outcome, allowing you to see not just the most likely category but also how confident 
+the model is.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultinomialNaiveBayes"><code>MultinomialNaiveBayes = 157</code></dt>
+  <dd><p>Multinomial Naive Bayes classifier for discrete count features.</p>
+<p>
+<b>For Beginners:</b> Multinomial Naive Bayes is designed for count data, like word frequencies in text documents.
+It's the go-to algorithm for text classification tasks like spam detection, sentiment analysis, and document categorization.
+Each feature represents how many times something occurs (e.g., how many times each word appears).
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultipleRegression"><code>MultipleRegression = 3</code></dt>
+  <dd><p>A model that finds the relationship between multiple input variables and a single output variable.</p>
+<p>
+<b>For Beginners:</b> Multiple Regression is like Simple Regression but with more factors.
+Instead of just using temperature to predict ice cream sales, you might also consider
+day of the week, local events, and season. This gives you a more complete picture.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_MultivariateRegression"><code>MultivariateRegression = 4</code></dt>
+  <dd><p>A model that predicts multiple output variables based on multiple input variables.</p>
+<p>
+<b>For Beginners:</b> Multivariate Regression predicts several things at once. For example,
+instead of just predicting ice cream sales, you might predict sales of ice cream,
+cold drinks, and sunscreen all from the same set of inputs like temperature and season.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_NEAT"><code>NEAT = 83</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_NeRF"><code>NeRF = 152</code></dt>
+  <dd><p>Neural Radiance Fields for novel view synthesis.</p>
+<p>
+<b>For Beginners:</b> NeRF learns a continuous 3D representation of a scene from 2D images.
+It represents scenes as a function mapping 3D coordinates and viewing direction to color
+and density, enabling photorealistic novel view synthesis.
+<p>NeRF is useful for:</p>
+<ul>
+<li>Novel view synthesis from photos</li>
+<li>3D reconstruction</li>
+<li>Virtual reality content creation</li>
+</ul>
+<p>Strengths: High-quality rendering, continuous representation, view-dependent effects</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_NegativeBinomialRegression"><code>NegativeBinomialRegression = 43</code></dt>
+  <dd><p>A model for count data with extra variation (overdispersion).</p>
+<p>
+<b>For Beginners:</b> Negative Binomial Regression is designed for counting events (like number of customer 
+complaints or product defects) when there's more variability in the data than expected. While Poisson 
+regression assumes the average and variance are equal, real-world count data often has higher variance. 
+Negative Binomial Regression handles this extra variability, making it more realistic for many 
+real-world counting problems.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_NeuralNetwork"><code>NeuralNetwork = 87</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_NeuralNetworkARIMA"><code>NeuralNetworkARIMA = 129</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_NeuralNetworkRegression"><code>NeuralNetworkRegression = 44</code></dt>
+  <dd><p>A flexible model inspired by the human brain's structure that can capture complex patterns.</p>
+<p>
+<b>For Beginners:</b> Neural Network Regression uses interconnected "neurons" organized in layers to learn 
+patterns in data. Think of it as a complex web of calculations that can discover and represent 
+relationships that simpler models miss. Neural networks can automatically learn features from data 
+without being explicitly programmed, making them powerful for complex problems like image recognition, 
+language processing, and predicting outcomes with many interacting factors.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_NeuralTuringMachine"><code>NeuralTuringMachine = 82</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_NonLinearRegression"><code>NonLinearRegression = 15</code></dt>
+  <dd><p>A model that captures complex, non-linear relationships in data.</p>
+<p>
+<b>For Beginners:</b> Non-Linear Regression captures complex relationships that can't be represented
+by straight lines. For example, population growth might follow an S-curve (slow at first,
+then rapid, then slowing down again). Non-linear models can capture these more complex patterns,
+but they can be harder to interpret and require more data to train effectively.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_None"><code>None = 0</code></dt>
+  
+  <dd><p>Represents no model selection.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_NuSupportVectorClassifier"><code>NuSupportVectorClassifier = 163</code></dt>
+  <dd><p>Nu-Support Vector Classifier with nu parameter for margin control.</p>
+<p>
+<b>For Beginners:</b> Nu-SVC is similar to regular SVC but uses a different parameter (nu) that has a more
+intuitive interpretation. The nu parameter bounds the fraction of support vectors and training errors,
+making it easier to tune for desired model complexity.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ObjectTracking"><code>ObjectTracking = 192</code></dt>
+  <dd><p>Object Tracking model for tracking objects across video frames.</p>
+<p>
+<b>For Beginners:</b> Object Tracking models follow objects as they move through a video,
+maintaining consistent identity even when objects are temporarily occluded.
+<p>Examples: ByteTrack, SORT, DeepSORT</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_OccupancyNetwork"><code>OccupancyNetwork = 88</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_OneVsOneClassifier"><code>OneVsOneClassifier = 178</code></dt>
+  <dd><p>One-vs-One classifier for multi-class classification.</p>
+<p>
+<b>For Beginners:</b> One-vs-One trains one classifier for each pair of classes. For N classes,
+this means N*(N-1)/2 classifiers. Each classifier votes, and the class with the most votes wins.
+It can be more accurate than One-vs-Rest but slower with many classes.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_OneVsRestClassifier"><code>OneVsRestClassifier = 177</code></dt>
+  <dd><p>One-vs-Rest classifier for multi-class classification.</p>
+<p>
+<b>For Beginners:</b> One-vs-Rest (also called One-vs-All) trains one binary classifier per class,
+where each classifier distinguishes one class from all others. The class with the highest
+confidence wins. It's simple and works with any binary classifier.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_OpticalFlow"><code>OpticalFlow = 186</code></dt>
+  <dd><p>Optical Flow model for estimating motion between frames.</p>
+<p>
+<b>For Beginners:</b> Optical Flow models estimate the apparent motion of pixels between consecutive
+video frames. This motion information is essential for many video processing tasks like frame
+interpolation, video stabilization, and action recognition.
+<p>Examples: RAFT, SEA-RAFT, GMFlow</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_OrthogonalRegression"><code>OrthogonalRegression = 33</code></dt>
+  <dd><p>A regression technique that accounts for errors in both input and output variables.</p>
+<p>
+<b>For Beginners:</b> Orthogonal Regression accounts for measurement errors in both your input and output 
+variables. Standard regression assumes your input measurements are perfect and only the outputs 
+have errors. But in reality, you might have uncertainty in both. For example, when studying how 
+height affects weight, both measurements might have errors. Orthogonal regression handles this 
+situation better than standard approaches.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PPOAgent"><code>PPOAgent = 132</code></dt>
+  <dd><p>Proximal Policy Optimization - a state-of-the-art policy gradient RL algorithm.</p>
+<p>
+<b>For Beginners:</b> PPO is one of the most popular RL algorithms today. It learns a policy
+(strategy for choosing actions) by making small, safe updates to avoid catastrophic performance drops.
+Think of it like making small course corrections while driving rather than sudden jerky turns.
+<p>Used by: OpenAI's ChatGPT (RLHF), robotics systems, game AI
+Strengths: Stable, sample-efficient, works well for continuous control</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PartialLeastSquaresRegression"><code>PartialLeastSquaresRegression = 37</code></dt>
+  <dd><p>A technique that handles correlated input variables by projecting them onto new dimensions.</p>
+<p>
+<b>For Beginners:</b> Partial Least Squares Regression works well when your input variables are related 
+to each other. For example, a person's height and weight are correlated - taller people tend to 
+weigh more. This correlation can confuse standard regression. PLS creates new combined variables 
+that capture the most important patterns while avoiding the problems caused by these correlations.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PassiveAggressiveClassifier"><code>PassiveAggressiveClassifier = 172</code></dt>
+  <dd><p>Passive Aggressive classifier for large-scale online learning.</p>
+<p>
+<b>For Beginners:</b> Passive Aggressive classifiers update aggressively when they make a mistake but stay
+"passive" (don't change) when they predict correctly. This makes them suitable for online learning
+where you receive data one example at a time.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PerceptronClassifier"><code>PerceptronClassifier = 173</code></dt>
+  <dd><p>Perceptron classifier - the simplest neural network.</p>
+<p>
+<b>For Beginners:</b> The Perceptron is the simplest possible neural network - just one layer that learns
+a linear boundary. While limited to linearly separable problems, it's historically important and
+forms the building block for more complex neural networks.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Pix2Pix"><code>Pix2Pix = 80</code></dt>
+  
+  <dd><p>A Pix2Pix GAN for paired image-to-image translation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_PointNet"><code>PointNet = 149</code></dt>
+  <dd><p>PointNet neural network for direct point cloud processing.</p>
+<p>
+<b>For Beginners:</b> PointNet processes 3D point clouds directly without converting
+to voxels or meshes. It learns global features from unordered point sets through
+symmetric functions (max pooling) that ensure permutation invariance.
+<p>PointNet is useful for:</p>
+<ul>
+<li>3D object classification from LiDAR or depth sensors</li>
+<li>Point cloud segmentation</li>
+<li>3D shape recognition</li>
+</ul>
+<p>Strengths: Simple, efficient, handles raw point clouds directly</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PointNetPlusPlus"><code>PointNetPlusPlus = 150</code></dt>
+  <dd><p>PointNet++ neural network with hierarchical point set learning.</p>
+<p>
+<b>For Beginners:</b> PointNet++ extends PointNet by learning local features at multiple scales.
+It uses farthest point sampling and ball query to create hierarchical point cloud representations,
+capturing both fine details and global structure.
+<p>PointNet++ is useful for:</p>
+<ul>
+<li>High-accuracy 3D classification and segmentation</li>
+<li>Scenes with varying point densities</li>
+<li>Applications requiring local geometric feature learning</li>
+</ul>
+<p>Strengths: Better local feature learning, multi-scale processing, state-of-the-art accuracy</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PoissonRegression"><code>PoissonRegression = 40</code></dt>
+  <dd><p>A regression model for count data (non-negative integers).</p>
+<p>
+<b>For Beginners:</b> Poisson Regression is designed for predicting counts - like the number of customer 
+calls per hour, website visits per day, or accidents per month. Unlike standard regression, it 
+ensures predictions are always non-negative (you can't have -3 customer calls) and works with the 
+special statistical properties of count data, where variance often increases with the mean.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Polynomial"><code>Polynomial = 98</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_PolynomialRegression"><code>PolynomialRegression = 5</code></dt>
+  <dd><p>A model that captures non-linear relationships using polynomial functions.</p>
+<p>
+<b>For Beginners:</b> Polynomial Regression uses curved lines instead of straight ones.
+This is useful when the relationship isn't a straight line - for example, plant growth
+might increase with water up to a point, then decrease if there's too much water.
+A curved line can capture this pattern better than a straight line.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_PrincipalComponentRegression"><code>PrincipalComponentRegression = 38</code></dt>
+  <dd><p>A dimension reduction technique combined with regression to handle many correlated variables.</p>
+<p>
+<b>For Beginners:</b> Principal Component Regression first simplifies your data by identifying the most 
+important patterns (principal components), then builds a regression model using these patterns. 
+It's like summarizing a 50-page document into 5 key points, then working with those summaries. 
+This approach works well when you have many related input variables and helps avoid overfitting 
+(when a model learns noise rather than true patterns).
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ProgressiveGAN"><code>ProgressiveGAN = 77</code></dt>
+  
+  <dd><p>A Progressive GAN that grows during training for high-resolution image generation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_ProphetModel"><code>ProphetModel = 128</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_QMIXAgent"><code>QMIXAgent = 144</code></dt>
+  <dd><p>QMIX - value-based multi-agent RL that factorizes joint action-values.</p>
+<p>
+<b>For Beginners:</b> QMIX learns how to coordinate multiple agents by factorizing the joint
+Q-function into individual agent Q-functions. It's particularly good for cooperative multi-agent
+tasks where agents need to work together.
+<p>Strengths: Efficient multi-agent coordination, monotonic value factorization</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_QuadraticDiscriminantAnalysis"><code>QuadraticDiscriminantAnalysis = 176</code></dt>
+  <dd><p>Quadratic Discriminant Analysis classifier with class-specific covariance.</p>
+<p>
+<b>For Beginners:</b> QDA is like LDA but allows each class to have its own covariance matrix.
+This creates quadratic (curved) decision boundaries instead of linear ones. It's more flexible
+than LDA but requires more data to estimate the additional parameters.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_QuantileRegression"><code>QuantileRegression = 23</code></dt>
+  <dd><p>Predicts specific percentiles of the output distribution rather than just the mean.</p>
+<p>
+<b>For Beginners:</b> Quantile Regression predicts different percentiles of your data. Instead of just
+predicting the average house price in an area, it might predict the median price (50th percentile),
+the luxury price (90th percentile), and the budget price (10th percentile). This gives you a more
+complete picture of the range of possible values.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_QuantileRegressionForests"><code>QuantileRegressionForests = 12</code></dt>
+  <dd><p>An extension of Random Forest that predicts a range of possible values rather than a single value.</p>
+<p>
+<b>For Beginners:</b> Quantile Regression Forests don't just predict a single value (like "this house
+will sell for $300,000") but instead predict a range ("this house will sell for between $280,000
+and $320,000 with 90% confidence"). This gives you a better sense of the uncertainty in the prediction,
+which can be very valuable for decision-making.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_QuantumNeuralNetwork"><code>QuantumNeuralNetwork = 57</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_REINFORCEAgent"><code>REINFORCEAgent = 139</code></dt>
+  <dd><p>REINFORCE (Monte Carlo Policy Gradient) - the foundational policy gradient algorithm.</p>
+<p>
+<b>For Beginners:</b> REINFORCE is the simplest policy gradient method. It plays full episodes,
+then updates the policy to make good actions more likely. Simple but can be slow and high-variance.
+<p>Strengths: Simple to understand and implement, works for any differentiable policy</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RadialBasisFunctionRegression"><code>RadialBasisFunctionRegression = 24</code></dt>
+  <dd><p>A model that uses radial basis functions to approximate complex patterns in data.</p>
+<p>
+<b>For Beginners:</b> Radial Basis Function Regression uses special functions that respond strongly 
+to data points close to their center and weakly to distant points. Imagine dropping a pebble 
+in water - the ripples are strongest near where the pebble fell and fade as they move outward. 
+By combining many of these "ripple patterns" centered at different points, the model can 
+approximate complex relationships in your data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RainbowDQN"><code>RainbowDQN = 68</code></dt>
+  <dd><p>Rainbow DQN - combines six DQN improvements into one powerful algorithm.</p>
+<p>
+<b>For Beginners:</b> Rainbow combines Double DQN, Dueling DQN, Prioritized Replay,
+Multi-step Learning, Distributional RL, and Noisy Networks. It's like taking the best features
+from six different DQN variants and putting them together. Currently the strongest DQN variant.
+<p>Strengths: State-of-the-art performance, combines multiple improvements, excellent sample efficiency</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RandomForest"><code>RandomForest = 7</code></dt>
+  <dd><p>An ensemble model that combines multiple decision trees to improve prediction accuracy.</p>
+<p>
+<b>For Beginners:</b> Random Forest combines many decision trees (simple flowchart-like models)
+and lets them vote on the final prediction. It's like asking a large group of people
+instead of just one person - the combined wisdom often gives better results. This model
+is powerful, handles complex data well, and is less likely to overfit (memorize) your data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RandomForestClassifier"><code>RandomForestClassifier = 166</code></dt>
+  <dd><p>Random Forest classifier using ensemble of decision trees.</p>
+<p>
+<b>For Beginners:</b> Random Forest combines many decision trees and lets them vote on the final prediction.
+By training each tree on a random subset of data and features, it reduces overfitting and improves
+accuracy. It's one of the most reliable "out of the box" classifiers and works well on many problems.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RecurrentNeuralNetwork"><code>RecurrentNeuralNetwork = 48</code></dt>
+  <dd><p>A neural network architecture designed to work with sequential data.</p>
+<p>
+<b>For Beginners:</b> Recurrent Neural Networks are designed to work with sequences of data, where the 
+order matters. They have a form of memory, allowing information to persist. This makes them ideal for 
+tasks involving time series, language, or any data where context from previous inputs is important. 
+Think of it like reading a book - your understanding of each word is influenced by the words that came before it.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ReinforcementLearning"><code>ReinforcementLearning = 131</code></dt>
+  <dd><p>A general reinforcement learning model type.</p>
+<p>
+<b>For Beginners:</b> Reinforcement Learning models learn through trial and error by interacting
+with an environment. Unlike supervised learning (which learns from labeled examples), RL agents
+learn from rewards and punishments. Think of training a dog - you give treats for good behavior
+and corrections for bad behavior, and the dog learns what actions lead to rewards.
+<p>RL has achieved remarkable successes:</p>
+<ul>
+<li>Playing games at superhuman level (AlphaGo, Atari games, Dota 2)</li>
+<li>Robotic control (walking, manipulation, assembly)</li>
+<li>Resource optimization (data center cooling, traffic control)</li>
+<li>Recommendation systems and personalization</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_ResidualNeuralNetwork"><code>ResidualNeuralNetwork = 54</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_RestrictedBoltzmannMachine"><code>RestrictedBoltzmannMachine = 94</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_RidgeClassifier"><code>RidgeClassifier = 174</code></dt>
+  <dd><p>Ridge classifier that uses L2 regularization.</p>
+<p>
+<b>For Beginners:</b> Ridge Classifier converts the classification problem to a regression problem and uses
+L2 regularization (like Ridge Regression). It's fast and works well for multi-class problems,
+especially when the number of classes is large.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RidgeRegression"><code>RidgeRegression = 18</code></dt>
+  <dd><p>Ridge Regression (L2 regularized linear regression) that adds a penalty for large coefficients.</p>
+<p>
+<b>For Beginners:</b> Ridge Regression is a safer version of linear regression that prevents overfitting.
+<p>It works by adding a penalty for large coefficient values (L2 regularization), which:</p>
+<ul>
+<li>Shrinks coefficients toward zero (but never exactly to zero)</li>
+<li>Makes the model more stable when features are correlated</li>
+<li>Reduces sensitivity to noise in the data</li>
+</ul>
+<p>Ridge Regression has a closed-form solution, making it fast to train. Use it when:</p>
+<ul>
+<li>You have correlated features</li>
+<li>You want to prevent overfitting</li>
+<li>You expect all features to contribute to the prediction</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_RobustRegression"><code>RobustRegression = 34</code></dt>
+  <dd><p>A regression method that is less sensitive to outliers in the data.</p>
+<p>
+<b>For Beginners:</b> Robust Regression is designed to handle outliers - unusual data points that don't 
+follow the general pattern. Standard regression can be heavily influenced by even a single extreme 
+value (like one house that sold for 10x the normal price). Robust regression reduces the influence 
+of these outliers, giving you a model that better represents the typical patterns in your data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SACAgent"><code>SACAgent = 133</code></dt>
+  <dd><p>Soft Actor-Critic - an off-policy algorithm combining maximum entropy RL with actor-critic.</p>
+<p>
+<b>For Beginners:</b> SAC encourages exploration by maximizing both reward and "entropy"
+(randomness/exploration). It's like learning to play a game while also maintaining variety
+in your strategies. This makes it very robust and sample-efficient for continuous control tasks.
+<p>Used by: Robotic manipulation, autonomous vehicles, industrial control
+Strengths: Very stable, excellent for continuous actions, sample-efficient</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SAGAN"><code>SAGAN = 81</code></dt>
+  
+  <dd><p>A Self-Attention GAN that uses attention mechanisms for modeling long-range dependencies.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_SARIMAModel"><code>SARIMAModel = 126</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SGDClassifier"><code>SGDClassifier = 171</code></dt>
+  <dd><p>Stochastic Gradient Descent classifier with various loss functions.</p>
+<p>
+<b>For Beginners:</b> SGD Classifier uses stochastic gradient descent to train linear classifiers efficiently.
+It can handle very large datasets that don't fit in memory by processing one example at a time.
+Different loss functions allow it to mimic logistic regression, SVM, or other linear models.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_STLDecomposition"><code>STLDecomposition = 119</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SelfOrganizingMap"><code>SelfOrganizingMap = 58</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SiameseNetwork"><code>SiameseNetwork = 109</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SimpleRegression"><code>SimpleRegression = 2</code></dt>
+  <dd><p>A basic model that finds the relationship between a single input variable and an output variable.</p>
+<p>
+<b>For Beginners:</b> Simple Regression is like drawing a straight line through your data points.
+It helps you understand how one thing affects another - for example, how temperature affects
+ice cream sales. It's the easiest model to understand and a great starting point.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SpectralAnalysisModel"><code>SpectralAnalysisModel = 127</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SpikingNeuralNetwork"><code>SpikingNeuralNetwork = 95</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SpiralNet"><code>SpiralNet = 93</code></dt>
+  <dd><p>SpiralNet neural network for mesh processing using spiral convolutions.</p>
+<p>
+<b>For Beginners:</b> SpiralNet is the original spiral convolution architecture
+for processing 3D meshes. It defines consistent spiral ordering of vertex neighbors
+for convolutional operations on irregular mesh structures.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SpiralNetPlusPlus"><code>SpiralNetPlusPlus = 92</code></dt>
+  <dd><p>SpiralNet++ neural network for mesh vertex processing using spiral convolutions.</p>
+<p>
+<b>For Beginners:</b> SpiralNet++ processes 3D meshes by applying convolutions
+along spiral sequences of vertices. This provides consistent local feature learning
+on irregular mesh structures without requiring mesh registration.
+<p>SpiralNet++ is useful for:</p>
+<ul>
+<li>Mesh shape analysis and classification</li>
+<li>Medical mesh analysis (organs, bones)</li>
+<li>General mesh classification and segmentation</li>
+</ul>
+<p>Strengths: Works on irregular meshes, efficient spiral-based operations</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SplineRegression"><code>SplineRegression = 26</code></dt>
+  <dd><p>A model that uses piecewise polynomial functions to create smooth curves through data points.</p>
+<p>
+<b>For Beginners:</b> Spline Regression connects data points with smooth curves rather than straight lines. 
+Imagine drawing a smooth curve through points on a graph by hand - you naturally create gentle 
+curves rather than sharp angles. Splines work similarly, creating a series of connected curves 
+that flow smoothly through your data points, which is useful for capturing complex patterns.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_StackingClassifier"><code>StackingClassifier = 181</code></dt>
+  <dd><p>Stacking classifier that combines multiple classifiers with a meta-learner.</p>
+<p>
+<b>For Beginners:</b> Stacking trains multiple base classifiers and then trains a "meta-learner" to combine
+their predictions. The meta-learner learns which classifiers to trust for different types of inputs.
+It often achieves better performance than any single classifier.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_StateSpaceModel"><code>StateSpaceModel = 123</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_StepwiseRegression"><code>StepwiseRegression = 39</code></dt>
+  <dd><p>A method that automatically selects the most important variables for prediction.</p>
+<p>
+<b>For Beginners:</b> Stepwise Regression automatically chooses which input variables to include in your 
+model. It starts with either no variables or all variables, then adds or removes them one by one 
+based on how much they improve predictions. This helps create simpler models by focusing only on 
+the most important factors, making the model easier to interpret and often more accurate on new data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_StyleGAN"><code>StyleGAN = 76</code></dt>
+  
+  <dd><p>A StyleGAN that generates high-quality images with style-based generation.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_SupportVectorClassifier"><code>SupportVectorClassifier = 161</code></dt>
+  <dd><p>Support Vector Classifier using the kernel trick for non-linear boundaries.</p>
+<p>
+<b>For Beginners:</b> Support Vector Classifier (SVC) finds the best boundary between classes by maximizing
+the margin (distance from the boundary to the nearest points). Using kernels, it can learn complex,
+non-linear decision boundaries. It's powerful but can be slow on large datasets.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_SupportVectorRegression"><code>SupportVectorRegression = 16</code></dt>
+  <dd><p>A powerful algorithm that finds patterns by mapping data to higher-dimensional spaces.</p>
+<p>
+<b>For Beginners:</b> Support Vector Regression finds patterns by transforming your data into a different
+space where the pattern becomes simpler. Imagine trying to separate mixed red and blue marbles on a table.
+It might be hard in 2D, but if you could lift some marbles up (adding a 3rd dimension), the separation
+might become easier. SVR uses a similar concept mathematically, making it powerful for complex patterns,
+though it can be slower and harder to tune than simpler models.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_Symbolic"><code>Symbolic = 99</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_SymbolicRegression"><code>SymbolicRegression = 28</code></dt>
+  <dd><p>A model that discovers mathematical formulas that best describe relationships in data.</p>
+<p>
+<b>For Beginners:</b> Symbolic Regression tries to find an actual mathematical formula that explains
+your data. Instead of just fitting parameters to a pre-defined equation, it searches for the
+equation itself. For example, it might discover that your data follows "y = x² + 3x - 2" rather 
+than just giving you numbers. This provides insights into the underlying relationships and can 
+be more interpretable than other complex models.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TBATSModel"><code>TBATSModel = 118</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_TD3Agent"><code>TD3Agent = 135</code></dt>
+  <dd><p>Twin Delayed Deep Deterministic Policy Gradient - improved version of DDPG.</p>
+<p>
+<b>For Beginners:</b> TD3 improves DDPG by addressing overestimation bias (being too optimistic
+about action values). It uses twin networks and delayed updates for more stable learning.
+Think of it as DDPG with better safety checks and more conservative estimates.
+<p>Used by: Advanced robotic control, simulated physics environments
+Strengths: More stable than DDPG, reduced overestimation, better final performance</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TRPOAgent"><code>TRPOAgent = 138</code></dt>
+  <dd><p>Trust Region Policy Optimization - ensures safe, monotonic policy improvements.</p>
+<p>
+<b>For Beginners:</b> TRPO guarantees that each policy update improves performance (monotonic improvement)
+by limiting how much the policy can change. It's like taking safe, guaranteed steps forward rather than
+potentially risky big leaps. PPO was developed as a simpler alternative to TRPO.
+<p>Strengths: Guaranteed improvement, very stable, excellent for continuous control</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TextToVideo"><code>TextToVideo = 191</code></dt>
+  <dd><p>Text-to-Video generation model for creating videos from text.</p>
+<p>
+<b>For Beginners:</b> Text-to-Video models generate video content from text descriptions,
+enabling creative content generation with natural language prompts.
+<p>Examples: OpenSora, Stable Video Diffusion</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TimeSeriesRegression"><code>TimeSeriesRegression = 35</code></dt>
+  <dd><p>A model specifically designed for data that changes over time.</p>
+<p>
+<b>For Beginners:</b> Time Series Regression is specialized for data collected over time, like daily 
+temperatures, stock prices, or monthly sales. It accounts for special patterns in time data, 
+such as seasonal effects (sales increasing during holidays), trends (gradual increase over years), 
+and the fact that recent values often influence future values. This makes it much better for 
+forecasting future values in time-based data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TransferFunctionModel"><code>TransferFunctionModel = 122</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_Transformer"><code>Transformer = 51</code></dt>
+  <dd><p>A neural network architecture that uses attention mechanisms to weigh the importance of different parts of the input.</p>
+<p>
+<b>For Beginners:</b> Transformer models use a mechanism called "attention" to weigh the importance of 
+different parts of the input when producing an output. It's like being able to focus on the most relevant 
+words in a sentence to understand its meaning. This allows them to handle long-range dependencies in data 
+very effectively. Transformers have revolutionized natural language processing tasks and are also being 
+applied to other domains like computer vision.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_TreeBased"><code>TreeBased = 100</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_UNet3D"><code>UNet3D = 90</code></dt>
+  <dd><p>3D U-Net architecture for volumetric semantic segmentation.</p>
+<p>
+<b>For Beginners:</b> A 3D U-Net is like an intelligent 3D scanner that can identify and label
+every single voxel in a 3D volume. The "U" shape comes from its encoder-decoder design:
+- Encoder: Progressively zooms out to understand the big picture
+- Decoder: Progressively zooms back in to produce detailed predictions
+- Skip connections: Preserve fine details by linking encoder to decoder
+<p>3D U-Net is useful for:</p>
+<ul>
+<li>Medical image segmentation (organs, tumors in CT/MRI)</li>
+<li>3D point cloud semantic segmentation</li>
+<li>Part segmentation of 3D shapes</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_UnobservedComponentsModel"><code>UnobservedComponentsModel = 121</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_VARModel"><code>VARModel = 120</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_VariationalAutoencoder"><code>VariationalAutoencoder = 55</code></dt>
+  
+  <dd></dd>
+    <dt id="AiDotNet_Enums_ModelType_Vector"><code>Vector = 31</code></dt>
+  <dd><p>A mathematical representation of data as points in multi-dimensional space.</p>
+<p>
+<b>For Beginners:</b> Vector models represent your data as points in space with multiple dimensions. 
+Each feature becomes a dimension - so if you have height and weight, each data point is plotted 
+in 2D space. With more features, you get more dimensions (though these become hard to visualize). 
+This representation allows mathematical operations that can reveal patterns and relationships 
+in your data.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoActionRecognition"><code>VideoActionRecognition = 190</code></dt>
+  <dd><p>Video Action Recognition model for understanding activities.</p>
+<p>
+<b>For Beginners:</b> Video Action Recognition models identify what actions or activities are
+happening in a video, such as "running", "cooking", or "playing basketball".
+<p>Examples: VideoMAE, InternVideo2</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoCLIP"><code>VideoCLIP = 115</code></dt>
+  <dd><p>VideoCLIP for video-text understanding and retrieval.</p>
+<p>
+<b>For Beginners:</b> VideoCLIP extends CLIP to understand videos, not just images.
+It can match videos with text descriptions, recognize actions, and caption videos.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoDenoising"><code>VideoDenoising = 196</code></dt>
+  <dd><p>Video Denoising model for removing noise from video.</p>
+<p>
+<b>For Beginners:</b> Video Denoising models remove noise (graininess) from video while
+preserving details and maintaining temporal consistency across frames.
+<p>Examples: FastDVDNet, VRT</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoDepthEstimation"><code>VideoDepthEstimation = 187</code></dt>
+  <dd><p>Video Depth Estimation model for predicting depth from video.</p>
+<p>
+<b>For Beginners:</b> Video Depth Estimation models predict how far each pixel is from the camera
+using temporal information across frames. This enables 3D scene understanding, autonomous driving,
+and AR/VR applications.
+<p>Examples: Depth Anything V2, Video Depth Anything</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoInpainting"><code>VideoInpainting = 189</code></dt>
+  <dd><p>Video Inpainting model for removing and filling content.</p>
+<p>
+<b>For Beginners:</b> Video Inpainting models remove unwanted objects from videos and fill in the
+removed areas with realistic content that maintains temporal consistency.
+<p>Examples: ProPainter, E2FGVI</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoMatting"><code>VideoMatting = 193</code></dt>
+  <dd><p>Video Matting model for extracting foreground with alpha matte.</p>
+<p>
+<b>For Beginners:</b> Video Matting models separate foreground subjects from backgrounds
+with soft alpha mattes that preserve fine details like hair and semi-transparent regions.
+<p>Examples: RVM (Robust Video Matting), MODNet</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoObjectSegmentation"><code>VideoObjectSegmentation = 188</code></dt>
+  <dd><p>Video Object Segmentation model for tracking and segmenting objects.</p>
+<p>
+<b>For Beginners:</b> Video Object Segmentation models identify and track specific objects across
+video frames, creating pixel-accurate masks that follow the object through time.
+<p>Examples: SAM2, Cutie, XMem</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoStabilization"><code>VideoStabilization = 194</code></dt>
+  <dd><p>Video Stabilization model for removing camera shake.</p>
+<p>
+<b>For Beginners:</b> Video Stabilization models smooth out shaky video by estimating
+and compensating for camera motion, producing steady footage.
+<p>Examples: DIFRINT, DUT</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VideoSuperResolution"><code>VideoSuperResolution = 184</code></dt>
+  <dd><p>Video Super-Resolution model for enhancing video resolution.</p>
+<p>
+<b>For Beginners:</b> Video Super-Resolution models upscale low-resolution videos to higher resolution
+while maintaining temporal consistency across frames. Unlike single-image super-resolution, video models
+use information from multiple frames to produce sharper and more consistent results.
+<p>Examples: BasicVSR++, VRT, VideoGigaGAN</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VotingClassifier"><code>VotingClassifier = 182</code></dt>
+  <dd><p>Voting classifier that combines predictions through voting.</p>
+<p>
+<b>For Beginners:</b> Voting Classifier combines multiple classifiers by letting them vote. Hard voting
+counts class predictions (majority wins), while soft voting averages predicted probabilities.
+It's a simple but effective way to combine diverse classifiers.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_VoxelCNN"><code>VoxelCNN = 89</code></dt>
+  <dd><p>A 3D Convolutional Neural Network that processes voxelized volumetric data.</p>
+<p>
+<b>For Beginners:</b> VoxelCNN is like a regular CNN but for 3D data. Instead of looking at
+2D images, it examines 3D grids of "voxels" (volumetric pixels). Think of voxels like
+3D Minecraft blocks - each block is either filled or empty.
+<p>VoxelCNN is useful for:</p>
+<ul>
+<li>3D shape classification (e.g., ModelNet40 dataset)</li>
+<li>Medical image analysis (CT scans, MRI)</li>
+<li>Robotics and spatial understanding</li>
+<li>Point cloud classification (after voxelization)</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_WassersteinGAN"><code>WassersteinGAN = 71</code></dt>
+  
+  <dd><p>A Wasserstein GAN that uses Wasserstein distance for more stable training.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_WassersteinGANGP"><code>WassersteinGANGP = 72</code></dt>
+  
+  <dd><p>A Wasserstein GAN with Gradient Penalty for enforcing Lipschitz constraint.</p>
+</dd>
+    <dt id="AiDotNet_Enums_ModelType_WeightedRegression"><code>WeightedRegression = 6</code></dt>
+  <dd><p>A regression model that gives different importance to different data points.</p>
+<p>
+<b>For Beginners:</b> Weighted Regression gives some data points more importance than others.
+For example, if you're predicting house prices, you might give more weight to recent sales
+and less weight to sales from many years ago, since the market changes over time.
+</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_ModelType_WorldModelsAgent"><code>WorldModelsAgent = 147</code></dt>
+  <dd><p>World Models - learns compressed spatial and temporal representations for model-based RL.</p>
+<p>
+<b>For Beginners:</b> World Models learns a compact representation of the environment and trains
+agents entirely inside this learned "world model". It can train much faster by learning in
+simulation rather than real environments.
+<p>Strengths: Fast training in learned models, good for visual environments, interpretable latent space</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_ModelType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This enum lists all the different AI models you can use in this library.
+Think of these as different tools in your AI toolbox - each one works best for specific
+types of problems. Some are simple and easy to understand, while others are more powerful
+but complex. Start with simpler models like SimpleRegression before moving to more advanced ones.
+</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ModelType.cs/#L14" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

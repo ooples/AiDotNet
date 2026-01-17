@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ProfilingConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ProfilingConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for performance profiling during model training and inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Deployment_Configuration_ProfilingConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Deployment.Configuration.ProfilingConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig">
+
+
+
+  <h1 id="AiDotNet_Deployment_Configuration_ProfilingConfig" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig" class="text-break">
+Class ProfilingConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Deployment.html">Deployment</a>.<a class="xref" href="AiDotNet.Deployment.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for performance profiling during model training and inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ProfilingConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ProfilingConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Deployment_Configuration_ProfilingConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Profiling measures how long different parts of your ML code take to run.
+Think of it like a stopwatch for your code - it helps you find bottlenecks and optimize performance.
+<p>What gets tracked:</p>
+<ul>
+<li>Operation timing: How long each training step, forward pass, backward pass takes</li>
+<li>Memory allocations: How much memory is used during training</li>
+<li>Call hierarchy: Which operations call which other operations</li>
+<li>Percentiles: P50 (median), P95, P99 timing for statistical analysis</li>
+</ul>
+<p>Why it's important:</p>
+<ul>
+<li>Find bottlenecks in your training pipeline</li>
+<li>Compare performance before and after optimizations</li>
+<li>Identify memory-intensive operations</li>
+<li>Understand your model's computational profile</li>
+</ul>
+<p>The profiler uses production-ready algorithms:</p>
+<ul>
+<li>Welford's algorithm for O(1) streaming mean/variance</li>
+<li>Reservoir sampling for bounded-memory percentile estimation</li>
+<li>Configurable sampling for high-frequency operations</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_AutoEnableInDebug_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.AutoEnableInDebug*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_AutoEnableInDebug" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.AutoEnableInDebug">
+  AutoEnableInDebug
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to auto-enable profiling in debug builds (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AutoEnableInDebug { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_AutoEnableInDebug_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When true, profiling is automatically enabled in debug builds
+even if Enabled is false. Convenient for development without changing config.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_CustomTags_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.CustomTags*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_CustomTags" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.CustomTags">
+  CustomTags
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom tags to include with profiling data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, string&gt; CustomTags { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_CustomTags_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Add custom labels to profiling data (e.g., model name, experiment ID).
+Useful for comparing profiles across different runs or configurations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_DetailedTiming_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.DetailedTiming*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_DetailedTiming" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.DetailedTiming">
+  DetailedTiming
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to include detailed timing breakdowns (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool DetailedTiming { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_DetailedTiming_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Track sub-operation timings within each operation.
+More detailed but adds overhead. Use for deep performance analysis.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_Enabled_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.Enabled*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_Enabled" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether profiling is enabled (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_Enabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Set to true to collect performance data during training/inference.
+Profiling adds some overhead, so it's disabled by default. Enable when debugging performance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_MaxOperations_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.MaxOperations*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_MaxOperations" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.MaxOperations">
+  MaxOperations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of unique operations to track (default: 10000).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxOperations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_MaxOperations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Maximum distinct operation names the profiler will track.
+Prevents unbounded memory growth if your code generates many unique operation names.
+10000 is typically more than enough for any ML workload.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_ReservoirSize_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.ReservoirSize*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_ReservoirSize" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.ReservoirSize">
+  ReservoirSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reservoir size for percentile estimation (default: 1000).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ReservoirSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_ReservoirSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many samples to keep for calculating P50/P95/P99.
+Larger values give more accurate percentiles but use more memory.
+1000 samples is usually sufficient for accurate estimates.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_SamplingRate_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.SamplingRate*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_SamplingRate" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.SamplingRate">
+  SamplingRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sampling rate for high-frequency operations (default: 1.0 = 100%).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SamplingRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_SamplingRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> What percentage of operations to profile (0.0 to 1.0).
+1.0 = profile everything, 0.1 = profile 10% of operations.
+Use lower values for very hot paths to reduce overhead.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackAllocations_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.TrackAllocations*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackAllocations" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.TrackAllocations">
+  TrackAllocations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track memory allocations (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackAllocations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackAllocations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records memory usage for each profiled operation.
+Helps identify memory-intensive operations during training.
+Combined with MemoryTracker for detailed analysis.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackCallHierarchy_" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.TrackCallHierarchy*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackCallHierarchy" data-uid="AiDotNet.Deployment.Configuration.ProfilingConfig.TrackCallHierarchy">
+  TrackCallHierarchy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track parent-child call relationships (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackCallHierarchy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_ProfilingConfig_TrackCallHierarchy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tracks which operations call which other operations.
+Enables call tree analysis to see the hierarchy of operations.
+Adds slight overhead but provides valuable context.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/ProfilingConfig.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

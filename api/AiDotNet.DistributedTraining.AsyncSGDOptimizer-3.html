@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AsyncSGDOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AsyncSGDOptimizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Asynchronous SGD optimizer - allows asynchronous parameter updates without strict barriers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_AsyncSGDOptimizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.AsyncSGDOptimizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3" class="text-break">
+Class AsyncSGDOptimizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Asynchronous SGD optimizer - allows asynchronous parameter updates without strict barriers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AsyncSGDOptimizer&lt;T, TInput, TOutput&gt; : ShardedOptimizerBase&lt;T, TInput, TOutput&gt;, IShardedOptimizer&lt;T, TInput, TOutput&gt;, IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html">ShardedOptimizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">AsyncSGDOptimizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DistributedTraining.IShardedOptimizer-3.html">IShardedOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_NumOps">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Config">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Config</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizer">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.WrappedOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WrappedOptimizerInternal">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.WrappedOptimizerInternal</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Rank">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Rank</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_WorldSize">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.WorldSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShardingConfiguration">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.ShardingConfiguration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeOptimizerState">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.SynchronizeOptimizerState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SynchronizeParameters_AiDotNet_Interfaces_IFullModel__0__1__2__">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.SynchronizeParameters(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ShouldEarlyStop">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.ShouldEarlyStop()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_GetOptions">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.GetOptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LastComputedGradients">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.LastComputedGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IFullModel__0__1__2__">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Reset">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Serialize">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_Deserialize_System_Byte___">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_SaveModel_System_String_">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.ShardedOptimizerBase-3.html#AiDotNet_DistributedTraining_ShardedOptimizerBase_3_LoadModel_System_String_">ShardedOptimizerBase&lt;T, TInput, TOutput&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Strategy Overview:</b>
+Asynchronous SGD (and variants like Hogwild!) removes synchronization barriers between workers.
+Each process updates parameters independently without waiting for others, using a parameter
+server or shared memory. This eliminates idle time from synchronization but introduces stale
+gradients - workers may compute gradients on slightly outdated parameters.
+<p>When done correctly (sparse gradients, low contention), async SGD can achieve near-linear
+speedup without much accuracy loss. However, it's more sensitive to hyperparameters and
+can be unstable for dense updates.</p>
+
+<p><b>For Beginners:</b>
+Async SGD is like a team working independently without meetings. Each person:
+1. Reads current parameters
+2. Computes gradients on their data
+3. Updates parameters immediately (no waiting!)
+<p>Pro: No time wasted waiting for slow workers
+Con: Updates might conflict or use slightly stale information</p>
+<p>This works well when updates are sparse (touching different parameters) but can be
+unstable when all workers update the same parameters frequently.</p>
+
+<p><b>Use Cases:</b>
+- Sparse models (embeddings, recommendation systems)
+- Scenarios with stragglers (some workers slower than others)
+- When synchronization overhead is very high
+- Research and experimentation
+</p>
+<p><b>Trade-offs:</b>
+- Memory: Requires parameter server or shared memory
+- Communication: Asynchronous - can be higher total volume
+- Complexity: High - requires parameter server infrastructure
+- Convergence: Can be slower or less stable than sync SGD
+- Best for: Sparse updates, heterogeneous workers, straggler tolerance
+- Limitation: Harder to tune, may require staleness-aware algorithms
+</p>
+<p><b>Implementation Note:</b>
+This framework provides async SGD infrastructure. Full production implementation
+requires parameter server setup or shared memory coordination. This implementation
+demonstrates the async update pattern.
+</p>
+<p>
+Example:
+<pre><code class="lang-csharp">var optimizer = new AdamOptimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(model, options);
+var backend = new InMemoryCommunicationBackend&lt;double&gt;(rank: 0, worldSize: 4);
+var config = new ShardingConfiguration&lt;double&gt;(backend);
+<p>var asyncOptimizer = new AsyncSGDOptimizer&lt;double, Tensor&lt;double&gt;, Tensor&lt;double&gt;&gt;(
+optimizer, config, allowStaleness: 2); // Allow up to 2 stale gradient steps</p></code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3__ctor_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3__ctor_AiDotNet_Interfaces_IOptimizer__0__1__2__AiDotNet_DistributedTraining_IShardingConfiguration__0__System_Int32_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.#ctor(AiDotNet.Interfaces.IOptimizer{`0,`1,`2},AiDotNet.DistributedTraining.IShardingConfiguration{`0},System.Int32)">
+  AsyncSGDOptimizer(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an async SGD optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AsyncSGDOptimizer(IOptimizer&lt;T, TInput, TOutput&gt; wrappedOptimizer, IShardingConfiguration&lt;T&gt; config, int allowStaleness = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>wrappedOptimizer</code> <a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimizer to wrap with async capabilities</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.DistributedTraining.IShardingConfiguration-1.html">IShardingConfiguration</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for sharding and communication</p>
+</dd>
+    <dt><code>allowStaleness</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum allowed staleness in gradient steps (default: 0 = sync)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Deserialize_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Deserialize_System_Byte___" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a previously serialized model from binary data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes binary data created by the Serialize method and uses it to
+restore a model to its previous state.</p>
+<p><b>For Beginners:</b> This is like opening a saved file to continue your work.</p>
+<p>When you call this method:</p>
+<ul>
+<li>You provide the binary data (bytes) that was previously created by Serialize</li>
+<li>The model rebuilds itself using this data</li>
+<li>After deserializing, the model is exactly as it was when serialized</li>
+<li>It's ready to make predictions without needing to be trained again</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>You download a pre-trained model file for detecting spam emails</li>
+<li>You deserialize this file into your application</li>
+<li>Immediately, your application can detect spam without any training</li>
+<li>The model has all the knowledge that was built into it by its original creator</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>You want to use a model that took days to train</li>
+<li>You need to deploy the same model across multiple devices</li>
+<li>You're creating an application that non-technical users will use</li>
+</ul>
+<p>Think of it like installing the brain of a trained expert directly into your application.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Optimize_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Optimize(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the optimization process to find the best parameters for a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override OptimizationResult&lt;T, TInput, TOutput&gt; Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The data needed for optimization, including the objective function,
+initial parameters, and any constraints.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The result of the optimization process, including the optimized parameters
+and performance metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method takes input data and attempts to find the optimal parameters
+that minimize or maximize the objective function.</p>
+<p><b>For Beginners:</b> This is where the actual &quot;learning&quot; happens. The optimizer looks at your data
+and tries different parameter values to find the ones that make your model perform best.</p>
+<p>The process typically involves:</p>
+<ol>
+<li>Evaluating how well the current parameters perform</li>
+<li>Calculating how to change the parameters to improve performance</li>
+<li>Updating the parameters</li>
+<li>Repeating until the model performs well enough or reaches a maximum number of attempts</li>
+</ol>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Serialize_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Serialize" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the current state of a machine learning model into a binary format.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method captures all the essential information about a trained model and converts it
+into a sequence of bytes that can be stored or transmitted.</p>
+<p><b>For Beginners:</b> This is like exporting your work to a file.</p>
+<p>When you call this method:</p>
+<ul>
+<li>The model's current state (all its learned patterns and parameters) is captured</li>
+<li>This information is converted into a compact binary format (bytes)</li>
+<li>You can then save these bytes to a file, database, or send them over a network</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>After training a model to recognize cats vs. dogs in images</li>
+<li>You can serialize the model to save all its learned knowledge</li>
+<li>Later, you can use this saved data to recreate the model exactly as it was</li>
+<li>The recreated model will make the same predictions as the original</li>
+</ul>
+<p>Think of it like taking a snapshot of your model's brain at a specific moment in time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_ShouldSync_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.ShouldSync*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_ShouldSync_System_Int32_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.ShouldSync(System.Int32)">
+  ShouldSync(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a barrier should be used (for periodic synchronization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ShouldSync(int iteration)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iteration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current iteration number</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if should synchronize at this iteration</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_SynchronizeOptimizerState_" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.SynchronizeOptimizerState*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_SynchronizeOptimizerState" data-uid="AiDotNet.DistributedTraining.AsyncSGDOptimizer`3.SynchronizeOptimizerState">
+  SynchronizeOptimizerState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes optimizer state (like momentum buffers) across all processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SynchronizeOptimizerState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_AsyncSGDOptimizer_3_SynchronizeOptimizerState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+Some optimizers (like Adam) keep track of past gradients to make smarter updates.
+This method makes sure all processes have the same optimizer state, so they stay
+coordinated. It's like making sure all team members are reading from the same playbook.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/AsyncSGDOptimizer.cs/#L68" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

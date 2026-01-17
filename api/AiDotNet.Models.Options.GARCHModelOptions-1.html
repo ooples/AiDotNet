@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GARCHModelOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GARCHModelOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model, which is used for analyzing and forecasting volatility in time series data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_GARCHModelOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.GARCHModelOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.GARCHModelOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_GARCHModelOptions_1" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1" class="text-break">
+Class GARCHModelOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Generalized Autoregressive Conditional Heteroskedasticity (GARCH) model,
+which is used for analyzing and forecasting volatility in time series data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GARCHModelOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically double or float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">GARCHModelOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_GARCHModelOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+GARCH models are specialized time series models designed to capture volatility clustering in financial
+and economic data. Unlike standard time series models that focus on predicting the mean value, GARCH
+models specifically model how the variance (volatility) of a time series changes over time, accounting
+for periods of high and low volatility.
+</p>
+<p><b>For Beginners:</b> Think of GARCH as a specialized tool for predicting how much something will
+fluctuate or vary in the future, rather than predicting its exact value. It's particularly useful for
+financial data like stock prices, where you might want to know not just whether a price will go up or down,
+but how stable or volatile it will be. For example, GARCH can help predict whether tomorrow's stock price
+will likely stay close to today's price or might swing dramatically in either direction. This is valuable
+for risk management and option pricing in finance. The model works by recognizing that periods of high
+volatility often cluster together (if today is volatile, tomorrow is likely to be volatile too).</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_GARCHModelOptions_1_ARCHOrder_" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.ARCHOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GARCHModelOptions_1_ARCHOrder" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.ARCHOrder">
+  ARCHOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ARCH order (p), which determines how many past squared errors are used to model current volatility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ARCHOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The ARCH order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GARCHModelOptions_1_ARCHOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The ARCH component of the model captures how recent shocks (unexpected changes) affect current volatility.
+The order (p) specifies how many past squared errors are included in the model. Higher values allow the
+model to capture more complex patterns in how past shocks influence current volatility.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past surprises or shocks the model considers
+when predicting today's volatility. With the default value of 1, the model only looks at yesterday's surprise
+(how far the actual value was from what was expected). Think of it like judging how nervous someone might be
+based on recent surprises they've experienced. If you set this higher (like 2 or 3), the model will consider
+surprises from multiple previous days, which might be more accurate but makes the model more complex. For most
+applications, a value of 1 or 2 works well, capturing the idea that recent surprises affect current volatility.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GARCHModelOptions_1_GARCHOrder_" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.GARCHOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GARCHModelOptions_1_GARCHOrder" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.GARCHOrder">
+  GARCHOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GARCH order (q), which determines how many past volatility values are used to model current volatility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GARCHOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The GARCH order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GARCHModelOptions_1_GARCHOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The GARCH component of the model captures how past volatility levels affect current volatility.
+The order (q) specifies how many past volatility values are included in the model. Higher values allow
+the model to capture more persistent patterns in volatility over time.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past volatility levels the model considers
+when predicting today's volatility. With the default value of 1, the model only looks at yesterday's volatility.
+Think of it like judging how rough the sea will be today based on how rough it was yesterday. If you set this
+higher (like 2 or 3), the model will consider volatility from multiple previous days, which might capture
+longer-lasting patterns. The combination of ARCH (recent surprises) and GARCH (recent volatility levels)
+helps the model predict whether things will be stable or unstable in the near future. A GARCH(1,1) model
+(both orders set to 1) is often sufficient for many applications.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GARCHModelOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GARCHModelOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations allowed during parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GARCHModelOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+GARCH models are typically estimated using iterative numerical optimization methods. This parameter
+limits how many iterations the optimization algorithm will perform before stopping, preventing
+excessively long computation times.
+</p>
+<p><b>For Beginners:</b> This setting limits how long the model will spend trying to find the best
+parameters. With the default value of 1000, the model will try up to 1000 rounds of refinement before
+stopping, even if it hasn't found the perfect solution. Think of it like setting a time limit on a
+treasure hunt - at some point, you need to stop searching even if you haven't found the absolute best
+treasure. For simple datasets, the model might find good parameters much sooner than 1000 iterations.
+You might increase this for complex datasets where the model needs more time to find good parameters,
+or decrease it if you need faster results and can accept slightly less optimal parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GARCHModelOptions_1_MeanModel_" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.MeanModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GARCHModelOptions_1_MeanModel" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.MeanModel">
+  MeanModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model used to predict the mean of the time series before modeling volatility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ITimeSeriesModel&lt;T&gt;? MeanModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ITimeSeriesModel-1.html">ITimeSeriesModel</a>&lt;T&gt;</dt>
+    <dd><p>The mean model, defaulting to null (which uses a simple mean).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GARCHModelOptions_1_MeanModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+GARCH models focus on modeling the variance (volatility) of a time series, but they typically need
+a separate model to handle the mean prediction. This property allows you to specify a different time
+series model (like ARIMA) to predict the mean values before the GARCH model analyzes the residuals
+for volatility patterns.
+</p>
+<p><b>For Beginners:</b> This setting lets you choose another model to predict the actual values
+before GARCH predicts the volatility. By default (when null), the model uses a simple average. Think
+of it like a two-step process: first, predict what value you expect (using this mean model), then
+predict how far off that prediction might be (using GARCH). For example, you might use an ARIMA model
+here to predict stock prices, and then GARCH to predict how volatile those prices will be. This combined
+approach (often called ARIMA-GARCH) is common in financial forecasting because it handles both the
+direction and the uncertainty of the forecast.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GARCHModelOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GARCHModelOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.GARCHModelOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for parameter estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.000001 (1e-6).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GARCHModelOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines how small the change in parameter estimates needs to be between iterations
+for the optimization algorithm to consider that it has converged to a solution. Smaller values require
+more precise convergence but may increase computation time.
+</p>
+<p><b>For Beginners:</b> This setting determines how precise the model needs to be before it decides
+it's found a good solution. With the default value of 0.000001 (one millionth), the model will stop
+refining its parameters when the improvements between attempts become very tiny. Think of it like
+deciding when a drawing is "finished" - at some point, additional pencil strokes make such a small
+difference that it's not worth continuing. A smaller value (like 0.0000001) would make the model more
+precise but might take longer to finish. A larger value (like 0.0001) would make the model finish faster
+but with potentially less optimal parameters. The default is a good balance for most applications.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GARCHModelOptions.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,2834 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class VectorModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class VectorModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a linear model that uses a vector of coefficients to make predictions.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_VectorModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.VectorModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.VectorModel`1">
+
+
+
+  <h1 id="AiDotNet_Models_VectorModel_1" data-uid="AiDotNet.Models.VectorModel`1" class="text-break">
+Class VectorModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a linear model that uses a vector of coefficients to make predictions.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class VectorModel&lt;T&gt; : IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IModel&lt;Matrix&lt;T&gt;, Vector&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;, IInterpretableModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">VectorModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInterpretableModel-1.html">IInterpretableModel</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Models_VectorModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class implements a simple linear model where predictions are made by computing the dot product of the input 
+features and a vector of coefficients. It provides methods for training the model using linear regression, 
+evaluating predictions, and genetic algorithm operations like mutation and crossover. This model is useful for 
+linear regression problems and can serve as a building block for more complex models.
+</p>
+<p><b>For Beginners:</b> This is a simple linear model that makes predictions by multiplying each input by a weight and adding them up.
+<p>When using this model:</p>
+<ul>
+<li>Each input feature has a corresponding coefficient (weight)</li>
+<li>Predictions are made by multiplying each input by its coefficient and summing the results</li>
+<li>The model can be trained using linear regression on example data</li>
+<li>It supports genetic algorithm operations for optimization</li>
+</ul>
+<p>For example, if predicting house prices, the model might learn that:
+price = 50,000 * bedrooms + 100 * square_feet + 20,000 * bathrooms</p>
+<p>This is one of the simplest and most interpretable machine learning models,
+making it a good starting point for many problems.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_VectorModel_1__ctor_" data-uid="AiDotNet.Models.VectorModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Models.VectorModel`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  VectorModel(Vector&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public VectorModel(Vector&lt;T&gt; coefficients, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Models_VectorModel_1__baseModel" data-uid="AiDotNet.Models.VectorModel`1._baseModel">
+  _baseModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? _baseModel</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Models_VectorModel_1__enabledMethods" data-uid="AiDotNet.Models.VectorModel`1._enabledMethods">
+  _enabledMethods
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly HashSet&lt;InterpretationMethod&gt; _enabledMethods</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.hashset-1">HashSet</a>&lt;<a class="xref" href="AiDotNet.Interpretability.InterpretationMethod.html">InterpretationMethod</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Models_VectorModel_1__fairnessMetrics" data-uid="AiDotNet.Models.VectorModel`1._fairnessMetrics">
+  _fairnessMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;FairnessMetric&gt; _fairnessMetrics</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Interpretability.FairnessMetric.html">FairnessMetric</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Models_VectorModel_1__sensitiveFeatures" data-uid="AiDotNet.Models.VectorModel`1._sensitiveFeatures">
+  _sensitiveFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;int&gt;? _sensitiveFeatures</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Coefficients_" data-uid="AiDotNet.Models.VectorModel`1.Coefficients*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Coefficients" data-uid="AiDotNet.Models.VectorModel`1.Coefficients">
+  Coefficients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vector of coefficients used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Coefficients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A Vector&lt;T&gt; containing the model's coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Coefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the vector of coefficients that the model uses to make predictions. Each coefficient 
+corresponds to a feature in the input data and represents the weight or importance of that feature in the model's 
+predictions. The coefficients are learned during training and are used to compute the dot product with input 
+features when making predictions.
+</p>
+<p><b>For Beginners:</b> This contains the weights that the model applies to each input feature.
+<p>The coefficients:</p>
+<ul>
+<li>Are the numbers that multiply each input feature</li>
+<li>Determine how much each feature contributes to the prediction</li>
+<li>Are learned during training to minimize prediction error</li>
+</ul>
+<p>For example, in a house price prediction model:</p>
+<ul>
+<li>A coefficient of 50,000 for bedrooms means each bedroom adds $50,000 to the predicted price</li>
+<li>A coefficient of 100 for square feet means each square foot adds $100 to the predicted price</li>
+</ul>
+<p>These coefficients make the model interpretable - you can see exactly how each feature affects the prediction.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Complexity_" data-uid="AiDotNet.Models.VectorModel`1.Complexity*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Complexity" data-uid="AiDotNet.Models.VectorModel`1.Complexity">
+  Complexity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the complexity of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Complexity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the model's complexity.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Complexity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of non-zero coefficients in the model, which provides a simple
+measure of the model's complexity. Lower complexity can indicate a more generalizable model that's
+less likely to overfit.
+</p>
+<p><b>For Beginners:</b> This property tells you how complex the model is.
+<p>The complexity:</p>
+<ul>
+<li>Is measured by counting how many non-zero coefficients the model uses</li>
+<li>Lower complexity often means better generalization to new data</li>
+<li>Higher complexity might mean the model is overfitting to training data</li>
+</ul>
+<p>For example, if a model has coefficients [0.5, 0, 0, 2.0, 0.3], its complexity would be 3,
+since only three coefficients are non-zero and actually contribute to predictions.</p>
+<p>This is useful for comparing different models and for regularization approaches
+that aim to reduce model complexity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_DefaultLossFunction_" data-uid="AiDotNet.Models.VectorModel`1.DefaultLossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_DefaultLossFunction" data-uid="AiDotNet.Models.VectorModel`1.DefaultLossFunction">
+  DefaultLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the default loss function used by this model for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; DefaultLossFunction { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_DefaultLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For VectorModel (linear regression), the default loss function is Mean Squared Error (MSE),
+which is the standard loss function for regression problems.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_FeatureCount_" data-uid="AiDotNet.Models.VectorModel`1.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_FeatureCount" data-uid="AiDotNet.Models.VectorModel`1.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the number of input features.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_FeatureCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the number of features that the model uses, which is determined by the length of the 
+coefficients vector. Each coefficient corresponds to a feature in the input data, so the number of coefficients 
+equals the number of features the model expects when making predictions.
+</p>
+<p><b>For Beginners:</b> This tells you how many input variables the model uses.
+<p>The feature count:</p>
+<ul>
+<li>Is equal to the length of the coefficients vector</li>
+<li>Tells you how many input values the model expects</li>
+<li>Must match the number of features in your input data</li>
+</ul>
+<p>For example, if FeatureCount is 3, the model expects three input values
+for each prediction (like bedrooms, bathrooms, and square footage).</p>
+<p>This property is useful when:</p>
+<ul>
+<li>Checking if your input data has the right number of features</li>
+<li>Understanding the complexity of the model</li>
+<li>Preparing data for prediction</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ParameterCount_" data-uid="AiDotNet.Models.VectorModel`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ParameterCount" data-uid="AiDotNet.Models.VectorModel`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of trainable parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the number of parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For a VectorModel, the number of parameters equals the number of coefficients,
+as each coefficient is a trainable parameter.
+</p>
+<p><b>For Beginners:</b> This tells you how many weights the model has to learn.
+<p>For a linear model:</p>
+<ul>
+<li>Each coefficient is a parameter that can be trained</li>
+<li>More parameters generally means more complexity</li>
+<li>The parameter count equals the number of features</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SupportsJitCompilation_" data-uid="AiDotNet.Models.VectorModel`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SupportsJitCompilation" data-uid="AiDotNet.Models.VectorModel`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1693"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this model supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+VectorModel supports JIT compilation by converting its linear regression computation
+(matrix-vector multiplication) to a computation graph. This enables 5-10x faster inference.
+</p>
+<p><b>For Beginners:</b> JIT compilation makes predictions much faster.
+<p>Linear regression is simple: output = input @ coefficients
+With JIT, this computation is compiled to optimized native code for maximum speed.</p>
+<p>Especially beneficial for:</p>
+<ul>
+<li>Processing large datasets</li>
+<li>Real-time prediction systems</li>
+<li>Production deployments</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ApplyGradients_" data-uid="AiDotNet.Models.VectorModel`1.ApplyGradients*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Models.VectorModel`1.ApplyGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  ApplyGradients(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L332"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pre-computed gradients to update the model parameters (coefficients).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyGradients(Vector&lt;T&gt; gradients, T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradient vector to apply.</p>
+</dd>
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate for the update.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Updates coefficients using: coefficients = coefficients - learningRate * gradients
+</p>
+<p><b>For Beginners:</b>
+After computing gradients (seeing which direction to adjust each coefficient),
+this method actually adjusts them. The learning rate controls how big of an adjustment to make.
+<p>In distributed training, this applies the averaged gradients from multiple machines
+to ensure all machines keep their models synchronized.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If gradients is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If gradient vector length doesn't match coefficient count.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Clone_" data-uid="AiDotNet.Models.VectorModel`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Clone" data-uid="AiDotNet.Models.VectorModel`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a shallow copy of this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance with the same coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a shallow copy of the model. For VectorModel, this is equivalent to DeepCopy because
+the only state that needs to be copied is the Coefficients vector.
+</p>
+<p><b>For Beginners:</b> This method creates a duplicate of the model.
+<p>For the VectorModel:</p>
+<ul>
+<li>Clone and DeepCopy do the same thing</li>
+<li>Both create a new model with a copy of the coefficients</li>
+</ul>
+<p>The Clone method is provided for compatibility with the IFullModel interface.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ComputeGradients_" data-uid="AiDotNet.Models.VectorModel`1.ComputeGradients*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0__" data-uid="AiDotNet.Models.VectorModel`1.ComputeGradients(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.ILossFunction{`0})">
+  ComputeGradients(Matrix&lt;T&gt;, Vector&lt;T&gt;, ILossFunction&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L277"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of the loss function with respect to model parameters WITHOUT updating parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ComputeGradients(Matrix&lt;T&gt; input, Vector&lt;T&gt; target, ILossFunction&lt;T&gt;? lossFunction = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data matrix.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target/expected output vector.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function to use. If null, uses the model's default loss function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing gradients with respect to all model parameters (coefficients).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_ILossFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the gradient of the loss function with respect to the model's coefficients.
+For a linear model: y_pred = coefficients · x
+The gradient is computed as: ∂L/∂coefficients = (1/n) * X^T * ∂L/∂y_pred
+</p>
+<p><b>For Beginners:</b>
+This calculates how to adjust each coefficient to reduce the prediction error,
+but it doesn't actually change the coefficients. This is useful for:
+- Distributed training: average gradients from multiple machines before updating
+- Custom optimization: use advanced optimizers like Adam or RMSprop
+- Analysis: understand which coefficients need the most adjustment
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>If input or target is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>If input and target dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ConfigureFairness_" data-uid="AiDotNet.Models.VectorModel`1.ConfigureFairness*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ConfigureFairness_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__AiDotNet_Interpretability_FairnessMetric___" data-uid="AiDotNet.Models.VectorModel`1.ConfigureFairness(AiDotNet.Tensors.LinearAlgebra.Vector{System.Int32},AiDotNet.Interpretability.FairnessMetric[])">
+  ConfigureFairness(Vector&lt;int&gt;, params FairnessMetric[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1540"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures fairness evaluation settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ConfigureFairness(Vector&lt;int&gt; sensitiveFeatures, params FairnessMetric[] fairnessMetrics)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sensitiveFeatures</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>fairnessMetrics</code> <a class="xref" href="AiDotNet.Interpretability.FairnessMetric.html">FairnessMetric</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_DeepCopy_" data-uid="AiDotNet.Models.VectorModel`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_DeepCopy" data-uid="AiDotNet.Models.VectorModel`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1084"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new instance with the same coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_DeepCopy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a deep copy of the model by creating a new VectorModel with a new coefficients vector that has 
+the same values as the original. This ensures that modifications to the copy do not affect the original model. This 
+method is useful when you need to create a duplicate of a model for experimentation or as part of genetic algorithm 
+operations.
+</p>
+<p><b>For Beginners:</b> This method creates an exact duplicate of the model.
+<p>The DeepCopy method:</p>
+<ul>
+<li>Creates a new model with the same coefficients as this one</li>
+<li>Ensures the new model is completely independent of the original</li>
+<li>Creates a &quot;deep copy&quot; where all data is duplicated, not just references</li>
+</ul>
+<p>This method is useful when:</p>
+<ul>
+<li>You need to create a duplicate of a model for experimentation</li>
+<li>You want to ensure changes to one model don't affect another</li>
+<li>You're implementing algorithms that require model copies</li>
+</ul>
+<p>For example, you might copy a model before mutating it to preserve the original.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Deserialize_" data-uid="AiDotNet.Models.VectorModel`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Deserialize_System_Byte___" data-uid="AiDotNet.Models.VectorModel`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L681"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes the model from a byte array by reading the number of coefficients and then each coefficient 
+value. It expects the same format as produced by the Serialize method: first an integer indicating the number of 
+coefficients, followed by each coefficient as a double. This allows a model that was previously serialized to be 
+reconstructed.
+</p>
+<p><b>For Beginners:</b> This method reconstructs a model from a byte array created by Serialize.
+<p>The Deserialize method:</p>
+<ul>
+<li>Takes a byte array containing a serialized model</li>
+<li>Reads the number of coefficients and each coefficient value</li>
+<li>Updates the model's coefficients with the deserialized values</li>
+</ul>
+<p>It expects the same format created by Serialize:</p>
+<ol>
+<li>An integer with the number of coefficients</li>
+<li>Each coefficient value as a double</li>
+</ol>
+<p>This method is useful when:</p>
+<ul>
+<li>Loading models from files or databases</li>
+<li>Receiving models over a network</li>
+<li>Restoring models from persistent storage</li>
+</ul>
+<p>Note that this method updates the existing model's coefficients rather than
+creating a new model, which is different from most other methods in this class.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when data is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when data is empty or invalid.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the serialized coefficients count doesn't match the model's coefficients count.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_EnableMethod_" data-uid="AiDotNet.Models.VectorModel`1.EnableMethod*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_EnableMethod_AiDotNet_Interpretability_InterpretationMethod___" data-uid="AiDotNet.Models.VectorModel`1.EnableMethod(AiDotNet.Interpretability.InterpretationMethod[])">
+  EnableMethod(params InterpretationMethod[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1529"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables specific interpretation methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void EnableMethod(params InterpretationMethod[] methods)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>methods</code> <a class="xref" href="AiDotNet.Interpretability.InterpretationMethod.html">InterpretationMethod</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Evaluate_" data-uid="AiDotNet.Models.VectorModel`1.Evaluate*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Evaluate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.VectorModel`1.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Evaluate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the model for a given input vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Evaluate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The model's prediction for the input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Evaluate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method evaluates the model for a given input vector by computing the dot product of the input and the 
+coefficients. This is the core prediction function of the linear model, where each feature value is multiplied 
+by its corresponding coefficient and the results are summed to produce the final prediction.
+</p>
+<p><b>For Beginners:</b> This method calculates the model's prediction for a single input.
+<p>The Evaluate method:</p>
+<ul>
+<li>Takes a vector of input values</li>
+<li>Multiplies each input by its corresponding coefficient</li>
+<li>Adds up all these products to get the final prediction</li>
+<li>Throws an error if the input has the wrong number of features</li>
+</ul>
+<p>This is the core of how a linear model works - it's just a weighted sum:
+prediction = (input1 × coefficient1) + (input2 × coefficient2) + ...</p>
+<p>For example, with coefficients [50000, 100, 20000] and input [3, 1500, 2],
+the prediction would be: 3×50000 + 1500×100 + 2×20000 = 350,000</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the input vector length doesn't match the coefficients length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ExportComputationGraph_" data-uid="AiDotNet.Models.VectorModel`1.ExportComputationGraph*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___" data-uid="AiDotNet.Models.VectorModel`1.ExportComputationGraph(System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}})">
+  ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1722"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exports the linear regression model as a computation graph for JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputNodes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List to populate with input computation nodes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output computation node representing the prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts the linear regression computation into a computation graph:
+output = input @ coefficients
+<p>The graph represents a simple matrix-vector multiplication that the JIT compiler
+can optimize and compile to native code.</p>
+
+<p><b>For Beginners:</b> This converts your linear model into a form the JIT compiler can optimize.
+<p>The conversion:</p>
+<ol>
+<li>Converts Matrix/Vector to Tensor (JIT works with Tensors)</li>
+<li>Creates computation nodes for input and coefficients</li>
+<li>Builds a graph: output = MatMul(input, coefficients)</li>
+<li>Returns the output node</li>
+</ol>
+<p>Once converted, the JIT compiler can:</p>
+<ul>
+<li>Optimize the computation</li>
+<li>Generate fast native code</li>
+<li>Provide 5-10x faster predictions</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GenerateTextExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GenerateTextExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GenerateTextExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.VectorModel`1.GenerateTextExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  GenerateTextExplanationAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text explanation for a prediction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;string&gt; GenerateTextExplanationAsync(Matrix&lt;T&gt; input, Vector&lt;T&gt; prediction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>prediction</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GenerateTextExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GenerateTextExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GenerateTextExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Models.VectorModel`1.GenerateTextExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GenerateTextExplanationAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1489"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text explanation for a prediction (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;string&gt; GenerateTextExplanationAsync(Tensor&lt;T&gt; input, Tensor&lt;T&gt; prediction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>prediction</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetActiveFeatureIndices_" data-uid="AiDotNet.Models.VectorModel`1.GetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetActiveFeatureIndices" data-uid="AiDotNet.Models.VectorModel`1.GetActiveFeatureIndices">
+  GetActiveFeatureIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1047"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices of all features used by this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int&gt; GetActiveFeatureIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A collection of feature indices for features with non-zero coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_GetActiveFeatureIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the indices of all features that have non-zero coefficients. These are the features
+that actually contribute to the model's predictions. Features with zero coefficients have no effect on
+the output.
+</p>
+<p><b>For Beginners:</b> This method tells you which input features actually matter to the model.
+<p>It returns:</p>
+<ul>
+<li>The positions (indices) of all features with non-zero weights</li>
+<li>Only the features that actually affect the prediction</li>
+</ul>
+<p>For example, if your model has coefficients [0.5, 0, 0, 2.0, 0.3],
+this method would return [0, 3, 4], since only those positions have non-zero values.</p>
+<p>This is useful for:</p>
+<ul>
+<li>Understanding which features the model considers important</li>
+<li>Feature selection (identifying which features to keep)</li>
+<li>Simplifying the model by focusing only on important features</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetAnchorExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetAnchorExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetAnchorExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0_" data-uid="AiDotNet.Models.VectorModel`1.GetAnchorExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`0)">
+  GetAnchorExplanationAsync(Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1447"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets anchor explanation for a given input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;AnchorExplanation&lt;T&gt;&gt; GetAnchorExplanationAsync(Matrix&lt;T&gt; input, T threshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.AnchorExplanation-1.html">AnchorExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetAnchorExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetAnchorExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetAnchorExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0_" data-uid="AiDotNet.Models.VectorModel`1.GetAnchorExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},`0)">
+  GetAnchorExplanationAsync(Tensor&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1505"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets anchor explanation for a given input (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;AnchorExplanation&lt;T&gt;&gt; GetAnchorExplanationAsync(Tensor&lt;T&gt; input, T threshold)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>threshold</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.AnchorExplanation-1.html">AnchorExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetCounterfactualAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetCounterfactualAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetCounterfactualAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetCounterfactualAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Int32)">
+  GetCounterfactualAsync(Matrix&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets counterfactual explanation for a given input and desired output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;CounterfactualExplanation&lt;T&gt;&gt; GetCounterfactualAsync(Matrix&lt;T&gt; input, Vector&lt;T&gt; desiredOutput, int maxChanges = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>desiredOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>maxChanges</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.CounterfactualExplanation-1.html">CounterfactualExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetCounterfactualAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetCounterfactualAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetCounterfactualAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetCounterfactualAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GetCounterfactualAsync(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1481"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets counterfactual explanation for a given input and desired output (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;CounterfactualExplanation&lt;T&gt;&gt; GetCounterfactualAsync(Tensor&lt;T&gt; input, Tensor&lt;T&gt; desiredOutput, int maxChanges = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>desiredOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>maxChanges</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.CounterfactualExplanation-1.html">CounterfactualExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetFeatureImportance_" data-uid="AiDotNet.Models.VectorModel`1.GetFeatureImportance*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetFeatureImportance" data-uid="AiDotNet.Models.VectorModel`1.GetFeatureImportance">
+  GetFeatureImportance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the feature importance scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; GetFeatureImportance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary mapping feature names to importance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_GetFeatureImportance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the feature importance scores for the model. For a VectorModel,
+the importance is based on the absolute value of each coefficient, as larger absolute
+values have a greater impact on predictions.
+</p>
+<p><b>For Beginners:</b> This method shows which features matter most to the model.
+<p>For a linear model:</p>
+<ul>
+<li>Features with larger coefficients (positive or negative) are more important</li>
+<li>The importance is the absolute value of each coefficient</li>
+<li>Features are named &quot;Feature_0&quot;, &quot;Feature_1&quot;, etc.</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Understanding which features drive predictions</li>
+<li>Feature selection (identifying which features to keep)</li>
+<li>Model interpretation and explanation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetFeatureInteractionAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetFeatureInteractionAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetFeatureInteractionAsync_System_Int32_System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetFeatureInteractionAsync(System.Int32,System.Int32)">
+  GetFeatureInteractionAsync(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1431"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets feature interaction effects between two features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;T&gt; GetFeatureInteractionAsync(int feature1Index, int feature2Index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>feature1Index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>feature2Index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetGlobalFeatureImportanceAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetGlobalFeatureImportanceAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetGlobalFeatureImportanceAsync" data-uid="AiDotNet.Models.VectorModel`1.GetGlobalFeatureImportanceAsync">
+  GetGlobalFeatureImportanceAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global feature importance across all predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Dictionary&lt;int, T&gt;&gt; GetGlobalFeatureImportanceAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetLimeExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetLimeExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetLimeExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetLimeExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32)">
+  GetLimeExplanationAsync(Matrix&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets LIME explanation for a specific input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;LimeExplanation&lt;T&gt;&gt; GetLimeExplanationAsync(Matrix&lt;T&gt; input, int numFeatures = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>numFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.LimeExplanation-1.html">LimeExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetLimeExplanationAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetLimeExplanationAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetLimeExplanationAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetLimeExplanationAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  GetLimeExplanationAsync(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1473"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets LIME explanation for a specific input (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;LimeExplanation&lt;T&gt;&gt; GetLimeExplanationAsync(Tensor&lt;T&gt; input, int numFeatures = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>numFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.LimeExplanation-1.html">LimeExplanation</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetLocalFeatureImportanceAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetLocalFeatureImportanceAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetLocalFeatureImportanceAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Models.VectorModel`1.GetLocalFeatureImportanceAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  GetLocalFeatureImportanceAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the local feature importance for a specific input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Dictionary&lt;int, T&gt;&gt; GetLocalFeatureImportanceAsync(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetLocalFeatureImportanceAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetLocalFeatureImportanceAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetLocalFeatureImportanceAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Models.VectorModel`1.GetLocalFeatureImportanceAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetLocalFeatureImportanceAsync(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1457"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the local feature importance for a specific input (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Dictionary&lt;int, T&gt;&gt; GetLocalFeatureImportanceAsync(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetModelMetadata_" data-uid="AiDotNet.Models.VectorModel`1.GetModelMetadata*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetModelMetadata" data-uid="AiDotNet.Models.VectorModel`1.GetModelMetadata">
+  GetModelMetadata()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L573"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metadata about the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelMetadata&lt;T&gt; GetModelMetadata()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>A ModelMetadata object containing information about the model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_GetModelMetadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns metadata about the model, including its type, feature count, complexity, and additional 
+information about the coefficients. The metadata includes the model type (Vector), the number of features, the 
+complexity (which for a vector model is the number of features), a description, and additional information such as 
+the norm of the coefficients, the number of non-zero coefficients, and the mean, maximum, and minimum coefficient 
+values. This metadata is useful for model selection, analysis, and visualization.
+</p>
+<p><b>For Beginners:</b> This method returns detailed information about the model.
+<p>The GetModelMetadata method:</p>
+<ul>
+<li>Creates a ModelMetadata object with information about the model</li>
+<li>Includes basic properties like model type, feature count, and complexity</li>
+<li>Adds additional statistics about the coefficients</li>
+</ul>
+<p>The additional information includes:</p>
+<ul>
+<li>CoefficientNorm: A measure of the magnitude of all coefficients</li>
+<li>NonZeroCoefficients: How many features are actually used (have non-zero weights)</li>
+<li>MeanCoefficient: The average coefficient value</li>
+<li>MaxCoefficient: The largest coefficient value</li>
+<li>MinCoefficient: The smallest coefficient value</li>
+</ul>
+<p>This information is useful for:</p>
+<ul>
+<li>Analyzing the model's characteristics</li>
+<li>Comparing different models</li>
+<li>Visualizing or reporting on the model</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetModelSpecificInterpretabilityAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetModelSpecificInterpretabilityAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetModelSpecificInterpretabilityAsync" data-uid="AiDotNet.Models.VectorModel`1.GetModelSpecificInterpretabilityAsync">
+  GetModelSpecificInterpretabilityAsync()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1415"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets model-specific interpretability information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Dictionary&lt;string, object&gt;&gt; GetModelSpecificInterpretabilityAsync()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetParameters_" data-uid="AiDotNet.Models.VectorModel`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetParameters" data-uid="AiDotNet.Models.VectorModel`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L921"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the model as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters (the coefficients).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the coefficients of the model as a vector, which represents all trainable parameters of the model.
+For a vector model, the parameters are simply the coefficients vector.
+</p>
+<p><b>For Beginners:</b> This method gives you access to all the weights the model uses.
+<p>For a linear model:</p>
+<ul>
+<li>The parameters are simply the coefficients (weights)</li>
+<li>This method returns a copy of those coefficients</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving the model for later use</li>
+<li>Analyzing the learned weights</li>
+<li>Transferring weights to another model</li>
+<li>Implementing optimization algorithms</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetPartialDependenceAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetPartialDependenceAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetPartialDependenceAsync_AiDotNet_Tensors_LinearAlgebra_Vector_System_Int32__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.GetPartialDependenceAsync(AiDotNet.Tensors.LinearAlgebra.Vector{System.Int32},System.Int32)">
+  GetPartialDependenceAsync(Vector&lt;int&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets partial dependence data for specified features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;PartialDependenceData&lt;T&gt;&gt; GetPartialDependenceAsync(Vector&lt;int&gt; featureIndices, int gridResolution = 20)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>gridResolution</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.PartialDependenceData-1.html">PartialDependenceData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetShapValuesAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetShapValuesAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetShapValuesAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Models.VectorModel`1.GetShapValuesAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  GetShapValuesAsync(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1217"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets SHAP values for the given inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Matrix&lt;T&gt;&gt; GetShapValuesAsync(Matrix&lt;T&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_GetShapValuesAsync_" data-uid="AiDotNet.Models.VectorModel`1.GetShapValuesAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_GetShapValuesAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Models.VectorModel`1.GetShapValuesAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  GetShapValuesAsync(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1465"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets SHAP values for the given inputs (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;Matrix&lt;T&gt;&gt; GetShapValuesAsync(Tensor&lt;T&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_IsFeatureUsed_" data-uid="AiDotNet.Models.VectorModel`1.IsFeatureUsed*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_IsFeatureUsed_System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.IsFeatureUsed(System.Int32)">
+  IsFeatureUsed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a specific feature is used by the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFeatureUsed(int featureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the feature to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the feature has a non-zero coefficient, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_IsFeatureUsed_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method determines whether a specific feature is used by the model by checking if its corresponding coefficient 
+is non-zero. A zero coefficient means that the feature has no impact on the model's predictions, effectively 
+removing it from the model. This method is useful for feature selection and for understanding which features 
+the model considers important.
+</p>
+<p><b>For Beginners:</b> This method checks if a particular input variable actually affects the model's predictions.
+<p>The IsFeatureUsed method:</p>
+<ul>
+<li>Checks if the coefficient for a specific feature is non-zero</li>
+<li>Returns true if the feature affects predictions, false if it doesn't</li>
+<li>Helps identify which features are actually important to the model</li>
+</ul>
+<p>For example, if the coefficient for square footage is 0, then
+IsFeatureUsed(2) would return false (assuming square footage is the third feature).</p>
+<p>This method is useful when:</p>
+<ul>
+<li>Analyzing which features matter to the model</li>
+<li>Simplifying the model by removing unused features</li>
+<li>Understanding the model's behavior</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_LoadModel_" data-uid="AiDotNet.Models.VectorModel`1.LoadModel*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_LoadModel_System_String_" data-uid="AiDotNet.Models.VectorModel`1.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L795"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a model from a file into the current instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path of the file containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method loads a model from a file by reading the byte array and deserializing it.
+The model must have been saved using the SaveModel method.
+</p>
+<p><b>For Beginners:</b> This method loads a saved model from a file.
+<p>To use this method:</p>
+<ul>
+<li>Provide the file path where the model was saved</li>
+<li>The model will be loaded and replace the current model's coefficients</li>
+<li>The file must have been created with SaveModel</li>
+</ul>
+<p>For example: model.LoadModel(&quot;my_model.bin&quot;);</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when filePath is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.filenotfoundexception">FileNotFoundException</a></dt>
+    <dd><p>Thrown when the file does not exist.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_LoadState_" data-uid="AiDotNet.Models.VectorModel`1.LoadState*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_LoadState_System_IO_Stream_" data-uid="AiDotNet.Models.VectorModel`1.LoadState(System.IO.Stream)">
+  LoadState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1632"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the model's state (parameters and configuration) from a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to read the model state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_LoadState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method deserializes model state that was previously saved with SaveState,
+restoring all coefficients and configuration to recreate the saved model.
+It uses the existing Deserialize method after reading data from the stream.
+</p>
+<p><b>For Beginners:</b> This is like loading a saved snapshot of your linear model.
+<p>When you call LoadState:</p>
+<ul>
+<li>All the coefficients are read from the stream</li>
+<li>The model is configured to match the saved state</li>
+<li>The model becomes identical to when SaveState was called</li>
+</ul>
+<p>After loading, the model can:</p>
+<ul>
+<li>Make predictions using the restored coefficients</li>
+<li>Continue training from where it left off</li>
+<li>Be used as a teacher model in knowledge distillation</li>
+</ul>
+<p>This is essential for:</p>
+<ul>
+<li>Resuming interrupted training sessions</li>
+<li>Loading the best checkpoint after training</li>
+<li>Deploying trained models to production</li>
+<li>Knowledge distillation workflows</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error reading from the stream.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the stream contains invalid or incompatible data.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Predict_" data-uid="AiDotNet.Models.VectorModel`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Models.VectorModel`1.Predict(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Predict(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L889"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts outputs for the provided input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Predict(Matrix&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data to make predictions for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Predict_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the IModel interface's Predict method by delegating to the internal Predict method.
+It accepts a matrix where each row is a separate data point and returns a vector of predictions.
+</p>
+<p><b>For Beginners:</b> This method makes predictions using your input data.
+<p>When using this method:</p>
+<ul>
+<li>You provide a matrix where each row is a separate data point</li>
+<li>Each row has the same features you trained the model with</li>
+<li>The model returns one prediction for each row</li>
+</ul>
+<p>This is the main method you'll use to make predictions once your model is trained.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when input is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when input has the wrong number of columns.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SaveModel_" data-uid="AiDotNet.Models.VectorModel`1.SaveModel*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SaveModel_System_String_" data-uid="AiDotNet.Models.VectorModel`1.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L745"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the model will be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the model to a file by serializing it to a byte array and writing it to disk.
+The model can later be loaded using the LoadModel method.
+</p>
+<p><b>For Beginners:</b> This method saves the model to a file so you can use it later.
+<p>To use this method:</p>
+<ul>
+<li>Provide a file path where the model should be saved</li>
+<li>The model will be serialized and written to disk</li>
+<li>You can load it later with LoadModel</li>
+</ul>
+<p>For example: model.SaveModel(&quot;my_model.bin&quot;);</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when filePath is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SaveState_" data-uid="AiDotNet.Models.VectorModel`1.SaveState*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SaveState_System_IO_Stream_" data-uid="AiDotNet.Models.VectorModel`1.SaveState(System.IO.Stream)">
+  SaveState(Stream)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the model's current state (parameters and configuration) to a stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveState(Stream stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.stream">Stream</a></dt>
+    <dd><p>The stream to write the model state to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_SaveState_System_IO_Stream__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes all the information needed to recreate the model's current state,
+including the model's coefficients. It uses the existing Serialize method and writes
+the data to the provided stream.
+</p>
+<p><b>For Beginners:</b> This is like creating a snapshot of your trained linear model.
+<p>When you call SaveState:</p>
+<ul>
+<li>All the learned coefficients (weights) are written to the stream</li>
+<li>The model's configuration is preserved</li>
+</ul>
+<p>This is particularly useful for:</p>
+<ul>
+<li>Checkpointing during long training sessions</li>
+<li>Knowledge distillation (saving teacher/student models)</li>
+<li>Resuming interrupted training</li>
+<li>Creating model ensembles</li>
+</ul>
+<p>You can later use LoadState to restore the model to this exact state.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when stream is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.ioexception">IOException</a></dt>
+    <dd><p>Thrown when there's an error writing to the stream.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Serialize_" data-uid="AiDotNet.Models.VectorModel`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Serialize" data-uid="AiDotNet.Models.VectorModel`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L627"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method serializes the model to a byte array by writing the number of coefficients and then each coefficient 
+value. The serialization format is simple: first an integer indicating the number of coefficients, followed by each 
+coefficient as a double. This allows the model to be stored or transmitted and later reconstructed using the 
+Deserialize method.
+</p>
+<p><b>For Beginners:</b> This method converts the model to a byte array that can be saved or transmitted.
+<p>The Serialize method:</p>
+<ul>
+<li>Converts the model to a compact binary format</li>
+<li>Writes the number of coefficients and each coefficient value</li>
+<li>Returns a byte array that can be stored or transmitted</li>
+</ul>
+<p>The serialization format is:</p>
+<ol>
+<li>An integer with the number of coefficients</li>
+<li>Each coefficient value as a double</li>
+</ol>
+<p>This method is useful when:</p>
+<ul>
+<li>Saving models to files or databases</li>
+<li>Sending models over a network</li>
+<li>Persisting models between application runs</li>
+</ul>
+<p>The resulting byte array can be converted back to a model using Deserialize.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SetActiveFeatureIndices_" data-uid="AiDotNet.Models.VectorModel`1.SetActiveFeatureIndices*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Models.VectorModel`1.SetActiveFeatureIndices(System.Collections.Generic.IEnumerable{System.Int32})">
+  SetActiveFeatureIndices(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active feature indices for this model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetActiveFeatureIndices(IEnumerable&lt;int&gt; featureIndices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SetBaseModel_" data-uid="AiDotNet.Models.VectorModel`1.SetBaseModel*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SetBaseModel_AiDotNet_Interfaces_IFullModel__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Models.VectorModel`1.SetBaseModel(AiDotNet.Interfaces.IFullModel{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  SetBaseModel(IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1521"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the base model for interpretability analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetBaseModel(IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SetBaseModel_" data-uid="AiDotNet.Models.VectorModel`1.SetBaseModel*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SetBaseModel__2_AiDotNet_Interfaces_IFullModel__0___0___1__" data-uid="AiDotNet.Models.VectorModel`1.SetBaseModel``2(AiDotNet.Interfaces.IFullModel{`0,``0,``1})">
+  SetBaseModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1513"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the base model for interpretability analysis (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SetBaseModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_SetParameters_" data-uid="AiDotNet.Models.VectorModel`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.VectorModel`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L956"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters of the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameters to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the coefficients of the model from the provided parameters vector.
+For a vector model, the parameters are simply the coefficients vector.
+</p>
+<p><b>For Beginners:</b> This method updates all the weights the model uses.
+<p>For a linear model:</p>
+<ul>
+<li>The parameters are simply the coefficients (weights)</li>
+<li>This method updates those coefficients</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Loading a saved model</li>
+<li>Updating weights during optimization</li>
+<li>Implementing learning algorithms</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when parameters is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when parameters has a different length than the model's coefficients.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_Train_" data-uid="AiDotNet.Models.VectorModel`1.Train*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.VectorModel`1.Train(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Train(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L852"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the model on the provided generic input and expected output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Train(Matrix&lt;T&gt; input, Vector&lt;T&gt; expectedOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data, which must be a Matrix of type T.</p>
+</dd>
+    <dt><code>expectedOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The expected output, which must be a Vector of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_Train_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the IModel interface's Train method by delegating to the internal Train method.
+It validates the input and output types before proceeding with training.
+</p>
+<p><b>For Beginners:</b> This method teaches the model using your data.
+<p>When using this method:</p>
+<ul>
+<li>You provide a matrix of input features and a vector of expected outputs</li>
+<li>The model learns to predict the outputs from the inputs</li>
+<li>It finds the weights (coefficients) that work best for your data</li>
+</ul>
+<p>This is the main method you'll use to train the model on your dataset.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when input or expectedOutput is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the input or output types are incompatible with the model.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ValidateFairnessAsync_" data-uid="AiDotNet.Models.VectorModel`1.ValidateFairnessAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ValidateFairnessAsync_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.ValidateFairnessAsync(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32)">
+  ValidateFairnessAsync(Matrix&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1439"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates fairness metrics for the given inputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;FairnessMetrics&lt;T&gt;&gt; ValidateFairnessAsync(Matrix&lt;T&gt; inputs, int sensitiveFeatureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>sensitiveFeatureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.FairnessMetrics-1.html">FairnessMetrics</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_ValidateFairnessAsync_" data-uid="AiDotNet.Models.VectorModel`1.ValidateFairnessAsync*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_ValidateFairnessAsync_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_" data-uid="AiDotNet.Models.VectorModel`1.ValidateFairnessAsync(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32)">
+  ValidateFairnessAsync(Tensor&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1497"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates fairness metrics for the given inputs (IInterpretableModel implementation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Task&lt;FairnessMetrics&lt;T&gt;&gt; ValidateFairnessAsync(Tensor&lt;T&gt; inputs, int sensitiveFeatureIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>sensitiveFeatureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interpretability.FairnessMetrics-1.html">FairnessMetrics</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_VectorModel_1_WithParameters_" data-uid="AiDotNet.Models.VectorModel`1.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Models_VectorModel_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.VectorModel`1.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L1006"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the model with new parameter values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model with the updated parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_VectorModel_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new model with the provided parameter values. For a vector model, the parameters are
+simply the coefficients, so this creates a new model with new coefficients.
+</p>
+<p><b>For Beginners:</b> This method creates a new model with different weights.
+<p>The WithParameters method:</p>
+<ul>
+<li>Takes a vector of new weights (parameters)</li>
+<li>Creates a new model using these weights</li>
+<li>Returns the new model without modifying the original</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Testing different sets of weights</li>
+<li>Implementing optimization algorithms</li>
+<li>Creating variations of a model</li>
+</ul>
+<p>For example, you might try different weight values to see which ones
+give the best predictions or modify weights to simplify the model.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when parameters is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when parameters has a different length than the model's coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/VectorModel.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements outlier detection and removal based on the Z-Score method.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3.md&amp;value=---%0Auid%3A%20AiDotNet.OutlierRemoval.ZScoreOutlierRemoval%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3">
+
+
+
+  <h1 id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3" data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3" class="text-break">
+Class ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/ZScoreOutlierRemoval.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.OutlierRemoval.html">OutlierRemoval</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements outlier detection and removal based on the Z-Score method.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt; : IOutlierRemoval&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOutlierRemoval-3.html">IOutlierRemoval</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides functionality to identify and remove outliers from a dataset using the Z-Score method.
+The Z-Score approach measures how many standard deviations a data point is from the mean of the dataset.
+Points with a Z-Score exceeding a specified threshold are considered outliers. This method assumes that
+the data follows a relatively normal distribution.
+</p>
+<p><b>For Beginners:</b> This class helps you find and remove unusual data points from your dataset.
+<p>Imagine you collected height measurements for a group of people. Most heights will be close to the average,
+but there might be a few very unusual values (like someone recorded as 10 feet tall), which could be errors
+or just very rare cases.</p>
+<p>The Z-Score method works like this:</p>
+<ul>
+<li>It calculates the average (mean) of all your data points</li>
+<li>It determines how spread out the data is (standard deviation)</li>
+<li>For each point, it calculates how far that point is from the average, in terms of standard deviations</li>
+<li>If a point is too far away (beyond the threshold you set), it's considered an outlier</li>
+</ul>
+<p>For example, with a threshold of 3, any point more than 3 standard deviations from the mean would be
+considered an outlier and removed from the dataset.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3__ctor_" data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3__ctor_System_Double_" data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3.#ctor(System.Double)">
+  ZScoreOutlierRemoval(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/ZScoreOutlierRemoval.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval-3.html">ZScoreOutlierRemoval&lt;T, TInput, TOutput&gt;</a> class with the specified threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ZScoreOutlierRemoval(double threshold = 3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The threshold value for outlier detection, default is 3.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3__ctor_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The constructor initializes the outlier removal algorithm with a specified threshold. The threshold
+determines how extreme a value must be to be considered an outlier. A common default value is 3,
+meaning data points with a Z-Score greater than 3 (or less than -3) are considered outliers.
+</p>
+<p><b>For Beginners:</b> This creates a new outlier detector with a specified sensitivity level.
+<p>The threshold parameter controls how sensitive the outlier detection is:</p>
+<ul>
+<li>A lower threshold (like 2.0) will be more aggressive in labeling points as outliers</li>
+<li>A higher threshold (like 4.0) will be more lenient, only marking very extreme values as outliers</li>
+</ul>
+<p>In statistics, a threshold of 3 is commonly used, which means points that are more than 3 standard
+deviations away from the average are considered outliers. With a normal distribution, this would
+flag approximately 0.3% of the data as outliers.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3_RemoveOutliers_" data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3.RemoveOutliers*"></a>
+
+  <h3 id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3_RemoveOutliers__1__2_" data-uid="AiDotNet.OutlierRemoval.ZScoreOutlierRemoval`3.RemoveOutliers(`1,`2)">
+  RemoveOutliers(TInput, TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/ZScoreOutlierRemoval.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes outliers from the provided inputs and outputs based on the Z-Score algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (TInput CleanedInputs, TOutput CleanedOutputs) RemoveOutliers(TInput inputs, TOutput outputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <span class="xref">TInput</span></dt>
+    <dd><p>The matrix of input data, where each row represents a data point and each column represents a feature.</p>
+</dd>
+    <dt><code>outputs</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The vector of output values corresponding to each row in the inputs matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.input">Input</a>, TOutput <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--1,-2-.output">Output</a>)</dt>
+    <dd><p>A tuple containing the cleaned inputs (as a matrix) and cleaned outputs (as a vector) with outliers removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_OutlierRemoval_ZScoreOutlierRemoval_3_RemoveOutliers__1__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method identifies outliers by examining each feature (column) in the inputs matrix. For each feature,
+it calculates the mean and standard deviation, then computes the Z-Score for every data point. If a data point
+has a Z-Score exceeding the threshold for any feature, it is considered an outlier and is removed from both
+the inputs and outputs.
+</p>
+<p><b>For Beginners:</b> This method analyzes your data and removes any unusual points.
+<p>Here's how it works:</p>
+<ol>
+<li>It looks at each characteristic (column) of your data separately</li>
+<li>For each characteristic, it:
+<ul>
+<li>Calculates the average value</li>
+<li>Determines how spread out the values are (standard deviation)</li>
+<li>Computes a Z-Score for each point (how many standard deviations from the average)</li>
+</ul>
+</li>
+<li>If a data point has an unusually high or low Z-Score for ANY characteristic, it's considered an outlier</li>
+<li>All outliers are removed, and the cleaned data is returned</li>
+</ol>
+<p>For example, if you have data about houses with columns for size, price, and age, a house might
+be considered an outlier if it has a normal size and age but an extremely high price (high Z-Score for price).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/OutlierRemoval/ZScoreOutlierRemoval.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

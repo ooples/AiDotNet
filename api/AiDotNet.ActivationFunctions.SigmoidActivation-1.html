@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SigmoidActivation&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SigmoidActivation&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Sigmoid activation function, one of the most common activation functions in neural networks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActivationFunctions_SigmoidActivation_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActivationFunctions.SigmoidActivation%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1">
+
+
+
+  <h1 id="AiDotNet_ActivationFunctions_SigmoidActivation_1" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1" class="text-break">
+Class SigmoidActivation&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActivationFunctions.html">ActivationFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Sigmoid activation function, one of the most common activation functions in neural networks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SigmoidActivation&lt;T&gt; : ActivationFunctionBase&lt;T&gt;, IActivationFunction&lt;T&gt;, IVectorActivationFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html">ActivationFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SigmoidActivation&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IActivationFunction-1.html">IActivationFunction</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVectorActivationFunction-1.html">IVectorActivationFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_NumOps">ActivationFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ActivationFunctions.ActivationFunctionBase-1.html#AiDotNet_ActivationFunctions_ActivationFunctionBase_1_Engine">ActivationFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Sigmoid function maps any input value to an output between 0 and 1, creating an S-shaped curve.
+It's often used in the output layer of binary classification problems or in hidden layers of neural networks.
+</p>
+<p>
+<b>For Beginners:</b> The Sigmoid function is like a "squashing" function that takes any number (from negative
+infinity to positive infinity) and converts it to a value between 0 and 1. This is useful in neural networks
+because it helps transform unbounded values into a probability-like range. The function creates an S-shaped
+curve that approaches 0 for very negative inputs and approaches 1 for very positive inputs, with a smooth
+transition in between. However, one limitation is that for extreme values (very large positive or negative),
+the gradient becomes very small, which can slow down learning in deep networks (known as the "vanishing
+gradient problem").
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsGpuTraining_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsGpuTraining*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsGpuTraining" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsGpuTraining">
+  SupportsGpuTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether Sigmoid supports GPU-resident training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsGpuTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because Sigmoid has GPU kernels for both forward and backward passes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsJitCompilation_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsJitCompilation*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsJitCompilation" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsJitCompilation">
+  SupportsJitCompilation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this activation function supports JIT compilation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsJitCompilation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True because Sigmoid gradient computation is fully implemented and tested.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsJitCompilation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Sigmoid supports JIT compilation because:
+- The gradient computation (backward pass) is fully implemented in TensorOperations
+- The operation is well-defined and differentiable
+- It can be represented as a static computation graph node
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Activate(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sigmoid activation function to each element in a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Activate(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to activate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor with the Sigmoid function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A tensor is a multi-dimensional array or a container for data.
+This method applies the Sigmoid function to every single value in that container,
+regardless of its position or dimension.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Activate(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sigmoid activation function to each element in a vector using SIMD optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; Activate(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the Sigmoid function applied to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This implementation uses TensorPrimitivesHelper for SIMD-optimized operations (3-6× speedup for float).
+For arrays with fewer than 16 elements, it falls back to manual loops.
+</p>
+<p>
+<b>For Beginners:</b> This method applies the Sigmoid function to a whole list of numbers at once
+using hardware acceleration, making it much faster than processing each number separately.
+<p>For example, if you have a vector [-2, -1, 0, 1, 2]:</p>
+<ul>
+<li>The output would be approximately [0.12, 0.27, 0.50, 0.73, 0.88]</li>
+<li>All values are computed in parallel using SIMD instructions</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate__0_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Activate(`0)">
+  Activate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sigmoid activation function to a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Activate(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to activate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Sigmoid of the input: 1 / (1 + e^(-input)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Activate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates the Sigmoid value for a single number. The formula 1/(1+e^(-x))
+creates that S-shaped curve that squashes any input to be between 0 and 1. When the input is 0,
+the output is exactly 0.5. As inputs get more positive, the output approaches 1, and as inputs get
+more negative, the output approaches 0.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ApplyToGraph_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.ApplyToGraph*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.ApplyToGraph(AiDotNet.Autodiff.ComputationNode{`0})">
+  ApplyToGraph(ComputationNode&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies this activation function to a computation graph node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ComputationNode&lt;T&gt; ApplyToGraph(ComputationNode&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The computation node to apply the activation to.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>A new computation node with Sigmoid activation applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ApplyToGraph_AiDotNet_Autodiff_ComputationNode__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method maps the Sigmoid activation to TensorOperations&lt;T&gt;.Sigmoid(input),
+which handles both forward and backward passes for JIT compilation.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if input is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Backward_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Backward*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the backward pass gradient for Sigmoid using GPU-accelerated fused operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor that was used in the forward pass.</p>
+</dd>
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the next layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient with respect to the input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method uses a single GPU kernel to compute the gradient,
+which is faster than computing derivative and gradient multiplication separately.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_BackwardGpu_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.BackwardGpu*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.BackwardGpu(AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32)">
+  BackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer?, IGpuBuffer?, IGpuBuffer, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Sigmoid backward pass gradient on GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void BackwardGpu(IDirectGpuBackend backend, IGpuBuffer gradOutput, IGpuBuffer? input, IGpuBuffer? output, IGpuBuffer gradInput, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for execution.</p>
+</dd>
+    <dt><code>gradOutput</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The gradient flowing back from the next layer.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>Not used for Sigmoid (can be null). Sigmoid backward uses forward output.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The output buffer from the forward pass.</p>
+</dd>
+    <dt><code>gradInput</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The output buffer to store the input gradient.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_BackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Sigmoid backward on GPU: gradInput[i] = gradOutput[i] * output[i] * (1 - output[i])
+Note: Sigmoid backward uses the forward output, not the input.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Derivative(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the Sigmoid function for each element in a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Derivative(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to calculate the derivative for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A new tensor containing the derivatives of the Sigmoid function for each input element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method calculates how sensitive each output value is to small changes
+in the corresponding input value, for every value in the tensor. For Sigmoid, the derivative is
+sigmoid(x) * (1 - sigmoid(x)).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Derivative(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Jacobian matrix of the Sigmoid function for a vector input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; Derivative(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of input values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A diagonal matrix where each diagonal element is the derivative of the Sigmoid function at the corresponding input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The Jacobian matrix represents how each output element changes with respect to each input element.
+For element-wise functions like Sigmoid, this is a diagonal matrix.
+</p>
+<p>
+<b>For Beginners:</b> This method calculates how sensitive each output is to changes in the input,
+but for a whole list of numbers at once. The result is a special matrix (called a diagonal matrix)
+that shows the rate of change for each input value. This is important during the learning process
+when the neural network is adjusting its weights. Don't worry too much about the mathematical details -
+this is handled automatically during training.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative__0_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.Derivative(`0)">
+  Derivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the Sigmoid function for a single input value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Derivative(T input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">T</span></dt>
+    <dd><p>The input value to calculate the derivative for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative of Sigmoid at the input: sigmoid(input) * (1 - sigmoid(input)).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_Derivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The derivative tells us how much the Sigmoid output changes when we slightly change the input.
+For the Sigmoid function, the derivative has a simple formula: sigmoid(x) * (1 - sigmoid(x)).
+This means the derivative is largest (0.25) when the input is 0, and gets smaller as the input moves away from 0
+in either direction. This property can cause the &quot;vanishing gradient problem&quot; in deep neural networks,
+where the learning signal becomes too weak for neurons in early layers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ForwardGpu_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.ForwardGpu(AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32)">
+  ForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the Sigmoid activation function on GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void ForwardGpu(IDirectGpuBackend backend, IGpuBuffer input, IGpuBuffer output, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a></dt>
+    <dd><p>The GPU backend to use for execution.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The input GPU buffer.</p>
+</dd>
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The output GPU buffer to store the activated values.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ActivationFunctions_SigmoidActivation_1_ForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Sigmoid on GPU: output[i] = 1 / (1 + exp(-input[i]))</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsScalarOperations_" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsScalarOperations*"></a>
+
+  <h3 id="AiDotNet_ActivationFunctions_SigmoidActivation_1_SupportsScalarOperations" data-uid="AiDotNet.ActivationFunctions.SigmoidActivation`1.SupportsScalarOperations">
+  SupportsScalarOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this activation function supports scalar operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override bool SupportsScalarOperations()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns true as Sigmoid supports scalar operations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActivationFunctions/SigmoidActivation.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace AiDotNet.Tensors.Engines.Gpu.Graph | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace AiDotNet.Tensors.Engines.Gpu.Graph | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.Graph">
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_Graph" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph" class="text-break">Namespace AiDotNet.Tensors.Engines.Gpu.Graph</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="namespaces">
+Namespaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.Optimization.html">AiDotNet.Tensors.Engines.Gpu.Graph.Optimization</a></dt>
+      <dd></dd>
+    </dl>
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.AllocationNode.html">AllocationNode</a></dt>
+      <dd><p>Represents a buffer allocation node in the execution graph.
+Used for allocating and deallocating GPU memory.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.BarrierNode.html">BarrierNode</a></dt>
+      <dd><p>Represents a barrier/synchronization node in the execution graph.
+Used to synchronize multiple streams or create synchronization points.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.CompiledGraphCache.html">CompiledGraphCache</a></dt>
+      <dd><p>Graph cache for reusing compiled graphs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.EventNode.html">EventNode</a></dt>
+      <dd><p>Represents an event recording node in the execution graph.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraph.html">ExecutionGraph</a></dt>
+      <dd><p>Represents a compiled execution graph of GPU operations.
+Provides topological execution with optional stream parallelism.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+      <dd><p>Builder for constructing execution graphs from recorded operations.
+Tracks dependencies and provides fluent API for building graphs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilderExtensions.html">ExecutionGraphBuilderExtensions</a></dt>
+      <dd><p>Extension methods for building common graph patterns.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.FusedKernelNode.html">FusedKernelNode</a></dt>
+      <dd><p>Represents a fused kernel execution node combining multiple operations.
+Examples: GEMM+Bias+ReLU, Conv+BatchNorm+ReLU, etc.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.GraphCompiler.html">GraphCompiler</a></dt>
+      <dd><p>Compiles and optimizes execution graphs for efficient GPU execution.
+Orchestrates multiple optimization passes and produces optimized graphs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.GraphExecutionStats.html">GraphExecutionStats</a></dt>
+      <dd><p>Statistics about graph execution.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.KernelNode.html">KernelNode</a></dt>
+      <dd><p>Represents a kernel execution node in the execution graph.
+Used for operations like GEMM, element-wise operations, reductions, etc.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.KernelTypeExtensions.html">KernelTypeExtensions</a></dt>
+      <dd><p>Extension methods for kernel types.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.TransferNode.html">TransferNode</a></dt>
+      <dd><p>Represents a memory transfer node in the execution graph.
+Used for host-to-device, device-to-host, and device-to-device transfers.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ElementWiseOp.html">ElementWiseOp</a></dt>
+      <dd><p>Element-wise operation types.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.FusedOperationType.html">FusedOperationType</a></dt>
+      <dd><p>Types of fused operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.KernelType.html">KernelType</a></dt>
+      <dd><p>Types of kernel operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.TransferDirection.html">TransferDirection</a></dt>
+      <dd><p>Direction of memory transfer.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

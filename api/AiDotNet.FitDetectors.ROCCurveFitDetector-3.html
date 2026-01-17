@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ROCCurveFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ROCCurveFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A detector that evaluates model fit quality using ROC (Receiver Operating Characteristic) curve analysis.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitDetectors_ROCCurveFitDetector_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitDetectors.ROCCurveFitDetector%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3">
+
+
+
+  <h1 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3" class="text-break">
+Class ROCCurveFitDetector&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitDetectors.html">FitDetectors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A detector that evaluates model fit quality using ROC (Receiver Operating Characteristic) curve analysis.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ROCCurveFitDetector&lt;T, TInput, TOutput&gt; : FitDetectorBase&lt;T, TInput, TOutput&gt;, IFitDetector&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html">FitDetectorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ROCCurveFitDetector&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitDetector-3.html">IFitDetector</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_NumOps">FitDetectorBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_Random">FitDetectorBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This class helps determine how well your classification model performs.
+It uses something called an "ROC curve" which is a way to visualize how good your model is at 
+distinguishing between positive cases (like "yes, this email is spam") and negative cases 
+(like "no, this email is not spam").
+<p>The key metric used is called &quot;AUC&quot; (Area Under the Curve), which gives a single number between 0 and 1:</p>
+<ul>
+<li>AUC near 1.0: Your model is excellent at classification</li>
+<li>AUC near 0.5: Your model is no better than random guessing</li>
+<li>AUC near 0.0: Your model is consistently wrong (which means it could be fixed by inverting its predictions)</li>
+</ul>
+<p>This detector will tell you if your model is good, moderate, poor, or very poor based on this AUC value.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_ROCCurveFitDetector_3__ctor_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3__ctor_AiDotNet_Models_ROCCurveFitDetectorOptions_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.#ctor(AiDotNet.Models.ROCCurveFitDetectorOptions)">
+  ROCCurveFitDetector(ROCCurveFitDetectorOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the ROC curve fit detector with optional custom configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ROCCurveFitDetector(ROCCurveFitDetectorOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.ROCCurveFitDetectorOptions.html">ROCCurveFitDetectorOptions</a></dt>
+    <dd><p>Custom options for the detector, or null to use default options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ROCCurveFitDetector_3__ctor_AiDotNet_Models_ROCCurveFitDetectorOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the constructor that creates a new ROC curve detector.
+You can provide custom settings through the options parameter, or leave it as null
+to use the default settings.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_CalculateConfidenceLevel_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.CalculateConfidenceLevel*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.CalculateConfidenceLevel(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates how confident the detector is in its assessment of the model's fit type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A confidence value between 0 and 1, where higher values indicate greater confidence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
+It uses the AUC value and multiplies it by a scaling factor to get a confidence score.
+<p>The higher the AUC, the more confident the detector is in its assessment.
+The confidence is a number between 0 and 1, where:</p>
+<ul>
+<li>1 means completely confident</li>
+<li>0 means not confident at all</li>
+</ul>
+<p>This helps you understand how much you should trust the detector's assessment.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetectFit_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.DetectFit*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.DetectFit(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes the model's performance data and determines how well the model fits the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override FitDetectorResult&lt;T&gt; DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics and predictions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A result object containing the fit type, confidence level, and recommendations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method that analyzes your model's performance.
+It takes your model's predictions and the actual correct answers, then:
+<ol>
+<li>Creates an ROC curve (a special graph that shows how well your model distinguishes between classes)</li>
+<li>Calculates the AUC (Area Under the Curve) - a single number that summarizes how good your model is</li>
+<li>Determines if your model has a good fit, moderate fit, poor fit, or very poor fit</li>
+<li>Calculates how confident it is in this assessment</li>
+<li>Generates helpful recommendations for improving your model</li>
+</ol>
+<p>The result contains all this information for you to use.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when evaluationData is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetermineFitType_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.DetermineFitType*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.DetermineFitType(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines the type of fit based on the AUC value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override FitType DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The determined fit type (GoodFit, Moderate, PoorFit, or VeryPoorFit).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method looks at the AUC value (which measures how good your model is)
+and categorizes your model into one of four groups:
+<ul>
+<li>GoodFit: Your model performs very well (high AUC)</li>
+<li>Moderate: Your model performs okay but could be improved</li>
+<li>PoorFit: Your model doesn't perform well</li>
+<li>VeryPoorFit: Your model performs very poorly (low AUC)</li>
+</ul>
+<p>The thresholds for these categories are set in the options.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_GenerateRecommendations_" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.GenerateRecommendations*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ROCCurveFitDetector`3.GenerateRecommendations(AiDotNet.Enums.FitType,AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates practical recommendations for improving the model based on the detected fit type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;string&gt; GenerateRecommendations(FitType fitType, ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitType</code> <a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The detected fit type (GoodFit, Moderate, PoorFit, or VeryPoorFit).</p>
+</dd>
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of recommendations as strings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ROCCurveFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method provides practical advice on how to improve your model based on
+how well it's currently performing.
+<ul>
+<li>For good models: Suggestions for fine-tuning to make small improvements</li>
+<li>For moderate models: Suggestions like feature engineering or trying different algorithms</li>
+<li>For poor models: Suggestions to review your features, try different algorithms, or get more data</li>
+<li>For very poor models: Suggestions to reassess your approach more fundamentally</li>
+</ul>
+<p>It also checks if your data might be imbalanced (having many more examples of one class than another),
+which is a common problem in classification tasks.</p>
+<p>These recommendations are starting points that you can try to improve your model's performance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ROCCurveFitDetector.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

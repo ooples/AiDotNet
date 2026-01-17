@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PredictionModelTool&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PredictionModelTool&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A tool that allows agents to use trained machine learning models for predictions. Integrates with PredictionModelResult for inference on trained models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tools_PredictionModelTool_3.md&amp;value=---%0Auid%3A%20AiDotNet.Tools.PredictionModelTool%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tools.PredictionModelTool`3">
+
+
+
+  <h1 id="AiDotNet_Tools_PredictionModelTool_3" data-uid="AiDotNet.Tools.PredictionModelTool`3" class="text-break">
+Class PredictionModelTool&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tools.html">Tools</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A tool that allows agents to use trained machine learning models for predictions.
+Integrates with PredictionModelResult for inference on trained models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PredictionModelTool&lt;T, TInput, TOutput&gt; : ITool</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type for the model (e.g., Matrix&lt;T&gt;, Vector&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type for the model (e.g., Vector&lt;T&gt;, Scalar&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PredictionModelTool&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ITool.html">ITool</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tools_PredictionModelTool_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This tool bridges AI agents with traditional machine learning models, enabling agents to:</p>
+<ul>
+<li>Make predictions using trained ML models</li>
+<li>Analyze data patterns</li>
+<li>Classify inputs</li>
+<li>Generate numerical forecasts</li>
+</ul>
+<p>Use cases:</p>
+<ul>
+<li><p><strong>Predictive Agent</strong>: &quot;What will sales be next quarter?&quot;
+→ Agent uses regression model trained on historical data</p>
+</li>
+<li><p><strong>Classification Agent</strong>: &quot;Is this email spam?&quot;
+→ Agent uses classification model on email features</p>
+</li>
+<li><p><strong>Anomaly Detection</strong>: &quot;Are there any unusual patterns in this data?&quot;
+→ Agent uses anomaly detection model</p>
+</li>
+<li><p><strong>Recommendation</strong>: &quot;Which product should we recommend?&quot;
+→ Agent uses recommendation model</p>
+</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Train a model
+var builder = new PredictionModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;();
+var trainedModel = builder
+    .ConfigureModel(new LinearRegressionModel&lt;double&gt;())
+    .Build(trainX, trainY);
+
+// Create tool from trained model
+var predictionTool = new PredictionModelTool&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;(
+    trainedModel,
+    "SalesPredictor",
+    "Predicts quarterly sales based on features: marketing_spend, season, previous_sales"
+);
+
+// Agent can now use the ML model
+var agent = new Agent&lt;double&gt;(chatModel, new[] { predictionTool });
+var result = await agent.RunAsync(
+    "Predict sales for Q4 with marketing spend of $50k");</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3__ctor_" data-uid="AiDotNet.Tools.PredictionModelTool`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3__ctor_AiDotNet_Models_Results_PredictionModelResult__0__1__2__System_String_System_String_System_Func_System_String__1__" data-uid="AiDotNet.Tools.PredictionModelTool`3.#ctor(AiDotNet.Models.Results.PredictionModelResult{`0,`1,`2},System.String,System.String,System.Func{System.String,`1})">
+  PredictionModelTool(PredictionModelResult&lt;T, TInput, TOutput&gt;, string, string, Func&lt;string, TInput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Tools.PredictionModelTool-3.html">PredictionModelTool&lt;T, TInput, TOutput&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PredictionModelTool(PredictionModelResult&lt;T, TInput, TOutput&gt; model, string name, string description, Func&lt;string, TInput&gt; inputParser)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Models.Results.PredictionModelResult-3.html">PredictionModelResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The trained prediction model to use.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the tool (e.g., &quot;SalesPredictor&quot;, &quot;SpamClassifier&quot;).</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of what the model predicts and expected input format.</p>
+</dd>
+    <dt><code>inputParser</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, TInput&gt;</dt>
+    <dd><p>Function to parse string input into model input format.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_PredictionModelTool_3__ctor_AiDotNet_Models_Results_PredictionModelResult__0__1__2__System_String_System_String_System_Func_System_String__1___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:</p>
+<p><strong>Parameters:</strong></p>
+<ul>
+<li>model: Your trained PredictionModelResult</li>
+<li>name: Give it a clear, descriptive name</li>
+<li>description: Explain what it predicts and what input format to use</li>
+<li>inputParser: Convert agent's string input to model's expected format</li>
+</ul>
+<p><strong>Input parsing:</strong>
+The inputParser is crucial - it converts natural language/JSON from the agent
+into the format your model expects (Matrix, Vector, etc.).</p>
+<p>Example parsers:</p>
+<pre><code class="lang-csharp">// For Vector input - JSON array
+inputParser: input =&gt; {
+    var array = JsonSerializer.Deserialize&lt;double[]&gt;(input);
+    return new Vector&lt;double&gt;(array);
+}
+
+// For Matrix input - JSON 2D array
+inputParser: input =&gt; {
+    var array = JsonSerializer.Deserialize&lt;double[][]&gt;(input);
+    return new Matrix&lt;double&gt;(array);
+}
+</code></pre>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when any required parameter is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3_Description_" data-uid="AiDotNet.Tools.PredictionModelTool`3.Description*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3_Description" data-uid="AiDotNet.Tools.PredictionModelTool`3.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a detailed description of what the tool does and how to use it.
+This description helps the agent understand when and how to use the tool effectively.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string describing the tool's functionality, input format, and expected output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3_Name_" data-uid="AiDotNet.Tools.PredictionModelTool`3.Name*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3_Name" data-uid="AiDotNet.Tools.PredictionModelTool`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the unique name of the tool.
+This name is used by the agent to identify and invoke the tool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representing the tool's name (e.g., &quot;Calculator&quot;, &quot;Search&quot;, &quot;WebScraper&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3_CreateMatrixInputTool_" data-uid="AiDotNet.Tools.PredictionModelTool`3.CreateMatrixInputTool*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3_CreateMatrixInputTool_AiDotNet_Models_Results_PredictionModelResult__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0___2__System_String_System_String_" data-uid="AiDotNet.Tools.PredictionModelTool`3.CreateMatrixInputTool(AiDotNet.Models.Results.PredictionModelResult{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`2},System.String,System.String)">
+  CreateMatrixInputTool(PredictionModelResult&lt;T, Matrix&lt;T&gt;, TOutput&gt;, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L343"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a prediction tool with a JSON 2D array parser for Matrix input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static PredictionModelTool&lt;T, Matrix&lt;T&gt;, TOutput&gt; CreateMatrixInputTool(PredictionModelResult&lt;T, Matrix&lt;T&gt;, TOutput&gt; model, string name, string description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Models.Results.PredictionModelResult-3.html">PredictionModelResult</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, TOutput&gt;</dt>
+    <dd><p>The trained model.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tool name.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tool description including expected features.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tools.PredictionModelTool-3.html">PredictionModelTool</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, TOutput&gt;</dt>
+    <dd><p>A configured PredictionModelTool.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_PredictionModelTool_3_CreateMatrixInputTool_AiDotNet_Models_Results_PredictionModelResult__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0___2__System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+Convenience method for models that take a Matrix as input (batch predictions).</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">var tool = PredictionModelTool&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;
+    .CreateMatrixInputTool(
+        trainedModel,
+        "BatchPredictor",
+        "Predicts multiple outputs. Input: 2D JSON array [[f1,f2,f3], [f1,f2,f3], ...]"
+    );</code></pre>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3_CreateVectorInputTool_" data-uid="AiDotNet.Tools.PredictionModelTool`3.CreateVectorInputTool*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3_CreateVectorInputTool_AiDotNet_Models_Results_PredictionModelResult__0_AiDotNet_Tensors_LinearAlgebra_Vector__0___2__System_String_System_String_" data-uid="AiDotNet.Tools.PredictionModelTool`3.CreateVectorInputTool(AiDotNet.Models.Results.PredictionModelResult{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},`2},System.String,System.String)">
+  CreateVectorInputTool(PredictionModelResult&lt;T, Vector&lt;T&gt;, TOutput&gt;, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a prediction tool with a simple JSON array parser for Vector input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static PredictionModelTool&lt;T, Vector&lt;T&gt;, TOutput&gt; CreateVectorInputTool(PredictionModelResult&lt;T, Vector&lt;T&gt;, TOutput&gt; model, string name, string description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Models.Results.PredictionModelResult-3.html">PredictionModelResult</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, TOutput&gt;</dt>
+    <dd><p>The trained model.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tool name.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tool description including expected features.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tools.PredictionModelTool-3.html">PredictionModelTool</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;, TOutput&gt;</dt>
+    <dd><p>A configured PredictionModelTool.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_PredictionModelTool_3_CreateVectorInputTool_AiDotNet_Models_Results_PredictionModelResult__0_AiDotNet_Tensors_LinearAlgebra_Vector__0___2__System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is a convenience factory method for the common case of models that take
+a Vector as input (like most regression and classification models).</p>
+<p>Example:</p>
+<pre><code class="lang-csharp">var tool = PredictionModelTool&lt;double, Vector&lt;double&gt;, Vector&lt;double&gt;&gt;
+    .CreateVectorInputTool(
+        trainedModel,
+        "HousePricePredictor",
+        "Predicts house prices. Input: JSON array [sqft, bedrooms, bathrooms, age]"
+    );</code></pre>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tools_PredictionModelTool_3_Execute_" data-uid="AiDotNet.Tools.PredictionModelTool`3.Execute*"></a>
+
+  <h3 id="AiDotNet_Tools_PredictionModelTool_3_Execute_System_String_" data-uid="AiDotNet.Tools.PredictionModelTool`3.Execute(System.String)">
+  Execute(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Executes the tool's operation with the provided input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Execute(string input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input string required by the tool to perform its operation.
+The format and requirements of this input should be described in the Description property.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string containing the result of the tool's execution or an error message if execution fails.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tools_PredictionModelTool_3_Execute_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+The Execute method is where the tool does its actual work. When called, it takes an input string,
+processes it according to the tool's purpose, and returns a result string.</p>
+<p>For example:</p>
+<ul>
+<li>A Calculator tool might take &quot;5 * 10&quot; as input and return &quot;50&quot;</li>
+<li>A Search tool might take &quot;weather in New York&quot; and return &quot;Sunny, 72°F&quot;</li>
+<li>A FileReader tool might take &quot;/path/to/file.txt&quot; and return the file's contents</li>
+</ul>
+<p>If something goes wrong (invalid input, error during execution), the method should return
+a descriptive error message rather than throwing an exception, so the agent can understand
+what went wrong and potentially try again with different input.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Tools/PredictionModelTool.cs/#L57" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

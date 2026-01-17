@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GraphRAG&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GraphRAG&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Graph-based RAG (Retrieval Augmented Generation) that combines knowledge graph traversal with vector search for enhanced retrieval.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1" class="text-break">
+Class GraphRAG&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.html">AdvancedPatterns</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Graph-based RAG (Retrieval Augmented Generation) that combines knowledge graph traversal with vector search for enhanced retrieval.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GraphRAG&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GraphRAG&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+GraphRAG enhances traditional RAG by maintaining a knowledge graph of entities and relationships alongside
+vector embeddings. When a query mentions entities in the graph, GraphRAG retrieves both directly related
+documents (via graph traversal) and semantically similar documents (via vector search), then boosts scores
+for documents that appear in both results. This leverages structured knowledge for more accurate retrieval.
+</p>
+<p><b>For Beginners:</b> Think of a knowledge graph like a mind map or family tree of facts.
+<p>Traditional RAG (vector-only):</p>
+<ul>
+<li>Question: &quot;What did Einstein discover?&quot;</li>
+<li>Search embeddings for documents about &quot;Einstein&quot; and &quot;discovery&quot;</li>
+<li>Problem: Might miss important connections or relationships</li>
+</ul>
+<p>GraphRAG (graph + vector):</p>
+<ul>
+<li>Question: &quot;What did Einstein discover?&quot;</li>
+<li>Step 1: Extract entities → &quot;Einstein&quot;</li>
+<li>Step 2: Check knowledge graph:
+<ul>
+<li>Einstein → DISCOVERED → Theory of Relativity</li>
+<li>Einstein → WORKED_AT → Princeton University</li>
+<li>Theory of Relativity → INFLUENCED → Quantum Mechanics</li>
+</ul>
+</li>
+<li>Step 3: Vector search for &quot;Einstein&quot; and &quot;discovery&quot;</li>
+<li>Step 4: Boost documents that mention graph-connected entities</li>
+<li>Result: Prioritizes documents about his actual discoveries over generic biographical info</li>
+</ul>
+<p>Real-world analogy:</p>
+<ul>
+<li>Regular search: Looking through books by reading every page</li>
+<li>GraphRAG: Using the index AND table of contents AND cross-references all together</li>
+</ul>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// Setup
+var generator = new StubGenerator&lt;double&gt;(); // Or real LLM for entity extraction
+var vectorRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+// Create GraphRAG instance
+var graphRAG = new GraphRAG&lt;double&gt;(generator, vectorRetriever);
+
+// Build knowledge graph (can be done manually or from documents)
+graphRAG.AddRelation("Albert Einstein", "DISCOVERED", "Theory of Relativity");
+graphRAG.AddRelation("Albert Einstein", "BORN_IN", "Germany");
+graphRAG.AddRelation("Theory of Relativity", "PUBLISHED", "1915");
+graphRAG.AddRelation("Theory of Relativity", "INFLUENCED", "GPS Technology");
+
+// Retrieve with graph-enhanced search
+var documents = graphRAG.Retrieve("What did Einstein discover?", topK: 10);
+
+// GraphRAG will:
+// 1. Extract "Einstein" from query
+// 2. Find graph neighbors: "Theory of Relativity", "Germany", etc.
+// 3. Perform vector search for the query
+// 4. Boost docs mentioning "Theory of Relativity" (graph-connected)
+// 5. Return top-10 with graph-boosted scores</code></pre>
+
+<p><b>How It Works:</b>
+The retrieval process:
+1. Entity Extraction - Use LLM to extract entities from the query
+2. Graph Traversal - Find all entities connected to query entities in the knowledge graph
+3. Vector Retrieval - Perform standard semantic search for the query
+4. Score Boosting - Multiply scores by 1.5x for documents mentioning graph-connected entities
+5. Ranking - Sort all documents by boosted scores and return top-K
+<p>Current implementation uses:</p>
+<ul>
+<li>In-memory dictionary for knowledge graph (production should use Neo4j, GraphDB)</li>
+<li>Regex-based entity extraction (production should use NER models)</li>
+<li>Simple score boosting (production could use graph embeddings, PageRank, etc.)</li>
+</ul>
+
+<p><b>Benefits:</b>
+- Structured reasoning - Leverages explicit relationships between entities
+- Better precision - Prioritizes documents with known connections
+- Explainable - Can trace why documents were selected via graph paths
+- Handles multi-hop reasoning - Can traverse entity → relation → entity chains
+- Complementary - Combines structured (graph) and unstructured (vector) knowledge
+</p>
+<p><b>Limitations:</b>
+- Requires building/maintaining knowledge graph (initial overhead)
+- Graph quality affects results (garbage in, garbage out)
+- Entity extraction quality matters (missed entities = missed connections)
+- Current implementation is in-memory only (not scalable for large graphs)
+- Simple boosting strategy (more sophisticated approaches possible)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1__ctor_AiDotNet_Interfaces_IGenerator__0__AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase__0__System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.#ctor(AiDotNet.Interfaces.IGenerator{`0},AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase{`0},System.Int32)">
+  GraphRAG(IGenerator&lt;T&gt;, RetrieverBase&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG-1.html">GraphRAG&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GraphRAG(IGenerator&lt;T&gt; generator, RetrieverBase&lt;T&gt; vectorRetriever, int maxHops = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The LLM generator for entity extraction (use StubGenerator or real LLM).</p>
+</dd>
+    <dt><code>vectorRetriever</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</dt>
+    <dd><p>Vector retriever for unstructured data.</p>
+</dd>
+    <dt><code>maxHops</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of hops to traverse in the knowledge graph (default: 2).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_AddRelation_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.AddRelation*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_AddRelation_System_String_System_String_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.AddRelation(System.String,System.String,System.String)">
+  AddRelation(string, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a relationship to the knowledge graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddRelation(string entity, string relation, string target)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>entity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The source entity.</p>
+</dd>
+    <dt><code>relation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The relationship type.</p>
+</dd>
+    <dt><code>target</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The target entity.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_AddRelation_System_String_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Creates a connection between two entities in the knowledge graph.
+<p>Example:</p>
+<pre><code class="lang-csharp">graphRAG.AddRelation("Einstein", "DISCOVERED", "Theory of Relativity");
+graphRAG.AddRelation("Theory of Relativity", "PUBLISHED_IN", "1915");</code></pre>
+<p>This builds a graph structure that can be traversed during retrieval.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when entity, relation, or target is null, empty, or whitespace.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_Retrieve_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.Retrieve*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_Retrieve_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.GraphRAG`1.Retrieve(System.String,System.Int32)">
+  Retrieve(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs/#L222"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents using combined knowledge graph traversal and vector similarity search.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Document&lt;T&gt;&gt; Retrieve(string query, int topK)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's query to search for.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of documents to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Documents ranked by graph-boosted relevance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_GraphRAG_1_Retrieve_System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method combines structured knowledge from the graph with unstructured vector search.
+Documents mentioning entities connected to the query in the knowledge graph receive
+higher relevance scores (1.5x boost).
+</p>
+<p><b>For Beginners:</b> This is the main retrieval method that uses both graph and vectors.
+<p>Process:</p>
+<ol>
+<li>Extract Entities: Use LLM to find entities in query (&quot;Einstein&quot;, &quot;relativity&quot;, etc.)</li>
+<li>Graph Traversal: Find all entities connected to query entities in knowledge graph</li>
+<li>Vector Search: Perform regular semantic search for the query</li>
+<li>Score Boosting: Multiply score by 1.5x for docs that mention graph-connected entities</li>
+<li>Ranking: Sort by boosted scores and return top-K</li>
+</ol>
+<p>Example:</p>
+<ul>
+<li>Query: &quot;What did Einstein discover?&quot;</li>
+<li>Extracted: [&quot;Einstein&quot;]</li>
+<li>Graph neighbors: [&quot;Theory of Relativity&quot;, &quot;E=mc²&quot;, &quot;Photoelectric Effect&quot;]</li>
+<li>Vector search returns 20 documents</li>
+<li>Document about &quot;Theory of Relativity&quot; gets 1.5x boost (in graph)</li>
+<li>Document about &quot;Einstein's childhood&quot; stays normal (not in graph neighbors)</li>
+<li>Result: Theory of Relativity doc ranks higher due to graph connection</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when query is null or whitespace.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when topK is not positive.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/GraphRAG.cs/#L100" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

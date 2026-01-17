@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum PartitionStrategy | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum PartitionStrategy | AiDotNet Documentation ">
+      
+      <meta name="description" content="Strategies for partitioning models between cloud and edge devices.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_PartitionStrategy.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.PartitionStrategy%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.PartitionStrategy">
+
+
+
+
+  <h1 id="AiDotNet_Enums_PartitionStrategy" data-uid="AiDotNet.Enums.PartitionStrategy" class="text-break">
+Enum PartitionStrategy  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PartitionStrategy.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Strategies for partitioning models between cloud and edge devices.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum PartitionStrategy</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_PartitionStrategy_Adaptive"><code>Adaptive = 3</code></dt>
+  
+  <dd><p>Adaptively determine partition based on runtime conditions
+(network speed, device power, battery level, model size).
+Best for dynamic environments.</p>
+</dd>
+    <dt id="AiDotNet_Enums_PartitionStrategy_Balanced"><code>Balanced = 2</code></dt>
+  
+  <dd><p>Balanced partition - splits model in the middle.
+Good general-purpose strategy.</p>
+</dd>
+    <dt id="AiDotNet_Enums_PartitionStrategy_EarlyLayers"><code>EarlyLayers = 0</code></dt>
+  
+  <dd><p>Execute early layers on edge, rest on cloud.
+Good for local preprocessing before cloud processing.</p>
+</dd>
+    <dt id="AiDotNet_Enums_PartitionStrategy_LateLayers"><code>LateLayers = 1</code></dt>
+  
+  <dd><p>Execute most layers on edge, only final on cloud.
+Good for powerful edge devices that can handle most processing.</p>
+</dd>
+    <dt id="AiDotNet_Enums_PartitionStrategy_Manual"><code>Manual = 4</code></dt>
+  
+  <dd><p>Manual partition specification - you control exactly where to split.
+For advanced users with specific requirements.</p>
+</dd>
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_PartitionStrategy_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Sometimes you want to split an AI model so that part of it runs on a
+local device (edge) and part runs in the cloud. This is useful for:</p>
+<ul>
+<li>Reducing bandwidth by processing some data locally</li>
+<li>Improving privacy by keeping sensitive data on the device</li>
+<li>Balancing speed (edge processing) with power (cloud processing)</li>
+</ul>
+<p>Different strategies determine where to split the model:</p>
+<ul>
+<li><strong>EarlyLayers</strong>: First few layers run on edge, rest in cloud. Good for preprocessing data
+locally before sending it to the cloud.</li>
+<li><strong>LateLayers</strong>: Most processing on edge, only final layers in cloud. Good for devices with
+decent processing power.</li>
+<li><strong>Balanced</strong>: Split in the middle. Good general-purpose strategy.</li>
+<li><strong>Adaptive</strong>: Automatically determines the best split based on network speed, device power,
+and battery level.</li>
+<li><strong>Manual</strong>: You specify exactly where to split. For advanced users.</li>
+</ul>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/PartitionStrategy.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

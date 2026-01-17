@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>AutoML Exhaustive Implementation Plan (v1) | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="AutoML Exhaustive Implementation Plan (v1) | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/design/AutoML-Exhaustive-Implementation-Plan.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="automl-exhaustive-implementation-plan-v1">AutoML Exhaustive Implementation Plan (v1)</h1>
+
+<p>Status: Draft (expanded, code-free)</p>
+<p>Date: 2025-12-17</p>
+<p>Purpose: Define a production-ready, facade-compliant plan to make AutoML &quot;exhaustive&quot; for AiDotNet while protecting IP (no weights/model recreation leakage).</p>
+<hr>
+<h2 id="1-context">1) Context</h2>
+<ul>
+<li>Active PR: #444 (branch: <code>claude/fix-issue-403-011CUvxMg2tE1BB8Nm5u94H5</code>)</li>
+<li>Issue anchor: #403 (NAS implementations) is a subset of &quot;Exhaustive AutoML&quot;.</li>
+<li>This document is intentionally code-free and focuses on architecture, task/metric coverage, and production readiness.</li>
+</ul>
+<hr>
+<h2 id="2-non-negotiables-project-guardrails">2) Non-Negotiables (Project Guardrails)</h2>
+<ul>
+<li>Facade / Public API: users must build/train via <code>PredictionModelBuilder</code> and infer via <code>PredictionModelResult</code>.</li>
+<li>IP protection: users must not be able to recreate/clone models outside the system using exposed artifacts (trial history, metadata, etc.).</li>
+<li>Options-driven UX: one configuration object per feature area, with industry-standard defaults; allow optional injection of interfaces (nullable -&gt; default internally).</li>
+<li>Architecture standards:
+<ul>
+<li>Avoid generic constraints; use <code>INumericOperations</code> for conversions/comparisons.</li>
+<li>Use intermediate base classes between interfaces and concrete implementations.</li>
+<li>One top-level type per file (classes/enums/interfaces).</li>
+<li>Documentation must match existing XML doc style with &quot;For Beginners&quot; sections (for C# code).</li>
+</ul>
+</li>
+<li>Compatibility: must remain compatible with <code>.NET Framework 4.7.1</code>.</li>
+<li>JSON: always <code>Newtonsoft.Json</code> (never <code>System.Text.Json</code>).</li>
+</ul>
+<hr>
+<h2 id="3-what-exhaustive-automl-v1-means-here">3) What &quot;Exhaustive AutoML v1&quot; Means Here</h2>
+<p>Exhaustive means:</p>
+<ul>
+<li>AutoML supports any <code>IFullModel&lt;T, TInput, TOutput&gt;</code> across all input/output types represented in the repo.</li>
+<li>AutoML supports all task families the repo can actually train and evaluate, with industry-recommended default metrics per task family and user override via configuration.</li>
+<li>RL is in-scope for AutoML v1 (environment-based training/evaluation through the existing facade RL path).</li>
+<li>AutoML is integrated behind the facade with minimal required user inputs.</li>
+<li>AutoML exposes a redacted trial history (no weights, no serialized model bytes, no raw hyperparameter values, no architecture dumps).</li>
+</ul>
+<p>Non-goal (v1):</p>
+<ul>
+<li>&quot;Any future research task under the sun&quot; if the repo does not yet have an evaluatable training+prediction loop for it.</li>
+</ul>
+<h3 id="31-compute-budget-presets-v1">3.1 Compute Budget Presets (v1)</h3>
+<p>AutoML must ship with opinionated, industry-standard budget presets, while still allowing full user override.</p>
+<p>Preset goals:</p>
+<ul>
+<li><code>CI</code>: deterministic, very fast, intended for pipelines; prioritizes compilation + correctness over peak quality.</li>
+<li><code>Fast</code>: quick iteration for local dev; good-enough model quality.</li>
+<li><code>Standard</code>: default; balanced quality vs cost.</li>
+<li><code>Thorough</code>: best-quality search under reasonable limits; intended for release candidates or offline tuning.</li>
+</ul>
+<p>Each preset must define defaults for:</p>
+<ul>
+<li>time budget (overall wall-clock limit)</li>
+<li>trial budget (max trials)</li>
+<li>multi-fidelity policy (enabled/disabled; early stopping rules)</li>
+<li>evaluation rigor (single split vs CV where meaningful)</li>
+<li>parallelism (max concurrent trials; safe defaults)</li>
+<li>deterministic seeding policy (on by default)</li>
+</ul>
+<p>Recommended first-pass defaults (to be tuned after benchmarking on representative datasets):</p>
+<ul>
+<li><code>CI</code>: time limit 2–5 minutes; max trials 5–10; single split only; multi-fidelity off; parallelism 1.</li>
+<li><code>Fast</code>: time limit 10–15 minutes; max trials 20–30; single split; multi-fidelity on for neural candidates; parallelism 1–2.</li>
+<li><code>Standard</code> (default): time limit 30 minutes; max trials 100; single split by default, with CV enabled only when task adapters support it; multi-fidelity on for neural candidates; parallelism 2–4.</li>
+<li><code>Thorough</code>: time limit 2 hours; max trials 300; CV enabled where supported; multi-fidelity on; parallelism 4–8 (bounded by available CPU/GPU and memory).</li>
+</ul>
+<p>Important: presets must be task-aware. For example, “trial” for a tree model may mean a full training run, while for deep learning it should support multi-fidelity (short runs promoted to longer runs).</p>
+<h3 id="32-facade-integration-requirements-automl">3.2 Facade Integration Requirements (AutoML)</h3>
+<p>AutoML must remain “options-first” behind <code>PredictionModelBuilder</code>:</p>
+<ul>
+<li>Typical users should configure AutoML using a single configuration options object with safe defaults.</li>
+<li>Advanced users may optionally inject interfaces (nullable -&gt; internal defaults).</li>
+<li>AutoML must not require users to manually instantiate internal components or provide custom evaluators for common task families.</li>
+</ul>
+<p>AutoML must also remain compatible with the existing facade rule:</p>
+<ul>
+<li>build/train via <code>PredictionModelBuilder</code></li>
+<li>inference via <code>PredictionModelResult</code></li>
+</ul>
+<hr>
+<h2 id="4-current-task-surface-in-repo-inventory">4) Current Task Surface in Repo (Inventory)</h2>
+<h3 id="41-task-type-signals-currently-present">4.1 Task-type signals currently present</h3>
+<ul>
+<li><code>PredictionType</code> only distinguishes <code>Binary</code> vs <code>Regression</code> (insufficient for multi-class, multi-label, ranking, seq2seq, detection, segmentation, etc.).</li>
+<li><code>NeuralNetworkTaskType</code> enumerates many task families (multi-class/multi-label, seq2seq, forecasting, detection/segmentation, RL, clustering, generative, ASR, translation, etc.).</li>
+<li><code>TransformerTaskType</code> includes classification/regression/text generation/sequence tagging/translation.</li>
+<li>Graph ML task containers exist:
+<ul>
+<li><code>NodeClassificationTask&lt;T&gt;</code></li>
+<li><code>GraphClassificationTask&lt;T&gt;</code></li>
+<li><code>LinkPredictionTask&lt;T&gt;</code></li>
+<li><code>GraphGenerationTask&lt;T&gt;</code></li>
+</ul>
+</li>
+<li>Time series modeling has a full model family via <code>ITimeSeriesModel&lt;T&gt; : IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;</code> and <code>TimeSeriesModelType</code>.</li>
+</ul>
+<h3 id="42-reality-check">4.2 Reality check</h3>
+<p>Enums describe potential coverage, but evaluation + metric extraction is currently only reliable for a subset end-to-end.</p>
+<h3 id="43-task-coverage-matrix-current-vs-required">4.3 Task coverage matrix (current vs required)</h3>
+<p>Legend:</p>
+<ul>
+<li>Model exists: a meaningful <code>IFullModel</code> training+prediction loop exists in-repo for this task family.</li>
+<li>Evaluator ready: the default evaluation pipeline can score this task family without user-provided glue code.</li>
+<li>AutoML ready: AutoML can run trials and select a best candidate using the correct metric by default.</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Task family</th>
+<th style="text-align: right;">Model exists</th>
+<th style="text-align: right;">Evaluator ready</th>
+<th style="text-align: right;">AutoML ready</th>
+<th>Default metric (v1)</th>
+<th>Notes / gaps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tabular regression (<code>Matrix/Vector</code>)</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">Partial</td>
+<td style="text-align: right;">Partial</td>
+<td>RMSE</td>
+<td>Default evaluator omits task/prediction type configuration and over-assumes <code>Vector&lt;T&gt;</code> outputs for all tasks.</td>
+</tr>
+<tr>
+<td>Binary classification (<code>Matrix/Vector</code>)</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">Partial</td>
+<td style="text-align: right;">Partial</td>
+<td>AUCROC (or F1 if imbalanced)</td>
+<td>Current <code>PredictionType</code> is only binary vs regression; multi-class is not representable here.</td>
+</tr>
+<tr>
+<td>Multi-class classification</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Macro-F1</td>
+<td>Requires multi-class-aware evaluation and output conventions (class id vs logits/probabilities).</td>
+</tr>
+<tr>
+<td>Multi-label classification</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Micro-F1</td>
+<td>Requires multi-hot label format and proper metric implementation.</td>
+</tr>
+<tr>
+<td>Time-series forecasting</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">Partial</td>
+<td style="text-align: right;">Partial</td>
+<td>SMAPE</td>
+<td>Requires time-aware splits and horizon-aware evaluation.</td>
+</tr>
+<tr>
+<td>Time-series anomaly detection</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>AUCPR</td>
+<td>Requires explicit anomaly label conventions and threshold policy.</td>
+</tr>
+<tr>
+<td>Ranking / recommendation</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>NDCG@K</td>
+<td>Metrics exist in parts of the codebase but not wired as task-aware evaluation with grouping.</td>
+</tr>
+<tr>
+<td>Graph node classification</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Accuracy / Macro-F1</td>
+<td>Graph models use bespoke evaluation methods; not integrated into <code>IModelEvaluator</code>/AutoML scoring.</td>
+</tr>
+<tr>
+<td>Graph classification</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Accuracy / Macro-F1</td>
+<td>Same as above.</td>
+</tr>
+<tr>
+<td>Graph link prediction</td>
+<td style="text-align: right;">Yes</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>AUCROC / hits@K</td>
+<td>Same as above; protocol-dependent metrics.</td>
+</tr>
+<tr>
+<td>Graph generation</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>TBD (policy)</td>
+<td>Requires explicit generation evaluation policy; may be domain dependent.</td>
+</tr>
+<tr>
+<td>NLP classification</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Macro-F1</td>
+<td>Needs task adapters and tokenization/data pipeline integration.</td>
+</tr>
+<tr>
+<td>Sequence tagging</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>F1 (entity-level)</td>
+<td>Needs task adapters and metrics (token-level vs span-level).</td>
+</tr>
+<tr>
+<td>Translation</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>BLEU/chrF</td>
+<td>Metrics not implemented/wired into evaluation pipeline.</td>
+</tr>
+<tr>
+<td>Text generation</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Perplexity</td>
+<td><code>MetricType</code> includes Perplexity but no unified implementation/wiring.</td>
+</tr>
+<tr>
+<td>Vision image classification</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Accuracy / Macro-F1</td>
+<td>Requires consistent label formats and evaluation adapters for tensor outputs.</td>
+</tr>
+<tr>
+<td>Object detection</td>
+<td style="text-align: right;">Unknown</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>mAP</td>
+<td>Requires standardized box formats and evaluation metrics.</td>
+</tr>
+<tr>
+<td>Image segmentation</td>
+<td style="text-align: right;">Unknown</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>mIoU / Dice</td>
+<td>Requires standardized mask formats and metrics.</td>
+</tr>
+<tr>
+<td>Generative modeling (images)</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>FID / IS</td>
+<td>Implementations exist as standalone metrics but not integrated; also requires feature extractor policy.</td>
+</tr>
+<tr>
+<td>Unsupervised clustering</td>
+<td style="text-align: right;">Unclear</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Silhouette</td>
+<td>Task exists in enums/metrics, but model+builder+evaluation integration is not end-to-end.</td>
+</tr>
+<tr>
+<td>Dimensionality reduction</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Reconstruction error</td>
+<td>Requires evaluation definition and builder support where labels are absent.</td>
+</tr>
+<tr>
+<td>Reinforcement learning</td>
+<td style="text-align: right;">Mixed</td>
+<td style="text-align: right;">No</td>
+<td style="text-align: right;">No</td>
+<td>Avg episodic return</td>
+<td>Requires environment-based evaluation (rollouts) and episode/step-based budgets.</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="5-current-evaluation--metrics-plumbing-inventory">5) Current Evaluation + Metrics Plumbing (Inventory)</h2>
+<h3 id="51-evaluator-implementation">5.1 Evaluator implementation</h3>
+<ul>
+<li>Only <code>DefaultModelEvaluator&lt;T, TInput, TOutput&gt;</code> exists as the main <code>IModelEvaluator</code>.</li>
+<li>It assumes predictions and targets can be converted to <code>Vector&lt;T&gt;</code> and evaluated via <code>ErrorStats&lt;T&gt;</code> and <code>PredictionStats&lt;T&gt;</code>.</li>
+<li>It does not set a prediction/task type for <code>ErrorStatsInputs&lt;T&gt;</code> / <code>PredictionStatsInputs&lt;T&gt;</code>, so they default to regression.</li>
+<li>Cross-validation defaults only apply to <code>Matrix&lt;T&gt;/Vector&lt;T&gt;</code>. For all other <code>TInput/TOutput</code>, a cross-validator must be supplied explicitly, which conflicts with &quot;industry defaults everywhere&quot;.</li>
+</ul>
+<h3 id="52-metrics-reality">5.2 Metrics reality</h3>
+<ul>
+<li><code>MetricType</code> is very broad, but:
+<ul>
+<li><code>ErrorStats.GetMetric()</code> and <code>PredictionStats.GetMetric()</code> only expose a small subset.</li>
+<li>Many <code>MetricType</code> entries are not reachable through the evaluator pipeline today.</li>
+</ul>
+</li>
+<li>Advanced metrics exist as standalone components (e.g., Inception Score, FID) but are not integrated into the unified evaluator pipeline nor exposed as first-class evaluation outputs.</li>
+</ul>
+<h3 id="53-automl-implementation-reality-today">5.3 AutoML implementation reality (today)</h3>
+<p>AutoML is currently not production-correct end-to-end:</p>
+<ul>
+<li>The only concrete AutoML implementations in-repo are NAS-focused and do not perform full trial training + evaluation.</li>
+<li><code>AutoMLModelBase</code> delegates evaluation to <code>IModelEvaluator</code> (if provided) but does not define how trials are trained; the fallback evaluation path is a placeholder.</li>
+<li><code>ValidateConstraints</code> is a stub (always returns true), so constraint-based search is not implemented.</li>
+<li>The public <code>TrialResult</code> model stores raw hyperparameter values, which conflicts with IP protection requirements.</li>
+<li>The public <code>IAutoMLModel</code> contract includes methods that return or suggest raw hyperparameter values; this must be reconciled with facade/IP goals in Phase E.</li>
+</ul>
+<hr>
+<h2 id="6-default-metrics-policy-v1">6) Default Metrics Policy (v1)</h2>
+<p>This section defines &quot;industry recommended defaults&quot; as primary optimization metric + secondary reported metrics.</p>
+<p>Note: where the evaluator lacks correct implementations today, the gap is explicitly called out in Section 7.</p>
+<h3 id="61-supervised-regression-tabular--general-numeric">6.1 Supervised regression (tabular / general numeric)</h3>
+<ul>
+<li>Primary: <code>RMSE</code> (minimize) unless user opts into robust; robust default can be <code>MAE</code> (minimize).</li>
+<li>Secondary: <code>R2</code>, <code>MAPE</code>/<code>SMAPE</code> (when meaningful), <code>MeanBiasError</code>.</li>
+</ul>
+<h3 id="62-binary-classification">6.2 Binary classification</h3>
+<ul>
+<li>Primary: <code>AUCROC</code> (maximize) by default; switch to <code>F1Score</code> (maximize) when imbalance is detected or declared.</li>
+<li>Secondary: <code>AUCPR</code>, <code>Precision</code>, <code>Recall</code>, <code>BrierScore</code> (calibration), <code>CrossEntropyLoss</code> (if available).</li>
+</ul>
+<h3 id="63-multi-class-classification-single-label">6.3 Multi-class classification (single-label)</h3>
+<ul>
+<li>Primary: Macro-F1 (maximize) or Log Loss (minimize) as calibrated alternative.</li>
+<li>Secondary: Accuracy, top-k accuracy, per-class precision/recall.</li>
+<li>Gap: current evaluation plumbing is binary-oriented; requires multi-class aware adapters/metrics.</li>
+</ul>
+<h3 id="64-multi-label-classification">6.4 Multi-label classification</h3>
+<ul>
+<li>Primary: Micro-F1 (maximize).</li>
+<li>Secondary: macro-F1, per-label AP, AUCPR (macro/micro), Hamming loss.</li>
+<li>Gap: requires multi-label aware adapters/metrics and output shape conventions.</li>
+</ul>
+<h3 id="65-ranking--recommendation-query-grouped">6.5 Ranking / recommendation (query-grouped)</h3>
+<ul>
+<li>Primary: <code>NormalizedDiscountedCumulativeGain</code>@K (maximize).</li>
+<li>Secondary: <code>MeanAveragePrecision</code>@K, <code>MeanReciprocalRank</code>, hits@K.</li>
+<li>Gap: requires group-aware evaluation; current evaluator assumes independent samples.</li>
+</ul>
+<h3 id="66-time-series-forecasting">6.6 Time series forecasting</h3>
+<ul>
+<li>Primary: <code>SMAPE</code> (minimize) for business-like forecasting; allow <code>RMSE</code> for scale-sensitive use cases.</li>
+<li>Secondary: <code>MAE</code>, <code>MAPE</code> (when safe), interval coverage metrics where available.</li>
+<li>Gap: time-series-aware splitting and horizon-aware evaluation needed.</li>
+</ul>
+<h3 id="67-anomaly-detection-time-series-or-tabular">6.7 Anomaly detection (time series or tabular)</h3>
+<ul>
+<li>Primary: <code>AUCPR</code> (maximize) for imbalance; fallback <code>AUCROC</code>.</li>
+<li>Secondary: precision/recall at chosen threshold; calibration metrics where applicable.</li>
+<li>Gap: requires clear definition of anomaly label format and thresholding policy.</li>
+</ul>
+<h3 id="68-clustering-unsupervised">6.8 Clustering (unsupervised)</h3>
+<ul>
+<li>Primary: <code>SilhouetteScore</code> (maximize).</li>
+<li>Secondary: <code>DaviesBouldinIndex</code> (minimize), <code>CalinskiHarabaszIndex</code> (maximize).</li>
+<li>Gap: evaluator must support tasks where no <code>y</code> exists (builder overloads and/or task definitions).</li>
+</ul>
+<h3 id="69-dimensionality-reduction-unsupervised">6.9 Dimensionality reduction (unsupervised)</h3>
+<ul>
+<li>Primary: reconstruction error (minimize) for reconstruction-based methods.</li>
+<li>Secondary: neighborhood preservation metrics (if implemented).</li>
+<li>Gap: missing unified evaluation support.</li>
+</ul>
+<h3 id="610-nlp-generation--translation--asr">6.10 NLP generation / translation / ASR</h3>
+<ul>
+<li>Primary (task-specific):
+<ul>
+<li>Translation: BLEU/chrF (maximize)</li>
+<li>Summarization: ROUGE (maximize)</li>
+<li>ASR: WER/CER (minimize)</li>
+<li>Language modeling: Perplexity (minimize)</li>
+</ul>
+</li>
+<li>Gap: most of these metrics are not implemented/wired into the evaluator pipeline today.</li>
+</ul>
+<h3 id="611-vision-detection--segmentation">6.11 Vision detection / segmentation</h3>
+<ul>
+<li>Detection primary: mAP (maximize) across IoU thresholds.</li>
+<li>Segmentation primary: mIoU or Dice (maximize).</li>
+<li>Gap: missing metrics and missing standardized prediction/label formats in evaluation.</li>
+</ul>
+<h3 id="612-graph-ml">6.12 Graph ML</h3>
+<ul>
+<li>Node/graph classification primary: Accuracy or macro-F1 depending on imbalance.</li>
+<li>Link prediction primary: AUCROC / hits@K (protocol dependent).</li>
+<li>Graph generation: requires explicit policy choice (domain dependent); candidate: FID-like proxies where meaningful.</li>
+<li>Gap: graph models evaluate via bespoke methods today; not integrated into <code>IModelEvaluator</code>/AutoML scoring.</li>
+</ul>
+<h3 id="613-reinforcement-learning-rl">6.13 Reinforcement learning (RL)</h3>
+<ul>
+<li>Primary: average episodic return (maximize) or success rate (maximize), depending on environment/task definition.</li>
+<li>Secondary: stability (variance of return), sample efficiency (return vs steps), constraint violations (safety), time-to-threshold.</li>
+<li>Gap: requires environment-based evaluation adapters (rollouts) and episode/step-aware splitting/budget definitions.</li>
+</ul>
+<hr>
+<h2 id="7-gap-analysis-what-must-change-to-be-truly-exhaustive">7) Gap Analysis (What Must Change To Be Truly Exhaustive)</h2>
+<h3 id="71-missing-universal-task-definition-for-ifullmodel">7.1 Missing universal task definition for <code>IFullModel</code></h3>
+<p>AutoML needs an internal task contract that can represent:</p>
+<ul>
+<li>supervised vs unsupervised vs self-supervised tasks</li>
+<li>output/label formats (scalar, class id, one-hot, multi-hot, sequence, boxes, masks, graph objects)</li>
+<li>split strategy (standard, stratified, group, time series, predefined splits)</li>
+</ul>
+<p>Today, there is no unified way to infer task family from <code>IFullModel</code> alone.</p>
+<h3 id="72-evaluator-assumes-vectorizable-outputs">7.2 Evaluator assumes vectorizable outputs</h3>
+<p>Many <code>IFullModel</code> implementations can output tensors, sequences, graphs, or structured results; a universal evaluator cannot require <code>ConvertToVector</code> as the primary path.</p>
+<h3 id="73-classification-evaluation-is-not-production-correct-by-default">7.3 Classification evaluation is not production-correct by default</h3>
+<p>The default evaluator path does not set prediction type and relies on helpers that assume binary classification or regression.</p>
+<h3 id="74-task-families-not-integrated-into-the-evaluation-pipeline">7.4 Task families not integrated into the evaluation pipeline</h3>
+<ul>
+<li>Graph tasks: bespoke evaluation methods not wired into <code>IModelEvaluator</code> or AutoML scoring.</li>
+<li>Transformers/NLP: task enums exist but evaluator does not compute task-specific metrics (BLEU/ROUGE/WER/etc.).</li>
+<li>Vision detection/segmentation: task enums exist but metrics and evaluation formats are missing.</li>
+<li>Generative metrics (IS/FID) exist but are not part of unified evaluation outputs.</li>
+</ul>
+<h3 id="75-metric-surface-mismatch">7.5 Metric surface mismatch</h3>
+<p><code>MetricType</code> is large, but AutoML metric extraction supports only a handful of metrics. AutoML must be able to optimize any metric it offers for a given task family.</p>
+<h3 id="76-ip-protection-conflict-trial-history-leaks-hyperparameter-values">7.6 IP protection conflict: trial history leaks hyperparameter values</h3>
+<p>AutoML trial results currently store raw hyperparameters and return them as-is. For monetization and IP goals, hyperparameter values must be redacted from public results.</p>
+<h3 id="77-automl-search-is-missing-core-trial-execution-mechanics">7.7 AutoML search is missing core “trial execution” mechanics</h3>
+<p>To be production-ready, AutoML must:</p>
+<ul>
+<li>train each candidate trial (or run a well-defined multi-fidelity approximation) using the same training infrastructure as the facade</li>
+<li>evaluate trials using task-aware evaluators/adapters</li>
+<li>support early stopping, pruning, and failure isolation</li>
+</ul>
+<p>Today, the AutoML surface does not consistently define or implement these responsibilities.</p>
+<h3 id="78-hyperparameter-optimization-strategies-are-missing-or-incomplete">7.8 Hyperparameter optimization strategies are missing or incomplete</h3>
+<p>Exhaustive AutoML requires multiple complementary strategies to meet industry standards across problem shapes and budgets:</p>
+<ul>
+<li>Random search baseline (always)</li>
+<li>Bayesian optimization (recommended default for mixed spaces; e.g., TPE-style)</li>
+<li>Multi-fidelity search (HyperBand/ASHA-style scheduling for budgets)</li>
+<li>Evolutionary/Genetic strategies (robust for discrete/conditional spaces; also helpful for NAS)</li>
+<li>Optional grid search (small spaces only; mainly for debugging)</li>
+</ul>
+<p>The repository currently has enums and documentation references implying several strategies, but does not provide production-ready implementations.</p>
+<h3 id="79-model-family-search-spaces-are-not-defined-comprehensively">7.9 Model-family search spaces are not defined comprehensively</h3>
+<p>“Exhaustive” requires:</p>
+<ul>
+<li>a default search space per model family (bounded, safe, and task-aware)</li>
+<li>domain packs that provide task-appropriate search spaces/constraints (especially for neural/NLP/vision/time-series)</li>
+<li>a registry that maps model families to valid hyperparameters, constraints, and default optimizers</li>
+</ul>
+<p>Today, the search-space surface exists only in limited form and is not populated exhaustively across the model catalog.</p>
+<h3 id="710-ensembleselection-policies-are-not-defined">7.10 Ensemble/selection policies are not defined</h3>
+<p>Industry-standard AutoML typically includes:</p>
+<ul>
+<li>robust model selection across folds/splits</li>
+<li>optional ensembling (bagging/stacking/averaging) where it improves generalization</li>
+<li>tie-breaking policies (accuracy vs latency vs size)</li>
+</ul>
+<p>These policies must be explicitly defined to claim “exhaustive” behavior.</p>
+<h3 id="711-rl-evaluation-and-automl-integration-are-not-defined">7.11 RL evaluation and AutoML integration are not defined</h3>
+<p>If RL models are treated as AutoML-eligible (they implement <code>IFullModel</code> and are trainable through the facade’s RL path), then AutoML must define:</p>
+<ul>
+<li>how to parameterize environments/tasks for trials</li>
+<li>how to evaluate (rollouts, seeds, horizon limits)</li>
+<li>what the default objective is (return vs success rate) and how to report stability</li>
+<li>how budgets map (episodes, steps, wall time)</li>
+</ul>
+<p>Without an RL-aware evaluator and budget policy, “exhaustive AutoML” will remain incomplete for RL task families.</p>
+<hr>
+<h2 id="8-implementation-phases-all-phases-fully-defined">8) Implementation Phases (All Phases Fully Defined)</h2>
+<p>Each phase includes: goals, deliverables, acceptance criteria, and a junior-friendly checklist.</p>
+<h3 id="80-first-pass-sprint-plan-junior-friendly">8.0 First-Pass Sprint Plan (Junior-Friendly)</h3>
+<p>This sprint plan is aligned to Phases A–H. It is intentionally “first-pass” and should be revalidated after Phase A’s taxonomy is finalized.</p>
+<p>Sprint 1 (Phase A):</p>
+<ul>
+<li>Deliver the canonical task taxonomy + default metric policy + required label/prediction formats.</li>
+<li>Add a “supported vs excluded” task list with rationale (exclusions are allowed only when training+prediction+evaluation cannot be made end-to-end in-repo in v1).</li>
+</ul>
+<p>Sprint 2 (Phase B, tabular baseline correctness):</p>
+<ul>
+<li>Fix the default evaluator assumptions (task/prediction type must be explicit).</li>
+<li>Ensure tabular regression + binary classification work end-to-end with correct default metrics.</li>
+<li>Ensure cross-validation does not silently produce incorrect metrics (either works correctly or is explicitly disabled for unsupported task shapes).</li>
+</ul>
+<p>Sprint 3 (Phase B/C, supervised classification expansion):</p>
+<ul>
+<li>Add multi-class + multi-label evaluation adapters and metric correctness tests.</li>
+<li>Ensure AutoML can optimize the selected default metric and report secondary metrics.</li>
+</ul>
+<p>Sprint 4 (Phase B/C, time series):</p>
+<ul>
+<li>Add time-series-aware splitting and forecasting evaluation adapter.</li>
+<li>Add anomaly detection evaluation policy (labels + thresholding) and metrics wiring.</li>
+</ul>
+<p>Sprint 5 (Phase B/C, ranking/recommendation):</p>
+<ul>
+<li>Add group-aware evaluation adapter (query/user grouping) and ranking metrics wiring (NDCG@K, MAP@K, MRR).</li>
+</ul>
+<p>Sprint 6 (Phase B/C, graph ML):</p>
+<ul>
+<li>Integrate graph task containers into the evaluator pipeline (node/graph/link).</li>
+<li>Standardize evaluation outputs so AutoML scoring is consistent across graph tasks.</li>
+</ul>
+<p>Sprint 7 (Phase B/C, NLP):</p>
+<ul>
+<li>Add task adapters for NLP classification and sequence tagging.</li>
+<li>Add translation/generation evaluation policies and metrics wiring (BLEU/chrF, ROUGE, WER/CER, perplexity).</li>
+</ul>
+<p>Sprint 8 (Phase B/C, vision):</p>
+<ul>
+<li>Add standardized formats + evaluation adapters for detection and segmentation.</li>
+<li>Add mAP and mIoU/Dice metric wiring.</li>
+</ul>
+<p>Sprint 9 (Phase D):</p>
+<ul>
+<li>Implement the internal AutoML registry mapping model families to supported tasks and searchable knobs.</li>
+<li>Add coverage enforcement so “exhaustiveness” cannot regress silently.</li>
+</ul>
+<p>Sprint 10 (Phase E):</p>
+<ul>
+<li>Implement redacted public trial summaries + internal replay records.</li>
+<li>Ensure serialization and results exposure do not leak hyperparameter values or architecture details.</li>
+</ul>
+<p>Sprint 11 (Phase F):</p>
+<ul>
+<li>Implement the trial execution engine (train/evaluate per trial) with failure isolation and pruning hooks.</li>
+<li>Implement baseline HPO strategies (random search + simple Bayesian/TPE) on top of the engine.</li>
+</ul>
+<p>Sprint 12 (Phase F/H):</p>
+<ul>
+<li>Add multi-fidelity scheduling (ASHA/HyperBand-style) and budget promotion policies.</li>
+<li>Add initial ensembling options + final model selection policies.</li>
+</ul>
+<p>Sprint 13 (Phase G):</p>
+<ul>
+<li>Populate the model-family registry/search spaces across the model catalog in a task-aware way.</li>
+<li>Add domain packs to keep defaults safe and “industry standard” per modality.</li>
+</ul>
+<h3 id="801-v1-user-stories-acceptance-oriented">8.0.1 v1 User Stories (Acceptance-Oriented)</h3>
+<p>US1 (Beginner AutoML run):</p>
+<ul>
+<li>As a beginner, I can run AutoML through <code>PredictionModelBuilder</code> with minimal configuration and receive a trained <code>PredictionModelResult</code>.</li>
+<li>Acceptance: no custom evaluator/cross-validator required for supported task families; defaults produce a valid best model and a primary metric.</li>
+</ul>
+<p>US2 (Task-aware defaults):</p>
+<ul>
+<li>As a user, if I do not specify task family or metric, AutoML chooses industry-standard defaults based on the task family and data shape.</li>
+<li>Acceptance: default metric selection is deterministic and documented; users can override.</li>
+</ul>
+<p>US3 (Budget control):</p>
+<ul>
+<li>As a user, I can select a budget preset (CI/Fast/Standard/Thorough) or explicitly set time/trial limits.</li>
+<li>Acceptance: AutoML respects the budget and stops deterministically; results include a summary of budget used.</li>
+</ul>
+<p>US4 (Correct evaluation per task):</p>
+<ul>
+<li>As a user, I can run AutoML for any supported task family (tabular, time series, ranking, graph, NLP, vision, unsupervised) and get correct metrics by default.</li>
+<li>Acceptance: evaluation does not rely on incorrect “vector-only” assumptions for non-vector tasks; adapters exist per supported family.</li>
+</ul>
+<p>US5 (AutoML “exhaustiveness” enforcement):</p>
+<ul>
+<li>As a library maintainer, when a new model family is added, AutoML coverage cannot silently regress.</li>
+<li>Acceptance: registry/validation fails CI if a model family is AutoML-eligible but not registered or explicitly excluded.</li>
+</ul>
+<p>US6 (IP-safe results):</p>
+<ul>
+<li>As a facade user, I can inspect AutoML trial history and model selection rationale without learning raw hyperparameter values or architecture internals.</li>
+<li>Acceptance: <code>PredictionModelResult</code> (and any other facade outputs) expose only safe summaries + fingerprints; no weights/bytes/hyperparameter values/architecture dumps in default output.</li>
+</ul>
+<h3 id="phase-a---task-taxonomy--default-metric-policy">Phase A - Task taxonomy + default metric policy</h3>
+<p>Goal: define what tasks AutoML supports and how AutoML chooses default metrics/splitting/evaluation.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Internal task definition design (doc + taxonomy list).</li>
+<li>Default metric policy mapping (primary + secondary metrics per task family).</li>
+<li>AutoML-eligible task families list (supported, excluded, rationale).</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>Every AutoML run can declare its task family explicitly (no ambiguous &quot;binary vs regression only&quot;).</li>
+<li>Default metric selection is deterministic and documented.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Inventory all existing task signals (enums, options, model types, task containers).</li>
+<li>Define a canonical internal taxonomy that can map from those signals.</li>
+<li>Define per-task defaults: metric, maximize/minimize, CV strategy, preprocessing defaults.</li>
+<li>Define required label/prediction formats for each task family.</li>
+</ul>
+<h3 id="phase-b---universal-evaluation-adapters">Phase B - Universal evaluation adapters</h3>
+<p>Goal: evaluate any <code>IFullModel</code> without assuming <code>Vector&lt;T&gt;</code> outputs.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Adapter-based evaluation architecture (internal).</li>
+<li>At least one evaluator adapter per supported task family.</li>
+<li>Default splitting/CV strategies for non-<code>Matrix/Vector</code> tasks (where meaningful).</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>AutoML can evaluate candidates for each supported task family without requiring user-supplied evaluators/CV.</li>
+<li>Evaluation output contains a standardized metric dictionary + task-specific artifacts needed for scoring.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Implement adapters in priority order:
+<ol>
+<li>Tabular <code>Matrix/Vector</code> (baseline correctness fixes)</li>
+<li>Tensor supervised tasks (classification/regression)</li>
+<li>Time series forecasting (horizon + time split)</li>
+<li>Graph tasks (node/graph/link; reuse existing task containers)</li>
+<li>NLP tasks (classification, tagging, translation, generation) with task-specific metrics</li>
+<li>Vision detection/segmentation formats + metrics</li>
+<li>Unsupervised tasks (clustering, dimensionality reduction) using unlabeled metrics</li>
+</ol>
+</li>
+<li>Ensure each adapter supports deterministic seeding and strict budget enforcement.</li>
+</ul>
+<h3 id="phase-c---metrics-expansion--wiring">Phase C - Metrics expansion + wiring</h3>
+<p>Goal: implement and wire &quot;industry standard&quot; metrics for each task family into the evaluation pipeline and AutoML scoring.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Metric calculators for missing task families (see Section 6).</li>
+<li>Unified metric exposure so AutoML can optimize any supported metric per task family.</li>
+<li>Validation tests for metric correctness on small known examples.</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>Each task family's primary metric is computed correctly and is selectable as an optimization objective.</li>
+<li>AutoML scoring supports more than the current limited subset of metrics.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Add multi-class + multi-label metric support (macro/micro/weighted variants).</li>
+<li>Add ranking metric support with group handling.</li>
+<li>Add NLP generation/translation/ASR metric implementations and wiring.</li>
+<li>Add detection/segmentation metrics and standardized evaluation formats.</li>
+<li>Integrate existing generative metrics (IS/FID) into the evaluation surface.</li>
+<li>Ensure metrics are compatible with <code>.NET Framework 4.7.1</code> and follow numeric ops patterns.</li>
+</ul>
+<h3 id="phase-d---automl-registry--coverage-enforcement">Phase D - AutoML registry + coverage enforcement</h3>
+<p>Goal: guarantee &quot;exhaustiveness&quot; doesn't regress when new models/task types are added.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Internal registry mapping candidate families to:
+<ul>
+<li>supported task families + input/output types</li>
+<li>default searchable hyperparameters (internal-only)</li>
+<li>supported optimizers + training recipes</li>
+<li>constraints (latency/size/memory) and prerequisites</li>
+</ul>
+</li>
+<li>Coverage enforcement (tests or validation step) that fails when registry is incomplete.</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>Every AutoML-eligible model family is either registered or explicitly excluded with rationale.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Build registry entries for each model family and/or <code>ModelType</code> group.</li>
+<li>Add explicit exclusions for models that cannot be evaluated/trained via facade yet.</li>
+<li>Add validation that prevents silent support gaps.</li>
+</ul>
+<h3 id="phase-e---trial-history-redaction-ip-protection--safe-exposure">Phase E - Trial history redaction (IP protection) + safe exposure</h3>
+<p>Goal: expose trial history that is useful but does not enable model recreation outside the system.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Public trial summary schema (no hyperparameter values).</li>
+<li>Internal replay schema (full details), stored only internally and excluded from default result serialization.</li>
+<li>Documentation describing what is and isn't exposed.</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>Trial history exposed via facade outputs contains no weights, no serialized model bytes, and no raw hyperparameter values.</li>
+<li>Facade outputs do not include enough detail to recreate models outside AiDotNet by copying trial dumps.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Replace &quot;parameters dictionary exposed&quot; with a redacted summary structure.</li>
+<li>Represent config fingerprint as a stable hash plus a small set of non-sensitive descriptors (model family, search strategy name, budget preset, etc.).</li>
+<li>Ensure serialized artifacts do not contain secret/internal config payloads by default.</li>
+</ul>
+<h3 id="phase-f---trial-execution-engine--hpo-strategies">Phase F - Trial execution engine + HPO strategies</h3>
+<p>Goal: make AutoML trials real (train + evaluate) and support multiple complementary hyperparameter optimization strategies.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Internal “trial executor” that can:
+<ul>
+<li>build a candidate (model + training recipe)</li>
+<li>train it under a budget</li>
+<li>evaluate it via task adapters</li>
+<li>report metrics + artifacts in a standardized way</li>
+</ul>
+</li>
+<li>At least these HPO strategies implemented on top of the executor:
+<ul>
+<li>Random search (baseline)</li>
+<li>Bayesian optimization for mixed spaces (recommended default)</li>
+<li>Evolutionary strategy (for discrete/conditional spaces)</li>
+<li>Multi-fidelity scheduler (ASHA/HyperBand-style)</li>
+</ul>
+</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>AutoML can run end-to-end for at least one tabular task family with real training + correct evaluation, using at least random search + one Bayesian strategy.</li>
+<li>Budget enforcement works (time/trials/multi-fidelity) and is deterministic under seeding.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Start with random search + deterministic sampling over <code>ParameterRange</code>.</li>
+<li>Add pruning hooks (early stopping and budget-based termination) before adding advanced strategies.</li>
+<li>Add one Bayesian strategy for mixed spaces (prefer approaches that work well with categorical/discrete knobs).</li>
+<li>Add ASHA/HyperBand scheduling once the evaluator adapters are reliable.</li>
+</ul>
+<h3 id="phase-g---model-family-search-spaces--domain-packs">Phase G - Model-family search spaces + domain packs</h3>
+<p>Goal: define safe, bounded default search spaces and candidate sets for the full model catalog, without leaking IP.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Search-space definitions for each AutoML-eligible model family (bounded, task-aware).</li>
+<li>Domain packs (vision/NLP/time-series/tabular/graph) that provide:
+<ul>
+<li>default candidate sets</li>
+<li>default search spaces</li>
+<li>default preprocessing and constraints</li>
+</ul>
+</li>
+<li>Documentation of what “eligible” means for a model family (inputs/outputs, training recipe availability, evaluation readiness).</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>The registry (Phase D) is populated for all eligible model families or each omission is explicitly excluded with rationale.</li>
+<li>A user can run AutoML on supported modalities using defaults without manually selecting model types.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Populate the registry in priority order: tabular -&gt; time series -&gt; graph -&gt; NLP -&gt; vision.</li>
+<li>Ensure each search space is bounded and has “safe defaults” for CI/Fast presets.</li>
+<li>Verify that public trial summaries never include raw hyperparameter values (even when internal search spaces are rich).</li>
+</ul>
+<h3 id="phase-h---ensemble--final-selection-policy">Phase H - Ensemble + final selection policy</h3>
+<p>Goal: exceed industry baselines by adding robust selection and optional ensembling where appropriate.</p>
+<p>Deliverables:</p>
+<ul>
+<li>Selection policy rules (metric direction, tie-breakers using constraints like latency/size).</li>
+<li>Optional ensemble mechanisms for supported task families (where it improves generalization).</li>
+<li>Consistent reporting of “best single model” vs “best ensemble” without leaking model internals.</li>
+</ul>
+<p>Acceptance criteria:</p>
+<ul>
+<li>AutoML produces stable selections under deterministic seeding and does not regress single-model behavior when ensembles are disabled.</li>
+<li>Ensemble options are configurable and default to off unless they measurably improve results within the chosen budget preset.</li>
+</ul>
+<p>Junior checklist:</p>
+<ul>
+<li>Implement tie-breakers (metric -&gt; constraints -&gt; simplicity).</li>
+<li>Add simple, safe ensembling first (e.g., averaging for compatible outputs) before stacking.</li>
+<li>Ensure inference through <code>PredictionModelResult</code> remains consistent and facade-friendly.</li>
+</ul>
+<hr>
+<h2 id="9-trial-history-redaction-policy-v1">9) Trial History Redaction Policy (v1)</h2>
+<p>Allowed to expose:</p>
+<ul>
+<li>Trial id, timestamps, status, duration, budget used (epochs/time/trials).</li>
+<li>Primary + secondary metric values and direction (maximize/minimize).</li>
+<li>Model family identifier and safe capability labels (e.g., &quot;tree-based&quot;, &quot;neural&quot;, &quot;time-series&quot;).</li>
+<li>A stable configuration fingerprint (hash) for internal reproducibility within AiDotNet.</li>
+</ul>
+<p>Not allowed to expose:</p>
+<ul>
+<li>Raw weights, serialized model bytes, optimizer state, gradients.</li>
+<li>Exact hyperparameter values.</li>
+<li>Full architecture dumps / full computation graphs / NAS cell definitions.</li>
+</ul>
+<h3 id="91-public-vs-internal-trial-records-schema-level-guidance">9.1 Public vs Internal Trial Records (Schema-Level Guidance)</h3>
+<p>Public trial summary (safe to return from <code>PredictionModelResult</code> / facade):</p>
+<ul>
+<li>Identifiers: trial id, run id, status, timestamps, duration</li>
+<li>Budgets: preset name, time used, trial index, early-stopping flags</li>
+<li>Metrics: objective metric name/value/direction + secondary metrics</li>
+<li>Safe model descriptors: model family id, high-level tags/capabilities</li>
+<li>Fingerprints: stable configuration fingerprint (hash) + safe provenance (e.g., “search strategy name”)</li>
+</ul>
+<p>Internal replay record (never exposed by default; used only for in-system reproducibility):</p>
+<ul>
+<li>Full hyperparameter assignments and search-space details</li>
+<li>All random seeds and split strategy definitions</li>
+<li>Full candidate model construction metadata required to reproduce inside AiDotNet</li>
+<li>Optional internal-only artifacts (e.g., logs, traces) that must not be serialized into default user results</li>
+</ul>
+<p>Note: the current public <code>IAutoMLModel</code> surface includes methods that return or suggest raw hyperparameter values. v1 must reconcile this with IP protection by ensuring the facade results do not expose those values, and by moving any “raw hyperparameter” APIs behind internal-only pathways or premium-gated surfaces (design choice to be made in Phase E).
+Decision (v1): hyperparameter values are redacted from facade outputs only (i.e., anything returned via <code>PredictionModelResult</code> / builder path). Non-facade AutoML surfaces may continue to expose raw hyperparameters.</p>
+<hr>
+<h2 id="10-notes-nas-within-exhaustive-automl">10) Notes: NAS within Exhaustive AutoML</h2>
+<ul>
+<li>NAS should be a general capability for neural candidates, but domain packs must supply:
+<ul>
+<li>task-appropriate search spaces (vision vs NLP vs time-series differ materially)</li>
+<li>default constraints and budgets</li>
+<li>task-aware evaluation (metrics and data handling)</li>
+</ul>
+</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/design/AutoML-Exhaustive-Implementation-Plan.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

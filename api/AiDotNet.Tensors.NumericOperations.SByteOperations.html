@@ -1,0 +1,3993 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SByteOperations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SByteOperations | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides operations for signed byte numbers in neural network computations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_NumericOperations_SByteOperations.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.NumericOperations.SByteOperations%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations">
+
+
+
+  <h1 id="AiDotNet_Tensors_NumericOperations_SByteOperations" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations" class="text-break">
+Class SByteOperations  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.NumericOperations.html">NumericOperations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides operations for signed byte numbers in neural network computations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SByteOperations : INumericOperations&lt;sbyte&gt;, IVectorizedOperations&lt;sbyte&gt;</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SByteOperations</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</div>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_NumericOperations_SByteOperations_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The SByteOperations class implements the INumericOperations interface for the sbyte data type.
+It provides essential mathematical operations needed for neural network computations, including
+basic arithmetic, comparison, and mathematical functions adapted for signed byte values.
+</p>
+<p><b>For Beginners:</b> This class handles math operations for very small whole numbers.
+<p>Think of it as a calculator specifically designed for neural networks that:</p>
+<ul>
+<li>Performs basic operations like addition and multiplication with tiny whole numbers</li>
+<li>Handles special math functions adapted to work with small integers</li>
+<li>Manages number conversions and comparisons</li>
+</ul>
+<p>The &quot;sbyte&quot; (signed byte) data type can only store numbers from -128 to 127, making it
+useful when you need to save memory and know your values will always stay within this small range.</p>
+<p>For example, if a neural network needs to store many small values (like simple flags or counts)
+in a very memory-efficient way, it might use the sbyte type instead of larger numeric types.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_MaxValue_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_MaxValue" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L629"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum possible value for a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The maximum value of sbyte, which is 127.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the largest possible value for an 8-bit signed byte.
+This value represents the upper bound of the range of representable values for the sbyte type.
+</p>
+<p><b>For Beginners:</b> This property gives you the largest possible value that a signed byte can store: 127.
+<p>Knowing the maximum value is important for:</p>
+<ul>
+<li>Preventing overflow (when calculations produce results too large to represent)</li>
+<li>Setting bounds for certain algorithms</li>
+<li>Implementing special case handling for extreme values</li>
+</ul>
+<p>The sbyte type can only store 256 different values (from -128 to 127), making it very
+limited compared to larger integer types. However, it uses only a single byte of memory,
+which can be important when memory efficiency is critical.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_MinValue_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_MinValue" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L606"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum possible value for a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The minimum value of sbyte, which is -128.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the smallest possible value for an 8-bit signed byte.
+This value represents the lower bound of the range of representable values for the sbyte type.
+</p>
+<p><b>For Beginners:</b> This property gives you the smallest possible value that a signed byte can store: -128.
+<p>Knowing the minimum value is important for:</p>
+<ul>
+<li>Preventing underflow (when calculations produce results too small to represent)</li>
+<li>Setting bounds for certain algorithms</li>
+<li>Implementing special case handling for extreme values</li>
+</ul>
+<p>Be careful when working with this minimum value: negating MinValue (-128) will cause an overflow
+because the positive equivalent (+128) is outside the representable range of a signed byte
+(which has a maximum value of +127).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_One_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_One" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the one value for the sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the one value for the sbyte type, which is 1.
+One is used in neural networks for initialization, identity operations, and counting.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number one (1) as a signed byte.
+<p>In neural networks, one is commonly used for:</p>
+<ul>
+<li>Identity operations (multiplying by 1 leaves a value unchanged)</li>
+<li>Initializing certain weights or biases</li>
+<li>Incrementing counters</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_PrecisionBits_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_PrecisionBits" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L714"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in sbyte (8 bits).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L742"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsCpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L745"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_SupportsGpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float, double, int, and long are typically supported on GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Zero_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Zero" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the zero value for the sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property returns the zero value for the sbyte type, which is 0.
+Zero is an important value in neural networks for initialization, comparison, and accumulation.
+</p>
+<p><b>For Beginners:</b> This property simply gives you the number zero (0) as a signed byte.
+<p>In neural networks, zero is commonly used for:</p>
+<ul>
+<li>Initializing accumulators before adding values to them</li>
+<li>Checking if a value is exactly zero</li>
+<li>As a default or baseline value in many calculations</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Abs_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Abs(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Abs(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L853"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the absolute value of each element: destination[i] = |x[i]|.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Abs(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Abs_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Abs(System.SByte)">
+  Abs(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the absolute value of a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Abs(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to find the absolute value of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The absolute value of the input.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Abs_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the absolute value of the input, which is its distance from zero
+regardless of sign. For positive numbers, the absolute value is the number itself;
+for negative numbers, it is the negation of the number.
+</p>
+<p><b>For Beginners:</b> This method gives you the positive version of any number.
+<p>The absolute value is the distance from zero, ignoring the direction (sign):</p>
+<ul>
+<li>Abs(50) returns 50 (already positive)</li>
+<li>Abs(-30) returns 30 (converts negative to positive)</li>
+<li>Abs(0) returns 0</li>
+</ul>
+<p>Special case: Because the sbyte range is from -128 to 127, the absolute value of -128 cannot be
+represented as an sbyte (it would be 128, which exceeds the maximum value of 127). In this case,
+the result wraps around to -128 again.</p>
+<p>In neural networks, absolute values are used for:</p>
+<ul>
+<li>Measuring error magnitudes (how far predictions are from actual values)</li>
+<li>Implementing certain activation functions</li>
+<li>Checking if values are within certain tolerances, regardless of sign</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Add_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Add(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Add(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L752"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise addition using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Add_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Add_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Add(System.SByte,System.SByte)">
+  Add(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two signed byte numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Add(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The sum of the two numbers, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Add_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs addition of two signed byte values and returns their sum, cast to a signed byte.
+Note that if the result exceeds the range of a signed byte (-128 to 127), overflow will occur,
+wrapping the result around to stay within the valid range.
+</p>
+<p><b>For Beginners:</b> This method adds two small numbers together, like 50 + 30 = 80.
+<p>Important: Because sbyte can only store numbers from -128 to 127, if the result is outside this range,
+you'll get unexpected results:</p>
+<ul>
+<li>Add(100, 50) should be 150, but since that's outside the sbyte range, you get -106 instead</li>
+<li>Add(-100, -50) should be -150, but since that's outside the sbyte range, you get 106 instead</li>
+</ul>
+<p>This &quot;wrapping around&quot; happens because signed bytes can only represent 256 different values
+(from -128 to 127), so once you go beyond this range, it cycles back through the available values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_AddScalar_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_AddScalar_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.AddScalar(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  AddScalar(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L850"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar to each element: destination[i] = x[i] + scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(ReadOnlySpan&lt;sbyte&gt; x, sbyte scalar, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scalar value to add.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Ceiling(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Ceiling(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L862"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the ceiling of each element: destination[i] = ceiling(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Ceiling(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Ceiling returns the smallest integer greater than or equal to each value.
+For example, ceiling(3.2) = 4, ceiling(-2.7) = -2.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Ceiling(System.SByte)">
+  Ceiling(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integral value greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Ceiling(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The smallest integral value greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Ceiling_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) = 4 and Ceiling(-2.7) = -2.
+Note that for negative numbers, ceiling rounds toward zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Clip_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Clip*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Clip_System_ReadOnlySpan_System_SByte__System_SByte_System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Clip(System.ReadOnlySpan{System.SByte},System.SByte,System.SByte,System.Span{System.SByte})">
+  Clip(ReadOnlySpan&lt;sbyte&gt;, sbyte, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L855"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips (clamps) each element to a range: destination[i] = clamp(x[i], min, max).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clip(ReadOnlySpan&lt;sbyte&gt; x, sbyte min, sbyte max, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The minimum value.</p>
+</dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The maximum value.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Compare_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Compare_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Compare(System.SByte,System.SByte)">
+  Compare(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L409"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Compare(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Compare_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comparing two numbers to determine their ordering:</p>
+<ul>
+<li>If a is less than b, returns a negative number (-1)</li>
+<li>If a equals b, returns zero (0)</li>
+<li>If a is greater than b, returns a positive number (1)</li>
+</ul>
+<p>This is commonly used for sorting or determining relative positions of values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Copy_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Copy*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Copy_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Copy(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Copy(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L857"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies elements from source to destination.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Copy(ReadOnlySpan&lt;sbyte&gt; source, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Cos_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Cos(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Cos(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L869"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine of each element: destination[i] = cos(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Cos(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Cos_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Cosine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Cos_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Cos(System.SByte)">
+  Cos(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L582"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the cosine of the specified value (truncated to integer).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Cos(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_CosineSimilarity_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_CosineSimilarity_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.CosineSimilarity(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte})">
+  CosineSimilarity(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L842"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes cosine similarity using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte CosineSimilarity(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Divide_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Divide(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Divide(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L770"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Divide(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Divide_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Divide(System.SByte,System.SByte)">
+  Divide(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides one signed byte by another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Divide(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The dividend (number being divided).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The divisor (number to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The quotient of the division, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Divide_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs integer division of two signed byte values, returning the result cast to a signed byte.
+This is integer division, so any fractional part is truncated. Care should be taken to ensure the divisor
+is not zero to avoid runtime exceptions.
+</p>
+<p><b>For Beginners:</b> This method divides the first number by the second, dropping any remainder.
+<p>For example:</p>
+<ul>
+<li>Divide(10, 2) returns 5 (exact division, no remainder)</li>
+<li>Divide(10, 3) returns 3 (not 3.33, because sbytes can't store decimals)</li>
+<li>Divide(10, 11) returns 0 (less than 1, so the integer result is 0)</li>
+</ul>
+<p>Unlike addition and multiplication, division is less likely to cause overflow issues since the result
+is always smaller in magnitude than the dividend (when dividing by values greater than 1).</p>
+<p>Note: This method doesn't check if the second number is zero, which would cause an error
+(you can't divide by zero). Make sure the second number is not zero before using this method.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_DivideScalar_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.DivideScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_DivideScalar_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.DivideScalar(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  DivideScalar(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L849"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element by a scalar: destination[i] = x[i] / scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideScalar(ReadOnlySpan&lt;sbyte&gt; x, sbyte scalar, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Dot_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Dot_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Dot(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte})">
+  Dot(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L776"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes dot product using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Dot(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ELU_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ELU_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ELU(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  ELU(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L918"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise: x if x &gt; 0, alpha * (exp(x) - 1) otherwise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ELU(ReadOnlySpan&lt;sbyte&gt; x, sbyte alpha, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scale factor for negative values (typically 1.0).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_ELU_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ELU is similar to ReLU for positive inputs but produces smooth
+negative values for negative inputs. This helps push mean activations closer to zero,
+speeding up learning.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, comparisons, and conditional selection
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Equals_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Equals_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Equals(System.SByte,System.SByte)">
+  Equals(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if two signed bytes are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the numbers are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Equals_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two signed byte values for equality.
+Unlike floating-point equality, integer equality is exact and reliable.
+</p>
+<p><b>For Beginners:</b> This method checks if two numbers are exactly the same.
+<p>For example:</p>
+<ul>
+<li>Equals(50, 50) returns true</li>
+<li>Equals(30, 40) returns false</li>
+</ul>
+<p>Unlike with decimal numbers (float/double), comparing integers for equality is straightforward
+and reliable because integers have exact representations in the computer.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Exp_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Exp(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Exp(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L801"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Exp(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Exp produces misleading results for sbyte (range -128 to 127).</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Exp_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Exp(System.SByte)">
+  Exp(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the exponential function (e raised to the power of the specified value), rounded and constrained to a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Exp(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value of e raised to the specified power, rounded and constrained to the signed byte range.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Exp_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates e (approximately 2.71828) raised to the power of the input value
+using the Math.Exp function, rounds the result, and clamps it to the valid sbyte range
+if it exceeds the maximum value.
+</p>
+<p><b>For Beginners:</b> This method calculates "e" raised to a power and gives a small whole number result.
+<p>In mathematics, &quot;e&quot; is a special number (approximately 2.71828) that appears naturally in many calculations.
+This method computes e^value and rounds to the nearest whole number, capping at 127 (the maximum sbyte value):</p>
+<ul>
+<li>Exp(1) returns 3 (e^ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2.71828, rounded to 3)</li>
+<li>Exp(2) returns 7 (e^ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  7.38906, rounded to 7)</li>
+<li>Exp(0) returns 1 (e^ = 1)</li>
+<li>Exp(5) returns 127 (e5 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 148.4, which exceeds 127, so it's capped at 127)</li>
+</ul>
+<p>The exponential function grows very quickly, so it's only useful with sbyte for small input values.
+Any input value of 5 or greater will produce a result that exceeds the maximum sbyte value of 127,
+so the method caps the result to prevent overflow.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Fill_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Fill_System_Span_System_SByte__System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Fill(System.Span{System.SByte},System.SByte)">
+  Fill(Span&lt;sbyte&gt;, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L847"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the destination span with a constant value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(Span&lt;sbyte&gt; destination, sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span to fill.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value to fill with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Floor(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Floor(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L861"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the floor of each element: destination[i] = floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Floor(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Floor returns the largest integer less than or equal to each value.
+For example, floor(3.7) = 3, floor(-2.3) = -3.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Floor(System.SByte)">
+  Floor(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L570"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integral value less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Floor(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The largest integral value less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Floor_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) = 3 and Floor(-2.3) = -3.
+Note that for negative numbers, floor rounds away from zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Frac(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Frac(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L863"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the fractional part of each element: destination[i] = x[i] - floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Frac(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, frac(3.7) = 0.7, frac(-2.3) = 0.7 (not -0.3, since frac = x - floor(x)).
+This is useful in hash encoding and periodic functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Frac(System.SByte)">
+  Frac(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L572"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value (value - floor(value)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Frac(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The value to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The fractional part of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Frac_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, Frac(3.7) = 0.7. Note that Frac(-2.3) = 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+This is useful in hash encoding and periodic functions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromDouble_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double-precision floating-point number to a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double-precision value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The equivalent signed byte value, truncated toward zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a double-precision floating-point value (double) to a signed byte (sbyte).
+The conversion truncates the value toward zero, discarding any fractional part, and then clamps
+the result to the valid sbyte range.
+</p>
+<p><b>For Beginners:</b> This method converts a decimal number to a small whole number.
+<p>For example:</p>
+<ul>
+<li>FromDouble(3.7) returns 3 (not 4, because it drops the decimal part instead of rounding)</li>
+<li>FromDouble(-2.8) returns -2 (not -3, because it drops the decimal part)</li>
+<li>FromDouble(200.0) returns 127 (the maximum sbyte value, since 200 is outside the valid range)</li>
+<li>FromDouble(-200.0) returns -128 (the minimum sbyte value, since -200 is outside the valid range)</li>
+</ul>
+<p>This conversion is used when:</p>
+<ul>
+<li>You need a whole number result from a calculation that produces decimals</li>
+<li>You're working with functions that use doubles but your neural network uses sbytes</li>
+<li>You need to convert values to the most memory-efficient type</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromFloat_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L724"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float value to sbyte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromFloatSpan(System.ReadOnlySpan{System.Single},System.Span{System.SByte})">
+  FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L881"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from float (FP32) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The source span containing float values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 32-bit floating-point numbers back to
+another type (like double or int). This is commonly used when retrieving results from GPU
+processing and converting them back to the user's preferred type.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromHalf_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L734"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half value to sbyte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.FromHalfSpan(System.ReadOnlySpan{System.Half},System.Span{System.SByte})">
+  FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L887"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from Half (FP16) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromHalfSpan(ReadOnlySpan&lt;Half&gt; source, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The source span containing Half values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 16-bit half-precision floating-point
+numbers to another type (like float or double). This is commonly used when retrieving results
+from GPU processing that used half precision.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_GELU_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_GELU_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GELU(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  GELU(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L897"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void GELU(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_GELU_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GELU is a smooth activation function that approximates
+multiplying the input by a probability based on its value. It's used in
+Transformers (BERT, GPT) and provides smooth gradients for optimization.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized tanh, exp, and arithmetic operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThan_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GreaterThan(System.SByte,System.SByte)">
+  GreaterThan(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one signed byte is greater than another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThan(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is greater than the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThan_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two signed byte values and returns true if the first value is greater than the second.
+Comparison operations are commonly used in neural networks for conditional logic and optimizations.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThan(50, 30) returns true because 50 is greater than 30</li>
+<li>GreaterThan(20, 70) returns false because 20 is not greater than 70</li>
+<li>GreaterThan(40, 40) returns false because the numbers are equal</li>
+</ul>
+<p>In neural networks, comparisons like this are used for:</p>
+<ul>
+<li>Finding maximum values</li>
+<li>Implementing decision logic in algorithms</li>
+<li>Detecting specific conditions during training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThanOrEquals_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.GreaterThanOrEquals(System.SByte,System.SByte)">
+  GreaterThanOrEquals(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L492"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one signed byte is greater than or equal to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThanOrEquals(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is greater than or equal to the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_GreaterThanOrEquals_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two signed byte values and returns true if the first value is greater than or equal to the second.
+This comparison combines the functionality of GreaterThan and Equals methods.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is larger than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>GreaterThanOrEquals(50, 30) returns true because 50 is greater than 30</li>
+<li>GreaterThanOrEquals(40, 40) returns true because the numbers are equal</li>
+<li>GreaterThanOrEquals(20, 70) returns false because 20 is less than 70</li>
+</ul>
+<p>In neural networks, this type of comparison is used for:</p>
+<ul>
+<li>Implementing thresholds with inclusive boundaries</li>
+<li>Checking if values have reached or exceeded certain levels</li>
+<li>Decision logic in various algorithms</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsInfinity_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsInfinity_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.IsInfinity(System.SByte)">
+  IsInfinity(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L675"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified signed byte is infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsInfinity(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The signed byte to test.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns false because signed bytes cannot be infinity.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsInfinity_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns false because the concept of infinity does not apply to integers.
+Infinity is a special value that exists only for floating-point types like float and double.
+</p>
+<p><b>For Beginners:</b> This method always returns false because signed bytes cannot represent infinity.
+<p>Unlike floating-point numbers (float/double) which can have special &quot;Infinity&quot; values,
+signed bytes have a fixed range and cannot represent concepts like infinity. This method exists
+only to maintain consistency with the interface used for different numeric types.</p>
+<p>In neural networks that can work with different numeric types, this consistent interface
+allows the same code to be used regardless of whether the network is using integers or
+floating-point numbers.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsNaN_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsNaN_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.IsNaN(System.SByte)">
+  IsNaN(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L652"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified signed byte is not a number (NaN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsNaN(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The signed byte to test.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Always returns false because signed bytes cannot be NaN.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_IsNaN_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method always returns false because the concept of NaN (Not a Number) does not apply to integers.
+NaN is a special value that exists only for floating-point types like float and double.
+</p>
+<p><b>For Beginners:</b> This method always returns false because all signed bytes are valid numbers.
+<p>Unlike floating-point numbers (float/double) which can have special &quot;Not a Number&quot; values,
+every possible signed byte value represents a valid number. This method exists only to maintain
+consistency with the interface used for different numeric types.</p>
+<p>In neural networks that can work with different numeric types, this consistent interface
+allows the same code to be used regardless of whether the network is using integers or
+floating-point numbers.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_LeakyReLU_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_LeakyReLU_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LeakyReLU(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  LeakyReLU(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L890"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise: destination[i] = x[i] &gt; 0 ? x[i] : alpha * x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LeakyReLU(ReadOnlySpan&lt;sbyte&gt; x, sbyte alpha, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The negative slope coefficient (typically 0.01).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_LeakyReLU_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> LeakyReLU is a variant of ReLU that allows a small negative slope
+for negative inputs instead of zeroing them out. This helps prevent "dying neurons".
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using vectorized comparisons
+and conditional selection, providing 3-5x speedup over scalar loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThan_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LessThan(System.SByte,System.SByte)">
+  LessThan(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one signed byte is less than another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThan(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is less than the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThan_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two signed byte values and returns true if the first value is less than the second.
+Like the GreaterThan method, this comparison is used in various conditional operations in neural networks.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than the second.
+<p>For example:</p>
+<ul>
+<li>LessThan(30, 50) returns true because 30 is less than 50</li>
+<li>LessThan(70, 20) returns false because 70 is not less than 20</li>
+<li>LessThan(40, 40) returns false because the numbers are equal</li>
+</ul>
+<p>In neural networks, this comparison is commonly used for:</p>
+<ul>
+<li>Finding minimum values</li>
+<li>Implementing thresholds in algorithms</li>
+<li>Checking if values have fallen below certain limits during training</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThanOrEquals_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.LessThanOrEquals(System.SByte,System.SByte)">
+  LessThanOrEquals(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L518"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if one signed byte is less than or equal to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThanOrEquals(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the first number is less than or equal to the second; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_LessThanOrEquals_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two signed byte values and returns true if the first value is less than or equal to the second.
+This comparison combines the functionality of LessThan and Equals methods.
+</p>
+<p><b>For Beginners:</b> This method checks if the first number is smaller than or the same as the second.
+<p>For example:</p>
+<ul>
+<li>LessThanOrEquals(30, 50) returns true because 30 is less than 50</li>
+<li>LessThanOrEquals(40, 40) returns true because the numbers are equal</li>
+<li>LessThanOrEquals(70, 20) returns false because 70 is greater than 20</li>
+</ul>
+<p>In neural networks, this type of comparison is used for:</p>
+<ul>
+<li>Implementing thresholds with inclusive lower boundaries</li>
+<li>Checking if values have reached or fallen below certain levels</li>
+<li>Decision logic in various algorithms</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Log(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L808"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Log produces misleading results for sbyte.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log(System.SByte)">
+  Log(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L466"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm (base e) of a signed byte, cast to a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Log(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to calculate the logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The natural logarithm of the input value, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the natural logarithm (base e) of the input value using the Math.Log function
+and converts the result to a signed byte. The input should be positive; otherwise, the result will be undefined.
+Since logarithm results are often not whole numbers, this conversion to signed byte loses precision.
+</p>
+<p><b>For Beginners:</b> This method calculates the natural logarithm of a number and gives a small whole number result.
+<p>The natural logarithm tells you what power you need to raise &quot;e&quot; to get your number:</p>
+<ul>
+<li>Log(3) returns 1 (because e^ ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2.718, and the integer result of ln(3) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  1.099 is 1)</li>
+<li>Log(10) returns 2 (because ln(10) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  2.303)</li>
+<li>Log(125) returns 4 (because ln(125) ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  4.828)</li>
+<li>Log(1) returns 0 (because e^ = 1)</li>
+</ul>
+<p>This integer version of logarithm loses a lot of precision compared to its floating-point
+equivalent. However, since the logarithm of small positive numbers is typically a small number,
+it works reasonably well within the limited sbyte range.</p>
+<p>Note: You should only use this with positive numbers. If you try to calculate the logarithm
+of zero or a negative number, you'll get an undefined result.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log2_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Log2_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Log2(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Log2(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L829"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log2(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Log2 produces misleading results for sbyte.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Max_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Max_System_ReadOnlySpan_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Max(System.ReadOnlySpan{System.SByte})">
+  Max(ReadOnlySpan&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L788"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds maximum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Max(ReadOnlySpan&lt;sbyte&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Min_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Min_System_ReadOnlySpan_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Min(System.ReadOnlySpan{System.SByte})">
+  Min(ReadOnlySpan&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L794"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds minimum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Min(ReadOnlySpan&lt;sbyte&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Mish_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Mish_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Mish(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Mish(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L904"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Mish(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Mish_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Mish is a smooth, self-regularized activation function that
+often outperforms ReLU in practice. It's unbounded above, bounded below, smooth,
+and non-monotonic.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, log, and tanh operations
+for 2-3x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Multiply_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Multiply(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Multiply(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L764"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Multiply(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Multiply_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Multiply(System.SByte,System.SByte)">
+  Multiply(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two signed byte numbers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Multiply(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The first number.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The second number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The product of the two numbers, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Multiply_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs multiplication of two signed byte values and returns their product, cast to a signed byte.
+If the product exceeds the range of a signed byte, overflow will occur.
+</p>
+<p><b>For Beginners:</b> This method multiplies two numbers together, like 10 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 5 = 50.
+<p>Multiplication is especially prone to overflow with sbytes since numbers grow quickly when multiplied:</p>
+<ul>
+<li>Multiply(20, 10) should be 200, but since that's outside the sbyte range, you get -56 instead</li>
+<li>Multiply(20, -10) should be -200, but you get 56 instead</li>
+</ul>
+<p>Because of these limitations, sbyte is typically used for very small values or flags in neural networks,
+rather than for values that will undergo extensive arithmetic operations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_MultiplyAdd_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_MultiplyAdd_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MultiplyAdd(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  MultiplyAdd(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L875"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyAdd(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, sbyte scalar, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The first source span (values to add to).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The second source span (values to multiply).</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scalar value to multiply y by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_MultiplyAdd_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This operation multiplies each element of y by a scalar value,
+then adds it to the corresponding element of x. It's commonly used in matrix multiplication
+and neural network operations.
+</p>
+<p>
+<b>Performance:</b> When FMA (Fused Multiply-Add) hardware is available, this operation
+can be performed in a single instruction, providing better performance and precision
+than separate multiply and add operations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_MultiplyScalar_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MultiplyScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_MultiplyScalar_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.MultiplyScalar(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  MultiplyScalar(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L848"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element by a scalar: destination[i] = x[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyScalar(ReadOnlySpan&lt;sbyte&gt; x, sbyte scalar, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Negate_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Negate(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Negate(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L854"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates each element: destination[i] = -x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Negate(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Negate_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Negate(System.SByte)">
+  Negate(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates a signed byte number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Negate(sbyte a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The negated value, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Negate_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the negative of the input value, cast to a signed byte. If the input is positive,
+the output is negative, and vice versa. Zero remains zero when negated.
+</p>
+<p><b>For Beginners:</b> This method flips the sign of a number.
+<p>Examples:</p>
+<ul>
+<li>Negate(50) returns -50</li>
+<li>Negate(-30) returns 30</li>
+<li>Negate(0) returns 0</li>
+</ul>
+<p>Special case: Because of how signed bytes are stored, there's one value (-128) that can't be negated
+within the sbyte range. Attempting to negate -128 would give 128, which is outside the valid range,
+so it wraps around to -128 again.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Pow_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Pow*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Pow_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Pow(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  Pow(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L856"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of each element: destination[i] = x[i]^power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Pow(ReadOnlySpan&lt;sbyte&gt; x, sbyte power, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>power</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The power to raise each element to.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Power_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Power_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Power(System.SByte,System.SByte)">
+  Power(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L437"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raises a signed byte to the specified power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Power(sbyte baseValue, sbyte exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The base number.</p>
+</dd>
+    <dt><code>exponent</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The exponent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The base raised to the power of the exponent, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Power_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates baseValue raised to the power of exponent using the Math.Pow function
+and converts the result to a signed byte. If the result exceeds the range of a signed byte,
+overflow will occur.
+</p>
+<p><b>For Beginners:</b> This method raises a number to a power and gives a small whole number result.
+<p>For example:</p>
+<ul>
+<li>Power(2, 3) returns 8 (2ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â² = 2 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 2ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â2 = 8)</li>
+<li>Power(3, 2) returns 9 (3ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â² = 3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 = 9)</li>
+<li>Power(2, 7) should return 128, but since that's outside the range of sbyte, you'd get -128 instead</li>
+</ul>
+<p>Due to the limited range of sbyte, even moderate powers can cause overflow:</p>
+<ul>
+<li>Any base greater than 3 with an exponent greater than 3 will exceed the maximum value of 127</li>
+<li>Any negative base with an odd exponent will produce a negative result</li>
+</ul>
+<p>This method is primarily useful for very small numbers and low exponents.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ReLU_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ReLU_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ReLU(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  ReLU(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L925"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU (Rectified Linear Unit) element-wise: max(0, x).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReLU(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_ReLU_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ReLU is the most common activation function in deep learning.
+It outputs the input directly if positive, otherwise outputs zero.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized maximum operation for 5-10x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Round_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Round_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Round(System.SByte)">
+  Round(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L568"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the same signed byte value (identity operation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Round(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The signed byte value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The same signed byte value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Round_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method simply returns the input value unchanged. It serves as an identity operation for signed bytes.
+For signed bytes, rounding is unnecessary since they are already whole numbers.
+</p>
+<p><b>For Beginners:</b> This method returns the exact same number you give it.
+<p>For float or double types, the equivalent method would round the number to the nearest whole number,
+but since signed bytes are already whole numbers, no rounding is needed:</p>
+<ul>
+<li>Round(50) returns 50</li>
+<li>Round(-30) returns -30</li>
+</ul>
+<p>This method exists to maintain consistency with the interface used for different numeric types.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sigmoid_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sigmoid_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sigmoid(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Sigmoid(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L822"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sigmoid(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Sigmoid saturates for sbyte inputs.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_SignOrZero_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_SignOrZero_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SignOrZero(System.SByte)">
+  SignOrZero(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L709"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of a signed byte, or zero if the number is zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte SignOrZero(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The signed byte to get the sign of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>1 if the number is positive, -1 if the number is negative, or 0 if the number is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_SignOrZero_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method determines the sign of the input value and returns 1 for positive numbers,
+-1 for negative numbers, and 0 for zero. This is similar to the Math.Sign function,
+but implemented specifically for the sbyte type.
+</p>
+<p><b>For Beginners:</b> This method tells you if a number is positive, negative, or zero.
+<p>It returns:</p>
+<ul>
+<li>1 if the number is positive (greater than zero)</li>
+<li>-1 if the number is negative (less than zero)</li>
+<li>0 if the number is exactly zero</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>SignOrZero(42) returns 1</li>
+<li>SignOrZero(-3) returns -1</li>
+<li>SignOrZero(0) returns 0</li>
+</ul>
+<p>In neural networks, this function might be used for:</p>
+<ul>
+<li>Implementing custom activation functions (like the sign function)</li>
+<li>Thresholding operations that depend only on the sign of a value</li>
+<li>Converting continuous values to discrete categories (-1, 0, +1)</li>
+</ul>
+<p>Unlike some sign functions that return either -1 or 1, this method treats zero as its own category,
+which can be useful in certain neural network applications.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sin_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sin(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Sin(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L864"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sine of each element: destination[i] = sin(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sin(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sin_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Sine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sin_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sin(System.SByte)">
+  Sin(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L577"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sine of the specified value (truncated to integer).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Sin(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_SoftMax_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SoftMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_SoftMax_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SoftMax(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  SoftMax(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L836"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SoftMax(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. SoftMax requires floating-point for normalized probabilities.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sqrt_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sqrt(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Sqrt(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L852"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the square root of each element: destination[i] = sqrt(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sqrt(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sqrt_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sqrt(System.SByte)">
+  Sqrt(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a signed byte, truncated to a signed byte.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Sqrt(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The square root of the input value, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sqrt_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square root of the input value using the Math.Sqrt function
+and converts the result to a signed byte. The input should be non-negative;
+otherwise, the result will be undefined.
+</p>
+<p><b>For Beginners:</b> This method calculates the square root of a number and gives you a small whole number result.
+<p>The square root of a number is a value that, when multiplied by itself, gives the original number.
+For example:</p>
+<ul>
+<li>The square root of 9 is 3 (because 3 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 3 = 9)</li>
+<li>The square root of 16 is 4 (because 4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 4 = 16)</li>
+<li>The square root of 125 would be approximately 11.18, but this method returns 11 (the whole number part only)</li>
+</ul>
+<p>Since the square root of most numbers is not a whole number, and sbyte can only store whole numbers,
+this method loses precision. It also has a very limited useful range, since the square root of 127
+(the maximum sbyte value) is only about 11.27.</p>
+<p>Note: You should only use this with positive numbers. If you try to calculate the square root
+of a negative number, you'll get an undefined result.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Square_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Square_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Square(System.SByte)">
+  Square(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Squares a signed byte number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Square(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The square of the input value, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Square_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the square of the input value by multiplying it by itself,
+and then casts the result to a signed byte. If the square exceeds the range of a signed byte,
+overflow will occur.
+</p>
+<p><b>For Beginners:</b> This method multiplies a number by itself.
+<p>For example:</p>
+<ul>
+<li>Square(4) returns 16 (4 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â 4 = 16)</li>
+<li>Square(-3) returns 9 (-3 ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â°Ãƒâ€¹Ã¢â‚¬Â  -3 = 9)</li>
+<li>Square(12) should return 144, but since that's outside the range of sbyte, you get -112 instead</li>
+</ul>
+<p>Due to the limited range of sbyte (-128 to 127), squaring even moderate values (like 12) can cause overflow.
+In fact, any number with an absolute value greater than 11 will cause overflow when squared.</p>
+<p>Despite these limitations, squaring is useful for very small values, such as when implementing
+small-scale error calculations or when working with normalized values near zero.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Subtract_System_ReadOnlySpan_System_SByte__System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Subtract(System.ReadOnlySpan{System.SByte},System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Subtract(ReadOnlySpan&lt;sbyte&gt;, ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L758"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction using SIMD-optimized operations via TensorPrimitivesCore.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Subtract(ReadOnlySpan&lt;sbyte&gt; x, ReadOnlySpan&lt;sbyte&gt; y, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Subtract_System_SByte_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Subtract(System.SByte,System.SByte)">
+  Subtract(sbyte, sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts one signed byte from another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Subtract(sbyte a, sbyte b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The number to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The difference between the two numbers, cast to a signed byte.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Subtract_System_SByte_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs subtraction of two signed byte values and returns their difference, cast to a signed byte.
+Like with addition, if the result exceeds the range of a signed byte, overflow will occur.
+</p>
+<p><b>For Beginners:</b> This method subtracts the second number from the first, like 50 - 30 = 20.
+<p>As with addition, if the result goes outside the range of -128 to 127, you'll get unexpected results due to overflow:</p>
+<ul>
+<li>Subtract(100, -50) should be 150, but you get -106 instead</li>
+<li>Subtract(-100, 50) should be -150, but you get 106 instead</li>
+</ul>
+<p>Be cautious when working near the limits of the sbyte range.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_SubtractScalar_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SubtractScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_SubtractScalar_System_ReadOnlySpan_System_SByte__System_SByte_System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.SubtractScalar(System.ReadOnlySpan{System.SByte},System.SByte,System.Span{System.SByte})">
+  SubtractScalar(ReadOnlySpan&lt;sbyte&gt;, sbyte, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L851"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar from each element: destination[i] = x[i] - scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractScalar(ReadOnlySpan&lt;sbyte&gt; x, sbyte scalar, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The scalar value to subtract.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sum_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Sum_System_ReadOnlySpan_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Sum(System.ReadOnlySpan{System.SByte})">
+  Sum(ReadOnlySpan&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L782"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes sum using sequential loops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sbyte Sum(ReadOnlySpan&lt;sbyte&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Swish_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Swish_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Swish(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Swish(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L911"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Swish(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_Swish_System_ReadOnlySpan_System_SByte__System_Span_System_SByte___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Swish (also called SiLU - Sigmoid Linear Unit) is a smooth,
+non-monotonic activation function that often outperforms ReLU. It allows negative
+values to pass through, helping with gradient flow.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized sigmoid and multiplication operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_Tanh_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_Tanh_System_ReadOnlySpan_System_SByte__System_Span_System_SByte__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.Tanh(System.ReadOnlySpan{System.SByte},System.Span{System.SByte})">
+  Tanh(ReadOnlySpan&lt;sbyte&gt;, Span&lt;sbyte&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L815"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transcendental operations are not supported for sbyte type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Tanh(ReadOnlySpan&lt;sbyte&gt; x, Span&lt;sbyte&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown. Tanh produces only -1, 0, or 1 for sbyte.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToDouble_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToDouble_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToDouble(System.SByte)">
+  ToDouble(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an sbyte value to double (FP64) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ToDouble(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToFloat_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToFloat_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToFloat(System.SByte)">
+  ToFloat(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L719"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an sbyte value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float ToFloat(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToFloatSpan_System_ReadOnlySpan_System_SByte__System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToFloatSpan(System.ReadOnlySpan{System.SByte},System.Span{System.Single})">
+  ToFloatSpan(ReadOnlySpan&lt;sbyte&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L878"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to float (FP32): destination[i] = (float)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToFloatSpan(ReadOnlySpan&lt;sbyte&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The destination span for float results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToFloatSpan_System_ReadOnlySpan_System_SByte__System_Span_System_Single___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers from one type (like double or int)
+to 32-bit floating-point numbers. This is commonly used when preparing data for GPU processing,
+which typically operates on float32 for optimal performance.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToSingle
+on .NET 8+, providing significant speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToHalf_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToHalf_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToHalf(System.SByte)">
+  ToHalf(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L729"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an sbyte value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Half ToHalf(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToHalfSpan_System_ReadOnlySpan_System_SByte__System_Span_System_Half__" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToHalfSpan(System.ReadOnlySpan{System.SByte},System.Span{System.Half})">
+  ToHalfSpan(ReadOnlySpan&lt;sbyte&gt;, Span&lt;Half&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L884"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to Half (FP16): destination[i] = (Half)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToHalfSpan(ReadOnlySpan&lt;sbyte&gt; source, Span&lt;Half&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a>&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The destination span for Half results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToHalfSpan_System_ReadOnlySpan_System_SByte__System_Span_System_Half___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers to 16-bit half-precision
+floating-point numbers. Half precision uses less memory and can be faster on GPUs that
+support it, at the cost of reduced precision and range.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToHalf
+on .NET 8+, providing significant speedup over sequential conversion loops. Critical for
+mixed-precision GPU operations where FP16 loads with FP32 accumulation provides 2x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToInt32_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToInt32_System_SByte_" data-uid="AiDotNet.Tensors.NumericOperations.SByteOperations.ToInt32(System.SByte)">
+  ToInt32(sbyte)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a signed byte to a 32-bit integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToInt32(sbyte value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.sbyte">sbyte</a></dt>
+    <dd><p>The signed byte value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The equivalent 32-bit integer value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_SByteOperations_ToInt32_System_SByte__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method converts a signed byte (8-bit, range -128 to 127) to a standard 32-bit integer
+(range -2,147,483,648 to 2,147,483,647). Since the range of signed byte is much smaller than
+the range of int, this conversion never causes data loss.
+</p>
+<p><b>For Beginners:</b> This method converts a very small whole number to a standard whole number.
+<p>For example:</p>
+<ul>
+<li>ToInt32(50) returns 50 as an int instead of an sbyte</li>
+<li>ToInt32(-30) returns -30 as an int instead of an sbyte</li>
+</ul>
+<p>This conversion is always safe because all possible sbyte values (-128 to 127) fit easily
+within the much larger int range (-2,147,483,648 to 2,147,483,647).</p>
+<p>In neural networks, this conversion might be needed when:</p>
+<ul>
+<li>Interfacing with methods that require standard integers</li>
+<li>Performing calculations that might exceed the sbyte range</li>
+<li>Combining sbyte values with values of other types</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/SByteOperations.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

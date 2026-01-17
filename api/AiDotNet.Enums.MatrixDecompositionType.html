@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum MatrixDecompositionType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum MatrixDecompositionType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies different methods for breaking down (decomposing) matrices into simpler components.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_MatrixDecompositionType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.MatrixDecompositionType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.MatrixDecompositionType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_MatrixDecompositionType" data-uid="AiDotNet.Enums.MatrixDecompositionType" class="text-break">
+Enum MatrixDecompositionType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/MatrixDecompositionType.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies different methods for breaking down (decomposing) matrices into simpler components.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum MatrixDecompositionType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Bidiagonal"><code>Bidiagonal = 14</code></dt>
+  <dd><p>Transforms a matrix into a bidiagonal form (non-zero elements only on the main diagonal and either the diagonal above or below it).</p>
+<p>
+<b>For Beginners:</b> Bidiagonal decomposition converts a matrix into an even simpler form than tridiagonal - 
+it has non-zero values only on the main diagonal and one adjacent diagonal (either above or below).
+<p>Think of it as:</p>
+<ul>
+<li>An even more streamlined version of a tridiagonal matrix</li>
+<li>A matrix where information is concentrated in just two diagonals</li>
+<li>A stepping stone toward computing the SVD</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>As an intermediate step in computing Singular Value Decomposition</li>
+<li>Certain numerical algorithms that benefit from this simplified structure</li>
+<li>Efficient storage and computation for specific types of problems</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Cholesky"><code>Cholesky = 1</code></dt>
+  <dd><p>A decomposition for symmetric, positive-definite matrices into a lower triangular matrix and its transpose.</p>
+<p>
+<b>For Beginners:</b> Cholesky decomposition breaks a special type of matrix (symmetric and positive-definite) 
+into a simpler form: a lower triangular matrix multiplied by its mirror image.
+<p>Think of it as:</p>
+<ul>
+<li>Finding the &quot;square root&quot; of a matrix</li>
+<li>Breaking a complex structure into matching halves</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Monte Carlo simulations</li>
+<li>Efficient solution of linear systems</li>
+<li>Numerical optimization</li>
+<li>When working with covariance matrices in statistics</li>
+</ul>
+<p>It's about twice as efficient as LU decomposition for applicable matrices.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Cramer"><code>Cramer = 0</code></dt>
+  <dd><p>A method for solving systems of linear equations using determinants.</p>
+<p>
+<b>For Beginners:</b> Cramer's rule uses determinants (special numbers calculated from matrices) 
+to find the solution to a system of equations.
+<p>Think of it as:</p>
+<ul>
+<li>A formula-based approach rather than a step-by-step process</li>
+<li>Finding the value of each variable independently</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Small systems of equations</li>
+<li>Theoretical proofs</li>
+<li>Understanding the relationship between solutions and matrix properties</li>
+</ul>
+<p>Not typically used for large systems due to computational inefficiency.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Eigen"><code>Eigen = 11</code></dt>
+  <dd><p>Decomposes a matrix in terms of its eigenvalues and eigenvectors.</p>
+<p>
+<b>For Beginners:</b> Eigendecomposition breaks a matrix into its eigenvalues (special scaling factors) 
+and eigenvectors (special directions that maintain their orientation when transformed).
+<p>Think of it as:</p>
+<ul>
+<li>Finding the natural vibration modes of a system</li>
+<li>Identifying the principal directions and stretching factors of a transformation</li>
+<li>Discovering the &quot;natural&quot; coordinate system for a transformation</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Principal Component Analysis (PCA)</li>
+<li>Vibration analysis</li>
+<li>Stability analysis</li>
+<li>Quantum mechanics</li>
+<li>Understanding the fundamental behavior of a linear transformation</li>
+</ul>
+<p>Eigendecomposition only works for diagonalizable matrices.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_GramSchmidt"><code>GramSchmidt = 2</code></dt>
+  <dd><p>A method for converting a set of vectors into an orthogonal or orthonormal set.</p>
+<p>
+<b>For Beginners:</b> Gram-Schmidt takes a set of vectors that might be pointing in various directions 
+and converts them into a new set of vectors that are all perpendicular (orthogonal) to each other.
+<p>Think of it as:</p>
+<ul>
+<li>Reorganizing a messy set of directions into clean north/south/east/west directions</li>
+<li>Creating a better coordinate system from an awkward one</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Creating orthogonal basis vectors</li>
+<li>QR decomposition</li>
+<li>Solving least squares problems</li>
+<li>Feature engineering in machine learning</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Hessenberg"><code>Hessenberg = 9</code></dt>
+  <dd><p>Transforms a matrix into Hessenberg form, which is nearly triangular.</p>
+<p>
+<b>For Beginners:</b> Hessenberg decomposition transforms a matrix into a form that's almost triangular - 
+it has zeros below the first subdiagonal.
+<p>Think of it as:</p>
+<ul>
+<li>A stepping stone toward finding eigenvalues</li>
+<li>Simplifying a matrix to make further calculations easier</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>As a preliminary step in eigenvalue algorithms</li>
+<li>Reducing computational complexity in matrix operations</li>
+<li>Making certain iterative methods converge faster</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Ica"><code>Ica = 18</code></dt>
+  <dd><p>Independent Component Analysis - separates mixed signals into statistically independent source components.</p>
+<p>
+<b>For Beginners:</b> ICA is designed to separate mixed signals into their original independent sources.
+The classic example is the "cocktail party problem" - imagine multiple people talking at once and
+multiple microphones recording the mixed conversations. ICA can separate out each person's voice.
+<p>Think of it as:</p>
+<ul>
+<li>Un-mixing signals that were combined together</li>
+<li>Finding the hidden independent sources in mixed observations</li>
+<li>Like trying to separate individual instruments from a musical recording</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Blind source separation (cocktail party problem)</li>
+<li>Brain signal analysis (EEG, MEG, fMRI)</li>
+<li>Removing artifacts from biomedical signals</li>
+<li>Feature extraction where statistical independence is important</li>
+<li>Image separation and analysis</li>
+<li>Financial data analysis</li>
+<li>Telecommunications</li>
+</ul>
+<p>ICA differs from PCA and other methods because it focuses on statistical independence
+rather than just uncorrelated patterns, making it powerful for separating truly independent sources.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Ldl"><code>Ldl = 16</code></dt>
+  <dd><p>Decomposes a symmetric matrix into the product L·D·Lᵀ, where L is lower triangular with 1s on the diagonal and D is diagonal.</p>
+<p>
+<b>For Beginners:</b> LDL decomposition is similar to UDU but uses lower triangular matrices instead of upper ones.
+It breaks a symmetric matrix into a lower triangular matrix L with 1s on its diagonal,
+a diagonal matrix D, and the transpose of L.
+<p>Think of it as:</p>
+<ul>
+<li>A variant of Cholesky decomposition that avoids square roots</li>
+<li>A way to break down symmetric matrices into simpler components</li>
+<li>A more numerically stable alternative to certain other decompositions</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Solving symmetric linear systems efficiently</li>
+<li>When working with indefinite matrices (where Cholesky might fail)</li>
+<li>Implementing certain optimization algorithms</li>
+<li>When computational stability is important</li>
+</ul>
+<p>LDL decomposition is often more efficient than LU for symmetric matrices and more stable than Cholesky for indefinite matrices.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Lq"><code>Lq = 7</code></dt>
+  <dd><p>A variant of QR decomposition that produces a lower triangular matrix L and an orthogonal matrix Q.</p>
+<p>
+<b>For Beginners:</b> LQ decomposition is like QR decomposition but in reverse order - 
+it breaks a matrix into a lower triangular matrix L and an orthogonal matrix Q.
+<p>Think of it as:</p>
+<ul>
+<li>First stretching/shearing your data (L) and then rotating it (Q)</li>
+<li>The &quot;mirror image&quot; of QR decomposition</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Certain types of least squares problems</li>
+<li>Some signal processing applications</li>
+<li>When the structure of your problem makes LQ more convenient than QR</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Lu"><code>Lu = 3</code></dt>
+  <dd><p>Decomposes a matrix into a product of lower and upper triangular matrices.</p>
+<p>
+<b>For Beginners:</b> LU decomposition breaks a matrix into a product of two triangular matrices - 
+one with non-zero entries below the diagonal (L) and one with non-zero entries above the diagonal (U).
+<p>Think of it as:</p>
+<ul>
+<li>Breaking a complex transformation into two simpler sequential steps</li>
+<li>Factoring a number into its prime components, but for matrices</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Solving linear systems efficiently</li>
+<li>Computing determinants</li>
+<li>Matrix inversion</li>
+<li>When you need to solve multiple systems with the same coefficient matrix</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Nmf"><code>Nmf = 17</code></dt>
+  <dd><p>Non-negative Matrix Factorization - decomposes a non-negative matrix into two non-negative matrices W and H.</p>
+<p>
+<b>For Beginners:</b> NMF breaks down a matrix containing only non-negative values (zero or positive)
+into two simpler non-negative matrices. It's particularly useful when negative values don't make sense
+in your domain (like pixel intensities, word frequencies, or probabilities).
+<p>Think of it as:</p>
+<ul>
+<li>Finding hidden patterns or topics in your data</li>
+<li>Breaking down complex data into interpretable parts</li>
+<li>Like SVD but maintaining non-negativity, which often leads to more interpretable results</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Topic modeling and text mining (finding themes in documents)</li>
+<li>Image processing and feature extraction</li>
+<li>Recommendation systems (collaborative filtering)</li>
+<li>Audio source separation</li>
+<li>Bioinformatics and gene expression analysis</li>
+<li>Any domain where negative values are meaningless</li>
+</ul>
+<p>NMF often produces more interpretable results than methods that allow negative values
+because the non-negativity constraint leads to parts-based representations.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Normal"><code>Normal = 6</code></dt>
+  <dd><p>Transforms a matrix into a form that simplifies certain calculations in least squares problems.</p>
+<p>
+<b>For Beginners:</b> Normal decomposition transforms a matrix into a form that's useful for solving 
+least squares problems (finding the best fit for overdetermined systems).
+<p>Think of it as:</p>
+<ul>
+<li>Rearranging an equation to make it easier to solve</li>
+<li>Converting a complex fitting problem into a simpler form</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Linear regression problems</li>
+<li>When you have more equations than unknowns</li>
+<li>Finding approximate solutions when exact solutions don't exist</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Polar"><code>Polar = 12</code></dt>
+  <dd><p>Decomposes a matrix into a product of a unitary matrix and a positive semi-definite Hermitian matrix.</p>
+<p>
+<b>For Beginners:</b> Polar decomposition separates a matrix into a rotation/reflection component 
+and a stretching/scaling component.
+<p>Think of it as:</p>
+<ul>
+<li>Breaking down a transformation into &quot;what direction it rotates&quot; and &quot;how much it stretches&quot;</li>
+<li>Similar to writing a complex number in polar form (magnitude and angle)</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Computer graphics and animation</li>
+<li>Finding the nearest orthogonal matrix to a given matrix</li>
+<li>Analyzing deformations in physics</li>
+<li>Understanding the geometric meaning of a transformation</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Qr"><code>Qr = 4</code></dt>
+  <dd><p>Decomposes a matrix into an orthogonal matrix Q and an upper triangular matrix R.</p>
+<p>
+<b>For Beginners:</b> QR decomposition breaks a matrix into a product of an orthogonal matrix Q 
+(which preserves lengths and angles) and an upper triangular matrix R.
+<p>Think of it as:</p>
+<ul>
+<li>First rotating your data (Q) and then stretching/shearing it (R)</li>
+<li>Creating a clean coordinate system and then describing transformations in that system</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Solving least squares problems</li>
+<li>Eigenvalue algorithms</li>
+<li>Linear regression</li>
+<li>Computing orthonormal bases</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Schur"><code>Schur = 10</code></dt>
+  <dd><p>Decomposes a matrix into a product involving an orthogonal matrix and a quasi-triangular matrix.</p>
+<p>
+<b>For Beginners:</b> Schur decomposition expresses a matrix as a product of an orthogonal matrix 
+and an upper triangular (or nearly triangular) matrix.
+<p>Think of it as:</p>
+<ul>
+<li>Finding a coordinate system where a transformation becomes as simple as possible</li>
+<li>Revealing the essential structure of a linear transformation</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Computing matrix functions</li>
+<li>Stability analysis</li>
+<li>As part of eigenvalue algorithms</li>
+<li>Understanding the structure of linear transformations</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Svd"><code>Svd = 5</code></dt>
+  <dd><p>Singular Value Decomposition - factorizes a matrix into three components representing rotation, scaling, and another rotation.</p>
+<p>
+<b>For Beginners:</b> SVD is one of the most powerful matrix decompositions that breaks any matrix into 
+three components: U (rotation/reflection), S (scaling), and V* (another rotation/reflection).
+<p>Think of it as:</p>
+<ul>
+<li>Revealing the underlying structure and important directions in your data</li>
+<li>Finding the &quot;natural axes&quot; of your data and how much it stretches along each axis</li>
+<li>Like a Swiss Army knife for matrix problems - extremely versatile</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Dimensionality reduction (like in PCA)</li>
+<li>Image compression</li>
+<li>Recommendation systems</li>
+<li>Noise reduction</li>
+<li>Finding the &quot;rank&quot; or effective complexity of a dataset</li>
+<li>Solving ill-conditioned linear systems</li>
+</ul>
+<p>SVD is computationally intensive but extremely powerful and stable.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Takagi"><code>Takagi = 8</code></dt>
+  <dd><p>A decomposition for complex symmetric matrices.</p>
+<p>
+<b>For Beginners:</b> Takagi decomposition is a specialized decomposition for complex symmetric matrices, 
+expressing them in terms of a unitary matrix and a diagonal matrix.
+<p>Think of it as:</p>
+<ul>
+<li>Finding a special coordinate system where a complex transformation becomes simple</li>
+<li>Breaking down a complex operation into simple scaling operations</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Quantum mechanics calculations</li>
+<li>Certain types of optimization problems</li>
+<li>When working with complex symmetric matrices</li>
+</ul>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Tridiagonal"><code>Tridiagonal = 13</code></dt>
+  <dd><p>Transforms a matrix into a tridiagonal form (non-zero elements only on the main diagonal and the diagonals above and below it).</p>
+<p>
+<b>For Beginners:</b> Tridiagonal decomposition converts a matrix into a special form where only three diagonals 
+contain non-zero values - the main diagonal and the ones directly above and below it.
+<p>Think of it as:</p>
+<ul>
+<li>Simplifying a complex matrix into a much simpler form that's easier to work with</li>
+<li>Converting a dense matrix (many non-zero values) into a sparse one (mostly zeros)</li>
+<li>Creating a &quot;band&quot; of values along the diagonal</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Solving certain types of differential equations</li>
+<li>Eigenvalue calculations for symmetric matrices</li>
+<li>Efficient storage and computation for large matrices</li>
+<li>Numerical simulations in physics and engineering</li>
+</ul>
+<p>Tridiagonal systems can be solved very efficiently using specialized algorithms.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_MatrixDecompositionType_Udu"><code>Udu = 15</code></dt>
+  <dd><p>Decomposes a symmetric matrix into the product U·D·Uᵀ, where U is upper triangular with 1s on the diagonal and D is diagonal.</p>
+<p>
+<b>For Beginners:</b> UDU decomposition breaks a symmetric matrix into three parts: 
+an upper triangular matrix U with 1s on its diagonal, a diagonal matrix D, and the transpose of U.
+<p>Think of it as:</p>
+<ul>
+<li>A specialized version of LU decomposition for symmetric matrices</li>
+<li>Breaking a complex transformation into simpler components</li>
+<li>A way to efficiently store and work with symmetric matrices</li>
+</ul>
+<p>Best used for:</p>
+<ul>
+<li>Solving symmetric linear systems</li>
+<li>Stability analysis in numerical methods</li>
+<li>Efficient implementation of certain algorithms for symmetric matrices</li>
+<li>When memory efficiency is important</li>
+</ul>
+<p>The UDU decomposition is numerically stable and memory-efficient for symmetric matrices.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_MatrixDecompositionType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Matrix decomposition is like breaking a complex puzzle into simpler pieces 
+that are easier to work with. In mathematics, we often need to break down complex matrices 
+(grids of numbers) into simpler components to solve problems more efficiently.
+<p>Think of it as:</p>
+<ul>
+<li>Breaking down a complex number like 15 into its factors 3 × 5</li>
+<li>Disassembling a complicated machine into its basic parts</li>
+<li>Converting a difficult problem into several easier ones</li>
+</ul>
+<p>Matrix decompositions are important in AI and machine learning for:</p>
+<ul>
+<li>Solving systems of equations efficiently</li>
+<li>Reducing the dimensionality of data</li>
+<li>Finding patterns in data</li>
+<li>Making certain calculations faster and more stable</li>
+<li>Enabling specific types of analysis</li>
+</ul>
+<p>Different decomposition methods have different strengths, weaknesses, and use cases.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/MatrixDecompositionType.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

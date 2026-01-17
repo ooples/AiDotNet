@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class IRBuilder | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class IRBuilder | AiDotNet Documentation ">
+      
+      <meta name="description" content="Builds an IR graph from a ComputationNode graph.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_JitCompiler_IRBuilder.md&amp;value=---%0Auid%3A%20AiDotNet.JitCompiler.IRBuilder%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IRBuilder">
+
+
+
+  <h1 id="AiDotNet_JitCompiler_IRBuilder" data-uid="AiDotNet.JitCompiler.IRBuilder" class="text-break">
+Class IRBuilder  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IRBuilder.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.JitCompiler.html">JitCompiler</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Builds an IR graph from a ComputationNode graph.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class IRBuilder</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">IRBuilder</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_JitCompiler_IRBuilder_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The IRBuilder converts a high-level ComputationNode graph (produced by autodiff)
+into a low-level IR graph suitable for optimization and compilation. It traverses
+the computation graph, converts each node to an IR operation, and builds the
+complete IR representation.
+</p>
+<p><b>For Beginners:</b> This translates autodiff graphs into a form the JIT compiler can work with.
+<p>Think of it like translating a recipe:</p>
+<ul>
+<li>Input: ComputationNode graph (high-level description of what to compute)</li>
+<li>Output: IR graph (low-level description ready for optimization)</li>
+</ul>
+<p>The IRBuilder:</p>
+<ul>
+<li>Walks through all the computation nodes</li>
+<li>Identifies what operation each node represents</li>
+<li>Creates corresponding IR operations</li>
+<li>Builds a complete IR graph with inputs, operations, and outputs</li>
+</ul>
+<p>This IR graph can then be optimized and compiled to fast executable code.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_JitCompiler_IRBuilder_BuildBackward_" data-uid="AiDotNet.JitCompiler.IRBuilder.BuildBackward*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IRBuilder_BuildBackward__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.IRBuilder.BuildBackward``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  BuildBackward&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IRBuilder.cs/#L565"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds a backward IR graph for gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRGraph BuildBackward&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the forward computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to compute gradients for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.IR.IRGraph.html">IRGraph</a></dt>
+    <dd><p>An IR graph that computes gradients via backpropagation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the computation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IRBuilder_BuildBackward__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method builds the backward pass (gradient computation) graph from a forward graph.
+The backward graph takes output gradients as inputs and computes gradients with respect
+to the original inputs via automatic differentiation.
+</p>
+<p><b>For Beginners:</b> This creates the gradient computation graph for training.
+<p>In neural network training:</p>
+<ul>
+<li>Forward pass: input → layers → output → loss</li>
+<li>Backward pass: loss gradient → layers (in reverse) → input gradients</li>
+</ul>
+<p>This method creates the backward pass graph automatically!</p>
+<p>Algorithm:</p>
+<ol>
+<li>Traverse forward graph in reverse topological order</li>
+<li>For each operation, generate its backward (gradient) operation</li>
+<li>Handle gradient accumulation for nodes with multiple consumers</li>
+<li>Build IR graph mapping output gradients → input gradients</li>
+</ol>
+<p>Example operations and their gradients:</p>
+<ul>
+<li>Add(a, b) → backward distributes gradient to both a and b</li>
+<li>MatMul(a, b) → backward: grad_a = grad_out @ b^T, grad_b = a^T @ grad_out</li>
+<li>ReLU(x) → backward: grad_x = grad_out * (x &gt; 0)</li>
+</ul>
+
+<p><b>IMPLEMENTATION STATUS:</b>
+<p>This is a complex feature requiring implementation of:</p>
+<ol>
+<li><p><strong>Reverse Graph Traversal</strong></p>
+<ul>
+<li>Walk forward graph in reverse topological order</li>
+<li>Track gradient flow through each operation</li>
+</ul>
+</li>
+<li><p><strong>Backward Operation Mapping</strong></p>
+<ul>
+<li>For each forward op type, generate corresponding backward op(s)</li>
+<li>Examples:
+<ul>
+<li>AddOp → GradAddOp (distributes gradient to both inputs)</li>
+<li>MatMulOp → GradMatMulLeftOp + GradMatMulRightOp</li>
+<li>ReLUOp → GradReLUOp (masks gradient by activation)</li>
+<li>Etc. for all 43+ operation types</li>
+</ul>
+</li>
+</ul>
+</li>
+<li><p><strong>Gradient Accumulation</strong></p>
+<ul>
+<li>When a node has multiple consumers, accumulate gradients</li>
+<li>Insert GradAccumulateOp to sum gradients from different paths</li>
+</ul>
+</li>
+<li><p><strong>Memory Optimization</strong></p>
+<ul>
+<li>Forward activations may need to be saved for backward pass</li>
+<li>Implement checkpointing for memory-efficient training</li>
+</ul>
+</li>
+<li><p><strong>IR Operation Types Needed</strong></p>
+<ul>
+<li>Create new IR op types for backward operations:
+<ul>
+<li>GradAddOp, GradSubtractOp, GradMultiplyOp</li>
+<li>GradMatMulLeftOp, GradMatMulRightOp</li>
+<li>GradReLUOp, GradSigmoidOp, GradTanhOp</li>
+<li>GradConv2DOp, GradMaxPool2DOp</li>
+<li>GradAccumulateOp (sums multiple gradients)</li>
+</ul>
+</li>
+<li>Implement code generation for each</li>
+</ul>
+</li>
+<li><p><strong>Testing Required</strong></p>
+<ul>
+<li>Gradient correctness tests (numerical gradient checking)</li>
+<li>Performance benchmarks vs. non-compiled backward pass</li>
+<li>Memory usage profiling</li>
+</ul>
+</li>
+</ol>
+<p><strong>TODO:</strong> Full implementation of backward pass IR builder</p>
+<ul>
+<li>This is a substantial feature requiring:
+<ul>
+<li>New IR operation types (~50+ backward ops)</li>
+<li>Code generation for backward ops</li>
+<li>Gradient accumulation logic</li>
+<li>Extensive testing</li>
+</ul>
+</li>
+<li>Estimated effort: 1-2 weeks for complete implementation</li>
+<li>See PyTorch's autograd and TensorFlow's GradientTape for reference implementations</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notimplementedexception">NotImplementedException</a></dt>
+    <dd><p>This method requires full implementation of backward operation mapping and gradient accumulation.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_JitCompiler_IRBuilder_Build_" data-uid="AiDotNet.JitCompiler.IRBuilder.Build*"></a>
+
+  <h3 id="AiDotNet_JitCompiler_IRBuilder_Build__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0___" data-uid="AiDotNet.JitCompiler.IRBuilder.Build``1(AiDotNet.Autodiff.ComputationNode{``0},System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{``0}})">
+  Build&lt;T&gt;(ComputationNode&lt;T&gt;, List&lt;ComputationNode&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IRBuilder.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds an IR graph from a ComputationNode graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRGraph Build&lt;T&gt;(ComputationNode&lt;T&gt; outputNode, List&lt;ComputationNode&lt;T&gt;&gt; inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputNode</code> <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;</dt>
+    <dd><p>The output node of the computation graph.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input nodes to the computation graph.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.JitCompiler.IR.IRGraph.html">IRGraph</a></dt>
+    <dd><p>An IR graph representing the computation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used in the computation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_JitCompiler_IRBuilder_Build__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode___0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs a topological traversal of the computation graph,
+converting each ComputationNode to an IROp and building the complete IR graph.
+It handles input mapping, operation conversion, and output identification.
+</p>
+<p><b>For Beginners:</b> This converts a computation graph to IR format.
+<p>The process:</p>
+<ol>
+<li>Identifies all input nodes and assigns them tensor IDs</li>
+<li>Traverses the graph in topological order (inputs to outputs)</li>
+<li>Converts each node to an IR operation</li>
+<li>Builds the final IR graph with all operations connected</li>
+</ol>
+<p>Example:
+If you have a graph: result = ReLU(MatMul(input, weights) + bias)
+This will create an IR graph with:</p>
+<ul>
+<li>Input tensors: input (t0), weights (t1), bias (t2)</li>
+<li>Operations: MatMul (t3 = MatMul(t0, t1)), Add (t4 = Add(t3, t2)), ReLU (t5 = ReLU(t4))</li>
+<li>Output: t5</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if a node doesn't have operation type metadata or uses an unsupported operation.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/JitCompiler/IRBuilder.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>AiDotNet Reasoning Framework - Tutorials | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="AiDotNet Reasoning Framework - Tutorials | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/Tutorials.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="aidotnet-reasoning-framework---tutorials">AiDotNet Reasoning Framework - Tutorials</h1>
+
+<p>Comprehensive tutorials for building advanced reasoning applications.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#tutorial-1-building-a-math-problem-solver">Tutorial 1: Building a Math Problem Solver</a></li>
+<li><a href="#tutorial-2-code-generation-assistant">Tutorial 2: Code Generation Assistant</a></li>
+<li><a href="#tutorial-3-logic-puzzle-solver">Tutorial 3: Logic Puzzle Solver</a></li>
+<li><a href="#tutorial-4-training-with-reinforcement-learning">Tutorial 4: Training with Reinforcement Learning</a></li>
+<li><a href="#tutorial-5-custom-benchmark-evaluation">Tutorial 5: Custom Benchmark Evaluation</a></li>
+</ol>
+<hr>
+<h2 id="tutorial-1-building-a-math-problem-solver">Tutorial 1: Building a Math Problem Solver</h2>
+<p>Build a complete system that solves math problems with verification and explanation.</p>
+<h3 id="step-1-setup">Step 1: Setup</h3>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.DomainSpecific;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.Reasoning.Verification;
+
+public class MathSolver
+{
+    private readonly MathematicalReasoner&lt;double&gt; _reasoner;
+    private readonly CalculatorVerifier&lt;double&gt; _calculator;
+    private readonly CriticModel&lt;double&gt; _critic;
+    private readonly SelfRefinementEngine&lt;double&gt; _refinement;
+
+    public MathSolver(IChatModel chatModel)
+    {
+        _reasoner = new MathematicalReasoner&lt;double&gt;(chatModel);
+        _calculator = new CalculatorVerifier&lt;double&gt;();
+        _critic = new CriticModel&lt;double&gt;(chatModel);
+        _refinement = new SelfRefinementEngine&lt;double&gt;(chatModel);
+    }
+}
+</code></pre>
+<h3 id="step-2-solve-with-verification">Step 2: Solve with Verification</h3>
+<pre><code class="lang-csharp">public async Task&lt;SolutionResult&gt; SolveAsync(string problem)
+{
+    // Initial solution
+    var result = await _reasoner.SolveAsync(
+        problem,
+        useVerification: true,
+        useSelfConsistency: false
+    );
+
+    if (!result.Success)
+    {
+        return new SolutionResult { Success = false, Error = result.ErrorMessage };
+    }
+
+    // Verify calculations
+    var verification = await _calculator.VerifyAsync(result.Chain, result.FinalAnswer);
+
+    if (!verification.IsValid)
+    {
+        // Try to refine
+        result = await RefineAsync(result, problem);
+        verification = await _calculator.VerifyAsync(result.Chain, result.FinalAnswer);
+    }
+
+    return new SolutionResult
+    {
+        Success = true,
+        Answer = result.FinalAnswer,
+        Steps = result.Chain.Steps.Select(s =&gt; s.Content).ToList(),
+        IsVerified = verification.IsValid,
+        Confidence = result.ConfidenceScore
+    };
+}
+</code></pre>
+<h3 id="step-3-add-refinement">Step 3: Add Refinement</h3>
+<pre><code class="lang-csharp">private async Task&lt;ReasoningResult&lt;double&gt;&gt; RefineAsync(
+    ReasoningResult&lt;double&gt; result,
+    string problem)
+{
+    var context = new ReasoningContext
+    {
+        OriginalQuery = problem,
+        Requirements = new List&lt;string&gt;
+        {
+            &quot;Correct mathematical calculations&quot;,
+            &quot;Clear step-by-step reasoning&quot;,
+            &quot;Proper use of formulas&quot;
+        }
+    };
+
+    foreach (var step in result.Chain.Steps)
+    {
+        var critique = await _critic.CritiqueStepAsync(step, context);
+
+        if (Convert.ToDouble(critique.OverallScore) &lt; 0.7)
+        {
+            var refinedStep = await _refinement.RefineStepAsync(step, critique, context);
+            // Update step content
+            step.Content = refinedStep.Content;
+            step.RefinementCount++;
+        }
+    }
+
+    return result;
+}
+</code></pre>
+<h3 id="step-4-test-it">Step 4: Test It</h3>
+<pre><code class="lang-csharp">var chatModel = /* your chat model */;
+var solver = new MathSolver(chatModel);
+
+var problems = new[]
+{
+    &quot;What is 347 + 892?&quot;,
+    &quot;Calculate 15 × 24&quot;,
+    &quot;If a train travels at 60 km/h for 2.5 hours, how far does it go?&quot;
+};
+
+foreach (var problem in problems)
+{
+    var result = await solver.SolveAsync(problem);
+    Console.WriteLine($&quot;\nProblem: {problem}&quot;);
+    Console.WriteLine($&quot;Answer: {result.Answer}&quot;);
+    Console.WriteLine($&quot;Verified: {(result.IsVerified ? &quot;✓&quot; : &quot;✗&quot;)}&quot;);
+    Console.WriteLine($&quot;Confidence: {result.Confidence:P0}&quot;);
+
+    Console.WriteLine(&quot;\nSteps:&quot;);
+    for (int i = 0; i &lt; result.Steps.Count; i++)
+    {
+        Console.WriteLine($&quot;  {i + 1}. {result.Steps[i]}&quot;);
+    }
+}
+</code></pre>
+<hr>
+<h2 id="tutorial-2-code-generation-assistant">Tutorial 2: Code Generation Assistant</h2>
+<p>Build an AI coding assistant that generates, explains, and debugs code.</p>
+<h3 id="step-1-setup-1">Step 1: Setup</h3>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.DomainSpecific;
+using AiDotNet.Reasoning.Verification;
+
+public class CodeAssistant
+{
+    private readonly CodeReasoner&lt;double&gt; _reasoner;
+    private readonly CodeExecutionVerifier&lt;double&gt; _executor;
+
+    public CodeAssistant(IChatModel chatModel)
+    {
+        _reasoner = new CodeReasoner&lt;double&gt;(chatModel);
+        _executor = new CodeExecutionVerifier&lt;double&gt;(timeoutMilliseconds: 5000);
+    }
+}
+</code></pre>
+<h3 id="step-2-generate-code">Step 2: Generate Code</h3>
+<pre><code class="lang-csharp">public async Task&lt;CodeGenerationResult&gt; GenerateAsync(
+    string specification,
+    string language = &quot;python&quot;,
+    string[] testCases = null)
+{
+    // Generate code
+    var result = await _reasoner.GenerateCodeAsync(specification, language);
+
+    if (!result.Success)
+    {
+        return new CodeGenerationResult { Success = false, Error = result.ErrorMessage };
+    }
+
+    // Extract code from result
+    string code = ExtractCode(result.FinalAnswer, language);
+
+    // If test cases provided, execute and verify
+    CodeExecutionResult&lt;double&gt; executionResult = null;
+    if (testCases != null &amp;&amp; testCases.Length &gt; 0)
+    {
+        executionResult = await _executor.VerifyCodeAsync(code, testCases, language);
+    }
+
+    return new CodeGenerationResult
+    {
+        Success = true,
+        Code = code,
+        Explanation = GetExplanation(result.Chain),
+        TestsPassed = executionResult?.AllTestsPassed ?? true,
+        ExecutionSummary = executionResult?.GetSummary()
+    };
+}
+</code></pre>
+<h3 id="step-3-debug-code">Step 3: Debug Code</h3>
+<pre><code class="lang-csharp">public async Task&lt;DebugResult&gt; DebugAsync(string buggyCode, string errorMessage)
+{
+    var debugPrompt = $@&quot;Debug this code:
+
+{buggyCode}
+
+Error: {errorMessage}
+
+Find the bug and provide:
+1. Explanation of the bug
+2. Corrected code
+3. Test cases to prevent regression&quot;;
+
+    var result = await _reasoner.SolveAsync(debugPrompt);
+
+    return new DebugResult
+    {
+        BugExplanation = ExtractExplanation(result),
+        FixedCode = ExtractCode(result.FinalAnswer, &quot;python&quot;),
+        TestCases = ExtractTestCases(result)
+    };
+}
+</code></pre>
+<h3 id="step-4-explain-code">Step 4: Explain Code</h3>
+<pre><code class="lang-csharp">public async Task&lt;string&gt; ExplainAsync(string code)
+{
+    var result = await _reasoner.ExplainCodeAsync(code);
+    return result.FinalAnswer;
+}
+</code></pre>
+<h3 id="step-5-test-the-assistant">Step 5: Test the Assistant</h3>
+<pre><code class="lang-csharp">var chatModel = /* your chat model */;
+var assistant = new CodeAssistant(chatModel);
+
+// Test 1: Generate code
+var genResult = await assistant.GenerateAsync(
+    &quot;Write a function to check if a number is prime&quot;,
+    &quot;python&quot;,
+    testCases: new[]
+    {
+        &quot;assert is_prime(2) == True&quot;,
+        &quot;assert is_prime(4) == False&quot;,
+        &quot;assert is_prime(17) == True&quot;
+    }
+);
+
+Console.WriteLine($&quot;Code generated: {genResult.Success}&quot;);
+Console.WriteLine($&quot;Tests passed: {genResult.TestsPassed}&quot;);
+Console.WriteLine($&quot;\nCode:\n{genResult.Code}&quot;);
+
+// Test 2: Debug code
+string buggyCode = @&quot;
+def factorial(n):
+    if n = 1:  # Bug: should be ==
+        return 1
+    return n * factorial(n - 1)
+&quot;;
+
+var debugResult = await assistant.DebugAsync(buggyCode, &quot;SyntaxError: invalid syntax&quot;);
+Console.WriteLine($&quot;\nBug: {debugResult.BugExplanation}&quot;);
+Console.WriteLine($&quot;\nFixed:\n{debugResult.FixedCode}&quot;);
+</code></pre>
+<hr>
+<h2 id="tutorial-3-logic-puzzle-solver">Tutorial 3: Logic Puzzle Solver</h2>
+<p>Build a system that solves complex logic puzzles using Tree-of-Thoughts.</p>
+<h3 id="step-1-setup-2">Step 1: Setup</h3>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.DomainSpecific;
+using AiDotNet.Reasoning.Strategies;
+using AiDotNet.Reasoning.Verification;
+
+public class LogicPuzzleSolver
+{
+    private readonly LogicalReasoner&lt;double&gt; _reasoner;
+    private readonly ContradictionDetector&lt;double&gt; _contradictionDetector;
+
+    public LogicPuzzleSolver(IChatModel chatModel)
+    {
+        _reasoner = new LogicalReasoner&lt;double&gt;(chatModel);
+        _contradictionDetector = new ContradictionDetector&lt;double&gt;(chatModel);
+    }
+}
+</code></pre>
+<h3 id="step-2-solve-puzzle">Step 2: Solve Puzzle</h3>
+<pre><code class="lang-csharp">public async Task&lt;PuzzleSolution&gt; SolveAsync(string puzzle)
+{
+    // Use tree search for complex puzzles
+    var result = await _reasoner.SolvePuzzleAsync(puzzle);
+
+    if (!result.Success)
+    {
+        return new PuzzleSolution { Success = false, Error = result.ErrorMessage };
+    }
+
+    // Check for contradictions
+    var contradictions = await _contradictionDetector.DetectContradictionsAsync(result.Chain);
+
+    if (contradictions.Count &gt; 0)
+    {
+        // Try again with different approach
+        var config = new ReasoningConfig
+        {
+            ExplorationDepth = 6,  // Deeper search
+            BranchingFactor = 4     // More branches
+        };
+        result = await _reasoner.SolvePuzzleAsync(puzzle, config);
+    }
+
+    return new PuzzleSolution
+    {
+        Success = true,
+        Solution = result.FinalAnswer,
+        ReasoningPath = result.Chain.Steps.Select(s =&gt; s.Content).ToList(),
+        HasContradictions = contradictions.Count &gt; 0,
+        Confidence = result.ConfidenceScore
+    };
+}
+</code></pre>
+<h3 id="step-3-test-with-classic-puzzles">Step 3: Test with Classic Puzzles</h3>
+<pre><code class="lang-csharp">var chatModel = /* your chat model */;
+var solver = new LogicPuzzleSolver(chatModel);
+
+// Classic: Knights and Knaves
+string puzzle1 = @&quot;
+On an island, there are two types of people:
+- Knights always tell the truth
+- Knaves always lie
+
+You meet two people, A and B.
+A says: 'We are both knaves.'
+B says nothing.
+
+What are A and B?
+&quot;;
+
+var result = await solver.SolveAsync(puzzle1);
+Console.WriteLine($&quot;Solution: {result.Solution}&quot;);
+Console.WriteLine($&quot;\nReasoning:&quot;);
+foreach (var step in result.ReasoningPath)
+{
+    Console.WriteLine($&quot;  • {step}&quot;);
+}
+
+// Classic: Einstein's Riddle (simplified)
+string puzzle2 = @&quot;
+There are 3 houses in different colors.
+- The red house is to the left of the blue house
+- The green house is to the right of the blue house
+- Coffee is drunk in the green house
+
+What is drunk in the blue house?
+&quot;;
+
+result = await solver.SolveAsync(puzzle2);
+Console.WriteLine($&quot;\nSolution: {result.Solution}&quot;);
+</code></pre>
+<hr>
+<h2 id="tutorial-4-training-with-reinforcement-learning">Tutorial 4: Training with Reinforcement Learning</h2>
+<p>Train a reasoning model using reinforcement learning.</p>
+<h3 id="step-1-prepare-training-data">Step 1: Prepare Training Data</h3>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.Training;
+using AiDotNet.Reasoning.Benchmarks;
+
+public class ModelTrainer
+{
+    private readonly ReinforcementLearner&lt;double&gt; _learner;
+    private readonly TrainingDataCollector&lt;double&gt; _dataCollector;
+
+    public ModelTrainer(IChatModel chatModel, IRewardModel&lt;double&gt; rewardModel)
+    {
+        _learner = new ReinforcementLearner&lt;double&gt;(chatModel, rewardModel);
+        _dataCollector = new TrainingDataCollector&lt;double&gt;();
+    }
+
+    public async Task&lt;List&lt;(string, string)&gt;&gt; LoadTrainingDataAsync()
+    {
+        // Load from GSM8K benchmark
+        var benchmark = new GSM8KBenchmark&lt;double&gt;();
+        var problems = await benchmark.LoadProblemsAsync(count: 1000);
+
+        return problems.Select(p =&gt; (p.Problem, p.CorrectAnswer)).ToList();
+    }
+}
+</code></pre>
+<h3 id="step-2-configure-training">Step 2: Configure Training</h3>
+<pre><code class="lang-csharp">public async Task TrainModelAsync()
+{
+    var trainingData = await LoadTrainingDataAsync();
+    var validationData = await LoadValidationDataAsync();
+
+    var config = new RLConfig
+    {
+        Epochs = 10,
+        BatchSize = 32,
+        LearningRate = 0.0001,
+        ValidationFrequency = 1,
+        EarlyStoppingPatience = 3,
+        SaveCheckpoints = true
+    };
+
+    // Monitor progress
+    _learner.OnEpochComplete += (sender, metrics) =&gt;
+    {
+        Console.WriteLine($&quot;\nEpoch {metrics.Epoch} Complete:&quot;);
+        Console.WriteLine($&quot;  Accuracy: {metrics.Accuracy:P2}&quot;);
+        Console.WriteLine($&quot;  Avg Reward: {Convert.ToDouble(metrics.AverageReward):F3}&quot;);
+        Console.WriteLine($&quot;  Avg Loss: {Convert.ToDouble(metrics.AverageLoss):F4}&quot;);
+    };
+
+    _learner.OnBatchComplete += (sender, progress) =&gt;
+    {
+        if (progress.BatchNumber % 10 == 0)
+        {
+            Console.WriteLine($&quot;  Batch {progress.BatchNumber}/{progress.TotalBatches}&quot;);
+        }
+    };
+
+    // Train
+    var results = await _learner.TrainAsync(trainingData, validationData);
+
+    Console.WriteLine($&quot;\n=== Training Complete ===&quot;);
+    Console.WriteLine($&quot;Best Accuracy: {results.BestAccuracy:P2}&quot;);
+    Console.WriteLine($&quot;Best Epoch: {results.BestEpoch}&quot;);
+    Console.WriteLine($&quot;Total Epochs: {results.EpochsTrained}&quot;);
+}
+</code></pre>
+<h3 id="step-3-use-star-training">Step 3: Use STaR Training</h3>
+<pre><code class="lang-csharp">public async Task TrainWithSTaRAsync()
+{
+    var trainingData = await LoadTrainingDataAsync();
+    var validationData = await LoadValidationDataAsync();
+
+    Console.WriteLine(&quot;Starting Self-Taught Reasoner (STaR) training...&quot;);
+
+    var results = await _learner.TrainSTaRAsync(
+        trainingData,
+        validationData,
+        samplesPerProblem: 5  // Generate 5 attempts per problem
+    );
+
+    Console.WriteLine($&quot;STaR Training Complete!&quot;);
+    Console.WriteLine($&quot;Best Accuracy: {results.BestAccuracy:P2}&quot;);
+}
+</code></pre>
+<hr>
+<h2 id="tutorial-5-custom-benchmark-evaluation">Tutorial 5: Custom Benchmark Evaluation</h2>
+<p>Evaluate your model on multiple benchmarks.</p>
+<h3 id="step-1-setup-evaluation">Step 1: Setup Evaluation</h3>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.Benchmarks;
+
+public class BenchmarkRunner
+{
+    private readonly IChatModel _chatModel;
+    private readonly IReasoningStrategy&lt;double&gt; _strategy;
+
+    public BenchmarkRunner(IChatModel chatModel)
+    {
+        _chatModel = chatModel;
+        _strategy = new ChainOfThoughtStrategy&lt;double&gt;(chatModel);
+    }
+}
+</code></pre>
+<h3 id="step-2-run-multiple-benchmarks">Step 2: Run Multiple Benchmarks</h3>
+<pre><code class="lang-csharp">public async Task&lt;Dictionary&lt;string, double&gt;&gt; EvaluateAllAsync(int sampleSize = 100)
+{
+    var results = new Dictionary&lt;string, double&gt;();
+
+    // GSM8K
+    Console.WriteLine(&quot;\nEvaluating GSM8K...&quot;);
+    var gsm8k = new GSM8KBenchmark&lt;double&gt;();
+    var gsm8kResult = await gsm8k.EvaluateAsync(SolveAsync, sampleSize);
+    results[&quot;GSM8K&quot;] = Convert.ToDouble(gsm8kResult.Accuracy);
+    Console.WriteLine($&quot;GSM8K Accuracy: {gsm8kResult.Accuracy:P2}&quot;);
+
+    // HumanEval
+    Console.WriteLine(&quot;\nEvaluating HumanEval...&quot;);
+    var humaneval = new HumanEvalBenchmark&lt;double&gt;();
+    var humanevalResult = await humaneval.EvaluateAsync(SolveAsync, sampleSize);
+    results[&quot;HumanEval&quot;] = Convert.ToDouble(humanevalResult.Accuracy);
+    Console.WriteLine($&quot;HumanEval Accuracy: {humanevalResult.Accuracy:P2}&quot;);
+
+    // MMLU
+    Console.WriteLine(&quot;\nEvaluating MMLU...&quot;);
+    var mmlu = new MMLUBenchmark&lt;double&gt;();
+    var mmluResult = await mmlu.EvaluateAsync(SolveAsync, sampleSize);
+    results[&quot;MMLU&quot;] = Convert.ToDouble(mmluResult.Accuracy);
+    Console.WriteLine($&quot;MMLU Accuracy: {mmluResult.Accuracy:P2}&quot;);
+
+    return results;
+}
+
+private async Task&lt;string&gt; SolveAsync(string problem)
+{
+    var result = await _strategy.ReasonAsync(problem);
+    return result.FinalAnswer;
+}
+</code></pre>
+<h3 id="step-3-compare-results">Step 3: Compare Results</h3>
+<pre><code class="lang-csharp">public async Task CompareStrategiesAsync()
+{
+    var strategies = new Dictionary&lt;string, IReasoningStrategy&lt;double&gt;&gt;
+    {
+        [&quot;Chain-of-Thought&quot;] = new ChainOfThoughtStrategy&lt;double&gt;(_chatModel),
+        [&quot;Self-Consistency&quot;] = new SelfConsistencyStrategy&lt;double&gt;(_chatModel),
+        [&quot;Tree-of-Thoughts&quot;] = new TreeOfThoughtsStrategy&lt;double&gt;(_chatModel)
+    };
+
+    var benchmark = new GSM8KBenchmark&lt;double&gt;();
+    var results = new Dictionary&lt;string, double&gt;();
+
+    foreach (var (name, strategy) in strategies)
+    {
+        Console.WriteLine($&quot;\nTesting {name}...&quot;);
+
+        var result = await benchmark.EvaluateAsync(
+            async (problem) =&gt; {
+                var r = await strategy.ReasonAsync(problem);
+                return r.FinalAnswer;
+            },
+            sampleSize: 50
+        );
+
+        results[name] = Convert.ToDouble(result.Accuracy);
+        Console.WriteLine($&quot;{name}: {result.Accuracy:P2}&quot;);
+    }
+
+    // Show best strategy
+    var best = results.OrderByDescending(kvp =&gt; kvp.Value).First();
+    Console.WriteLine($&quot;\nBest Strategy: {best.Key} with {best.Value:P2} accuracy&quot;);
+}
+</code></pre>
+<hr>
+<h2 id="next-steps">Next Steps</h2>
+<ul>
+<li><strong>Advanced Topics</strong>: See <a href="./AdvancedGuide.md">Advanced Guide</a></li>
+<li><strong>Best Practices</strong>: See <a href="BestPractices.html">Best Practices</a></li>
+<li><strong>API Reference</strong>: See <a href="./ApiReference.md">API Documentation</a></li>
+<li><strong>Examples</strong>: Browse <code>examples/</code> directory for more code samples</li>
+</ul>
+<h2 id="common-issues--solutions">Common Issues &amp; Solutions</h2>
+<h3 id="issue-training-takes-too-long">Issue: Training takes too long</h3>
+<p><strong>Solution</strong>: Reduce batch size or use fewer samples</p>
+<pre><code class="lang-csharp">var config = new RLConfig
+{
+    BatchSize = 16,  // Smaller batches
+    Epochs = 5       // Fewer epochs
+};
+</code></pre>
+<h3 id="issue-low-benchmark-accuracy">Issue: Low benchmark accuracy</h3>
+<p><strong>Solution</strong>: Try different strategies or increase exploration</p>
+<pre><code class="lang-csharp">var config = new ReasoningConfig
+{
+    ExplorationDepth = 5,
+    BranchingFactor = 4,
+    NumSamples = 10  // For Self-Consistency
+};
+</code></pre>
+<h3 id="issue-out-of-memory-errors">Issue: Out of memory errors</h3>
+<p><strong>Solution</strong>: Use BeamSearch instead of BFS for memory efficiency</p>
+<pre><code class="lang-csharp">var beamSearch = new BeamSearch&lt;double&gt;(beamWidth: 3);
+// Use in TreeOfThoughtsStrategy
+</code></pre>
+<p>Happy building! 🎉</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/Tutorials.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

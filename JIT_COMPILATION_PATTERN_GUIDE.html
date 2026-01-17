@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>JIT Compilation Pattern Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="JIT Compilation Pattern Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_COMPILATION_PATTERN_GUIDE.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="jit-compilation-pattern-guide">JIT Compilation Pattern Guide</h1>
+
+<h2 id="overview">Overview</h2>
+<h3 id="what-is-jit-compilation-in-aidotnet">What is JIT Compilation in AiDotNet?</h3>
+<p>Just-In-Time (JIT) compilation in AiDotNet is a performance optimization technique that compiles neural network layers into optimized computation graphs <strong>before</strong> training or inference begins. This allows the framework to:</p>
+<ol>
+<li><strong>Optimize the computation graph</strong> - Remove redundant operations, fuse operations together, and apply mathematical simplifications</li>
+<li><strong>Generate efficient code</strong> - Convert high-level operations into optimized low-level code that runs on CPU or GPU</li>
+<li><strong>Accelerate execution</strong> - Execute the compiled graph much faster than interpreting operations one-by-one</li>
+</ol>
+<h3 id="performance-benefits">Performance Benefits</h3>
+<p>JIT compilation provides significant performance improvements:</p>
+<ul>
+<li><strong>Target speedup</strong>: 5-10x faster execution compared to eager mode</li>
+<li><strong>Reduced memory overhead</strong>: Optimized graphs use less temporary memory</li>
+<li><strong>Better hardware utilization</strong>: Compiled code can better leverage CPU/GPU parallelism</li>
+<li><strong>Batch efficiency</strong>: Symbolic batch dimensions (-1) allow same compiled graph to handle any batch size</li>
+</ul>
+<h3 id="when-to-use-jit-compilation">When to Use JIT Compilation</h3>
+<p><strong>Use JIT compilation when:</strong></p>
+<ul>
+<li>Training or running inference on production models</li>
+<li>Working with large batch sizes (where compilation overhead is amortized)</li>
+<li>Deploying models to resource-constrained environments</li>
+<li>Performance is critical (real-time inference, large-scale training)</li>
+</ul>
+<p><strong>Don't use JIT compilation when:</strong></p>
+<ul>
+<li>Rapidly prototyping and debugging (eager mode is easier to debug)</li>
+<li>Working with dynamic architectures that change structure frequently</li>
+<li>Batch size is 1 and latency is more important than throughput</li>
+</ul>
+<h3 id="current-support-status">Current Support Status</h3>
+<p>As of the latest release:</p>
+<ul>
+<li><strong>Foundation</strong>: Complete (TensorOperations, IEngine integration, IR operations)</li>
+<li><strong>DenseLayer</strong>: Production-ready with 10 supported activations</li>
+<li><strong>Other layers</strong>: 76 layers pending implementation (following the same pattern)</li>
+</ul>
+<p><strong>Supported activations (10 ready for production use):</strong></p>
+<ul>
+<li>ReLU, Sigmoid, Tanh, Softmax, Identity</li>
+<li>GELU, ELU, Mish, Swish, SiLU</li>
+</ul>
+<p><strong>Additional activations (27 available, pending integration):</strong></p>
+<ul>
+<li>LeakyReLU, SELU, CELU, PReLU, RReLU, ThresholdedReLU</li>
+<li>HardSigmoid, HardTanh, ScaledTanh, Softplus, Softsign, BentIdentity</li>
+<li>Softmin, LogSoftmax, LogSoftmin</li>
+<li>Sign, Gaussian, ISRU, LiSHT, SQRBF, Squash, BinarySpiking</li>
+<li>Sparsemax, SphericalSoftmax, GumbelSoftmax, TaylorSoftmax, HierarchicalSoftmax, Maxout</li>
+</ul>
+<hr>
+<h2 id="supported-activations">Supported Activations</h2>
+<p>The following activations are fully implemented and ready for JIT compilation:</p>
+<h3 id="scalar-activations-element-wise">Scalar Activations (Element-wise)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation</th>
+<th>TensorOperations Method</th>
+<th>Description</th>
+<th>Use Cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>ReLU</strong></td>
+<td><code>TensorOperations&lt;T&gt;.ReLU(node)</code></td>
+<td>Rectified Linear Unit - outputs max(0, x)</td>
+<td>Most common activation, default for hidden layers</td>
+</tr>
+<tr>
+<td><strong>Sigmoid</strong></td>
+<td><code>TensorOperations&lt;T&gt;.Sigmoid(node)</code></td>
+<td>Sigmoid function - outputs 1/(1+e^(-x))</td>
+<td>Binary classification output, gates in RNNs</td>
+</tr>
+<tr>
+<td><strong>Tanh</strong></td>
+<td><code>TensorOperations&lt;T&gt;.Tanh(node)</code></td>
+<td>Hyperbolic tangent - outputs (e^x - e^(-x))/(e^x + e^(-x))</td>
+<td>Alternative to sigmoid, centers output around 0</td>
+</tr>
+<tr>
+<td><strong>GELU</strong></td>
+<td><code>TensorOperations&lt;T&gt;.GELU(node)</code></td>
+<td>Gaussian Error Linear Unit</td>
+<td>Used in Transformers (BERT, GPT)</td>
+</tr>
+<tr>
+<td><strong>ELU</strong></td>
+<td><code>TensorOperations&lt;T&gt;.ELU(node, alpha)</code></td>
+<td>Exponential Linear Unit</td>
+<td>Reduces vanishing gradient problem</td>
+</tr>
+<tr>
+<td><strong>Mish</strong></td>
+<td><code>TensorOperations&lt;T&gt;.Mish(node)</code></td>
+<td>Self-regularized smooth activation</td>
+<td>Modern alternative to ReLU</td>
+</tr>
+<tr>
+<td><strong>Swish</strong></td>
+<td><code>TensorOperations&lt;T&gt;.Swish(node)</code></td>
+<td>Self-gated activation (x * sigmoid(x))</td>
+<td>Google Brain's smooth alternative to ReLU</td>
+</tr>
+<tr>
+<td><strong>SiLU</strong></td>
+<td><code>TensorOperations&lt;T&gt;.SiLU(node)</code></td>
+<td>Sigmoid Linear Unit (same as Swish)</td>
+<td>Used in modern architectures</td>
+</tr>
+<tr>
+<td><strong>LeakyReLU</strong></td>
+<td><code>TensorOperations&lt;T&gt;.LeakyReLU(node, slope)</code></td>
+<td>ReLU with small negative slope</td>
+<td>Prevents dying ReLU problem</td>
+</tr>
+<tr>
+<td><strong>Identity</strong></td>
+<td><code>input</code> (no-op)</td>
+<td>Returns input unchanged</td>
+<td>Linear layers, skip connections</td>
+</tr>
+</tbody>
+</table>
+<h3 id="vector-activations-operates-on-entire-vectors">Vector Activations (Operates on entire vectors)</h3>
+<table>
+<thead>
+<tr>
+<th>Activation</th>
+<th>TensorOperations Method</th>
+<th>Description</th>
+<th>Use Cases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Softmax</strong></td>
+<td><code>TensorOperations&lt;T&gt;.Softmax(node, axis)</code></td>
+<td>Converts logits to probability distribution</td>
+<td>Multi-class classification output</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="step-by-step-implementation-guide">Step-by-Step Implementation Guide</h2>
+<p>This section shows you exactly how to add JIT compilation support to any neural network layer.</p>
+<h3 id="prerequisites">Prerequisites</h3>
+<p>Before implementing JIT support, ensure:</p>
+<ol>
+<li>✅ Your layer inherits from <code>LayerBase&lt;T&gt;</code> or implements <code>ILayer&lt;T&gt;</code></li>
+<li>✅ Your layer has a working <code>Forward()</code> method</li>
+<li>✅ Your layer uses one of the supported activations listed above</li>
+<li>✅ Your layer has properly initialized weights and biases</li>
+</ol>
+<h3 id="step-1-override-exportcomputationgraph">Step 1: Override ExportComputationGraph</h3>
+<p>The <code>ExportComputationGraph</code> method is the core of JIT compilation. It builds a symbolic representation of your layer's computation that can be optimized and compiled.</p>
+<pre><code class="lang-csharp">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    // 1. Validate inputs
+    if (inputNodes == null)
+        throw new ArgumentNullException(nameof(inputNodes));
+
+    if (_weights == null)
+        throw new InvalidOperationException(&quot;Layer weights not initialized. Call Initialize() or train the layer first.&quot;);
+
+    if (_biases == null)
+        throw new InvalidOperationException(&quot;Layer biases not initialized. Call Initialize() or train the layer first.&quot;);
+
+    if (InputShape == null || InputShape.Length == 0)
+        throw new InvalidOperationException(&quot;Layer input shape not configured.&quot;);
+
+    if (!CanActivationBeJitted())
+    {
+        var activationType = ScalarActivation?.GetType().Name ?? VectorActivation?.GetType().Name ?? &quot;unknown&quot;;
+        throw new NotSupportedException(
+            $&quot;Activation function '{activationType}' is not supported for JIT compilation yet. &quot; +
+            &quot;Supported activations: ReLU, Sigmoid, Tanh, GELU, ELU, Mish, Swish, SiLU, LeakyReLU, Softmax, Identity&quot;);
+    }
+
+    // 2. Extract layer dimensions
+    int inputSize = InputShape[0];   // e.g., 784 for MNIST
+    int outputSize = OutputShape[0]; // e.g., 128 for hidden layer
+
+    // 3. Create input placeholder with symbolic batch dimension
+    // The -1 means &quot;any batch size&quot; - allows same compiled graph for batch sizes 1, 32, 128, etc.
+    var inputPlaceholder = new Tensor&lt;T&gt;(new int[] { 1, inputSize }); // Actual placeholder is batch size 1
+    var inputNode = TensorOperations&lt;T&gt;.Variable(inputPlaceholder, &quot;input&quot;);
+
+    // 4. Create parameter nodes for weights and biases
+    // Weights shape: [outputSize, inputSize] - transposed for efficient computation
+    var weightsNode = TensorOperations&lt;T&gt;.Variable(
+        new Tensor&lt;T&gt;(new int[] { _weights.Rows, _weights.Columns }, _weights),
+        &quot;weights&quot;
+    );
+
+    // Biases shape: [outputSize]
+    var biasesNode = TensorOperations&lt;T&gt;.Variable(
+        new Tensor&lt;T&gt;(new int[] { _biases.Length }, _biases),
+        &quot;biases&quot;
+    );
+
+    // 5. Add nodes to input list (required by JIT compiler)
+    inputNodes.Add(inputNode);
+    inputNodes.Add(weightsNode);
+    inputNodes.Add(biasesNode);
+
+    // 6. Build computation graph matching Forward() logic
+    // This example shows DenseLayer: output = (input × weights^T) + biases + activation
+
+    // Step 6a: Transpose weights for matrix multiplication
+    var weightsTransposed = TensorOperations&lt;T&gt;.Transpose(weightsNode);
+
+    // Step 6b: Matrix multiply: input × weights^T
+    var matmulResult = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, weightsTransposed);
+
+    // Step 6c: Add biases (broadcasts across batch dimension)
+    var outputNode = TensorOperations&lt;T&gt;.Add(matmulResult, biasesNode);
+
+    // Step 6d: Apply activation function
+    var activatedOutput = ApplyActivationToGraph(outputNode);
+
+    // 7. Return the final output node
+    return activatedOutput;
+}
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><strong>Symbolic batch dimension</strong>: Use <code>-1</code> in shape to indicate &quot;any batch size&quot;. This allows the same compiled graph to handle different batch sizes efficiently.</li>
+<li><strong>Match Forward() exactly</strong>: The computation graph must produce identical results to your existing <code>Forward()</code> method.</li>
+<li><strong>Parameter ordering matters</strong>: Add nodes to <code>inputNodes</code> in the order: input, then parameters (weights, biases, etc.)</li>
+<li><strong>Use TensorOperations, not IEngine</strong>: <code>TensorOperations&lt;T&gt;</code> methods return <code>ComputationNode&lt;T&gt;</code>, which is what we need.</li>
+</ul>
+<h3 id="step-2-implement-applyactivationtograph">Step 2: Implement ApplyActivationToGraph</h3>
+<p>This helper method maps your layer's configured activation to the corresponding TensorOperations method.</p>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Applies the layer's activation function to a computation graph node.
+/// Maps the layer's configured activation to the corresponding TensorOperations method.
+/// &lt;/summary&gt;
+private ComputationNode&lt;T&gt; ApplyActivationToGraph(ComputationNode&lt;T&gt; input)
+{
+    if (input == null)
+        throw new ArgumentNullException(nameof(input));
+
+    // Check scalar activation first (element-wise activations)
+    if (ScalarActivation is not null)
+    {
+        // ReLU family
+        if (ScalarActivation is ReLUActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.ReLU(input);
+        else if (ScalarActivation is LeakyReLUActivation&lt;T&gt; leakyRelu)
+            return TensorOperations&lt;T&gt;.LeakyReLU(input, leakyRelu.NegativeSlope);
+
+        // Sigmoid family
+        else if (ScalarActivation is SigmoidActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.Sigmoid(input);
+        else if (ScalarActivation is TanhActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.Tanh(input);
+        else if (ScalarActivation is SwishActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.Swish(input);
+        else if (ScalarActivation is SiLUActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.SiLU(input);
+        else if (ScalarActivation is MishActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.Mish(input);
+
+        // Modern activations
+        else if (ScalarActivation is GELUActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.GELU(input);
+        else if (ScalarActivation is ELUActivation&lt;T&gt; elu)
+            return TensorOperations&lt;T&gt;.ELU(input, elu.Alpha);
+
+        // Identity (no-op)
+        else if (ScalarActivation is IdentityActivation&lt;T&gt;)
+            return input;
+
+        // Unsupported activation
+        else
+            throw new NotSupportedException(
+                $&quot;Activation {ScalarActivation.GetType().Name} is not supported for JIT compilation yet&quot;);
+    }
+
+    // Check vector activation (operates on entire vectors)
+    if (VectorActivation is not null)
+    {
+        if (VectorActivation is SoftmaxActivation&lt;T&gt;)
+            return TensorOperations&lt;T&gt;.Softmax(input);
+        else
+            throw new NotSupportedException(
+                $&quot;Activation {VectorActivation.GetType().Name} is not supported for JIT compilation yet&quot;);
+    }
+
+    // No activation configured (identity)
+    return input;
+}
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><strong>Check both ScalarActivation and VectorActivation</strong>: Layers can have either type</li>
+<li><strong>Parameterized activations</strong>: Some activations like LeakyReLU and ELU have parameters - extract and pass them</li>
+<li><strong>Identity is a no-op</strong>: Just return the input unchanged</li>
+<li><strong>Clear error messages</strong>: Tell users which activations are not yet supported</li>
+</ul>
+<h3 id="step-3-implement-canactivationbejitted">Step 3: Implement CanActivationBeJitted</h3>
+<p>This helper method checks if the layer's current activation is supported for JIT compilation.</p>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Checks if the layer's current activation function is supported for JIT compilation.
+/// &lt;/summary&gt;
+private bool CanActivationBeJitted()
+{
+    // Check scalar activations
+    if (ScalarActivation is ReLUActivation&lt;T&gt; ||
+        ScalarActivation is SigmoidActivation&lt;T&gt; ||
+        ScalarActivation is TanhActivation&lt;T&gt; ||
+        ScalarActivation is GELUActivation&lt;T&gt; ||
+        ScalarActivation is ELUActivation&lt;T&gt; ||
+        ScalarActivation is MishActivation&lt;T&gt; ||
+        ScalarActivation is SwishActivation&lt;T&gt; ||
+        ScalarActivation is SiLUActivation&lt;T&gt; ||
+        ScalarActivation is LeakyReLUActivation&lt;T&gt; ||
+        ScalarActivation is IdentityActivation&lt;T&gt;)
+    {
+        return true;
+    }
+
+    // Check vector activations
+    if (VectorActivation is SoftmaxActivation&lt;T&gt;)
+    {
+        return true;
+    }
+
+    // No activation is fine (identity)
+    if (ScalarActivation == null &amp;&amp; VectorActivation == null)
+    {
+        return true;
+    }
+
+    return false;
+}
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><strong>Whitelist approach</strong>: Explicitly list supported activations</li>
+<li><strong>No activation = identity</strong>: Return true if no activation configured</li>
+<li><strong>Easy to extend</strong>: Just add new activation types as they're implemented</li>
+</ul>
+<h3 id="step-4-update-supportsjitcompilation">Step 4: Update SupportsJitCompilation</h3>
+<p>This property tells the framework whether the layer can be JIT compiled in its current configuration.</p>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Gets whether this layer currently supports JIT compilation.
+/// &lt;/summary&gt;
+/// &lt;value&gt;
+/// True if the layer's activation function is supported for JIT compilation.
+/// Supported activations: ReLU, Sigmoid, Tanh, GELU, ELU, Mish, Swish, SiLU, LeakyReLU, Softmax, Identity.
+/// &lt;/value&gt;
+public override bool SupportsJitCompilation =&gt; CanActivationBeJitted();
+</code></pre>
+<p><strong>Key Points:</strong></p>
+<ul>
+<li><strong>Dynamic check</strong>: Layer might support JIT with ReLU but not with a custom activation</li>
+<li><strong>Used by JIT compiler</strong>: Framework checks this before attempting compilation</li>
+<li><strong>Document supported activations</strong>: Keep XML comment updated as you add more activations</li>
+</ul>
+<h3 id="step-5-add-validation-optional-but-recommended">Step 5: Add Validation (Optional but Recommended)</h3>
+<p>For production-quality implementations, add validation to catch common errors early.</p>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Validates that the layer is ready for JIT compilation.
+/// &lt;/summary&gt;
+private void ValidateForJitCompilation()
+{
+    if (_weights == null)
+        throw new InvalidOperationException(
+            &quot;Layer weights not initialized. Call Initialize() or train the layer first.&quot;);
+
+    if (_biases == null)
+        throw new InvalidOperationException(
+            &quot;Layer biases not initialized. Call Initialize() or train the layer first.&quot;);
+
+    if (InputShape == null || InputShape.Length == 0)
+        throw new InvalidOperationException(
+            &quot;Layer input shape not configured. Set InputShape before exporting computation graph.&quot;);
+
+    if (OutputShape == null || OutputShape.Length == 0)
+        throw new InvalidOperationException(
+            &quot;Layer output shape not configured. This should be set during initialization.&quot;);
+
+    if (!CanActivationBeJitted())
+    {
+        var activationType = ScalarActivation?.GetType().Name ??
+                            VectorActivation?.GetType().Name ??
+                            &quot;unknown&quot;;
+        throw new NotSupportedException(
+            $&quot;Activation function '{activationType}' is not supported for JIT compilation. &quot; +
+            $&quot;Supported activations: ReLU, Sigmoid, Tanh, GELU, ELU, Mish, Swish, SiLU, LeakyReLU, Softmax, Identity&quot;);
+    }
+}
+</code></pre>
+<p>Then call it at the start of <code>ExportComputationGraph</code>:</p>
+<pre><code class="lang-csharp">public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+{
+    ValidateForJitCompilation();
+    // ... rest of implementation
+}
+</code></pre>
+<hr>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="pattern-1-matrix-operations">Pattern 1: Matrix Operations</h3>
+<p>Most layers perform matrix multiplication (dense, convolutional, attention, etc.):</p>
+<pre><code class="lang-csharp">// Dense layer: output = input × weights^T
+var weightsTransposed = TensorOperations&lt;T&gt;.Transpose(weightsNode);
+var output = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, weightsTransposed);
+
+// Add bias
+output = TensorOperations&lt;T&gt;.Add(output, biasesNode);
+</code></pre>
+<h3 id="pattern-2-element-wise-operations">Pattern 2: Element-wise Operations</h3>
+<p>Activation functions, batch normalization, layer normalization use element-wise ops:</p>
+<pre><code class="lang-csharp">// Element-wise multiply
+var scaled = TensorOperations&lt;T&gt;.ElementwiseMultiply(input, scaleNode);
+
+// Element-wise add
+var shifted = TensorOperations&lt;T&gt;.Add(scaled, offsetNode);
+
+// Activation
+var activated = TensorOperations&lt;T&gt;.ReLU(shifted);
+</code></pre>
+<h3 id="pattern-3-convolution-operations">Pattern 3: Convolution Operations</h3>
+<p>Convolutional layers use Conv2D:</p>
+<pre><code class="lang-csharp">// Convolution: output = Conv2D(input, kernel) + bias
+var convResult = TensorOperations&lt;T&gt;.Conv2D(
+    inputNode,
+    kernelNode,
+    stride: new[] { strideY, strideX },
+    padding: new[] { padY, padX },
+    dilation: new[] { dilationY, dilationX }
+);
+
+var withBias = TensorOperations&lt;T&gt;.Add(convResult, biasNode);
+var activated = ApplyActivationToGraph(withBias);
+</code></pre>
+<h3 id="pattern-4-pooling-operations">Pattern 4: Pooling Operations</h3>
+<p>MaxPooling and AveragePooling layers:</p>
+<pre><code class="lang-csharp">// Max pooling
+var pooled = TensorOperations&lt;T&gt;.MaxPool2D(
+    inputNode,
+    poolSize: new[] { poolHeight, poolWidth },
+    stride: new[] { strideY, strideX },
+    padding: new[] { padY, padX }
+);
+
+// Average pooling
+var pooled = TensorOperations&lt;T&gt;.AvgPool2D(
+    inputNode,
+    poolSize: new[] { poolHeight, poolWidth },
+    stride: new[] { strideY, strideX },
+    padding: new[] { padY, padX }
+);
+</code></pre>
+<h3 id="pattern-5-normalization-operations">Pattern 5: Normalization Operations</h3>
+<p>Batch normalization and layer normalization:</p>
+<pre><code class="lang-csharp">// Batch normalization
+var normalized = TensorOperations&lt;T&gt;.BatchNorm(
+    inputNode,
+    gammaNode,  // Scale parameter
+    betaNode,   // Shift parameter
+    meanNode,   // Running mean
+    varianceNode, // Running variance
+    epsilon: 1e-5
+);
+
+// Layer normalization
+var normalized = TensorOperations&lt;T&gt;.LayerNorm(
+    inputNode,
+    gammaNode,
+    betaNode,
+    epsilon: 1e-5
+);
+</code></pre>
+<h3 id="pattern-6-concatenation-and-splitting">Pattern 6: Concatenation and Splitting</h3>
+<p>Combine or split tensors:</p>
+<pre><code class="lang-csharp">// Concatenate multiple inputs
+var combined = TensorOperations&lt;T&gt;.Concat(
+    new List&lt;ComputationNode&lt;T&gt;&gt; { input1, input2, input3 },
+    axis: 1  // Concatenate along feature dimension
+);
+
+// Reshape to split
+var reshaped = TensorOperations&lt;T&gt;.Reshape(inputNode, newShape);
+</code></pre>
+<h3 id="pattern-7-attention-mechanism">Pattern 7: Attention Mechanism</h3>
+<p>Self-attention and multi-head attention:</p>
+<pre><code class="lang-csharp">// Query, Key, Value projections
+var query = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, queryWeightsNode);
+var key = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, keyWeightsNode);
+var value = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, valueWeightsNode);
+
+// Attention scores: Q × K^T / sqrt(d_k)
+var keyTransposed = TensorOperations&lt;T&gt;.Transpose(key);
+var scores = TensorOperations&lt;T&gt;.MatrixMultiply(query, keyTransposed);
+
+// Scale
+var scaleFactor = Math.Sqrt(embeddingDim);
+var scaled = TensorOperations&lt;T&gt;.Divide(scores, TensorOperations&lt;T&gt;.Constant(scaleFactor));
+
+// Softmax
+var attention = TensorOperations&lt;T&gt;.Softmax(scaled, axis: -1);
+
+// Apply attention to values
+var output = TensorOperations&lt;T&gt;.MatrixMultiply(attention, value);
+</code></pre>
+<hr>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="error-activation-x-is-not-supported-for-jit-compilation">Error: &quot;Activation X is not supported for JIT compilation&quot;</h3>
+<p><strong>Cause</strong>: Your layer uses an activation function that hasn't been added to <code>ApplyActivationToGraph</code> yet.</p>
+<p><strong>Solution</strong>:</p>
+<ol>
+<li>Check if the activation is in the supported list (see &quot;Supported Activations&quot; section)</li>
+<li>If it's listed but not working, add it to <code>CanActivationBeJitted()</code> and <code>ApplyActivationToGraph()</code></li>
+<li>If it's not listed, add the TensorOperations method first, then update your layer</li>
+</ol>
+<p><strong>Example fix</strong>:</p>
+<pre><code class="lang-csharp">// Add to CanActivationBeJitted()
+if (ScalarActivation is SELUActivation&lt;T&gt;)
+    return true;
+
+// Add to ApplyActivationToGraph()
+else if (ScalarActivation is SELUActivation&lt;T&gt;)
+    return TensorOperations&lt;T&gt;.SELU(input);
+</code></pre>
+<h3 id="error-layer-weights-not-initialized">Error: &quot;Layer weights not initialized&quot;</h3>
+<p><strong>Cause</strong>: Trying to export computation graph before calling <code>Initialize()</code> or training the layer.</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="lang-csharp">var layer = new DenseLayer&lt;float&gt;(inputSize: 784, outputSize: 128);
+layer.Initialize();  // Initialize weights and biases
+var graph = layer.ExportComputationGraph(inputNodes);
+</code></pre>
+<h3 id="error-inputshape-not-configured">Error: &quot;InputShape not configured&quot;</h3>
+<p><strong>Cause</strong>: Layer doesn't know its input dimensions.</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="lang-csharp">layer.InputShape = new int[] { 784 };  // Set before exporting graph
+</code></pre>
+<h3 id="build-error-cannot-convert-tensoroperations-result-to-expected-type">Build Error: &quot;Cannot convert TensorOperations result to expected type&quot;</h3>
+<p><strong>Cause</strong>: Using IEngine methods instead of TensorOperations methods.</p>
+<p><strong>Solution</strong>:</p>
+<pre><code class="lang-csharp">// ❌ WRONG - IEngine methods don't return ComputationNode&lt;T&gt;
+var result = _engine.MatrixMultiply(input, weights);
+
+// ✅ CORRECT - Use TensorOperations
+var result = TensorOperations&lt;T&gt;.MatrixMultiply(inputNode, weightsNode);
+</code></pre>
+<h3 id="error-backward-function-not-implemented">Error: &quot;Backward function not implemented&quot;</h3>
+<p><strong>Cause</strong>: This is expected! Gradient computation is not yet implemented.</p>
+<p><strong>Current status</strong>: Forward pass works, backward pass is placeholder.</p>
+<p><strong>Workaround</strong>: Use JIT compilation for inference only. For training, gradients will be added in a future phase.</p>
+<h3 id="performance-issue-compilation-takes-too-long">Performance Issue: Compilation takes too long</h3>
+<p><strong>Cause</strong>: Very large or complex graphs can take time to compile.</p>
+<p><strong>Solutions</strong>:</p>
+<ol>
+<li>Compile once, reuse for multiple batches</li>
+<li>Use smaller subgraphs (compile individual layers instead of entire model)</li>
+<li>Cache compiled graphs</li>
+</ol>
+<p><strong>Example</strong>:</p>
+<pre><code class="lang-csharp">// Compile once
+var compiled = jitCompiler.Compile(layer);
+
+// Reuse for many batches
+for (int i = 0; i &lt; numBatches; i++)
+{
+    var output = compiled.Execute(batch[i]);
+}
+</code></pre>
+<h3 id="shape-mismatch-expected-shape-x-y-but-got-a-b">Shape Mismatch: &quot;Expected shape [X, Y] but got [A, B]&quot;</h3>
+<p><strong>Cause</strong>: Symbolic batch dimension (-1) not handled correctly.</p>
+<p><strong>Solution</strong>: Use symbolic shapes consistently:</p>
+<pre><code class="lang-csharp">// ✅ CORRECT - Symbolic batch dimension
+var inputShape = new int[] { -1, inputSize };
+
+// ❌ WRONG - Fixed batch dimension
+var inputShape = new int[] { 32, inputSize };
+</code></pre>
+<hr>
+<h2 id="complete-example-adding-jit-support-to-convolutionallayer">Complete Example: Adding JIT Support to ConvolutionalLayer</h2>
+<p>Here's a full example showing how to add JIT compilation to <code>ConvolutionalLayer</code>:</p>
+<pre><code class="lang-csharp">public class ConvolutionalLayer&lt;T&gt; : LayerBase&lt;T&gt;
+{
+    // ... existing fields and properties ...
+
+    public override ComputationNode&lt;T&gt; ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt; inputNodes)
+    {
+        // 1. Validate
+        if (inputNodes == null)
+            throw new ArgumentNullException(nameof(inputNodes));
+
+        if (_kernels == null)
+            throw new InvalidOperationException(&quot;Kernels not initialized&quot;);
+
+        if (!CanActivationBeJitted())
+            throw new NotSupportedException($&quot;Activation not supported for JIT&quot;);
+
+        // 2. Extract dimensions
+        // InputShape: [channels, height, width]
+        int channels = InputShape[0];
+        int height = InputShape[1];
+        int width = InputShape[2];
+
+        // 3. Create input placeholder with symbolic batch
+        var inputPlaceholder = new Tensor&lt;T&gt;(new int[] { 1, channels, height, width });
+        var inputNode = TensorOperations&lt;T&gt;.Variable(inputPlaceholder, &quot;input&quot;);
+
+        // 4. Create kernel parameters
+        // Kernels shape: [numFilters, channels, kernelHeight, kernelWidth]
+        var kernelNode = TensorOperations&lt;T&gt;.Variable(
+            new Tensor&lt;T&gt;(_kernels.Shape, _kernels.ToArray()),
+            &quot;kernels&quot;
+        );
+
+        // Biases shape: [numFilters]
+        var biasNode = TensorOperations&lt;T&gt;.Variable(
+            new Tensor&lt;T&gt;(new int[] { NumFilters }, _biases),
+            &quot;biases&quot;
+        );
+
+        // 5. Add to input list
+        inputNodes.Add(inputNode);
+        inputNodes.Add(kernelNode);
+        inputNodes.Add(biasNode);
+
+        // 6. Build computation graph
+        var convResult = TensorOperations&lt;T&gt;.Conv2D(
+            inputNode,
+            kernelNode,
+            stride: new[] { StrideY, StrideX },
+            padding: new[] { PaddingY, PaddingX },
+            dilation: new[] { DilationY, DilationX }
+        );
+
+        var withBias = TensorOperations&lt;T&gt;.Add(convResult, biasNode);
+        var activated = ApplyActivationToGraph(withBias);
+
+        return activated;
+    }
+
+    private ComputationNode&lt;T&gt; ApplyActivationToGraph(ComputationNode&lt;T&gt; input)
+    {
+        if (input == null)
+            throw new ArgumentNullException(nameof(input));
+
+        if (ScalarActivation is not null)
+        {
+            if (ScalarActivation is ReLUActivation&lt;T&gt;)
+                return TensorOperations&lt;T&gt;.ReLU(input);
+            else if (ScalarActivation is SigmoidActivation&lt;T&gt;)
+                return TensorOperations&lt;T&gt;.Sigmoid(input);
+            // ... add other activations ...
+            else
+                throw new NotSupportedException($&quot;Activation {ScalarActivation.GetType().Name} not supported&quot;);
+        }
+
+        return input;
+    }
+
+    private bool CanActivationBeJitted()
+    {
+        if (ScalarActivation is ReLUActivation&lt;T&gt; ||
+            ScalarActivation is SigmoidActivation&lt;T&gt; ||
+            ScalarActivation is TanhActivation&lt;T&gt; ||
+            ScalarActivation is IdentityActivation&lt;T&gt;)
+        {
+            return true;
+        }
+
+        if (ScalarActivation == null &amp;&amp; VectorActivation == null)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    public override bool SupportsJitCompilation =&gt; CanActivationBeJitted();
+}
+</code></pre>
+<hr>
+<h2 id="next-steps">Next Steps</h2>
+<p>After implementing JIT support for your layer:</p>
+<ol>
+<li><strong>Test compilation</strong>: Ensure <code>ExportComputationGraph</code> runs without errors</li>
+<li><strong>Verify correctness</strong>: Compare JIT output with eager mode output</li>
+<li><strong>Measure performance</strong>: Benchmark to confirm speedup</li>
+<li><strong>Add more activations</strong>: Extend <code>ApplyActivationToGraph</code> as needed</li>
+<li><strong>Document</strong>: Update this guide with any new patterns you discover</li>
+</ol>
+<p>For the complete roadmap and list of layers to implement, see <a href="JIT_ROADMAP.html">JIT_ROADMAP.md</a>.</p>
+<p>For activation function reference, see <a href="JIT_ACTIVATION_MAPPING.html">JIT_ACTIVATION_MAPPING.md</a>.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/JIT_COMPILATION_PATTERN_GUIDE.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

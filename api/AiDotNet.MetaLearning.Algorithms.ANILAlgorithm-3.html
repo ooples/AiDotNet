@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ANILAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ANILAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of Almost No Inner Loop (ANIL) meta-learning algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Algorithms.ANILAlgorithm%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3" class="text-break">
+Class ANILAlgorithm&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Algorithms.html">Algorithms</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of Almost No Inner Loop (ANIL) meta-learning algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ANILAlgorithm&lt;T, TInput, TOutput&gt; : MetaLearnerBase&lt;T, TInput, TOutput&gt;, IMetaLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html">MetaLearnerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ANILAlgorithm&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearner-3.html">IMetaLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_LossFunction">MetaLearnerBase&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__options">MetaLearnerBase&lt;T, TInput, TOutput&gt;._options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_DataLoader">MetaLearnerBase&lt;T, TInput, TOutput&gt;.DataLoader</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_NumOps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_RandomGenerator">MetaLearnerBase&lt;T, TInput, TOutput&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__currentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;._currentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Engine">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_BaseModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.BaseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Options">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CurrentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CurrentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AlgorithmType">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AlgorithmType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptationSteps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptationSteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_OuterLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.OuterLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrainStep(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Train">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Train()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptAndEvaluate_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptAndEvaluate(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.GetMetaModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_SetMetaModel_AiDotNet_Interfaces_IFullModel__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.SetMetaModel(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Save_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Save(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Load_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Load(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Reset">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeGradients(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_ValueTuple__1__2____1__2__0_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeSecondOrderGradients(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;(TInput input, TOutput target)&gt;, TInput, TOutput, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ClipGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Double__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ClipGradients(Vector&lt;T&gt;, double?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CreateTaskBatch_System_Collections_Generic_IReadOnlyList_AiDotNet_Data_Structures_MetaLearningTask__0__1__2___">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CreateTaskBatch(IReadOnlyList&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ToMetaLearningTask_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ToMetaLearningTask(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeAccuracy(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeLossFromOutput__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeLossFromOutput(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ConvertToVector__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ConvertToVector(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeMean_System_Collections_Generic_List__0__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeMean(List&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CloneModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CloneModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ANIL is a simplified version of MAML that only adapts the classification head
+during inner-loop adaptation while keeping the feature extractor (body) frozen.
+This significantly reduces computation while often maintaining competitive performance.
+</p>
+<p>
+<b>Key Insight:</b> Most of the "learning to learn" ability in MAML comes from
+learning a good feature representation, not from adapting the entire network.
+By only adapting the final classification layer, ANIL achieves:
+</p>
+<ul><li>Much faster adaptation (fewer parameters to update)</li><li>Lower memory usage (no gradients stored for the body)</li><li>Comparable performance to full MAML in many scenarios</li></ul>
+<p>
+<b>For Beginners:</b> Think of a neural network as having two parts:
+</p>
+<p>
+1. <b>Body (Feature Extractor):</b> Like learning to see and understand images
+2. <b>Head (Classifier):</b> Like learning which button to press for each category
+</p>
+<p>
+ANIL says: "The 'seeing' part is general enough - we just need to learn
+which button to press for each new task!" So it only updates the button-pressing
+part (head) and keeps the seeing part (body) fixed during adaptation.
+</p>
+<p>
+<b>Algorithm (MAML-style with head-only adaptation):</b>
+<pre><code class="lang-csharp">For each task batch:
+  For each task:
+    1. Clone the classification head parameters
+    2. Freeze body, only compute gradients for head
+    3. For each adaptation step:
+       a. Forward pass through body (frozen) + head
+       b. Compute loss on support set
+       c. Update ONLY head parameters
+    4. Evaluate adapted head on query set
+  Meta-update: body (outer loop) + head initialization (inner loop starting point)</code></pre>
+
+<p>
+Reference: Raghu, A., Raghu, M., Bengio, S., &amp; Vinyals, O. (2020).
+Rapid Learning or Feature Reuse? Towards Understanding the Effectiveness of MAML.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3__ctor_" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_ANILOptions__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.#ctor(AiDotNet.MetaLearning.Options.ANILOptions{`0,`1,`2})">
+  ANILAlgorithm(ANILOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ANILAlgorithm class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ANILAlgorithm(ANILOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.MetaLearning.Options.ANILOptions-3.html">ANILOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>ANIL configuration options containing the model and all hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_ANILOptions__0__1__2___examples">Examples</h4>
+  <pre><code class="lang-csharp">// Create ANIL with minimal configuration
+var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork);
+var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);
+
+// Create ANIL with custom configuration
+var options = new ANILOptions&lt;double, Tensor, Tensor&gt;(myNeuralNetwork)
+{
+    AdaptationSteps = 5,
+    InnerLearningRate = 0.01,
+    NumClasses = 5,
+    FeatureDimension = 512
+};
+var anil = new ANILAlgorithm&lt;double, Tensor, Tensor&gt;(options);</code></pre>
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when options is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when required components are not set in options.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_AlgorithmType_" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.AlgorithmType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_AlgorithmType" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.AlgorithmType">
+  AlgorithmType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the algorithm type identifier for this meta-learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override MetaLearningAlgorithmType AlgorithmType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html">MetaLearningAlgorithmType</a></dt>
+    <dd><p>Returns <a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html#AiDotNet_MetaLearning_MetaLearningAlgorithmType_ANIL">ANIL</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_AlgorithmType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property identifies the algorithm as ANIL (Almost No Inner Loop),
+a simplified MAML variant that only adapts the classification head.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_Adapt_" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.Adapt*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.Adapt(AiDotNet.Interfaces.IMetaLearningTask{`0,`1,`2})">
+  Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts the meta-learned model to a new task by only updating the classification head.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt; Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The new task containing support set examples for adaptation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new model instance that has been adapted to the given task with an updated head.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+ANIL adaptation is significantly faster than full MAML adaptation because
+only the classification head parameters are updated.
+</p>
+<p>
+<b>Adaptation Process:</b>
+1. Clone the meta-learned head parameters
+2. Optionally reinitialize head (if configured)
+3. For each adaptation step:
+   a. Forward pass: frozen body + current head
+   b. Compute loss on support set
+   c. Update head parameters with gradient descent
+4. Return model with frozen body + adapted head
+</p>
+<p>
+<b>For Beginners:</b> When you give ANIL a new task:
+1. It keeps its "vision" (feature extractor) exactly the same
+2. It only retrains the "decision maker" (classifier head)
+3. This is like teaching someone who already knows how to see,
+   just teaching them what labels to assign to things
+</p>
+<p>
+<b>Speed Advantage:</b> If your network has 1 million parameters and the head
+has only 5000, ANIL updates 200x fewer parameters per adaptation step!
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when task is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_MetaTrain_" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.MetaTrain*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.ANILAlgorithm`3.MetaTrain(AiDotNet.MetaLearning.Data.TaskBatch{`0,`1,`2})">
+  MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one meta-training step using ANIL's head-only adaptation approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt; taskBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskBatch</code> <a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A batch of tasks to meta-train on, each containing support and query sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The average meta-loss across all tasks in the batch (evaluated on query sets).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_ANILAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+ANIL meta-training is a simplified version of MAML:
+</p>
+<p>
+<b>ANIL Inner Loop (per task):</b>
+1. Clone the head parameters from the meta-learned initialization
+2. Keep body parameters frozen (no gradients computed for body)
+3. Perform gradient descent on head parameters using support set
+4. Evaluate adapted model on query set
+</p>
+<p>
+<b>ANIL Outer Loop:</b>
+1. Accumulate gradients from all tasks' query losses
+2. Update body parameters to improve feature extraction
+3. Update head initialization to provide better starting point
+</p>
+<p>
+<b>Key Differences from MAML:</b>
+- Only head parameters are updated in inner loop
+- Body parameters are only updated in outer loop
+- First-order approximation is typically used
+- Much faster per-iteration (fewer parameters to track)
+</p>
+<p>
+<b>For Beginners:</b> ANIL learns two things:
+1. A good feature extractor that works for all tasks (updated in outer loop)
+2. A good starting point for the classifier head (adapted per task)
+<p>During adaptation, only the classifier changes - the &quot;vision system&quot; stays fixed.
+This is much faster because the classifier is much smaller than the full network.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the task batch is null or empty.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when meta-gradient computation fails.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/ANILAlgorithm.cs/#L66" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

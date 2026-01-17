@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DataLoaders | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DataLoaders | AiDotNet Documentation ">
+      
+      <meta name="description" content="Static factory class for creating data loaders with beginner-friendly methods.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Loaders_DataLoaders.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Loaders.DataLoaders%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Loaders.DataLoaders">
+
+
+
+  <h1 id="AiDotNet_Data_Loaders_DataLoaders" data-uid="AiDotNet.Data.Loaders.DataLoaders" class="text-break">
+Class DataLoaders  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Loaders.html">Loaders</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Static factory class for creating data loaders with beginner-friendly methods.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class DataLoaders</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DataLoaders</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Loaders_DataLoaders_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DataLoaders provides the easiest way to create data loaders for common scenarios.
+It follows a factory pattern with static methods that handle type inference and
+common configurations automatically.
+</p>
+<p><b>For Beginners:</b> This is your starting point for loading data into AiDotNet!
+Choose the method that matches your data format:
+<p><strong>Common Patterns:</strong></p>
+<pre><code class="lang-csharp">// From arrays (simplest for small datasets)
+var loader = DataLoaders.FromArrays(features, labels);
+
+// From Matrix and Vector (most common for ML)
+var loader = DataLoaders.FromMatrixVector(featureMatrix, labelVector);
+
+// From Tensors (for deep learning)
+var loader = DataLoaders.FromTensors(inputTensor, outputTensor);
+</code></pre>
+<p>All loaders support:</p>
+<ul>
+<li>Batching: <code>loader.BatchSize = 32;</code></li>
+<li>Shuffling: <code>loader.Shuffle();</code></li>
+<li>Splitting: <code>var (train, val, test) = loader.Split();</code></li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_Empty_" data-uid="AiDotNet.Data.Loaders.DataLoaders.Empty*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_Empty__1" data-uid="AiDotNet.Data.Loaders.DataLoaders.Empty``1">
+  Empty&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty data loader placeholder (useful for meta-learning or custom scenarios).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; Empty&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A data loader with empty data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_Empty__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> You typically won't need this method.
+It's used for advanced scenarios where data is loaded dynamically or for meta-learning tasks
+that don't use traditional supervised learning data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromArrays_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_0__0_____0___" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays``1(``0[0:,0:],``0[])">
+  FromArrays&lt;T&gt;(T[,], T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from 2D feature array and 1D label array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; FromArrays&lt;T&gt;(T[,] features, T[] labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> T[,]</dt>
+    <dd><p>2D array where rows are samples and columns are features.</p>
+</dd>
+    <dt><code>labels</code> T[]</dt>
+    <dd><p>1D array of labels, one per sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_0__0_____0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the simplest way to load tabular data.
+<p><strong>Example - Predicting House Prices:</strong></p>
+<pre><code class="lang-csharp">// Features: [sqft, bedrooms, bathrooms]
+double[,] features = new double[,] {
+    { 1500, 3, 2 },
+    { 2000, 4, 3 },
+    { 1200, 2, 1 }
+};
+
+// Labels: price
+double[] labels = { 300000, 450000, 250000 };
+
+var loader = DataLoaders.FromArrays(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromArrays_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_____0___" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays``1(``0[],``0[])">
+  FromArrays&lt;T&gt;(T[], T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from 1D feature array (single feature) and 1D label array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; FromArrays&lt;T&gt;(T[] features, T[] labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> T[]</dt>
+    <dd><p>1D array of single feature values.</p>
+</dd>
+    <dt><code>labels</code> T[]</dt>
+    <dd><p>1D array of labels, one per sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_____0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this for simple regression with one input variable.
+<p><strong>Example - Simple Linear Regression:</strong></p>
+<pre><code class="lang-csharp">// X: study hours
+double[] features = { 1, 2, 3, 4, 5 };
+// Y: test scores
+double[] labels = { 50, 60, 70, 80, 90 };
+
+var loader = DataLoaders.FromArrays(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when lengths don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromArrays_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_______0___" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromArrays``1(``0[][],``0[])">
+  FromArrays&lt;T&gt;(T[][], T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from jagged feature array and 1D label array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; FromArrays&lt;T&gt;(T[][] features, T[] labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> T[][]</dt>
+    <dd><p>Jagged array where each inner array is a sample's features.</p>
+</dd>
+    <dt><code>labels</code> T[]</dt>
+    <dd><p>1D array of labels, one per sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromArrays__1___0_______0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this when your data is in jagged array format.
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">double[][] features = {
+    new[] { 1.0, 2.0, 3.0 },
+    new[] { 4.0, 5.0, 6.0 },
+    new[] { 7.0, 8.0, 9.0 }
+};
+double[] labels = { 0, 1, 0 };
+
+var loader = DataLoaders.FromArrays(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions don't match or arrays are inconsistent.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromCsv_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromCsv*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromCsv__3_System_String_System_Func_System_String_System_Int32_System_ValueTuple___1___2___System_Int32_System_Boolean_System_Int32_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromCsv``3(System.String,System.Func{System.String,System.Int32,System.ValueTuple{``1,``2}},System.Int32,System.Boolean,System.Int32)">
+  FromCsv&lt;T, TInput, TOutput&gt;(string, Func&lt;string, int, (TInput, TOutput)&gt;, int, bool, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L695"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a streaming data loader from a CSV file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CsvStreamingDataLoader&lt;T, TInput, TOutput&gt; FromCsv&lt;T, TInput, TOutput&gt;(string filePath, Func&lt;string, int, (TInput, TOutput)&gt; lineParser, int batchSize, bool hasHeader = true, int prefetchCount = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the CSV file.</p>
+</dd>
+    <dt><code>lineParser</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, (TInput, TOutput)&gt;</dt>
+    <dd><p>Function that parses a CSV line into (input, output).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>hasHeader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether the CSV has a header row to skip. Default is true.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch. Default is 2.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.CsvStreamingDataLoader-3.html">CsvStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A CSV streaming data loader.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for each row.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output/label data type for each row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromCsv__3_System_String_System_Func_System_String_System_Int32_System_ValueTuple___1___2___System_Int32_System_Boolean_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this for large CSV files that don't fit in memory.
+The file is read line by line during training.
+<p><strong>Example - Large Tabular Dataset:</strong></p>
+<pre><code class="lang-csharp">var loader = DataLoaders.FromCsv&lt;double, double[], double&gt;(
+    filePath: &quot;data/huge_dataset.csv&quot;,
+    lineParser: (line, lineNumber) =&gt;
+    {
+        var parts = line.Split(',');
+        var features = parts.Take(10).Select(double.Parse).ToArray();
+        var label = double.Parse(parts[10]);
+        return (features, label);
+    },
+    batchSize: 256,
+    hasHeader: true
+);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromDirectory_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromDirectory*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromDirectory__3_System_String_System_String_System_Func_System_String_System_Threading_CancellationToken_System_Threading_Tasks_Task_System_ValueTuple___1___2____System_Int32_System_IO_SearchOption_System_Int32_System_Int32_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromDirectory``3(System.String,System.String,System.Func{System.String,System.Threading.CancellationToken,System.Threading.Tasks.Task{System.ValueTuple{``1,``2}}},System.Int32,System.IO.SearchOption,System.Int32,System.Int32)">
+  FromDirectory&lt;T, TInput, TOutput&gt;(string, string, Func&lt;string, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt;, int, SearchOption, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L619"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a streaming data loader from a directory of files.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static FileStreamingDataLoader&lt;T, TInput, TOutput&gt; FromDirectory&lt;T, TInput, TOutput&gt;(string directory, string filePattern, Func&lt;string, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt; fileProcessor, int batchSize, SearchOption searchOption = SearchOption.TopDirectoryOnly, int prefetchCount = 2, int numWorkers = 4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>directory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The directory containing data files.</p>
+</dd>
+    <dt><code>filePattern</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The file pattern to match (e.g., &quot;<em>.png&quot;, &quot;</em>.csv&quot;).</p>
+</dd>
+    <dt><code>fileProcessor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;(TInput, TOutput)&gt;&gt;</dt>
+    <dd><p>Function that processes a file and returns (input, output).</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>searchOption</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.searchoption">SearchOption</a></dt>
+    <dd><p>Whether to search subdirectories. Default is TopDirectoryOnly.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch. Default is 2.</p>
+</dd>
+    <dt><code>numWorkers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parallel workers. Default is 4.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.FileStreamingDataLoader-3.html">FileStreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A file streaming data loader.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for each sample.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output/label data type for each sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromDirectory__3_System_String_System_String_System_Func_System_String_System_Threading_CancellationToken_System_Threading_Tasks_Task_System_ValueTuple___1___2____System_Int32_System_IO_SearchOption_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this when you have a folder of data files (images, audio, etc.)
+that you want to stream during training.
+<p><strong>Example - Image Dataset:</strong></p>
+<pre><code class="lang-csharp">var loader = DataLoaders.FromDirectory&lt;float, float[], int&gt;(
+    directory: &quot;data/images&quot;,
+    filePattern: &quot;*.png&quot;,
+    fileProcessor: async (filePath, ct) =&gt;
+    {
+        var pixels = await LoadImagePixelsAsync(filePath, ct);
+        var label = ParseLabelFromFilename(filePath);
+        return (pixels, label);
+    },
+    batchSize: 64
+);
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromLeafFederatedJsonFiles_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromLeafFederatedJsonFiles*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromLeafFederatedJsonFiles__1_System_String_System_String_AiDotNet_FederatedLearning_Benchmarks_Leaf_LeafFederatedDatasetLoadOptions_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromLeafFederatedJsonFiles``1(System.String,System.String,AiDotNet.FederatedLearning.Benchmarks.Leaf.LeafFederatedDatasetLoadOptions)">
+  FromLeafFederatedJsonFiles&lt;T&gt;(string, string?, LeafFederatedDatasetLoadOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L415"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a LEAF federated data loader from LEAF benchmark JSON files.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static LeafFederatedDataLoader&lt;T&gt; FromLeafFederatedJsonFiles&lt;T&gt;(string trainFilePath, string? testFilePath = null, LeafFederatedDatasetLoadOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainFilePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the LEAF train split JSON file.</p>
+</dd>
+    <dt><code>testFilePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional path to the LEAF test split JSON file.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.FederatedLearning.Benchmarks.Leaf.LeafFederatedDatasetLoadOptions.html">LeafFederatedDatasetLoadOptions</a></dt>
+    <dd><p>Optional LEAF load options (subset, validation).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.LeafFederatedDataLoader-1.html">LeafFederatedDataLoader</a>&lt;T&gt;</dt>
+    <dd><p>A configured LEAF data loader ready for federated learning.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromLeafFederatedJsonFiles__1_System_String_System_String_AiDotNet_FederatedLearning_Benchmarks_Leaf_LeafFederatedDatasetLoadOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> LEAF is a standard federated learning benchmark suite where each "user" is treated as one client.
+This loader keeps that per-client split intact so federated learning simulations match the benchmark.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromMatrices_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromMatrices*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromMatrices__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromMatrices``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Matrix{``0})">
+  FromMatrices&lt;T&gt;(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from a feature Matrix and label Matrix (for multi-output regression).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Matrix&lt;T&gt;&gt; FromMatrices&lt;T&gt;(Matrix&lt;T&gt; features, Matrix&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where rows are samples and columns are features.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where rows are samples and columns are output dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromMatrices__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this when predicting multiple outputs simultaneously.
+<p><strong>Example - Predicting Multiple Properties:</strong></p>
+<pre><code class="lang-csharp">// Input: molecule features
+var features = new Matrix&lt;double&gt;(100, 10);
+
+// Output: multiple properties (e.g., toxicity, solubility, binding affinity)
+var labels = new Matrix&lt;double&gt;(100, 3);
+
+var loader = DataLoaders.FromMatrices(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when row counts don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromMatrixVector_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromMatrixVector__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromMatrixVector``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  FromMatrixVector&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from a feature Matrix and label Vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; FromMatrixVector&lt;T&gt;(Matrix&lt;T&gt; features, Vector&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where rows are samples and columns are features.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of labels, one per sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromMatrixVector__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the most common format for machine learning.
+Use this when you already have Matrix and Vector objects.
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">var features = new Matrix&lt;double&gt;(100, 5);  // 100 samples, 5 features
+var labels = new Vector&lt;double&gt;(100);       // 100 labels
+
+// Fill your data...
+
+var loader = DataLoaders.FromMatrixVector(features, labels);
+
+// Use with PredictionModelBuilder
+var result = await builder
+    .ConfigureDataLoader(loader)
+    .ConfigureModel(model)
+    .BuildAsync();
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when row count doesn't match label count.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromTensorVector_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromTensorVector*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromTensorVector__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromTensorVector``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  FromTensorVector&lt;T&gt;(Tensor&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from a Tensor of features and a Vector of labels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Tensor&lt;T&gt;, Vector&lt;T&gt;&gt; FromTensorVector&lt;T&gt;(Tensor&lt;T&gt; features, Vector&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input tensor where first dimension is batch/samples.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of labels, one per sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromTensorVector__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Vector___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Common pattern for classification with complex inputs.
+<p><strong>Example - Image Classification with Class Labels:</strong></p>
+<pre><code class="lang-csharp">// Input: images as tensor
+var features = new Tensor&lt;float&gt;([1000, 28, 28, 1]);
+
+// Output: class indices (0-9)
+var labels = new Vector&lt;float&gt;(1000);  // Contains values 0-9
+
+var loader = DataLoaders.FromTensorVector(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when sample counts don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_FromTensors_" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromTensors*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_FromTensors__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__" data-uid="AiDotNet.Data.Loaders.DataLoaders.FromTensors``1(AiDotNet.Tensors.LinearAlgebra.Tensor{``0},AiDotNet.Tensors.LinearAlgebra.Tensor{``0})">
+  FromTensors&lt;T&gt;(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader from input and output Tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; FromTensors&lt;T&gt;(Tensor&lt;T&gt; features, Tensor&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input tensor where first dimension is batch/samples.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Output tensor where first dimension is batch/samples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader ready for training.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_FromTensors__1_AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use tensors for deep learning with multi-dimensional data.
+<p><strong>Example - Image Classification:</strong></p>
+<pre><code class="lang-csharp">// Input: 1000 images, 28x28 pixels, 1 channel (grayscale)
+var features = new Tensor&lt;float&gt;([1000, 28, 28, 1]);
+
+// Output: 1000 labels, 10 classes (one-hot encoded)
+var labels = new Tensor&lt;float&gt;([1000, 10]);
+
+var loader = DataLoaders.FromTensors(features, labels);
+</code></pre>
+<p><strong>Example - Sequence Data:</strong></p>
+<pre><code class="lang-csharp">// Input: 500 sequences, 100 time steps, 32 features per step
+var features = new Tensor&lt;double&gt;([500, 100, 32]);
+
+// Output: 500 predictions
+var labels = new Tensor&lt;double&gt;([500, 1]);
+
+var loader = DataLoaders.FromTensors(features, labels);
+</code></pre>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when features or labels is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when sample counts don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_ModelNet40Classification_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ModelNet40Classification*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_ModelNet40Classification__1_AiDotNet_Data_Geometry_ModelNet40ClassificationDataLoaderOptions_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ModelNet40Classification``1(AiDotNet.Data.Geometry.ModelNet40ClassificationDataLoaderOptions)">
+  ModelNet40Classification&lt;T&gt;(ModelNet40ClassificationDataLoaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L484"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a ModelNet40 classification data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ModelNet40ClassificationDataLoader&lt;T&gt; ModelNet40Classification&lt;T&gt;(ModelNet40ClassificationDataLoaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Data.Geometry.ModelNet40ClassificationDataLoaderOptions.html">ModelNet40ClassificationDataLoaderOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Geometry.ModelNet40ClassificationDataLoader-1.html">ModelNet40ClassificationDataLoader</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_ScanNetSemanticSegmentation_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ScanNetSemanticSegmentation*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_ScanNetSemanticSegmentation__1_AiDotNet_Data_Geometry_ScanNetSemanticSegmentationDataLoaderOptions_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ScanNetSemanticSegmentation``1(AiDotNet.Data.Geometry.ScanNetSemanticSegmentationDataLoaderOptions)">
+  ScanNetSemanticSegmentation&lt;T&gt;(ScanNetSemanticSegmentationDataLoaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L502"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a ScanNet semantic segmentation data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ScanNetSemanticSegmentationDataLoader&lt;T&gt; ScanNetSemanticSegmentation&lt;T&gt;(ScanNetSemanticSegmentationDataLoaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Data.Geometry.ScanNetSemanticSegmentationDataLoaderOptions.html">ScanNetSemanticSegmentationDataLoaderOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Geometry.ScanNetSemanticSegmentationDataLoader-1.html">ScanNetSemanticSegmentationDataLoader</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_ShapeNetCorePartSegmentation_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ShapeNetCorePartSegmentation*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_ShapeNetCorePartSegmentation__1_AiDotNet_Data_Geometry_ShapeNetCorePartSegmentationDataLoaderOptions_" data-uid="AiDotNet.Data.Loaders.DataLoaders.ShapeNetCorePartSegmentation``1(AiDotNet.Data.Geometry.ShapeNetCorePartSegmentationDataLoaderOptions)">
+  ShapeNetCorePartSegmentation&lt;T&gt;(ShapeNetCorePartSegmentationDataLoaderOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L493"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a ShapeNetCore part segmentation data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static ShapeNetCorePartSegmentationDataLoader&lt;T&gt; ShapeNetCorePartSegmentation&lt;T&gt;(ShapeNetCorePartSegmentationDataLoaderOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Data.Geometry.ShapeNetCorePartSegmentationDataLoaderOptions.html">ShapeNetCorePartSegmentationDataLoaderOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Geometry.ShapeNetCorePartSegmentationDataLoader-1.html">ShapeNetCorePartSegmentationDataLoader</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_Streaming_" data-uid="AiDotNet.Data.Loaders.DataLoaders.Streaming*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_Streaming__3_System_Int32_System_Func_System_Int32_System_Threading_CancellationToken_System_Threading_Tasks_Task_System_ValueTuple___1___2____System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Data.Loaders.DataLoaders.Streaming``3(System.Int32,System.Func{System.Int32,System.Threading.CancellationToken,System.Threading.Tasks.Task{System.ValueTuple{``1,``2}}},System.Int32,System.Int32,System.Int32)">
+  Streaming&lt;T, TInput, TOutput&gt;(int, Func&lt;int, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt;, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L549"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a streaming data loader that reads samples on-demand.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static StreamingDataLoader&lt;T, TInput, TOutput&gt; Streaming&lt;T, TInput, TOutput&gt;(int sampleCount, Func&lt;int, CancellationToken, Task&lt;(TInput, TOutput)&gt;&gt; sampleReader, int batchSize, int prefetchCount = 2, int numWorkers = 4)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sampleCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total number of samples in the dataset.</p>
+</dd>
+    <dt><code>sampleReader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;(TInput, TOutput)&gt;&gt;</dt>
+    <dd><p>Async function that reads a single sample by index.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of samples per batch.</p>
+</dd>
+    <dt><code>prefetchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of batches to prefetch. Default is 2.</p>
+</dd>
+    <dt><code>numWorkers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of parallel workers. Default is 4.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.StreamingDataLoader-3.html">StreamingDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A streaming data loader.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for each sample.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output/label data type for each sample.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_Streaming__3_System_Int32_System_Func_System_Int32_System_Threading_CancellationToken_System_Threading_Tasks_Task_System_ValueTuple___1___2____System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Use this when your dataset is too large to fit in memory.
+The sampleReader function is called on-demand to load individual samples.
+<p><strong>Example - Loading Images:</strong></p>
+<pre><code class="lang-csharp">var loader = DataLoaders.Streaming&lt;float, float[], int&gt;(
+    sampleCount: 1000000,
+    sampleReader: async (index, ct) =&gt;
+    {
+        var image = await LoadImageAsync($&quot;images/{index}.png&quot;, ct);
+        var label = GetLabel(index);
+        return (image, label);
+    },
+    batchSize: 32
+);
+
+await foreach (var batch in loader.GetBatchesAsync())
+{
+    await model.TrainOnBatchAsync(batch.Inputs, batch.Outputs);
+}
+</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Loaders_DataLoaders_WithBatchSize_" data-uid="AiDotNet.Data.Loaders.DataLoaders.WithBatchSize*"></a>
+
+  <h3 id="AiDotNet_Data_Loaders_DataLoaders_WithBatchSize__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_" data-uid="AiDotNet.Data.Loaders.DataLoaders.WithBatchSize``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},System.Int32)">
+  WithBatchSize&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L467"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a data loader with pre-configured batch size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static InMemoryDataLoader&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; WithBatchSize&lt;T&gt;(Matrix&lt;T&gt; features, Vector&lt;T&gt; labels, int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix where rows are samples and columns are features.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of labels, one per sample.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The batch size for iteration.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Loaders.InMemoryDataLoader-3.html">InMemoryDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A configured InMemoryDataLoader with the specified batch size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type (float, double, etc.).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Loaders_DataLoaders_WithBatchSize__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Batch size determines how many samples are processed together.
+Common values:
+- 32: Good default for most cases
+- 16-64: Standard range for GPU training
+- 1: Stochastic gradient descent (slowest but most updates)
+- Full dataset: Batch gradient descent (fewer updates but more stable)
+<p><strong>Example:</strong></p>
+<pre><code class="lang-csharp">var loader = DataLoaders.WithBatchSize(features, labels, batchSize: 64);
+</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Loaders/DataLoaders.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

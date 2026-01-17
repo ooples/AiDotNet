@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NodeClassificationTask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NodeClassificationTask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a node classification task where the goal is to predict labels for individual nodes.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Structures_NodeClassificationTask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Structures.NodeClassificationTask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1">
+
+
+
+  <h1 id="AiDotNet_Data_Structures_NodeClassificationTask_1" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1" class="text-break">
+Class NodeClassificationTask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Structures.html">Structures</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a node classification task where the goal is to predict labels for individual nodes.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NodeClassificationTask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NodeClassificationTask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Structures_NodeClassificationTask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Node classification is a fundamental graph learning task where each node in a graph has a label,
+and the goal is to predict labels for unlabeled nodes based on:
+- Node features
+- Graph structure (connections between nodes)
+- Labels of neighboring nodes
+</p>
+<p><b>For Beginners:</b> Node classification is like categorizing people in a social network.
+<p><strong>Real-world examples:</strong></p>
+<p><strong>Social Networks:</strong></p>
+<ul>
+<li>Nodes: Users</li>
+<li>Task: Predict user interests/communities</li>
+<li>How: Use profile features + friend connections</li>
+<li>Example: &quot;Is this user interested in sports?&quot;</li>
+</ul>
+<p><strong>Citation Networks:</strong></p>
+<ul>
+<li>Nodes: Research papers</li>
+<li>Task: Classify paper topics</li>
+<li>How: Use paper abstracts + citation links</li>
+<li>Example: Papers citing each other often share topics</li>
+</ul>
+<p><strong>Fraud Detection:</strong></p>
+<ul>
+<li>Nodes: Financial accounts</li>
+<li>Task: Detect fraudulent accounts</li>
+<li>How: Use transaction patterns + account relationships</li>
+<li>Example: Fraudsters often form connected clusters</li>
+</ul>
+<p><strong>Key Insight:</strong> Node classification leverages the graph structure. Connected nodes often
+share similar properties (homophily), so a node's neighbors provide valuable information
+for prediction.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_Graph_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.Graph*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_Graph" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.Graph">
+  Graph
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The graph data containing nodes, edges, and features.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GraphData&lt;T&gt; Graph { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_NodeClassificationTask_1_Graph_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is the complete graph structure. In semi-supervised node classification,
+some nodes have known labels (training set) and others don't (test set).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_IsMultiLabel_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.IsMultiLabel*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_IsMultiLabel" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.IsMultiLabel">
+  IsMultiLabel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether this is a multi-label classification task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsMultiLabel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_NodeClassificationTask_1_IsMultiLabel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><ul>
+<li>False: Each node has exactly one label (e.g., paper topic)</li>
+<li>True: Each node can have multiple labels (e.g., user interests)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_Labels_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.Labels*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_Labels" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.Labels">
+  Labels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Node labels for all nodes in the graph.
+Shape: [num_nodes] for single-label or [num_nodes, num_classes] for multi-label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Labels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_NodeClassificationTask_1_Labels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>In semi-supervised settings, labels for test nodes are only used for evaluation,
+not during training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_NumClasses_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.NumClasses*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_NumClasses" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.NumClasses">
+  NumClasses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of classes in the classification task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumClasses { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_TestIndices_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.TestIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_TestIndices" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.TestIndices">
+  TestIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indices of nodes to use for testing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] TestIndices { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_TrainIndices_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.TrainIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_TrainIndices" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.TrainIndices">
+  TrainIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indices of nodes to use for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] TrainIndices { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_NodeClassificationTask_1_TrainIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> In semi-supervised node classification, we typically have:
+- Small set of labeled nodes for training (5-20% of nodes)
+- Larger set of unlabeled nodes for testing
+<p>This split simulates real-world scenarios where getting labels is expensive.
+For example, manually labeling research papers by topic requires expert knowledge.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_NodeClassificationTask_1_ValIndices_" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.ValIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_NodeClassificationTask_1_ValIndices" data-uid="AiDotNet.Data.Structures.NodeClassificationTask`1.ValIndices">
+  ValIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indices of nodes to use for validation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] ValIndices { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/NodeClassificationTask.cs/#L44" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

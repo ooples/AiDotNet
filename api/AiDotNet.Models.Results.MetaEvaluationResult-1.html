@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MetaEvaluationResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MetaEvaluationResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Results from evaluating a meta-learner across multiple tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_MetaEvaluationResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.MetaEvaluationResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_MetaEvaluationResult_1" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1" class="text-break">
+Class MetaEvaluationResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Results from evaluating a meta-learner across multiple tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MetaEvaluationResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double, decimal).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MetaEvaluationResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_MetaEvaluationResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class aggregates evaluation metrics from multiple tasks to assess meta-learning performance.
+It uses the existing BasicStats infrastructure to provide comprehensive statistical analysis
+of how well the meta-learner adapts to new tasks.
+</p>
+<p><b>For Beginners:</b> Meta-learning evaluation tests how well your model can quickly learn new tasks.
+<p>This result tells you:</p>
+<ul>
+<li><b>Average accuracy:</b> How well the model performs on new tasks after quick adaptation</li>
+<li><b>Consistency:</b> How much performance varies across different tasks (standard deviation)</li>
+<li><b>Confidence:</b> Statistical confidence intervals for the results</li>
+<li><b>Per-task details:</b> Individual task results for deep analysis</li>
+</ul>
+<p>For example, if you're doing 5-way 1-shot classification:</p>
+<ul>
+<li>You sample many test tasks (e.g., 100 tasks)</li>
+<li>For each task, the model sees 1 example per class and must classify new examples</li>
+<li>This result aggregates accuracy and loss across all those tasks</li>
+<li>Higher mean accuracy and lower standard deviation indicate better meta-learning</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1__ctor_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_TimeSpan_System_Collections_Generic_Dictionary_System_String__0__" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.TimeSpan,System.Collections.Generic.Dictionary{System.String,`0})">
+  MetaEvaluationResult(Vector&lt;T&gt;, Vector&lt;T&gt;, TimeSpan, Dictionary&lt;string, T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with task results and calculates all statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MetaEvaluationResult(Vector&lt;T&gt; taskAccuracies, Vector&lt;T&gt; taskLosses, TimeSpan evaluationTime, Dictionary&lt;string, T&gt;? additionalMetrics = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskAccuracies</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Accuracy values from all evaluated tasks.</p>
+</dd>
+    <dt><code>taskLosses</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Loss values from all evaluated tasks.</p>
+</dd>
+    <dt><code>evaluationTime</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>Time taken for evaluation.</p>
+</dd>
+    <dt><code>additionalMetrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>Optional algorithm-specific metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1__ctor_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_TimeSpan_System_Collections_Generic_Dictionary_System_String__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor follows the established pattern of calculating statistics in the constructor.
+It uses the existing BasicStats infrastructure to compute comprehensive statistics from the
+raw per-task values, ensuring consistency with other result classes in the codebase.
+</p>
+<p><b>For Beginners:</b> This constructor takes your raw task results and automatically
+calculates all the statistical summaries (mean, std dev, etc.).
+<p>You typically call this from meta-learning evaluation code after collecting results
+from many tasks. The constructor does all the statistical work for you.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when taskAccuracies or taskLosses is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when vectors have different lengths or are empty.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_AccuracyStats_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.AccuracyStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_AccuracyStats" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.AccuracyStats">
+  AccuracyStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets comprehensive statistics for accuracy across all evaluated tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BasicStats&lt;T&gt; AccuracyStats { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.BasicStats-1.html">BasicStats</a>&lt;T&gt;</dt>
+    <dd><p>BasicStats containing mean, standard deviation, median, quartiles, and distribution metrics
+for accuracy values across tasks. Accuracy is measured on query sets after adaptation.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_AccuracyStats_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This contains all the statistical measures for accuracy:
+- Mean: The average accuracy across all tasks
+- StandardDeviation: How much accuracy varies between tasks
+- Median: The middle accuracy value (less affected by outliers)
+- Min/Max: The worst and best task accuracies
+<p>Lower standard deviation means the model consistently performs well across different tasks.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_AdditionalMetrics_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.AdditionalMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_AdditionalMetrics" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.AdditionalMetrics">
+  AdditionalMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets algorithm-specific metrics that don't fit standard categories.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, T&gt; AdditionalMetrics { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A dictionary of custom metrics with generic T values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_AdditionalMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Common additional metrics include:
+- "support_accuracy": Accuracy on support sets (should be very high)
+- "adaptation_time_ms": Average time per task adaptation
+- "convergence_rate": How quickly inner loop converged
+- "gradient_magnitude": Size of adaptation gradients
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_EvaluationTime_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.EvaluationTime*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_EvaluationTime" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.EvaluationTime">
+  EvaluationTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total time taken for evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan EvaluationTime { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd><p>The elapsed time for evaluating all tasks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_LossStats_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.LossStats*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_LossStats" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.LossStats">
+  LossStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets comprehensive statistics for loss across all evaluated tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BasicStats&lt;T&gt; LossStats { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.BasicStats-1.html">BasicStats</a>&lt;T&gt;</dt>
+    <dd><p>BasicStats containing mean, standard deviation, median, quartiles, and distribution metrics
+for loss values across tasks. Loss is measured on query sets after adaptation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_NumTasks_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.NumTasks*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_NumTasks" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.NumTasks">
+  NumTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of tasks used for evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumTasks { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total count of tasks sampled and evaluated.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_NumTasks_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> More tasks give more reliable statistics.
+<p>Typical values:</p>
+<ul>
+<li>Research papers: 600-1000 tasks for final evaluation</li>
+<li>Quick validation: 100-200 tasks</li>
+<li>Debugging: 10-50 tasks</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_PerTaskAccuracies_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.PerTaskAccuracies*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_PerTaskAccuracies" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.PerTaskAccuracies">
+  PerTaskAccuracies
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the individual accuracy values for each evaluated task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PerTaskAccuracies { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing one accuracy value per task, in the order tasks were evaluated.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_PerTaskAccuracies_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Production:</b> Use this for:
+- Detailed analysis of task-level performance
+- Identifying problematic task types
+- Creating histograms or other visualizations
+- Statistical hypothesis testing
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_PerTaskLosses_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.PerTaskLosses*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_PerTaskLosses" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.PerTaskLosses">
+  PerTaskLosses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the individual loss values for each evaluated task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; PerTaskLosses { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing one loss value per task, in the order tasks were evaluated.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_GenerateReport_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GenerateReport*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_GenerateReport" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GenerateReport">
+  GenerateReport()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a formatted summary report of the evaluation results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GenerateReport()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A human-readable string containing key evaluation metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_GenerateReport_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a text summary you can print or log
+to quickly see how well your meta-learner performed.
+<p>It includes the most important metrics:</p>
+<ul>
+<li>Mean accuracy ± standard deviation</li>
+<li>95% confidence interval</li>
+<li>Loss statistics</li>
+<li>Number of tasks evaluated</li>
+<li>Evaluation time</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_GetAccuracyConfidenceInterval_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GetAccuracyConfidenceInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_GetAccuracyConfidenceInterval" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GetAccuracyConfidenceInterval">
+  GetAccuracyConfidenceInterval()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the 95% confidence interval for mean accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) GetAccuracyConfidenceInterval()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd><p>A tuple containing the lower and upper bounds of the confidence interval.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_MetaEvaluationResult_1_GetAccuracyConfidenceInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Uses the standard error of the mean with a z-score of 1.96 (95% confidence level).
+Assumes the distribution of task accuracies is approximately normal, which is
+reasonable for large sample sizes (Central Limit Theorem).
+</p>
+<p><b>For Beginners:</b> The confidence interval tells you the range where the true
+average accuracy likely falls.
+<p>For example, if you get (0.82, 0.88) with mean accuracy 0.85:</p>
+<ul>
+<li>You can be 95% confident the true mean accuracy is between 82% and 88%</li>
+<li>Narrower intervals mean more precise estimates</li>
+<li>More tasks (larger NumTasks) give narrower intervals</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_MetaEvaluationResult_1_GetLossConfidenceInterval_" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GetLossConfidenceInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Results_MetaEvaluationResult_1_GetLossConfidenceInterval" data-uid="AiDotNet.Models.Results.MetaEvaluationResult`1.GetLossConfidenceInterval">
+  GetLossConfidenceInterval()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the 95% confidence interval for mean loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Lower, T Upper) GetLossConfidenceInterval()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd><p>A tuple containing the lower and upper bounds of the confidence interval.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/MetaEvaluationResult.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

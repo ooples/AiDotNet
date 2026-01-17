@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class QuantileRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class QuantileRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Quantile Regression, a technique that enables prediction of specific quantiles of the conditional distribution rather than just the conditional mean.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_QuantileRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.QuantileRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_QuantileRegressionOptions_1" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1" class="text-break">
+Class QuantileRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/QuantileRegressionOptions.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Quantile Regression, a technique that enables prediction of specific
+quantiles of the conditional distribution rather than just the conditional mean.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class QuantileRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">QuantileRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_QuantileRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Quantile Regression extends traditional regression methods by estimating conditional quantiles
+of the response variable. While standard regression estimates the conditional mean E(Y|X),
+Quantile Regression can estimate any conditional quantile Q(a|X) for a ? (0,1), including
+medians (a = 0.5) and other percentiles. This technique provides a more comprehensive view of the
+relationship between variables, allowing for the analysis of the full conditional distribution.
+It is particularly valuable when the conditional distribution is non-Gaussian, skewed, or when
+outliers are present. Quantile Regression is also robust to heteroscedasticity (non-constant variance)
+and can reveal how different parts of the distribution respond differently to predictor variables.
+</p>
+<p><b>For Beginners:</b> Quantile Regression helps predict specific percentiles of possible outcomes, not just the average outcome.
+<p>Think about salary predictions:</p>
+<ul>
+<li>Regular regression might tell you &quot;the average salary for this job is $75,000&quot;</li>
+<li>But Quantile Regression could tell you:
+<ul>
+<li>&quot;10% of people in this job earn less than $50,000&quot; (10th percentile)</li>
+<li>&quot;Half of people in this job earn less than $70,000&quot; (median or 50th percentile)</li>
+<li>&quot;90% of people in this job earn less than $120,000&quot; (90th percentile)</li>
+</ul>
+</li>
+</ul>
+<p>What this technique does:</p>
+<ul>
+<li>It focuses on specific slices of the data distribution</li>
+<li>Instead of minimizing squared errors (as in mean regression)</li>
+<li>It minimizes a different loss function that depends on which quantile you want</li>
+<li>This gives you insight into different parts of the outcome distribution</li>
+</ul>
+<p>This is especially useful when:</p>
+<ul>
+<li>The outcomes aren't evenly distributed around the average</li>
+<li>You're interested in extreme cases (very high or low values)</li>
+<li>Different factors might affect different parts of the distribution differently</li>
+<li>You want to understand risk or uncertainty better</li>
+</ul>
+<p>For example, in healthcare, knowing that a treatment reduces the risk of severe complications
+(the high quantile) is different information than knowing it reduces the average symptom severity.</p>
+<p>This class lets you configure how the quantile regression algorithm operates.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_QuantileRegressionOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_QuantileRegressionOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/QuantileRegressionOptions.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_QuantileRegressionOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate controls the step size in the gradient-based optimization process used to
+estimate the quantile regression model. A smaller learning rate leads to more precise but slower
+convergence, while a larger learning rate can speed up learning but risks overshooting the optimal
+solution or causing instability. The appropriate learning rate depends on the scale and characteristics
+of the data. If the algorithm fails to converge or produces poor results, adjusting this parameter
+may help. For quantile regression, the optimization landscape can sometimes be less smooth than for
+mean regression, potentially requiring a smaller learning rate for stable convergence.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the algorithm adjusts its predictions during training.
+<p>The default value of 0.01 means:</p>
+<ul>
+<li>The algorithm takes moderate-sized steps when improving its model</li>
+<li>It's a balance between learning speed and learning stability</li>
+</ul>
+<p>Think of it like walking down a hill blindfolded:</p>
+<ul>
+<li>A small learning rate (like 0.001) means taking tiny, cautious steps
+<ul>
+<li>Safer but takes much longer to reach the bottom</li>
+</ul>
+</li>
+<li>A large learning rate (like 0.1) means taking big, bold steps
+<ul>
+<li>Faster but you might trip or miss the lowest point entirely</li>
+</ul>
+</li>
+</ul>
+<p>You might want a smaller learning rate (like 0.001):</p>
+<ul>
+<li>When your model is unstable or oscillating during training</li>
+<li>When you need very precise results and have time for longer training</li>
+<li>When working with data that has very large or varied scales</li>
+</ul>
+<p>You might want a larger learning rate (like 0.05):</p>
+<ul>
+<li>When training is taking too long</li>
+<li>When you're doing initial exploration</li>
+<li>When you have a lot of data and want faster convergence</li>
+</ul>
+<p>Finding the right learning rate often requires experimentation - too small and training takes forever,
+too large and the model might never find the best solution.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_QuantileRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_QuantileRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/QuantileRegressionOptions.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_QuantileRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter limits the number of iterations the optimization algorithm will perform when
+fitting the quantile regression model. It serves as a stopping criterion to prevent excessive
+computation time in cases where convergence is slow or not achieved. The algorithm may terminate
+earlier if convergence is detected before reaching this limit. For simpler datasets or higher
+learning rates, fewer iterations may be sufficient, while complex relationships or lower learning
+rates might require more iterations to reach convergence. Monitoring the convergence behavior
+can help in determining an appropriate value for this parameter.
+</p>
+<p><b>For Beginners:</b> This setting controls how many times the algorithm will try to improve its predictions before stopping.
+<p>The default value of 1000 means:</p>
+<ul>
+<li>The algorithm will make up to 1000 attempts to refine its model</li>
+<li>It might stop earlier if it determines the model isn't improving anymore</li>
+</ul>
+<p>Think of it like a game where you're trying to guess a number:</p>
+<ul>
+<li>Each iteration is one guess</li>
+<li>After each guess, you get feedback to improve your next guess</li>
+<li>MaxIterations is like setting a limit: &quot;I'll stop after 1000 guesses even if I haven't found the exact answer&quot;</li>
+</ul>
+<p>You might want more iterations (like 5000 or 10000):</p>
+<ul>
+<li>When your data is complex or has subtle patterns</li>
+<li>When using a very small learning rate</li>
+<li>When you need high precision and have the computational resources</li>
+</ul>
+<p>You might want fewer iterations (like 500 or 100):</p>
+<ul>
+<li>When you need faster training times</li>
+<li>When you have simpler data relationships</li>
+<li>When you're doing exploratory analysis and don't need perfect results</li>
+<li>When you notice the model stops improving well before 1000 iterations</li>
+</ul>
+<p>This setting helps prevent the model from training indefinitely, ensuring it eventually completes
+even if it hasn't reached perfect convergence.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_QuantileRegressionOptions_1_Quantile_" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.Quantile*"></a>
+
+  <h3 id="AiDotNet_Models_Options_QuantileRegressionOptions_1_Quantile" data-uid="AiDotNet.Models.Options.QuantileRegressionOptions`1.Quantile">
+  Quantile
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/QuantileRegressionOptions.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the quantile to be estimated by the regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Quantile { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The quantile value between 0 and 1, defaulting to 0.5 (median regression).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_QuantileRegressionOptions_1_Quantile_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter determines which quantile of the conditional distribution the model will estimate.
+The quantile must be a value between 0 and 1, where 0.5 represents the median (50th percentile),
+0.9 represents the 90th percentile, 0.1 represents the 10th percentile, and so on. Setting this
+value to 0.5 (the default) results in median regression, which is more robust to outliers than
+mean regression. Lower values (e.g., 0.1) focus on the lower tail of the distribution, while
+higher values (e.g., 0.9) focus on the upper tail. Different quantiles can reveal how the
+relationship between predictors and the response variable changes across the distribution.
+</p>
+<p><b>For Beginners:</b> This setting controls which percentile of the data you want to predict.
+<p>The default value of 0.5 means:</p>
+<ul>
+<li>You're trying to predict the median (middle value)</li>
+<li>Half of outcomes will likely be above your prediction</li>
+<li>Half of outcomes will likely be below your prediction</li>
+</ul>
+<p>Think of it like height predictions:</p>
+<ul>
+<li>Quantile 0.5 (median): The height where half of people are taller and half are shorter</li>
+<li>Quantile 0.9 (90th percentile): The height where only 10% of people are taller</li>
+<li>Quantile 0.1 (10th percentile): The height where 90% of people are taller</li>
+</ul>
+<p>You might choose different quantiles for different purposes:</p>
+<ul>
+<li>0.5 for a typical or central prediction (median)</li>
+<li>0.9 or higher when you're concerned about upper limits or worst-case scenarios</li>
+<li>0.1 or lower when you're concerned about lower limits or best-case scenarios</li>
+<li>Multiple quantiles (running the model multiple times) to get a full picture of possibilities</li>
+</ul>
+<p>For example, in flood risk modeling, the 0.99 quantile might tell you the water level that
+has only a 1% chance of being exceeded - critical information for safety planning.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/QuantileRegressionOptions.cs/#L45" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FlashAttentionConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FlashAttentionConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Flash Attention algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig.md&amp;value=---%0Auid%3A%20AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig">
+
+
+
+  <h1 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig" class="text-break">
+Class FlashAttentionConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.NeuralNetworks.html">NeuralNetworks</a>.<a class="xref" href="AiDotNet.NeuralNetworks.Attention.html">Attention</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Flash Attention algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FlashAttentionConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FlashAttentionConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Flash Attention is a memory-efficient attention algorithm that avoids materializing
+the full N x N attention matrix. Instead, it processes attention in tiles/blocks,
+computing online softmax incrementally.
+</p>
+<p><b>For Beginners:</b> Flash Attention is a faster way to compute attention.
+<p>Standard attention creates a huge matrix comparing every position to every other position.
+For long sequences (like 4096 tokens), this matrix has 16 million entries!</p>
+<p>Flash Attention avoids creating this huge matrix by:</p>
+<ul>
+<li>Processing in small blocks that fit in fast GPU memory (SRAM)</li>
+<li>Computing softmax incrementally as it processes each block</li>
+<li>Never storing the full attention matrix</li>
+</ul>
+<p>Benefits:</p>
+<ul>
+<li>2-4x faster than standard attention</li>
+<li>Uses much less memory (O(N) instead of O(N^2))</li>
+<li>Enables training with longer sequences</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeKV_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.BlockSizeKV*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeKV" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.BlockSizeKV">
+  BlockSizeKV
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Block size for key/value processing (Bc in the paper).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BlockSizeKV { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeKV_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls how many key/value positions are processed together.
+Should typically match BlockSizeQ for square blocks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeQ_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.BlockSizeQ*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeQ" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.BlockSizeQ">
+  BlockSizeQ
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Block size for query processing (Br in the paper).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BlockSizeQ { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_BlockSizeQ_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls how many query positions are processed together.
+Larger values may be faster but use more memory.
+Must divide sequence length evenly for best performance.
+</p>
+<p><b>For Beginners:</b> This is how many "questions" we process at once.
+<p>Default of 64 works well for most GPUs:</p>
+<ul>
+<li>RTX 3090/4090: Can use 128</li>
+<li>Older GPUs: May need 32</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Causal_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Causal*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Causal" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Causal">
+  Causal
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for causal/autoregressive models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static FlashAttentionConfig Causal { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.html">FlashAttentionConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Default_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Default*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Default" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Default">
+  Default
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration suitable for most use cases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static FlashAttentionConfig Default { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.html">FlashAttentionConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_DropoutProbability_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.DropoutProbability*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_DropoutProbability" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.DropoutProbability">
+  DropoutProbability
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Dropout probability to apply to attention weights during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float DropoutProbability { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_DropoutProbability_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Randomly zeros out attention weights to prevent overfitting.
+Only applied during training, not inference.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_HighPerformance_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.HighPerformance*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_HighPerformance" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.HighPerformance">
+  HighPerformance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for speed (uses more memory).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static FlashAttentionConfig HighPerformance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.html">FlashAttentionConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_MemoryEfficient_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.MemoryEfficient*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_MemoryEfficient" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.MemoryEfficient">
+  MemoryEfficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for memory efficiency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static FlashAttentionConfig MemoryEfficient { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.html">FlashAttentionConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Precision_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Precision*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Precision" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.Precision">
+  Precision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numerical precision mode for attention computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FlashAttentionPrecision Precision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.NeuralNetworks.Attention.FlashAttentionPrecision.html">FlashAttentionPrecision</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_Precision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Controls the precision used for intermediate computations.
+Higher precision is more accurate but slower and uses more memory.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_RecomputeInBackward_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.RecomputeInBackward*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_RecomputeInBackward" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.RecomputeInBackward">
+  RecomputeInBackward
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to enable memory-efficient backward pass with recomputation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RecomputeInBackward { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_RecomputeInBackward_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, the backward pass recomputes attention weights instead of storing them.
+This significantly reduces memory usage at the cost of some additional computation.
+</p>
+<p><b>For Beginners:</b> This trades speed for memory during training.
+<p>Standard approach: Store attention weights, use them in backward pass
+Recomputation: Recompute attention weights during backward pass</p>
+<p>Enable this when:</p>
+<ul>
+<li>Training with limited GPU memory</li>
+<li>Using very long sequences</li>
+<li>Training large models</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ReturnAttentionWeights_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.ReturnAttentionWeights*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ReturnAttentionWeights" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.ReturnAttentionWeights">
+  ReturnAttentionWeights
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to return attention weights (for visualization/debugging).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ReturnAttentionWeights { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ReturnAttentionWeights_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, materializes and returns the attention weights.
+This negates some memory benefits of Flash Attention but is useful for debugging.
+Should typically be false in production.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ScaleFactor_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.ScaleFactor*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ScaleFactor" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.ScaleFactor">
+  ScaleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scale factor for attention scores. If null, uses 1/sqrt(head_dim).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float? ScaleFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_ScaleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The standard scale factor of 1/sqrt(d_k) prevents attention scores from
+becoming too large, which would cause softmax to produce very peaked distributions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseCausalMask_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.UseCausalMask*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseCausalMask" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.UseCausalMask">
+  UseCausalMask
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to apply causal masking (for autoregressive models).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseCausalMask { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseCausalMask_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, position i can only attend to positions j where j &lt;= i.
+This is essential for language models like GPT where future tokens should not influence current predictions.
+</p>
+<p><b>For Beginners:</b> Causal masking prevents "cheating" in text generation.
+<p>When generating text word by word:</p>
+<ul>
+<li>The model shouldn't see future words when predicting the next word</li>
+<li>Causal masking hides future positions</li>
+<li>Set to true for GPT-style models</li>
+<li>Set to false for BERT-style models (bidirectional)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseGpuKernel_" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.UseGpuKernel*"></a>
+
+  <h3 id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseGpuKernel" data-uid="AiDotNet.NeuralNetworks.Attention.FlashAttentionConfig.UseGpuKernel">
+  UseGpuKernel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use the optimized GPU kernel (when available).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseGpuKernel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_NeuralNetworks_Attention_FlashAttentionConfig_UseGpuKernel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true and GPU is available, uses optimized DirectGpu kernels for Flash Attention.
+Falls back to CPU implementation if GPU is not available.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/NeuralNetworks/Attention/FlashAttentionConfig.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

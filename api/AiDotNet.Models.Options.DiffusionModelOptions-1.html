@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DiffusionModelOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DiffusionModelOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for diffusion-based generative models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_DiffusionModelOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.DiffusionModelOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_DiffusionModelOptions_1" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1" class="text-break">
+Class DiffusionModelOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for diffusion-based generative models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DiffusionModelOptions&lt;T&gt; : ModelOptions</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><span class="xref">DiffusionModelOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Diffusion.Models.PixArtOptions-1.html">PixArtOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_DiffusionModelOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This options class provides configuration for all diffusion model parameters including
+training hyperparameters, scheduler configuration, and generation settings.
+</p>
+<p><b>For Beginners:</b> Diffusion models work by learning to reverse a gradual noising process.
+These options control how the model trains and generates samples:
+<ul><li>LearningRate: How big of a step to take during training</li><li>TrainTimesteps: How many noise levels to use (more = finer control)</li><li>BetaStart/BetaEnd: How much noise at each step</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaEnd_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaEnd*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaEnd" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaEnd">
+  BetaEnd
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the ending beta value (noise variance at t=T).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BetaEnd { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The ending beta value, defaulting to 0.02.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaEnd_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Beta end is the amount of noise added at the final timestep.
+It should be larger than beta start to ensure samples become nearly pure noise.
+The default of 0.02 is from the original DDPM paper.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaSchedule_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaSchedule*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaSchedule" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaSchedule">
+  BetaSchedule
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of beta schedule to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BetaSchedule BetaSchedule { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.BetaSchedule.html">BetaSchedule</a></dt>
+    <dd><p>The beta schedule type, defaulting to Linear.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaSchedule_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The beta schedule determines how noise variance changes across timesteps.
+Linear is simplest and widely compatible. ScaledLinear is used by Stable Diffusion.
+SquaredCosine often provides better quality results.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaStart_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaStart*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaStart" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.BetaStart">
+  BetaStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the starting beta value (noise variance at t=0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BetaStart { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The starting beta value, defaulting to 0.0001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_BetaStart_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Beta start is the amount of noise added at the first timestep.
+It should be small since early timesteps should preserve most of the signal.
+The default of 0.0001 is from the original DDPM paper.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_ClipSample_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.ClipSample*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_ClipSample" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.ClipSample">
+  ClipSample
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to clip predicted samples to [-1, 1].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ClipSample { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to clip samples, false otherwise. Defaults to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_ClipSample_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Clipping can prevent extreme values that might cause numerical
+instability, but may reduce output quality if the model is well-trained.
+Generally leave this as false unless you experience numerical issues.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_DefaultInferenceSteps_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.DefaultInferenceSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_DefaultInferenceSteps" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.DefaultInferenceSteps">
+  DefaultInferenceSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the default number of inference steps for generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DefaultInferenceSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of inference steps, defaulting to 50.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_DefaultInferenceSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> During generation, you don't need all 1000 training timesteps.
+Using fewer steps (like 50) is much faster while still producing good quality.
+DDIM and PNDM schedulers are designed to work well with fewer steps.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for training parameter updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The learning rate controls how big each step is during training.
+A value of 0.001 means taking small, careful steps. If this value is too large, the model might
+overshoot the optimal solution. If it's too small, training will take a very long time.
+The default of 0.001 is a good starting point for most diffusion models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_LossFunction_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.LossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_LossFunction" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function, or null to use Mean Squared Error.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_LossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The loss function measures how wrong the model's predictions are.
+Mean Squared Error (MSE) is standard for diffusion models since they predict continuous values.
+Leave as null to use the default MSE loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_PredictionType_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.PredictionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_PredictionType" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.PredictionType">
+  PredictionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets what the model is trained to predict.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DiffusionPredictionType PredictionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.DiffusionPredictionType.html">DiffusionPredictionType</a></dt>
+    <dd><p>The prediction type, defaulting to Epsilon (noise).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_PredictionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This must match what the diffusion model was trained to predict.
+Most models use Epsilon (noise) prediction. Some newer models use velocity prediction
+or direct sample prediction.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DiffusionModelOptions_1_TrainTimesteps_" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.TrainTimesteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DiffusionModelOptions_1_TrainTimesteps" data-uid="AiDotNet.Models.Options.DiffusionModelOptions`1.TrainTimesteps">
+  TrainTimesteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of timesteps used during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TrainTimesteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of training timesteps, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DiffusionModelOptions_1_TrainTimesteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This controls how many discrete noise levels the model learns.
+More timesteps (like 1000) give finer control over the denoising process but require more
+computation. The default of 1000 is standard for DDPM/DDIM models.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DiffusionModelOptions.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

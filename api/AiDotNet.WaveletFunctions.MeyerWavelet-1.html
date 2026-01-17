@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MeyerWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MeyerWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a Meyer wavelet function implementation for frequency domain analysis and signal processing.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_MeyerWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.MeyerWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_MeyerWavelet_1" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1" class="text-break">
+Class MeyerWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a Meyer wavelet function implementation for frequency domain analysis and signal processing.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MeyerWavelet&lt;T&gt; : WaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html">WaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MeyerWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_WaveletFunctionBase_1_NumOps">WaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Meyer wavelet is a frequency domain wavelet that is infinitely differentiable with compact
+support in the frequency domain. Unlike many other wavelets that are defined primarily in the
+time domain, the Meyer wavelet is more naturally defined in the frequency domain, making it
+particularly useful for spectral analysis. This implementation uses Fast Fourier Transform (FFT)
+for efficient computation.
+</p>
+<p><b>For Beginners:</b> The Meyer wavelet is a special mathematical tool for analyzing signals in the frequency domain.
+<p>Think of the Meyer wavelet like a musical tuning fork that:</p>
+<ul>
+<li>Works especially well for analyzing what frequencies are present in your data</li>
+<li>Has very clean frequency separation (it doesn't mix up different frequencies)</li>
+<li>Is infinitely smooth, which makes it good for analyzing continuous signals</li>
+</ul>
+<p>Unlike other wavelets that work directly with your data points (time domain), the Meyer wavelet
+works with the frequencies in your data (frequency domain). This is like looking at a piece of music
+as a collection of different notes played simultaneously, rather than as sounds that change over time.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1__ctor" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.#ctor">
+  MeyerWavelet()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.WaveletFunctions.MeyerWavelet-1.html">MeyerWavelet&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MeyerWavelet()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor initializes the Meyer wavelet and sets up the numeric operations helper
+and Fast Fourier Transform implementation for the specified numeric type T. Unlike other wavelets,
+the Meyer wavelet doesn't require additional parameters as it has a fixed, well-defined form
+in the frequency domain.
+</p>
+<p><b>For Beginners:</b> This sets up the Meyer wavelet for use.
+<p>When creating a Meyer wavelet:</p>
+<ul>
+<li>No parameters are needed because the Meyer wavelet has a fixed mathematical definition</li>
+<li>It initializes the mathematical helpers needed for calculations</li>
+<li>It prepares the FFT tool that will convert between time and frequency domains</li>
+</ul>
+<p>This is like setting up your workbench with all the tools you'll need before starting a project.
+Once created, the wavelet is immediately ready to use for signal analysis.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Calculate__0_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Meyer wavelet function value at the specified point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input point at which to calculate the wavelet value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Meyer wavelet function value at the specified point.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the value of the Meyer wavelet function at the given input point in the
+time domain. The Meyer wavelet is defined piecewise based on the magnitude of the input value,
+with different formulas applied for different ranges. The result is a function that is
+infinitely differentiable yet has compact support in the frequency domain.
+</p>
+<p><b>For Beginners:</b> This method calculates the value of the Meyer wavelet at a specific point.
+<p>The Meyer wavelet function:</p>
+<ul>
+<li>Has a complex shape defined by mathematical formulas</li>
+<li>Returns different values depending on where the input point falls</li>
+<li>Is zero for many input values (outside its support region)</li>
+</ul>
+<p>While the Meyer wavelet is more naturally defined in the frequency domain, this method
+gives you its value in the time domain at a specific point. This is useful for visualizing
+the wavelet or for direct application to signals in the time domain.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes an input signal using the Meyer wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation and detail coefficients of the decomposed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the Meyer wavelet transform, which decomposes the input signal into
+approximation coefficients (low-frequency components) and detail coefficients (high-frequency components).
+It uses the Fast Fourier Transform to convert the signal to the frequency domain, applies the Meyer
+wavelet filters, and then converts the results back to the time domain.
+</p>
+<p><b>For Beginners:</b> This method breaks down your data into low-frequency and high-frequency parts.
+<p>When decomposing a signal with the Meyer wavelet:</p>
+<ul>
+<li>First, the data is converted to the frequency domain using FFT</li>
+<li>Then, the frequencies are separated into &quot;low&quot; (approximation) and &quot;high&quot; (detail) components</li>
+<li>Finally, these components are converted back to the time domain</li>
+</ul>
+<p>This is like separating the bass notes from the treble notes in a piece of music.
+The approximation coefficients represent the bass notes (slow changes, overall trends),
+while the detail coefficients represent the treble notes (quick changes, fine details).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling coefficients (low-pass filter) used in the Meyer wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the scaling coefficients in the frequency domain.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the scaling coefficients used in the Meyer wavelet transform, which
+represent the low-pass filter in the frequency domain. These coefficients follow a specific
+pattern with a flat region for low frequencies and a smooth transition band that ensures
+the filter has desirable mathematical properties.
+</p>
+<p><b>For Beginners:</b> This method gives you the pattern used to extract low frequencies.
+<p>The scaling coefficients in the Meyer wavelet:</p>
+<ul>
+<li>Keep all the low frequencies (below 1/3 of the maximum frequency) unchanged</li>
+<li>Gradually reduce frequencies between 1/3 and 2/3 using a smooth function</li>
+<li>Remove all frequencies above 2/3</li>
+</ul>
+<p>This is like a special audio filter that keeps the bass and mid-range sounds
+but gradually removes the higher pitches. The smooth transition ensures that
+the filtering doesn't create artificial artifacts in your results.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet coefficients (high-pass filter) used in the Meyer wavelet transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the wavelet coefficients in the frequency domain.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method returns the wavelet coefficients used in the Meyer wavelet transform, which
+represent the high-pass filter in the frequency domain. These coefficients are designed
+to complement the scaling coefficients, passing high frequencies while blocking low ones,
+with smooth transition bands that ensure the filter has desirable mathematical properties.
+</p>
+<p><b>For Beginners:</b> This method gives you the pattern used to extract high frequencies.
+<p>The wavelet coefficients in the Meyer wavelet:</p>
+<ul>
+<li>Block all the very low frequencies (below 1/3 of the maximum frequency)</li>
+<li>Gradually increase frequencies between 1/3 and 2/3 using a smooth function</li>
+<li>Keep frequencies between 2/3 and 4/3 with another smooth transition</li>
+<li>Block frequencies above 4/3</li>
+</ul>
+<p>This is like an audio filter that focuses on the treble sounds while removing the bass.
+The smooth transitions ensure that the filtering process doesn't create artificial
+distortions in your results. Together with the scaling coefficients, they cover
+the entire frequency spectrum of your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.MeyerWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Reconstruct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reconstruct(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_MeyerWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>For Meyer wavelets, reconstruction is straightforward in the frequency domain:</p>
+<ol>
+<li>Transform both approximation and detail to frequency domain using FFT</li>
+<li>Add them together (since they are orthogonal frequency bands)</li>
+<li>Transform back to time domain using inverse FFT</li>
+</ol>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should equal the original signal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/MeyerWavelet.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

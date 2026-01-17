@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum ActivationFunction | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum ActivationFunction | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different activation functions used in neural networks and deep learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_ActivationFunction.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.ActivationFunction%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.ActivationFunction">
+
+
+
+
+  <h1 id="AiDotNet_Enums_ActivationFunction" data-uid="AiDotNet.Enums.ActivationFunction" class="text-break">
+Enum ActivationFunction  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ActivationFunction.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different activation functions used in neural networks and deep learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum ActivationFunction</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_ActivationFunction_ELU"><code>ELU = 5</code></dt>
+  <dd><p>Exponential Linear Unit - smooth version of ReLU that can output negative values.</p>
+<p>
+<b>For Beginners:</b> ELU (Exponential Linear Unit) is an activation function that combines the benefits 
+of ReLU while addressing some of its limitations.
+<p>How it works:</p>
+<ul>
+<li>For positive inputs: same as ReLU, output equals input</li>
+<li>For negative inputs: output equals a * (e^x - 1), where a is typically 1.0
+This creates a smooth curve that approaches -a for large negative inputs</li>
+</ul>
+<p>Formula: f(x) = x if x &gt; 0, a * (e^x - 1) if x = 0</p>
+<p>Advantages:</p>
+<ul>
+<li>Smooth function including for negative values (helps with learning)</li>
+<li>Reduces the &quot;dying neuron&quot; problem of ReLU</li>
+<li>Can produce negative outputs, pushing mean activations closer to zero</li>
+<li>Often leads to faster learning</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>More computationally expensive than ReLU due to exponential operation</li>
+<li>Has an extra hyperparameter a to tune</li>
+</ul>
+<p>ELU is a good choice when you want better performance than ReLU and can afford the
+slightly higher computational cost.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_GELU"><code>GELU = 11</code></dt>
+  <dd><p>Gaussian Error Linear Unit - a smooth activation function that performs well in transformers and language models.</p>
+<p>
+<b>For Beginners:</b> GELU (Gaussian Error Linear Unit) is an activation function that has become popular 
+in modern language models like BERT and GPT.
+<p>How it works:</p>
+<ul>
+<li>Multiplies the input by the cumulative distribution function of the standard normal distribution</li>
+<li>For positive inputs, behaves similarly to ReLU but with a smooth curve</li>
+<li>For negative inputs, allows small negative values with a smooth transition</li>
+</ul>
+<p>Formula: f(x) = 0.5 * x * (1 + tanh(sqrt(2/p) * (x + 0.044715 * x^3)))
+(This is an approximation of the actual formula for computational efficiency)</p>
+<p>Advantages:</p>
+<ul>
+<li>Performs exceptionally well in transformer architectures</li>
+<li>Smooth function with non-zero gradients for most inputs</li>
+<li>Combines benefits of ReLU, ELU, and Swish</li>
+<li>State-of-the-art results in many language models</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>More computationally expensive than simpler functions like ReLU</li>
+<li>Relatively complex mathematical formulation</li>
+<li>Best suited for specific architectures like transformers</li>
+</ul>
+<p>GELU is particularly recommended for transformer-based models and when working with natural language processing tasks.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Identity"><code>Identity = 12</code></dt>
+  <dd><p>Identity function - returns the input value unchanged, providing a direct pass-through.</p>
+<p>
+<b>For Beginners:</b> The Identity activation function simply passes the input through unchanged - 
+whatever value goes in is exactly what comes out.
+<p>How it works:</p>
+<ul>
+<li>Output equals input: f(x) = x</li>
+<li>No transformation is applied at all</li>
+</ul>
+<p>Formula: f(x) = x</p>
+<p>Advantages:</p>
+<ul>
+<li>Zero computational cost (fastest possible activation)</li>
+<li>Preserves the full range of input values</li>
+<li>Useful for testing or when you want a layer to pass values through unchanged</li>
+<li>Can be used in the final layer of some regression networks</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Provides no non-linearity whatsoever</li>
+<li>A network using only Identity activations reduces to a simple linear model</li>
+<li>Cannot help the network learn complex patterns</li>
+</ul>
+<p>The Identity function is primarily used in specific scenarios like skip connections in residual networks,
+or when you want to debug a network by temporarily removing non-linearities.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_LeakyReLU"><code>LeakyReLU = 4</code></dt>
+  <dd><p>Leaky Rectified Linear Unit - similar to ReLU but allows a small gradient for negative inputs.</p>
+<p>
+<b>For Beginners:</b> LeakyReLU is a variation of ReLU that allows a small, non-zero output for 
+negative inputs.
+<p>How it works:</p>
+<ul>
+<li>If input is positive, output equals input (same as ReLU)</li>
+<li>If input is negative, output equals input multiplied by a small factor (typically 0.01)</li>
+</ul>
+<p>Formula: f(x) = max(0.01x, x)</p>
+<p>Advantages:</p>
+<ul>
+<li>Prevents the &quot;dying ReLU&quot; problem by allowing small gradients for negative inputs</li>
+<li>Almost as computationally efficient as ReLU</li>
+<li>All the benefits of ReLU with added robustness</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>The leakage parameter (0.01) is another hyperparameter to tune</li>
+<li>Still not zero-centered</li>
+</ul>
+<p>LeakyReLU is a good alternative to ReLU when you're concerned about neurons &quot;dying&quot; during training.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_LiSHT"><code>LiSHT = 13</code></dt>
+  <dd><p>Linearly Scaled Hyperbolic Tangent - a self-regularized activation function.</p>
+<p>
+<b>For Beginners:</b> LiSHT (Linearly Scaled Hyperbolic Tangent) is an activation function
+that combines the benefits of linear and tanh functions.
+<p>How it works:</p>
+<ul>
+<li>Multiplies the input by its own tanh: f(x) = x * tanh(x)</li>
+<li>For positive inputs, behaves similarly to the input itself</li>
+<li>For negative inputs, output is negative but bounded</li>
+</ul>
+<p>Formula: f(x) = x * tanh(x)</p>
+<p>Advantages:</p>
+<ul>
+<li>Non-monotonic function that can help with learning complex patterns</li>
+<li>Smooth and differentiable everywhere</li>
+<li>Self-regularized, helping prevent overfitting</li>
+<li>Has bounded gradient properties</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>More computationally expensive than ReLU</li>
+<li>Relatively new, so less extensively tested</li>
+</ul>
+<p>LiSHT is useful when you need a self-regularizing activation function with good gradient properties.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Linear"><code>Linear = 3</code></dt>
+  <dd><p>Linear activation - simply returns the input value unchanged.</p>
+<p>
+<b>For Beginners:</b> The Linear activation function simply returns the input without any change.
+<p>How it works:</p>
+<ul>
+<li>Output equals input: f(x) = x</li>
+</ul>
+<p>Advantages:</p>
+<ul>
+<li>Simplest possible activation function</li>
+<li>No computation cost</li>
+<li>Useful for regression problems in the output layer</li>
+<li>Allows unbounded outputs</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Provides no non-linearity, so networks with only linear activations can't learn complex patterns</li>
+<li>Essentially reduces the network to a linear model regardless of depth</li>
+</ul>
+<p>Linear activation is typically only used in the output layer of regression networks
+(when predicting continuous values like prices, temperatures, etc.).</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_ReLU"><code>ReLU = 0</code></dt>
+  <dd><p>Rectified Linear Unit - returns 0 for negative inputs and the input value for positive inputs.</p>
+<p>
+<b>For Beginners:</b> ReLU (Rectified Linear Unit) is the most commonly used activation function in 
+modern neural networks.
+<p>How it works:</p>
+<ul>
+<li>If the input is negative, ReLU outputs 0</li>
+<li>If the input is positive, ReLU outputs the input value unchanged</li>
+</ul>
+<p>Formula: f(x) = max(0, x)</p>
+<p>Advantages:</p>
+<ul>
+<li>Simple and fast to compute</li>
+<li>Helps networks learn faster than older functions like Sigmoid</li>
+<li>Reduces the &quot;vanishing gradient problem&quot; (where networks stop learning)</li>
+<li>Works well in hidden layers of deep networks</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Can cause &quot;dying ReLU&quot; problem where neurons permanently stop learning</li>
+<li>Not zero-centered, which can make training slightly less efficient</li>
+</ul>
+<p>ReLU is typically the default choice for hidden layers in most neural networks.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_SELU"><code>SELU = 6</code></dt>
+  <dd><p>Scaled Exponential Linear Unit - self-normalizing version of ELU.</p>
+<p>
+<b>For Beginners:</b> SELU (Scaled Exponential Linear Unit) is a special activation function designed 
+to make neural networks "self-normalizing."
+<p>How it works:</p>
+<ul>
+<li>Similar to ELU but with carefully chosen scaling parameters</li>
+<li>For positive inputs: output equals input multiplied by a scale factor ?</li>
+<li>For negative inputs: output equals ? * a * (e^x - 1)
+where ? ≈ 1.0507 and a ≈ 1.6733 are specific constants</li>
+</ul>
+<p>Formula: f(x) = ? * x if x &gt; 0, ? * a * (e^x - 1) if x = 0</p>
+<p>Advantages:</p>
+<ul>
+<li>Self-normalizing property helps maintain stable activations across many layers</li>
+<li>Can eliminate the need for techniques like batch normalization</li>
+<li>Helps prevent vanishing and exploding gradients</li>
+<li>Works particularly well for deep networks</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Requires specific initialization (LeCun normal) to work properly</li>
+<li>Benefits are most apparent in fully-connected networks</li>
+<li>More computationally expensive than ReLU</li>
+</ul>
+<p>SELU is particularly useful for deep fully-connected networks where maintaining normalized
+activations is important.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Sigmoid"><code>Sigmoid = 1</code></dt>
+  <dd><p>Sigmoid function - maps any input to a value between 0 and 1.</p>
+<p>
+<b>For Beginners:</b> The Sigmoid function squeezes any input value into an output between 0 and 1, 
+creating an S-shaped curve.
+<p>How it works:</p>
+<ul>
+<li>Large negative inputs approach 0</li>
+<li>Large positive inputs approach 1</li>
+<li>Input of 0 gives output of 0.5</li>
+</ul>
+<p>Formula: f(x) = 1 / (1 + e^(-x))</p>
+<p>Advantages:</p>
+<ul>
+<li>Smooth and bounded output (always between 0 and 1)</li>
+<li>Provides a clear probability interpretation</li>
+<li>Good for binary classification output layers</li>
+<li>Historically important in neural networks</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Suffers from vanishing gradient problem for extreme inputs</li>
+<li>Outputs are not zero-centered</li>
+<li>Computationally more expensive than ReLU</li>
+</ul>
+<p>Sigmoid is now mostly used in output layers for binary classification or in specific
+architectures like LSTMs, but rarely in hidden layers of deep networks.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_SoftSign"><code>SoftSign = 9</code></dt>
+  <dd><p>SoftSign function - maps inputs to values between -1 and 1 with a smoother approach to the asymptotes.</p>
+<p>
+<b>For Beginners:</b> SoftSign is similar to Tanh but approaches its asymptotes more slowly, 
+which can help with learning in some cases.
+<p>How it works:</p>
+<ul>
+<li>Maps inputs to a range between -1 and 1</li>
+<li>For large negative inputs, output approaches -1</li>
+<li>For large positive inputs, output approaches 1</li>
+<li>Has a gentler slope than Tanh for extreme values</li>
+</ul>
+<p>Formula: f(x) = x / (1 + |x|)</p>
+<p>Advantages:</p>
+<ul>
+<li>Zero-centered like Tanh</li>
+<li>Bounded output between -1 and 1</li>
+<li>Approaches asymptotes more gradually than Tanh</li>
+<li>Less prone to saturation (getting &quot;stuck&quot; at the extremes)</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Not as widely used or studied as other activation functions</li>
+<li>Computationally more expensive than ReLU</li>
+</ul>
+<p>SoftSign can be used as an alternative to Tanh when you want a function that saturates more slowly.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Softmax"><code>Softmax = 7</code></dt>
+  <dd><p>Softmax function - converts a vector of values to a probability distribution.</p>
+<p>
+<b>For Beginners:</b> Softmax is special because it works on a group of neurons together, not just one at a time.
+It converts a set of numbers into a probability distribution that sums to 1.
+<p>How it works:</p>
+<ul>
+<li>Takes a vector of numbers (e.g., scores for different classes)</li>
+<li>Applies exponential function (e^x) to each number</li>
+<li>Divides each result by the sum of all exponentials</li>
+</ul>
+<p>Formula: softmax(x_i) = e^x_i / S(e^x_j) for all j</p>
+<p>Advantages:</p>
+<ul>
+<li>Outputs are between 0 and 1 and sum to exactly 1 (perfect for probabilities)</li>
+<li>Emphasizes the largest values while suppressing lower values</li>
+<li>Ideal for multi-class classification problems</li>
+<li>Differentiable, so works well with gradient-based learning</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Only meaningful when applied to multiple neurons together (output layer)</li>
+<li>Can be numerically unstable (requires special implementation techniques)</li>
+<li>Not suitable for hidden layers</li>
+</ul>
+<p>Softmax is almost exclusively used in the output layer of classification networks when you need
+to predict probabilities across multiple classes.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Softplus"><code>Softplus = 8</code></dt>
+  <dd><p>Softplus function - a smooth approximation of the ReLU function.</p>
+<p>
+<b>For Beginners:</b> Softplus is a smooth version of ReLU that has a more gradual transition 
+from 0 to positive values.
+<p>How it works:</p>
+<ul>
+<li>For large negative inputs, output approaches 0</li>
+<li>For large positive inputs, output approaches the input value</li>
+<li>The transition is smooth and differentiable everywhere</li>
+</ul>
+<p>Formula: f(x) = ln(1 + e^x)</p>
+<p>Advantages:</p>
+<ul>
+<li>Smooth everywhere (no sharp corner like ReLU)</li>
+<li>Always has a non-zero gradient, avoiding the &quot;dying neuron&quot; problem</li>
+<li>Outputs are always positive</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>More computationally expensive than ReLU</li>
+<li>Can still suffer from vanishing gradient for very negative inputs</li>
+<li>Not zero-centered</li>
+</ul>
+<p>Softplus is sometimes used as an alternative to ReLU when a smoother activation function is desired.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Swish"><code>Swish = 10</code></dt>
+  <dd><p>Swish function - a self-gated activation function developed by researchers at Google.</p>
+<p>
+<b>For Beginners:</b> Swish is a newer activation function that was discovered through automated search 
+techniques and often outperforms ReLU in deep networks.
+<p>How it works:</p>
+<ul>
+<li>Multiplies the input by a sigmoid of the input</li>
+<li>For positive inputs, behaves similarly to ReLU</li>
+<li>For negative inputs, allows small negative values instead of zeroing them out</li>
+<li>Has a slight dip below zero for some negative inputs</li>
+</ul>
+<p>Formula: f(x) = x * sigmoid(x) or f(x) = x / (1 + e^(-x))</p>
+<p>Advantages:</p>
+<ul>
+<li>Often achieves better accuracy than ReLU in deep networks</li>
+<li>Smooth function with non-zero gradients everywhere</li>
+<li>Allows negative outputs for some inputs, which can be beneficial</li>
+<li>Works well with normalization techniques</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>More computationally expensive than ReLU</li>
+<li>Relatively new, so less extensively tested in all scenarios</li>
+<li>May require more careful initialization</li>
+</ul>
+<p>Swish is a good alternative to try when ReLU isn't giving optimal results, especially in deep networks.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_ActivationFunction_Tanh"><code>Tanh = 2</code></dt>
+  <dd><p>Hyperbolic Tangent - maps any input to a value between -1 and 1.</p>
+<p>
+<b>For Beginners:</b> The Tanh (hyperbolic tangent) function is similar to Sigmoid but maps inputs 
+to values between -1 and 1 instead of 0 and 1.
+<p>How it works:</p>
+<ul>
+<li>Large negative inputs approach -1</li>
+<li>Large positive inputs approach 1</li>
+<li>Input of 0 gives output of 0</li>
+</ul>
+<p>Formula: f(x) = (e^x - e^(-x)) / (e^x + e^(-x))</p>
+<p>Advantages:</p>
+<ul>
+<li>Zero-centered outputs (centered around 0), which helps with learning</li>
+<li>Bounded output (always between -1 and 1)</li>
+<li>Often performs better than Sigmoid in hidden layers</li>
+<li>Works well in recurrent neural networks (RNNs)</li>
+</ul>
+<p>Limitations:</p>
+<ul>
+<li>Still suffers from vanishing gradient problem for extreme inputs</li>
+<li>Computationally more expensive than ReLU</li>
+</ul>
+<p>Tanh is commonly used in recurrent neural networks and sometimes in hidden layers when
+zero-centered outputs are important.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_ActivationFunction_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Activation functions are mathematical operations that determine whether a neuron in a 
+neural network should be "activated" (output a signal) or not.
+<p>Think of a neuron as a decision-maker that:</p>
+<ol>
+<li>Receives multiple inputs</li>
+<li>Calculates a weighted sum of these inputs</li>
+<li>Applies an activation function to decide what value to output</li>
+</ol>
+<p>Without activation functions, neural networks would just be linear models (like basic regression),
+unable to learn complex patterns. Activation functions add non-linearity, allowing networks to learn
+complicated relationships in data.</p>
+<p>Different activation functions have different properties that make them suitable for different tasks.
+Choosing the right activation function can significantly impact how well your neural network learns
+and performs.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/ActivationFunction.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

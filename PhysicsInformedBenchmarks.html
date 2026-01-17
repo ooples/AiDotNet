@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Physics-Informed Benchmarks | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Physics-Informed Benchmarks | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PhysicsInformedBenchmarks.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="physics-informed-benchmarks">Physics-Informed Benchmarks</h1>
+
+<p>This document describes the benchmark harnesses that validate the physics-informed components
+introduced in PR #449 and Issue #400. The benchmarks focus on reproducible PDE baselines and
+operator-learning evaluations using simple, deterministic data generation.</p>
+<h2 id="pde-benchmarks">PDE Benchmarks</h2>
+<p>The PDE benchmark suite provides reference baselines using explicit finite-difference solvers
+for 1D Burgers' and Allen-Cahn equations. These baselines are designed for correctness checks
+and regression testing rather than large-scale accuracy studies.</p>
+<h3 id="burgers-equation">Burgers' Equation</h3>
+<pre><code class="lang-csharp">using AiDotNet.PhysicsInformed.Benchmarks;
+
+var options = new BurgersBenchmarkOptions
+{
+    SpatialPoints = 64,
+    TimeSteps = 200,
+    FinalTime = 1.0,
+    Viscosity = 0.01
+};
+
+PdeBenchmarkResult result = PdeBenchmarkSuite.RunBurgers(
+    options,
+    (x, t) =&gt; /* model prediction u(x, t) */ 0.0);
+</code></pre>
+<h3 id="allen-cahn-equation">Allen-Cahn Equation</h3>
+<pre><code class="lang-csharp">using AiDotNet.PhysicsInformed.Benchmarks;
+
+var options = new AllenCahnBenchmarkOptions
+{
+    SpatialPoints = 64,
+    TimeSteps = 200,
+    FinalTime = 1.0,
+    Epsilon = 0.01
+};
+
+PdeBenchmarkResult result = PdeBenchmarkSuite.RunAllenCahn(
+    options,
+    (x, t) =&gt; /* model prediction u(x, t) */ 0.0);
+</code></pre>
+<p>Both benchmarks return L2 and max error against the finite-difference baseline at the final
+time step. Use these results to compare PINN predictions with a traditional solver.</p>
+<h2 id="operator-learning-benchmark">Operator Learning Benchmark</h2>
+<p>Operator learning benchmarks use a synthetic smoothing operator applied to random Fourier
+series inputs. The goal is to ensure operator learners (e.g., FNO, DeepONet) can reproduce
+the moving-average target.</p>
+<pre><code class="lang-csharp">using AiDotNet.PhysicsInformed.Benchmarks;
+
+var options = new OperatorBenchmarkOptions
+{
+    SpatialPoints = 64,
+    SampleCount = 32,
+    MaxFrequency = 3,
+    SmoothingWindow = 5,
+    Seed = 42
+};
+
+OperatorBenchmarkResult result = OperatorBenchmarkSuite.RunSmoothingOperatorBenchmark(
+    options,
+    input =&gt; /* model prediction */ input);
+</code></pre>
+<h2 id="real-operator-benchmarks">Real Operator Benchmarks</h2>
+<p>Two standard operator-learning benchmarks are included with deterministic dataset generation.
+Both use simple finite-difference baselines for correctness and regression tracking.</p>
+<h3 id="poisson-operator-2d">Poisson Operator (2D)</h3>
+<pre><code class="lang-csharp">using AiDotNet.PhysicsInformed.Benchmarks;
+
+var options = new PoissonOperatorBenchmarkOptions
+{
+    GridSize = 32,
+    SampleCount = 8,
+    MaxFrequency = 3,
+    MaxIterations = 2000,
+    Tolerance = 1e-6,
+    Seed = 42
+};
+
+OperatorBenchmarkResult result = OperatorBenchmarkSuite.RunPoissonOperatorBenchmark(
+    options,
+    forcing =&gt; /* model prediction */ forcing);
+</code></pre>
+<p>To access the deterministic dataset directly:</p>
+<pre><code class="lang-csharp">OperatorDataset2D dataset = OperatorBenchmarkSuite.GeneratePoissonDataset(options);
+</code></pre>
+<h3 id="darcy-flow-operator-2d">Darcy Flow Operator (2D)</h3>
+<pre><code class="lang-csharp">using AiDotNet.PhysicsInformed.Benchmarks;
+
+var options = new DarcyOperatorBenchmarkOptions
+{
+    GridSize = 32,
+    SampleCount = 8,
+    MaxFrequency = 3,
+    MaxIterations = 3000,
+    Tolerance = 1e-6,
+    ForcingValue = 1.0,
+    LogPermeabilityScale = 0.5,
+    Seed = 42
+};
+
+OperatorBenchmarkResult result = OperatorBenchmarkSuite.RunDarcyOperatorBenchmark(
+    options,
+    permeability =&gt; /* model prediction */ permeability);
+</code></pre>
+<p>To access the deterministic dataset directly:</p>
+<pre><code class="lang-csharp">OperatorDataset2D dataset = OperatorBenchmarkSuite.GenerateDarcyDataset(options);
+</code></pre>
+<h2 id="baselines-and-metrics">Baselines and Metrics</h2>
+<ul>
+<li>PDE baselines: explicit finite-difference time stepping with periodic boundaries.</li>
+<li>Operator baselines: moving-average smoothing plus finite-difference solvers for Poisson and Darcy.</li>
+<li>Metrics: MSE, L2 error, relative L2 error, and max absolute error.</li>
+</ul>
+<p>Use the provided harnesses to track regressions and verify that physics-informed models
+retain expected numerical behavior across releases.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PhysicsInformedBenchmarks.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

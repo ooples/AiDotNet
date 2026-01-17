@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Active Learning &amp; Continual Learning Exhaustive Implementation Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Active Learning &amp; Continual Learning Exhaustive Implementation Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/design/ActiveLearning-ContinualLearning-Exhaustive-Plan.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="active-learning--continual-learning-exhaustive-implementation-plan">Active Learning &amp; Continual Learning Exhaustive Implementation Plan</h1>
+
+<h2 id="overview">Overview</h2>
+<p>This document outlines the exhaustive implementation plan for Active Learning (AL) and Continual Learning (CL) strategies in AiDotNet, as well as their integration into the PredictionModelBuilder facade.</p>
+<h2 id="current-state">Current State</h2>
+<h3 id="active-learning-5-strategies">Active Learning (5 strategies)</h3>
+<ol>
+<li><strong>UncertaintySampling</strong> - Select samples where model is most uncertain</li>
+<li><strong>QueryByCommittee</strong> - Use committee disagreement for selection</li>
+<li><strong>DiversitySampling</strong> - Select diverse samples using k-center/MMD</li>
+<li><strong>ExpectedModelChange</strong> - Select samples causing largest gradient changes</li>
+<li><strong>HybridSampling</strong> - Combine uncertainty and diversity</li>
+</ol>
+<h3 id="continual-learning-3-strategies">Continual Learning (3 strategies)</h3>
+<ol>
+<li><strong>ElasticWeightConsolidation (EWC)</strong> - Fisher Information regularization</li>
+<li><strong>GradientEpisodicMemory (GEM)</strong> - Gradient projection with episodic memory</li>
+<li><strong>LearningWithoutForgetting (LwF)</strong> - Knowledge distillation from previous tasks</li>
+</ol>
+<h2 id="missing-strategies-for-exhaustive-coverage">Missing Strategies for Exhaustive Coverage</h2>
+<h3 id="active-learning-strategies-to-implement-10-new">Active Learning Strategies to Implement (10 new)</h3>
+<h4 id="1-randomsampling-baseline">1. RandomSampling (Baseline)</h4>
+<ul>
+<li><strong>Purpose</strong>: Baseline strategy for comparison</li>
+<li><strong>Method</strong>: Random selection from unlabeled pool</li>
+<li><strong>Complexity</strong>: O(n) for selection</li>
+<li><strong>Reference</strong>: Standard baseline</li>
+</ul>
+<h4 id="2-marginsampling">2. MarginSampling</h4>
+<ul>
+<li><strong>Purpose</strong>: Select samples with smallest prediction margin</li>
+<li><strong>Method</strong>: For each sample, compute difference between top-2 probabilities</li>
+<li><strong>Formula</strong>: margin = P(y₁|x) - P(y₂|x), select smallest margins</li>
+<li><strong>Reference</strong>: Settles, 2012</li>
+</ul>
+<h4 id="3-entropysampling">3. EntropySampling</h4>
+<ul>
+<li><strong>Purpose</strong>: Select samples with highest prediction entropy</li>
+<li><strong>Method</strong>: Compute entropy of predicted class distribution</li>
+<li><strong>Formula</strong>: H(y|x) = -Σ P(yᵢ|x) log P(yᵢ|x)</li>
+<li><strong>Reference</strong>: Shannon, 1948; Settles, 2012</li>
+</ul>
+<h4 id="4-leastconfidencesampling">4. LeastConfidenceSampling</h4>
+<ul>
+<li><strong>Purpose</strong>: Select samples with lowest prediction confidence</li>
+<li><strong>Method</strong>: 1 - max(P(y|x)) for each sample</li>
+<li><strong>Reference</strong>: Lewis &amp; Catlett, 1994</li>
+</ul>
+<h4 id="5-bald-bayesian-active-learning-by-disagreement">5. BALD (Bayesian Active Learning by Disagreement)</h4>
+<ul>
+<li><strong>Purpose</strong>: Information-theoretic sample selection</li>
+<li><strong>Method</strong>: Mutual information between predictions and model parameters</li>
+<li><strong>Formula</strong>: I(y; θ|x, D) = H(y|x, D) - E_θ[H(y|x, θ)]</li>
+<li><strong>Implementation</strong>: Use MC Dropout for approximate Bayesian inference</li>
+<li><strong>Reference</strong>: Houlsby et al., 2011</li>
+</ul>
+<h4 id="6-batchbald">6. BatchBALD</h4>
+<ul>
+<li><strong>Purpose</strong>: Extension of BALD for batch selection</li>
+<li><strong>Method</strong>: Joint mutual information for batches</li>
+<li><strong>Avoids</strong>: Redundant samples in batch</li>
+<li><strong>Reference</strong>: Kirsch et al., 2019</li>
+</ul>
+<h4 id="7-coresetselection">7. CoreSetSelection</h4>
+<ul>
+<li><strong>Purpose</strong>: Select representative samples covering feature space</li>
+<li><strong>Method</strong>: k-Center-Greedy algorithm in feature space</li>
+<li><strong>Formula</strong>: Select samples maximizing minimum distance to selected set</li>
+<li><strong>Reference</strong>: Sener &amp; Savarese, 2018</li>
+</ul>
+<h4 id="8-densityweightedsampling">8. DensityWeightedSampling</h4>
+<ul>
+<li><strong>Purpose</strong>: Combine uncertainty with density weighting</li>
+<li><strong>Method</strong>: Score = Uncertainty × Density</li>
+<li><strong>Avoids</strong>: Selecting outliers with high uncertainty</li>
+<li><strong>Reference</strong>: Settles &amp; Craven, 2008</li>
+</ul>
+<h4 id="9-informationdensity">9. InformationDensity</h4>
+<ul>
+<li><strong>Purpose</strong>: Balance informativeness and representativeness</li>
+<li><strong>Method</strong>: Score = Uncertainty × Avg_Similarity_to_Pool^β</li>
+<li><strong>Reference</strong>: McCallum &amp; Nigam, 1998</li>
+</ul>
+<h4 id="10-variationratios">10. VariationRatios</h4>
+<ul>
+<li><strong>Purpose</strong>: Measure prediction uncertainty via variation ratios</li>
+<li><strong>Method</strong>: VR = 1 - max(P(y|x))</li>
+<li><strong>Interpretation</strong>: Fraction of predicted labels not in modal class</li>
+<li><strong>Reference</strong>: Freeman, 1965</li>
+</ul>
+<h3 id="continual-learning-strategies-to-implement-9-new">Continual Learning Strategies to Implement (9 new)</h3>
+<h4 id="1-synapticintelligence-si">1. SynapticIntelligence (SI)</h4>
+<ul>
+<li><strong>Purpose</strong>: Online importance estimation without explicit Fisher computation</li>
+<li><strong>Method</strong>: Track parameter importance during training via path integral</li>
+<li><strong>Formula</strong>: Ω_k = Σ_t (∂L/∂θ_k)·Δθ_k / (Δθ_k² + ξ)</li>
+<li><strong>Advantage</strong>: More efficient than EWC (online computation)</li>
+<li><strong>Reference</strong>: Zenke et al., 2017</li>
+</ul>
+<h4 id="2-memoryawaresynapses-mas">2. MemoryAwareSynapses (MAS)</h4>
+<ul>
+<li><strong>Purpose</strong>: Unsupervised importance estimation</li>
+<li><strong>Method</strong>: Importance based on output sensitivity to weight changes</li>
+<li><strong>Formula</strong>: Ω_ij = |∂F(x)/∂θ_ij|</li>
+<li><strong>Advantage</strong>: No need for labeled data</li>
+<li><strong>Reference</strong>: Aljundi et al., 2018</li>
+</ul>
+<h4 id="3-packnet">3. PackNet</h4>
+<ul>
+<li><strong>Purpose</strong>: Parameter isolation via pruning</li>
+<li><strong>Method</strong>: Prune network after each task, freeze important weights</li>
+<li><strong>Advantage</strong>: No forgetting (hard isolation)</li>
+<li><strong>Disadvantage</strong>: Limited capacity for many tasks</li>
+<li><strong>Reference</strong>: Mallya &amp; Lazebnik, 2018</li>
+</ul>
+<h4 id="4-progressiveneuralnetworks">4. ProgressiveNeuralNetworks</h4>
+<ul>
+<li><strong>Purpose</strong>: Add new capacity for each task</li>
+<li><strong>Method</strong>: Add lateral connections from frozen previous columns</li>
+<li><strong>Advantage</strong>: No forgetting, enables forward transfer</li>
+<li><strong>Disadvantage</strong>: Linear growth in parameters</li>
+<li><strong>Reference</strong>: Rusu et al., 2016</li>
+</ul>
+<h4 id="5-averagedgem-a-gem">5. AveragedGEM (A-GEM)</h4>
+<ul>
+<li><strong>Purpose</strong>: Efficient approximation of GEM</li>
+<li><strong>Method</strong>: Project gradient using random sample from memory</li>
+<li><strong>Advantage</strong>: O(1) memory access per update (vs O(t) for GEM)</li>
+<li><strong>Reference</strong>: Chaudhry et al., 2019</li>
+</ul>
+<h4 id="6-experiencereplay">6. ExperienceReplay</h4>
+<ul>
+<li><strong>Purpose</strong>: Rehearsal of past experiences</li>
+<li><strong>Method</strong>: Store and replay examples from previous tasks</li>
+<li><strong>Variants</strong>: Reservoir sampling, ring buffer, prioritized replay</li>
+<li><strong>Reference</strong>: Rolnick et al., 2019</li>
+</ul>
+<h4 id="7-generativereplay">7. GenerativeReplay</h4>
+<ul>
+<li><strong>Purpose</strong>: Generate pseudo-examples from previous tasks</li>
+<li><strong>Method</strong>: Train generative model alongside main model</li>
+<li><strong>Advantage</strong>: Constant memory regardless of task count</li>
+<li><strong>Reference</strong>: Shin et al., 2017</li>
+</ul>
+<h4 id="8-onlineewc">8. OnlineEWC</h4>
+<ul>
+<li><strong>Purpose</strong>: Running approximation of EWC</li>
+<li><strong>Method</strong>: Merge Fisher information matrices across tasks</li>
+<li><strong>Formula</strong>: F_online = γ·F_old + F_new</li>
+<li><strong>Advantage</strong>: Constant memory (O(params) vs O(tasks × params))</li>
+<li><strong>Reference</strong>: Schwarz et al., 2018</li>
+</ul>
+<h4 id="9-variationalcontinuallearning-vcl">9. VariationalContinualLearning (VCL)</h4>
+<ul>
+<li><strong>Purpose</strong>: Bayesian approach to continual learning</li>
+<li><strong>Method</strong>: Maintain posterior over parameters, use as prior for new task</li>
+<li><strong>Formula</strong>: p(θ|D₁:t) ∝ p(D_t|θ)·p(θ|D₁:t-1)</li>
+<li><strong>Reference</strong>: Nguyen et al., 2018</li>
+</ul>
+<h2 id="facade-integration-design">Facade Integration Design</h2>
+<h3 id="predictionmodelbuilder-integration">PredictionModelBuilder Integration</h3>
+<pre><code class="lang-csharp">// New private fields
+private IActiveLearningStrategy&lt;T&gt;? _activeLearningStrategy;
+private IContinualLearningStrategy&lt;T&gt;? _continualLearningStrategy;
+private ActiveLearningOptions? _activeLearningOptions;
+private ContinualLearningOptions? _continualLearningOptions;
+
+// New configuration methods
+public IPredictionModelBuilder&lt;T, TInput, TOutput&gt; ConfigureActiveLearning(
+    IActiveLearningStrategy&lt;T&gt; strategy,
+    ActiveLearningOptions? options = null)
+{
+    _activeLearningStrategy = strategy;
+    _activeLearningOptions = options ?? new ActiveLearningOptions();
+    return this;
+}
+
+public IPredictionModelBuilder&lt;T, TInput, TOutput&gt; ConfigureContinualLearning(
+    IContinualLearningStrategy&lt;T&gt; strategy,
+    ContinualLearningOptions? options = null)
+{
+    _continualLearningStrategy = strategy;
+    _continualLearningOptions = options ?? new ContinualLearningOptions();
+    return this;
+}
+</code></pre>
+<h3 id="options-classes">Options Classes</h3>
+<pre><code class="lang-csharp">/// &lt;summary&gt;
+/// Configuration options for Active Learning.
+/// &lt;/summary&gt;
+public class ActiveLearningOptions
+{
+    /// &lt;summary&gt;
+    /// Number of samples to query in each active learning iteration.
+    /// &lt;/summary&gt;
+    public int BatchSize { get; set; } = 10;
+
+    /// &lt;summary&gt;
+    /// Maximum number of active learning iterations.
+    /// &lt;/summary&gt;
+    public int MaxIterations { get; set; } = 100;
+
+    /// &lt;summary&gt;
+    /// Initial number of labeled samples to start with.
+    /// &lt;/summary&gt;
+    public int InitialLabeledSize { get; set; } = 10;
+
+    /// &lt;summary&gt;
+    /// Whether to use batch diversity when selecting samples.
+    /// &lt;/summary&gt;
+    public bool UseBatchDiversity { get; set; } = true;
+
+    /// &lt;summary&gt;
+    /// Stopping criterion: stop when model accuracy reaches this threshold.
+    /// &lt;/summary&gt;
+    public double TargetAccuracy { get; set; } = 0.95;
+
+    /// &lt;summary&gt;
+    /// Stopping criterion: stop when accuracy improvement is below threshold.
+    /// &lt;/summary&gt;
+    public double MinImprovementThreshold { get; set; } = 0.001;
+}
+
+/// &lt;summary&gt;
+/// Configuration options for Continual Learning.
+/// &lt;/summary&gt;
+public class ContinualLearningOptions
+{
+    /// &lt;summary&gt;
+    /// Regularization strength for preventing forgetting.
+    /// &lt;/summary&gt;
+    public double Lambda { get; set; } = 400.0;
+
+    /// &lt;summary&gt;
+    /// Memory size for replay-based methods.
+    /// &lt;/summary&gt;
+    public int MemorySize { get; set; } = 1000;
+
+    /// &lt;summary&gt;
+    /// Memory sampling strategy.
+    /// &lt;/summary&gt;
+    public MemorySamplingStrategy SamplingStrategy { get; set; } = MemorySamplingStrategy.ReservoirSampling;
+
+    /// &lt;summary&gt;
+    /// Whether to evaluate on all previous tasks after each task.
+    /// &lt;/summary&gt;
+    public bool EvaluateAllTasks { get; set; } = true;
+
+    /// &lt;summary&gt;
+    /// Number of samples per task to use for importance computation.
+    /// &lt;/summary&gt;
+    public int ImportanceEstimationSamples { get; set; } = 100;
+}
+
+public enum MemorySamplingStrategy
+{
+    ReservoirSampling,
+    RingBuffer,
+    PrioritizedReplay,
+    ClassBalanced
+}
+</code></pre>
+<h3 id="predictionmodelresult-integration">PredictionModelResult Integration</h3>
+<pre><code class="lang-csharp">// Add to PredictionModelResult or create new specialized result classes
+
+/// &lt;summary&gt;
+/// Results from an Active Learning training session.
+/// &lt;/summary&gt;
+public class ActiveLearningResult&lt;T, TInput, TOutput&gt;
+{
+    /// &lt;summary&gt;
+    /// The final trained model.
+    /// &lt;/summary&gt;
+    public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; set; }
+
+    /// &lt;summary&gt;
+    /// Indices of samples selected for labeling in each iteration.
+    /// &lt;/summary&gt;
+    public List&lt;int[]&gt; SelectedSamplesPerIteration { get; set; } = [];
+
+    /// &lt;summary&gt;
+    /// Model accuracy after each iteration.
+    /// &lt;/summary&gt;
+    public List&lt;double&gt; AccuracyHistory { get; set; } = [];
+
+    /// &lt;summary&gt;
+    /// Total number of labeled samples used.
+    /// &lt;/summary&gt;
+    public int TotalLabeledSamples { get; set; }
+
+    /// &lt;summary&gt;
+    /// Selection statistics from the active learning strategy.
+    /// &lt;/summary&gt;
+    public Dictionary&lt;string, T&gt;? FinalSelectionStatistics { get; set; }
+}
+
+/// &lt;summary&gt;
+/// Results from a Continual Learning training session.
+/// &lt;/summary&gt;
+public class ContinualLearningResult&lt;T, TInput, TOutput&gt;
+{
+    /// &lt;summary&gt;
+    /// The final trained model.
+    /// &lt;/summary&gt;
+    public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; set; }
+
+    /// &lt;summary&gt;
+    /// Performance on each task after training on all tasks.
+    /// &lt;/summary&gt;
+    public Dictionary&lt;int, TaskPerformance&lt;T&gt;&gt; TaskPerformances { get; set; } = [];
+
+    /// &lt;summary&gt;
+    /// Average accuracy across all tasks.
+    /// &lt;/summary&gt;
+    public double AverageAccuracy { get; set; }
+
+    /// &lt;summary&gt;
+    /// Backward transfer (impact on old tasks from learning new ones).
+    /// &lt;/summary&gt;
+    public double BackwardTransfer { get; set; }
+
+    /// &lt;summary&gt;
+    /// Forward transfer (benefit from old tasks to new ones).
+    /// &lt;/summary&gt;
+    public double ForwardTransfer { get; set; }
+
+    /// &lt;summary&gt;
+    /// Forgetting measure for each task.
+    /// &lt;/summary&gt;
+    public Dictionary&lt;int, double&gt; ForgettingPerTask { get; set; } = [];
+}
+
+public class TaskPerformance&lt;T&gt;
+{
+    public int TaskId { get; set; }
+    public double AccuracyAfterTask { get; set; }
+    public double FinalAccuracy { get; set; }
+    public double Forgetting { get; set; }
+}
+</code></pre>
+<h2 id="implementation-order">Implementation Order</h2>
+<h3 id="phase-1-active-learning-strategies-priority-order">Phase 1: Active Learning Strategies (Priority Order)</h3>
+<ol>
+<li>RandomSampling (baseline)</li>
+<li>MarginSampling</li>
+<li>EntropySampling</li>
+<li>LeastConfidenceSampling</li>
+<li>CoreSetSelection</li>
+<li>DensityWeightedSampling</li>
+<li>InformationDensity</li>
+<li>VariationRatios</li>
+<li>BALD</li>
+<li>BatchBALD</li>
+</ol>
+<h3 id="phase-2-continual-learning-strategies-priority-order">Phase 2: Continual Learning Strategies (Priority Order)</h3>
+<ol>
+<li>SynapticIntelligence</li>
+<li>OnlineEWC</li>
+<li>AveragedGEM</li>
+<li>ExperienceReplay</li>
+<li>MemoryAwareSynapses</li>
+<li>GenerativeReplay</li>
+<li>PackNet</li>
+<li>ProgressiveNeuralNetworks</li>
+<li>VariationalContinualLearning</li>
+</ol>
+<h3 id="phase-3-facade-integration">Phase 3: Facade Integration</h3>
+<ol>
+<li>Create ActiveLearningOptions and ContinualLearningOptions</li>
+<li>Add private fields to PredictionModelBuilder</li>
+<li>Add ConfigureActiveLearning and ConfigureContinualLearning methods</li>
+<li>Integrate into BuildAsync methods</li>
+<li>Create specialized result classes</li>
+</ol>
+<h3 id="phase-4-testing">Phase 4: Testing</h3>
+<ol>
+<li>Unit tests for each new strategy</li>
+<li>Integration tests for facade</li>
+<li>End-to-end tests with real models</li>
+</ol>
+<h2 id="summary">Summary</h2>
+<p>After implementation, AiDotNet will have:</p>
+<ul>
+<li><strong>15 Active Learning strategies</strong> (5 existing + 10 new)</li>
+<li><strong>12 Continual Learning strategies</strong> (3 existing + 9 new)</li>
+<li><strong>Full facade integration</strong> via PredictionModelBuilder</li>
+<li><strong>Comprehensive options</strong> for customization</li>
+<li><strong>Result tracking</strong> for analysis and debugging</li>
+</ul>
+<p>This provides exhaustive coverage of the most important AL and CL techniques from the academic literature, making AiDotNet a complete solution for these paradigms.</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/design/ActiveLearning-ContinualLearning-Exhaustive-Plan.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

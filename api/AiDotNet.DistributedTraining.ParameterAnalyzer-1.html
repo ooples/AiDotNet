@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ParameterAnalyzer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ParameterAnalyzer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Analyzes model parameters and creates optimized groupings for distributed communication.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DistributedTraining_ParameterAnalyzer_1.md&amp;value=---%0Auid%3A%20AiDotNet.DistributedTraining.ParameterAnalyzer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1">
+
+
+
+  <h1 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1" class="text-break">
+Class ParameterAnalyzer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DistributedTraining.html">DistributedTraining</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Analyzes model parameters and creates optimized groupings for distributed communication.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ParameterAnalyzer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ParameterAnalyzer&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b>
+Think of ParameterAnalyzer as a smart packing assistant. When shipping items, you don't
+want to send thousands of tiny packages - it's inefficient! Instead, you group small
+items together into larger boxes.
+</p>
+<p>
+Similarly, when communicating parameters across GPUs:
+- Sending many small parameter arrays is slow (lots of communication overhead)
+- Grouping small parameters together reduces the number of messages
+- This analyzer figures out the best way to group parameters for efficiency
+</p>
+<p>
+For example, instead of sending 1000 separate bias vectors (each with 1 parameter),
+we might group them into 10 larger chunks (each with 100 parameters).
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1__ctor_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1__ctor_System_Int32_System_Int32_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.#ctor(System.Int32,System.Int32)">
+  ParameterAnalyzer(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new parameter analyzer with the specified settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ParameterAnalyzer(int minimumGroupSize = 1024, int worldSize = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>minimumGroupSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum size for a parameter group (smaller groups will be merged)</p>
+</dd>
+    <dt><code>worldSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of processes in the distributed group</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1__ctor_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This creates the analyzer that will figure out how to group parameters.
+You tell it:
+- minimumGroupSize: The smallest acceptable group size (smaller groups get merged)
+- worldSize: How many processes are sharing the work (affects optimal group sizes)
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeForDistribution_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeForDistribution*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeForDistribution_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeForDistribution(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  AnalyzeForDistribution(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes parameters and creates groups optimized for even distribution across processes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ParameterAnalyzer&lt;T&gt;.ParameterGroup&gt; AnalyzeForDistribution(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to analyze</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.html">ParameterAnalyzer</a>&lt;T&gt;.<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.ParameterGroup.html">ParameterGroup</a>&gt;</dt>
+    <dd><p>A list of parameter groups optimized for distribution</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeForDistribution_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+When distributing work across multiple processes, we want each process to get
+roughly the same amount of work. This method creates groups that divide evenly.
+</p>
+<p>
+For example, if you have 10,000 parameters and 4 processes:
+- Each process should get ~2,500 parameters
+- We create groups sized to divide evenly by 4
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeModel_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeModel*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeModel__2_AiDotNet_Interfaces_IFullModel__0___0___1__" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeModel``2(AiDotNet.Interfaces.IFullModel{`0,``0,``1})">
+  AnalyzeModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a model's parameters and creates optimized groupings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ParameterAnalyzer&lt;T&gt;.ParameterGroup&gt; AnalyzeModel&lt;TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to analyze</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.html">ParameterAnalyzer</a>&lt;T&gt;.<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.ParameterGroup.html">ParameterGroup</a>&gt;</dt>
+    <dd><p>A list of optimized parameter groups</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TInput</code></dt>
+    <dd><p>The input type of the model</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output type of the model</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeModel__2_AiDotNet_Interfaces_IFullModel__0___0___1___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This method looks at all the parameters in your model and decides how to
+group them for efficient communication. It returns a list of ParameterGroups,
+each representing parameters that should be sent together.
+</p>
+<p>
+The analyzer:
+1. Identifies natural parameter boundaries (e.g., weights vs biases)
+2. Merges small groups that are below the minimum size
+3. Ensures groups are aligned with process boundaries for even distribution
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeParameters_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeParameters*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.AnalyzeParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  AnalyzeParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a parameter vector and creates optimized groupings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ParameterAnalyzer&lt;T&gt;.ParameterGroup&gt; AnalyzeParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to analyze</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.html">ParameterAnalyzer</a>&lt;T&gt;.<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.ParameterGroup.html">ParameterGroup</a>&gt;</dt>
+    <dd><p>A list of optimized parameter groups</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_AnalyzeParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is the core analysis method. It takes a long list of parameters
+and intelligently groups them for efficient communication.
+</p>
+<p>
+Strategy:
+1. Start with natural boundaries (we assume every N parameters belong together)
+2. Merge groups that are too small
+3. Align group boundaries to make distribution across processes easier
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_CalculateDistributionStats_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.CalculateDistributionStats*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_CalculateDistributionStats_System_Collections_Generic_List_AiDotNet_DistributedTraining_ParameterAnalyzer__0__ParameterGroup__" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.CalculateDistributionStats(System.Collections.Generic.List{AiDotNet.DistributedTraining.ParameterAnalyzer{`0}.ParameterGroup})">
+  CalculateDistributionStats(List&lt;ParameterGroup&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L307"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates statistics about parameter distribution for a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; CalculateDistributionStats(List&lt;ParameterAnalyzer&lt;T&gt;.ParameterGroup&gt; groups)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>groups</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.html">ParameterAnalyzer</a>&lt;T&gt;.<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.ParameterGroup.html">ParameterGroup</a>&gt;</dt>
+    <dd><p>The parameter groups to analyze</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>A dictionary of statistics (e.g., &quot;TotalGroups&quot;, &quot;AverageGroupSize&quot;)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_CalculateDistributionStats_System_Collections_Generic_List_AiDotNet_DistributedTraining_ParameterAnalyzer__0__ParameterGroup___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This gives you information about how parameters would be distributed,
+helping you understand the efficiency of the grouping strategy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_ValidateGrouping_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.ValidateGrouping*"></a>
+
+  <h3 id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_ValidateGrouping_System_Collections_Generic_List_AiDotNet_DistributedTraining_ParameterAnalyzer__0__ParameterGroup__System_Int32_" data-uid="AiDotNet.DistributedTraining.ParameterAnalyzer`1.ValidateGrouping(System.Collections.Generic.List{AiDotNet.DistributedTraining.ParameterAnalyzer{`0}.ParameterGroup},System.Int32)">
+  ValidateGrouping(List&lt;ParameterGroup&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L349"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that parameter groups cover all parameters without gaps or overlaps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ValidateGrouping(List&lt;ParameterAnalyzer&lt;T&gt;.ParameterGroup&gt; groups, int totalParameterCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>groups</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.html">ParameterAnalyzer</a>&lt;T&gt;.<a class="xref" href="AiDotNet.DistributedTraining.ParameterAnalyzer-1.ParameterGroup.html">ParameterGroup</a>&gt;</dt>
+    <dd><p>The parameter groups to validate</p>
+</dd>
+    <dt><code>totalParameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of parameters</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if grouping is valid, false otherwise</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DistributedTraining_ParameterAnalyzer_1_ValidateGrouping_System_Collections_Generic_List_AiDotNet_DistributedTraining_ParameterAnalyzer__0__ParameterGroup__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b>
+This is a safety check to make sure our grouping is correct. It verifies:
+- Every parameter is in exactly one group
+- Groups don't overlap
+- There are no gaps between groups
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if validation fails with details</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DistributedTraining/ParameterAnalyzer.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

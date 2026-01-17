@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GradientBoostingRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GradientBoostingRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Gradient Boosting Regression, an ensemble learning technique that combines multiple decision trees to create a powerful regression model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_GradientBoostingRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.GradientBoostingRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_GradientBoostingRegressionOptions" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions" class="text-break">
+Class GradientBoostingRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBoostingRegressionOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Gradient Boosting Regression, an ensemble learning technique that combines
+multiple decision trees to create a powerful regression model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GradientBoostingRegressionOptions : DecisionTreeOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html">DecisionTreeOptions</a></div>
+      <div><span class="xref">GradientBoostingRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_MaxDepth">DecisionTreeOptions.MaxDepth</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_MinSamplesSplit">DecisionTreeOptions.MinSamplesSplit</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_MaxFeatures">DecisionTreeOptions.MaxFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_SplitCriterion">DecisionTreeOptions.SplitCriterion</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_UseSoftTree">DecisionTreeOptions.UseSoftTree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.DecisionTreeOptions.html#AiDotNet_Models_Options_DecisionTreeOptions_SoftTreeTemperature">DecisionTreeOptions.SoftTreeTemperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Gradient Boosting is an ensemble machine learning technique that builds multiple decision trees
+sequentially, with each tree correcting the errors made by the previous trees. This approach typically
+produces more accurate models than single decision trees, at the cost of increased complexity and
+training time. This class inherits from DecisionTreeOptions, so all options for configuring individual
+trees are also available.
+</p>
+<p><b>For Beginners:</b> Think of Gradient Boosting as a team of decision trees working together to
+make predictions. Instead of relying on just one tree (which might make mistakes), gradient boosting
+builds trees one after another, with each new tree focusing specifically on correcting the mistakes
+made by all the previous trees.
+<p>Imagine you're trying to predict house prices. The first tree might make rough predictions, getting
+some houses right but being way off on others. The second tree doesn't try to predict the full house
+price again - instead, it specifically focuses on the houses where the first tree was wrong, trying to
+predict the error. This process continues, with each new tree fixing more subtle mistakes, until you
+have a collection of trees that work together to make very accurate predictions.</p>
+<p>Gradient boosting models are among the most powerful and widely used machine learning algorithms,
+especially for structured/tabular data, because they often achieve excellent accuracy while being
+relatively easy to use.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_LearningRate_" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_LearningRate" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBoostingRegressionOptions.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate (shrinkage) applied to each tree's contribution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate controls how much each tree contributes to the final prediction. Lower values mean
+each tree has less influence, requiring more trees to achieve the same level of performance but
+typically resulting in better generalization. Higher values make each tree more influential but may
+lead to overfitting.
+</p>
+<p><b>For Beginners:</b> This setting controls how strongly each tree's predictions affect the
+final result. With the default value of 0.1, each tree's contribution is scaled down to 10% of its
+original prediction.
+<p>Think of it like taking cautious steps when navigating in the dark - smaller steps (lower learning rate)
+mean you're less likely to make a big mistake, but you'll need more steps (trees) to reach your
+destination. A higher learning rate is like taking bigger steps - you might reach your destination
+faster, but you're more likely to stumble.</p>
+<p>Common values range from 0.01 to 0.3:</p>
+<ul>
+<li>Smaller values (0.01-0.05): More conservative, less likely to overfit, but require more trees</li>
+<li>Medium values (0.1): A good default balancing performance and training time</li>
+<li>Larger values (0.2-0.3): Faster training, but higher risk of overfitting</li>
+</ul>
+<p>The learning rate and number of trees are closely related - if you decrease the learning rate, you
+typically need to increase the number of trees.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_NumberOfTrees_" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.NumberOfTrees*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_NumberOfTrees" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.NumberOfTrees">
+  NumberOfTrees
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBoostingRegressionOptions.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of trees (estimators) in the ensemble.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumberOfTrees { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of trees, defaulting to 100.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_NumberOfTrees_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how many decision trees are built sequentially in the ensemble. More trees
+generally improve model performance up to a point, after which returns diminish and the risk of
+overfitting increases. The optimal number depends on the dataset size, complexity, and other
+hyperparameters like the learning rate.
+</p>
+<p><b>For Beginners:</b> This setting determines how many trees will work together in your model.
+With the default value of 100, the model will build 100 trees sequentially, with each new tree
+focusing on correcting the mistakes of all previous trees.
+<p>Think of it like getting multiple opinions before making a decision - more opinions (trees) generally
+leads to better decisions, but there's a point where adding more opinions doesn't help much and just
+makes the process take longer. Similarly, more trees usually improve accuracy but make your model
+slower to train and use.</p>
+<p>If you're getting poor results, you might increase this number (e.g., to 200 or 500). If training is
+too slow, you might decrease it (e.g., to 50). The optimal number of trees is often related to your
+learning rate - a smaller learning rate typically requires more trees to achieve good performance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_SubsampleRatio_" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.SubsampleRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_SubsampleRatio" data-uid="AiDotNet.Models.Options.GradientBoostingRegressionOptions.SubsampleRatio">
+  SubsampleRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBoostingRegressionOptions.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fraction of samples used for fitting each tree.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SubsampleRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The subsample ratio, defaulting to 1.0 (use all samples).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_GradientBoostingRegressionOptions_SubsampleRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls the random subsampling of the training data before building each tree.
+Values less than 1.0 implement stochastic gradient boosting, which can improve model robustness
+and reduce overfitting by introducing randomness. A value of 1.0 means all samples are used for
+every tree (standard gradient boosting).
+</p>
+<p><b>For Beginners:</b> This setting determines what fraction of your training data is used to
+build each individual tree. With the default value of 1.0, every tree uses all of your training data.
+If you set it to a lower value like 0.8, each tree would be built using a random 80% of your data.
+<p>Think of it like getting opinions from people who have seen different parts of a movie - each person
+has incomplete information, but together they might give you a more robust understanding than if they
+all saw exactly the same scenes. Similarly, training trees on different subsets of data can make your
+model more robust and less likely to memorize the training data.</p>
+<p>Setting this below 1.0 (typically 0.5-0.8) can:</p>
+<ul>
+<li>Help prevent overfitting</li>
+<li>Make training faster</li>
+<li>Introduce helpful randomness that improves generalization</li>
+<li>Make the model more robust to outliers</li>
+</ul>
+<p>This technique is sometimes called &quot;stochastic gradient boosting&quot; and is particularly helpful for
+larger datasets.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/GradientBoostingRegressionOptions.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

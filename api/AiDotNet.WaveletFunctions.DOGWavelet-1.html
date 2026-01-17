@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DOGWavelet&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DOGWavelet&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Derivative of Gaussian (DOG) wavelet, which is based on the nth derivative of the Gaussian function and is useful for detecting changes in signals.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_WaveletFunctions_DOGWavelet_1.md&amp;value=---%0Auid%3A%20AiDotNet.WaveletFunctions.DOGWavelet%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1">
+
+
+
+  <h1 id="AiDotNet_WaveletFunctions_DOGWavelet_1" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1" class="text-break">
+Class DOGWavelet&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.WaveletFunctions.html">WaveletFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Derivative of Gaussian (DOG) wavelet, which is based on the nth derivative
+of the Gaussian function and is useful for detecting changes in signals.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DOGWavelet&lt;T&gt; : WaveletFunctionBase&lt;T&gt;, IWaveletFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html">WaveletFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">DOGWavelet&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWaveletFunction-1.html">IWaveletFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.WaveletFunctions.WaveletFunctionBase-1.html#AiDotNet_WaveletFunctions_WaveletFunctionBase_1_NumOps">WaveletFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_WaveletFunctions_DOGWavelet_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Derivative of Gaussian (DOG) wavelet is derived from taking derivatives of the Gaussian function.
+It has excellent localization properties in both time and frequency domains and is particularly
+useful for detecting changes or transitions in signals.
+</p>
+<p>
+<b>For Beginners:</b>
+The Derivative of Gaussian (DOG) wavelet is like a mathematical tool that's especially
+good at finding places where your data changes quickly.
+<p>Key features of DOG wavelets:</p>
+<ul>
+<li>They're based on derivatives of the Gaussian function (bell curve)</li>
+<li>Different orders detect different types of changes</li>
+<li>They're symmetric (the same on both sides of the center)</li>
+<li>They have good localization in both time and frequency</li>
+</ul>
+<p>Think of them as detectors that respond strongly when your data shows specific
+patterns of change:</p>
+<ul>
+<li>1st order (order=1): Detects edges (sudden jumps)</li>
+<li>2nd order (order=2): Detects peaks and valleys (Mexican Hat wavelet)</li>
+<li>Higher orders: Detect more complex patterns of change</li>
+</ul>
+<p>These wavelets are particularly useful for:</p>
+<ul>
+<li>Edge detection in signals and images</li>
+<li>Finding points where data changes rapidly</li>
+<li>Scale-space analysis</li>
+<li>Feature detection</li>
+<li>Signal analysis where transitions are important</li>
+</ul>
+<p>The order parameter lets you choose which type of change you're looking for.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1__ctor_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1__ctor_System_Int32_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.#ctor(System.Int32)">
+  DOGWavelet(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DOGWavelet class with the specified order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DOGWavelet(int order = 2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>order</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The order of the derivative of the Gaussian function. Default is 2.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The order parameter determines which derivative of the Gaussian function is used
+to create the wavelet.
+<p>Different orders create wavelets with different properties:</p>
+<ul>
+<li><p>Order 1: First derivative of Gaussian</p>
+<ul>
+<li>Looks like an odd function (antisymmetric)</li>
+<li>Good for detecting edges (sudden changes)</li>
+<li>Similar to the Haar wavelet but smoother</li>
+</ul>
+</li>
+<li><p>Order 2: Second derivative of Gaussian (Mexican Hat wavelet)</p>
+<ul>
+<li>Looks like a Mexican hat or sombrero</li>
+<li>Good for detecting peaks and valleys</li>
+<li>Most commonly used DOG wavelet</li>
+</ul>
+</li>
+<li><p>Higher orders:</p>
+<ul>
+<li>More oscillations</li>
+<li>Can detect more complex patterns of change</li>
+<li>More selective in frequency</li>
+</ul>
+</li>
+</ul>
+<p>The default order of 2 corresponds to the Mexican Hat wavelet, which is
+widely used for its ability to detect peaks and transitions in signals.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1_Calculate_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Calculate*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1_Calculate__0_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Calculate(`0)">
+  Calculate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the value of the DOG wavelet function at point x.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Calculate(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The point at which to evaluate the wavelet function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the wavelet function at point x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1_Calculate__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method gives you the actual value of the DOG wavelet at a specific point.
+<p>The DOG wavelet is defined as the nth derivative of the Gaussian function:
+?(x) = (-1)^n · d^n/dx^n(e^(-x²/2))</p>
+<p>For specific orders, this gives:</p>
+<ul>
+<li>Order 1: ?(x) = -x · e^(-x²/2)</li>
+<li>Order 2: ?(x) = (x² - 1) · e^(-x²/2)</li>
+<li>Order 3: ?(x) = -(x³ - 3x) · e^(-x²/2)</li>
+</ul>
+<p>The implementation uses a combination of:</p>
+<ol>
+<li>The appropriate polynomial term based on the order</li>
+<li>The Gaussian envelope e^(-x²/2)</li>
+<li>A normalization factor to ensure proper scaling</li>
+</ol>
+<p>The result is a function that:</p>
+<ul>
+<li>Has n+1 zero-crossings for order n</li>
+<li>Decays to zero as x moves away from the center</li>
+<li>Has specific vanishing moments</li>
+</ul>
+<p>You might use this method to visualize the wavelet or to directly apply the wavelet
+to a signal at specific points.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1_Decompose_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Decompose*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Decompose(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Decompose(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decomposes an input signal into approximation and detail coefficients using the DOG wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail) Decompose(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input signal vector to decompose.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the approximation coefficients and detail coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1_Decompose_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method performs one level of wavelet decomposition on your signal, splitting it into:
+<ul>
+<li>Approximation coefficients: Represent the low-frequency components (the overall shape)</li>
+<li>Detail coefficients: Represent the high-frequency components (the fine details)</li>
+</ul>
+<p>The process works like this:</p>
+<ol>
+<li>The input signal is convolved (filtered) with a Gaussian filter to get the approximation</li>
+<li>The input signal is convolved with the DOG wavelet to get the details</li>
+<li>Both results are downsampled (every other value is kept)</li>
+</ol>
+<p>What makes the DOG wavelet special for this task is:</p>
+<ul>
+<li>It's excellent at detecting changes or transitions in the signal</li>
+<li>It has good localization properties in both time and frequency</li>
+<li>Different orders can detect different types of features</li>
+</ul>
+<p>For example, with order=2 (Mexican Hat), the detail coefficients will highlight
+places where the signal has peaks or valleys.</p>
+<p>The result has half the length of the original signal (due to downsampling),
+which makes wavelet decomposition efficient for compression and multi-resolution analysis.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetScalingCoefficients_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.GetScalingCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetScalingCoefficients" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.GetScalingCoefficients">
+  GetScalingCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L309"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scaling function coefficients for the DOG wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetScalingCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of scaling function coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetScalingCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The scaling coefficients are the filter weights used to extract the low-frequency
+components (approximation) from a signal.
+<p>For DOG wavelets, these coefficients are derived from the Gaussian function:</p>
+<p>g(x) = e^(-x²)</p>
+<p>The Gaussian function is a natural choice for the scaling function because:</p>
+<ul>
+<li>It's smooth and has good localization properties</li>
+<li>It's the function whose derivatives create the DOG wavelets</li>
+<li>It acts as an effective low-pass filter</li>
+</ul>
+<p>This method:</p>
+<ol>
+<li>Creates a discretized Gaussian function of specified length</li>
+<li>Normalizes the coefficients so they sum to 1</li>
+</ol>
+<p>The resulting filter captures the low-frequency components of the signal,
+providing the &quot;approximation&quot; part of the wavelet decomposition.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetWaveletCoefficients_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.GetWaveletCoefficients*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetWaveletCoefficients" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.GetWaveletCoefficients">
+  GetWaveletCoefficients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the wavelet function coefficients for the DOG wavelet.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetWaveletCoefficients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of wavelet function coefficients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1_GetWaveletCoefficients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+The wavelet coefficients are the filter weights used to extract the high-frequency
+components (details) from a signal.
+<p>For DOG wavelets, these coefficients are a discretized version of the
+first derivative of the Gaussian function:</p>
+<p>?(t) = -2t · e^(-t²)</p>
+<p>This method:</p>
+<ol>
+<li>Creates a discretized version of this function with specified length</li>
+<li>Samples the function at regular intervals</li>
+<li>Normalizes the coefficients to ensure proper energy preservation</li>
+</ol>
+<p>The resulting filter is excellent at detecting edges and transitions in the signal.
+The characteristic shape with opposite signs on either side of the center
+makes it respond strongly to changes in the data.</p>
+<p>Note that this implementation specifically uses the first derivative form
+regardless of the order parameter. For a complete implementation, this would
+need to be extended to use the appropriate derivative based on the order.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_WaveletFunctions_DOGWavelet_1_Reconstruct_" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Reconstruct*"></a>
+
+  <h3 id="AiDotNet_WaveletFunctions_DOGWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.WaveletFunctions.DOGWavelet`1.Reconstruct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Reconstruct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the original signal from approximation and detail coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reconstruct(Vector&lt;T&gt; approximation, Vector&lt;T&gt; detail)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>approximation</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The approximation coefficients from decomposition.</p>
+</dd>
+    <dt><code>detail</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The detail coefficients from decomposition.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The reconstructed signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_WaveletFunctions_DOGWavelet_1_Reconstruct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+This method reverses the decomposition process to get back the original signal.
+<p>The reconstruction process for DOG wavelets:</p>
+<ol>
+<li>Upsample the approximation and detail coefficients by inserting zeros</li>
+<li>Convolve with the time-reversed scaling and wavelet filters</li>
+<li>Add the results together</li>
+</ol>
+<p>This is the inverse of the Decompose method, so:
+Reconstruct(Decompose(signal)) should equal the original signal.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/WaveletFunctions/DOGWavelet.cs/#L41" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

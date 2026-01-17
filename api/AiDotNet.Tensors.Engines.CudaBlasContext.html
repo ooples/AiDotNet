@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CudaBlasContext | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CudaBlasContext | AiDotNet Documentation ">
+      
+      <meta name="description" content="Managed wrapper for a CUDA context with cuBLAS support.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CudaBlasContext.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CudaBlasContext%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CudaBlasContext">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CudaBlasContext" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext" class="text-break">
+Class CudaBlasContext  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L574"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Managed wrapper for a CUDA context with cuBLAS support.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CudaBlasContext : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CudaBlasContext</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext__ctor_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext__ctor_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.#ctor(System.Int32)">
+  CudaBlasContext(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L594"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new CUDA context with cuBLAS on the specified device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CudaBlasContext(int deviceId = 0)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>deviceId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_CublasHandle_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CublasHandle*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_CublasHandle" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CublasHandle">
+  CublasHandle
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L584"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cuBLAS handle for BLAS operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public nint CublasHandle { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_IsValid_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.IsValid*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_IsValid" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.IsValid">
+  IsValid
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L589"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this context is valid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsValid { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Allocate_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Allocate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Allocate__1_System_Int64_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Allocate``1(System.Int64)">
+  Allocate&lt;T&gt;(long)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L618"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates device memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CudaDeviceMemory&lt;T&gt; Allocate&lt;T&gt;(long count) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToDevice_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToDevice*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToDevice__1_AiDotNet_Tensors_Engines_CudaDeviceMemory___0__System_ReadOnlySpan___0__" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToDevice``1(AiDotNet.Tensors.Engines.CudaDeviceMemory{``0},System.ReadOnlySpan{``0})">
+  CopyToDevice&lt;T&gt;(CudaDeviceMemory&lt;T&gt;, ReadOnlySpan&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L668"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies data from host span to device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyToDevice&lt;T&gt;(CudaDeviceMemory&lt;T&gt; dst, ReadOnlySpan&lt;T&gt; src) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>src</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToDevice_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToDevice*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToDevice__1_AiDotNet_Tensors_Engines_CudaDeviceMemory___0____0___" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToDevice``1(AiDotNet.Tensors.Engines.CudaDeviceMemory{``0},``0[])">
+  CopyToDevice&lt;T&gt;(CudaDeviceMemory&lt;T&gt;, T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L632"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies data from host to device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyToDevice&lt;T&gt;(CudaDeviceMemory&lt;T&gt; dst, T[] src) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>src</code> T[]</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToHost_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToHost*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToHost__1_System_Span___0__AiDotNet_Tensors_Engines_CudaDeviceMemory___0__" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToHost``1(System.Span{``0},AiDotNet.Tensors.Engines.CudaDeviceMemory{``0})">
+  CopyToHost&lt;T&gt;(Span&lt;T&gt;, CudaDeviceMemory&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L686"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies data from device to host span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyToHost&lt;T&gt;(Span&lt;T&gt; dst, CudaDeviceMemory&lt;T&gt; src) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>src</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToHost_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToHost*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_CopyToHost__1___0___AiDotNet_Tensors_Engines_CudaDeviceMemory___0__" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.CopyToHost``1(``0[],AiDotNet.Tensors.Engines.CudaDeviceMemory{``0})">
+  CopyToHost&lt;T&gt;(T[], CudaDeviceMemory&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L650"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies data from device to host.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyToHost&lt;T&gt;(T[] dst, CudaDeviceMemory&lt;T&gt; src) where T : unmanaged</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dst</code> T[]</dt>
+    <dd></dd>
+    <dt><code>src</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Dgemm_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Dgemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Dgemm_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Double_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Double__System_Int32_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Double__System_Int32_System_Double_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Double__System_Int32_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Dgemm(AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Double,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Double},System.Int32,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Double},System.Int32,System.Double,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Double},System.Int32)">
+  Dgemm(CublasOperation, CublasOperation, int, int, int, double, CudaDeviceMemory&lt;double&gt;, int, CudaDeviceMemory&lt;double&gt;, int, double, CudaDeviceMemory&lt;double&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs DGEMM: C = alpha * A * B + beta * C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dgemm(CublasOperation transa, CublasOperation transb, int m, int n, int k, double alpha, CudaDeviceMemory&lt;double&gt; A, int lda, CudaDeviceMemory&lt;double&gt; B, int ldb, double beta, CudaDeviceMemory&lt;double&gt; C, int ldc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Dispose_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Dispose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Dispose" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L778"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Finalize_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Finalize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Finalize" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Finalize">
+  ~CudaBlasContext()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L798"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ~CudaBlasContext()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Sgemm_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Sgemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Sgemm_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32_System_Single_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Sgemm(AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Single,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Single},System.Int32,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Single},System.Int32,System.Single,AiDotNet.Tensors.Engines.CudaDeviceMemory{System.Single},System.Int32)">
+  Sgemm(CublasOperation, CublasOperation, int, int, int, float, CudaDeviceMemory&lt;float&gt;, int, CudaDeviceMemory&lt;float&gt;, int, float, CudaDeviceMemory&lt;float&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L712"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs SGEMM: C = alpha * A * B + beta * C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sgemm(CublasOperation transa, CublasOperation transb, int m, int n, int k, float alpha, CudaDeviceMemory&lt;float&gt; A, int lda, CudaDeviceMemory&lt;float&gt; B, int ldb, float beta, CudaDeviceMemory&lt;float&gt; C, int ldc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaDeviceMemory-1.html">CudaDeviceMemory</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CudaBlasContext_Sgemm_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32_System_Single_AiDotNet_Tensors_Engines_CudaDeviceMemory_System_Single__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For row-major matrices (C# default), this computes C = alpha * B^T * A^T + beta * C^T
+which is equivalent to C^T = alpha * A * B + beta * C.</p>
+<p>To compute C = A * B in row-major:</p>
+<ul>
+<li>Call Sgemm with A and B swapped, m and n swapped</li>
+<li>Result is correctly in row-major format</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CudaBlasContext_Synchronize_" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Synchronize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CudaBlasContext_Synchronize" data-uid="AiDotNet.Tensors.Engines.CudaBlasContext.Synchronize">
+  Synchronize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L766"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes the CUDA context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Synchronize()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L574" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

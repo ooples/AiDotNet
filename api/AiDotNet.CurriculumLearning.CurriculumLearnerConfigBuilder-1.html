@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CurriculumLearnerConfigBuilder&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CurriculumLearnerConfigBuilder&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Fluent builder for curriculum learning configuration.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1.md&amp;value=---%0Auid%3A%20AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1">
+
+
+
+  <h1 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1" class="text-break">
+Class CurriculumLearnerConfigBuilder&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.CurriculumLearning.html">CurriculumLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Fluent builder for curriculum learning configuration.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class CurriculumLearnerConfigBuilder&lt;T&gt; : ICurriculumLearnerConfigBuilder&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CurriculumLearnerConfigBuilder&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This builder lets you configure curriculum learning
+using a fluent, readable style. Each method returns the builder so you can
+chain multiple settings together.</p>
+<p><b>Example Usage:</b></p>
+<pre><code class="lang-csharp">var config = CurriculumLearnerConfig&lt;double&gt;.CreateBuilder()
+    .WithTotalEpochs(100)
+    .WithNumPhases(5)
+    .WithSchedule(CurriculumScheduleType.Linear)
+    .WithEarlyStopping(patience: 10)
+    .Build();</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1__ctor_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1__ctor" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.#ctor">
+  CurriculumLearnerConfigBuilder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CurriculumLearnerConfigBuilder()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_Build_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.Build*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_Build" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.Build">
+  Build()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds the configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfig&lt;T&gt; Build()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfig-1.html">ICurriculumLearnerConfig</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_Reset_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.Reset*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_Reset" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the builder to default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; Reset()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithBatchSize_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithBatchSize*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithBatchSize_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithBatchSize(System.Int32)">
+  WithBatchSize(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the batch size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithBatchSize(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyRecalculation_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyRecalculation*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyRecalculation_System_Boolean_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyRecalculation(System.Boolean,System.Int32)">
+  WithDifficultyRecalculation(bool, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables or disables difficulty recalculation during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithDifficultyRecalculation(bool enabled, int frequency = 10)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enabled</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enable difficulty recalculation.</p>
+</dd>
+    <dt><code>frequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How often to recalculate (in epochs).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyRecalculation_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyRecalculation*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyRecalculation_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyRecalculation(System.Int32)">
+  WithDifficultyRecalculation(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enables difficulty recalculation during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithDifficultyRecalculation(int frequency)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frequency</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyWeighting_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyWeighting*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithDifficultyWeighting_System_Boolean_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithDifficultyWeighting(System.Boolean)">
+  WithDifficultyWeighting(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithDifficultyWeighting(bool useWeighting)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>useWeighting</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithEarlyStopping_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithEarlyStopping_System_Int32__0_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithEarlyStopping(System.Int32,`0)">
+  WithEarlyStopping(int, T?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures early stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithEarlyStopping(int patience, T? minDelta = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>patience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>minDelta</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithFinalDataFraction_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithFinalDataFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithFinalDataFraction__0_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithFinalDataFraction(`0)">
+  WithFinalDataFraction(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithFinalDataFraction(T fraction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fraction</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithInitialDataFraction_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithInitialDataFraction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithInitialDataFraction__0_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithInitialDataFraction(`0)">
+  WithInitialDataFraction(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the initial data fraction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithInitialDataFraction(T fraction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fraction</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithLearningRate_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithLearningRate*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithLearningRate__0_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithLearningRate(`0)">
+  WithLearningRate(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithLearningRate(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithLogAction_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithLogAction*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithLogAction_System_Action_System_String__" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithLogAction(System.Action{System.String})">
+  WithLogAction(Action&lt;string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a custom logging action.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithLogAction(Action&lt;string&gt; logAction)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>logAction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Action to invoke for logging messages.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithNormalizeDifficulties_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithNormalizeDifficulties*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithNormalizeDifficulties_System_Boolean_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithNormalizeDifficulties(System.Boolean)">
+  WithNormalizeDifficulties(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithNormalizeDifficulties(bool normalize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>normalize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithNumPhases_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithNumPhases*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithNumPhases_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithNumPhases(System.Int32)">
+  WithNumPhases(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the number of curriculum phases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithNumPhases(int phases)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>phases</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithRandomSeed_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithRandomSeed*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithRandomSeed_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithRandomSeed(System.Int32)">
+  WithRandomSeed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the random seed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithRandomSeed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithScheduleType_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithScheduleType*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithScheduleType_AiDotNet_CurriculumLearning_Interfaces_CurriculumScheduleType_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithScheduleType(AiDotNet.CurriculumLearning.Interfaces.CurriculumScheduleType)">
+  WithScheduleType(CurriculumScheduleType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the curriculum schedule type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithScheduleType(CurriculumScheduleType scheduleType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scheduleType</code> <a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.CurriculumScheduleType.html">CurriculumScheduleType</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithShuffling_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithShuffling*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithShuffling_System_Boolean_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithShuffling(System.Boolean)">
+  WithShuffling(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithShuffling(bool shuffle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shuffle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithTotalEpochs_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithTotalEpochs*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithTotalEpochs_System_Int32_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithTotalEpochs(System.Int32)">
+  WithTotalEpochs(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the total number of training epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithTotalEpochs(int epochs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>epochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithVerbosity_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithVerbosity*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithVerbosity_AiDotNet_CurriculumLearning_Interfaces_CurriculumVerbosity_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithVerbosity(AiDotNet.CurriculumLearning.Interfaces.CurriculumVerbosity)">
+  WithVerbosity(CurriculumVerbosity)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the verbosity level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithVerbosity(CurriculumVerbosity verbosity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>verbosity</code> <a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.CurriculumVerbosity.html">CurriculumVerbosity</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithoutEarlyStopping_" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithoutEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_CurriculumLearning_CurriculumLearnerConfigBuilder_1_WithoutEarlyStopping" data-uid="AiDotNet.CurriculumLearning.CurriculumLearnerConfigBuilder`1.WithoutEarlyStopping">
+  WithoutEarlyStopping()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICurriculumLearnerConfigBuilder&lt;T&gt; WithoutEarlyStopping()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.CurriculumLearning.Interfaces.ICurriculumLearnerConfigBuilder-1.html">ICurriculumLearnerConfigBuilder</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/CurriculumLearning/CurriculumLearnerConfigBuilder.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

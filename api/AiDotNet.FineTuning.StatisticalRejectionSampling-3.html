@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StatisticalRejectionSampling&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StatisticalRejectionSampling&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements Statistical Rejection Sampling Optimization (RSO) for fine-tuning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FineTuning_StatisticalRejectionSampling_3.md&amp;value=---%0Auid%3A%20AiDotNet.FineTuning.StatisticalRejectionSampling%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3">
+
+
+
+  <h1 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3" class="text-break">
+Class StatisticalRejectionSampling&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FineTuning.html">FineTuning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements Statistical Rejection Sampling Optimization (RSO) for fine-tuning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StatisticalRejectionSampling&lt;T, TInput, TOutput&gt; : FineTuningBase&lt;T, TInput, TOutput&gt;, IFineTuning&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html">FineTuningBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">StatisticalRejectionSampling&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFineTuning-3.html">IFineTuning</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_NumOps">FineTuningBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Options">FineTuningBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Random">FineTuningBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_CurrentMetrics">FineTuningBase&lt;T, TInput, TOutput&gt;.CurrentMetrics</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_MethodName">FineTuningBase&lt;T, TInput, TOutput&gt;.MethodName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Category">FineTuningBase&lt;T, TInput, TOutput&gt;.Category</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_RequiresRewardModel">FineTuningBase&lt;T, TInput, TOutput&gt;.RequiresRewardModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_RequiresReferenceModel">FineTuningBase&lt;T, TInput, TOutput&gt;.RequiresReferenceModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_SupportsPEFT">FineTuningBase&lt;T, TInput, TOutput&gt;.SupportsPEFT</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_FineTuneAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_">FineTuningBase&lt;T, TInput, TOutput&gt;.FineTuneAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_EvaluateAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_">FineTuningBase&lt;T, TInput, TOutput&gt;.EvaluateAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_GetOptions">FineTuningBase&lt;T, TInput, TOutput&gt;.GetOptions()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Reset">FineTuningBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Serialize">FineTuningBase&lt;T, TInput, TOutput&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Deserialize_System_Byte___">FineTuningBase&lt;T, TInput, TOutput&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_SaveModel_System_String_">FineTuningBase&lt;T, TInput, TOutput&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_LoadModel_System_String_">FineTuningBase&lt;T, TInput, TOutput&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_ValidateTrainingData_AiDotNet_Models_Options_FineTuningData__0__1__2__">FineTuningBase&lt;T, TInput, TOutput&gt;.ValidateTrainingData(FineTuningData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_CreateBatches_AiDotNet_Models_Options_FineTuningData__0__1__2__System_Int32_System_Boolean_">FineTuningBase&lt;T, TInput, TOutput&gt;.CreateBatches(FineTuningData&lt;T, TInput, TOutput&gt;, int, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbability_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">FineTuningBase&lt;T, TInput, TOutput&gt;.ComputeLogProbability(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_ComputeLogProbabilityFromPrediction__2__2_">FineTuningBase&lt;T, TInput, TOutput&gt;.ComputeLogProbabilityFromPrediction(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_ComputeKLDivergence_System_Double___System_Double___">FineTuningBase&lt;T, TInput, TOutput&gt;.ComputeKLDivergence(double[], double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_Sigmoid_System_Double_">FineTuningBase&lt;T, TInput, TOutput&gt;.Sigmoid(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_LogSigmoid_System_Double_">FineTuningBase&lt;T, TInput, TOutput&gt;.LogSigmoid(double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_UpdateMetrics_System_Double_System_Int32_">FineTuningBase&lt;T, TInput, TOutput&gt;.UpdateMetrics(double, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FineTuning.FineTuningBase-3.html#AiDotNet_FineTuning_FineTuningBase_3_LogProgress_System_Int32_System_Int32_System_Double_System_String_">FineTuningBase&lt;T, TInput, TOutput&gt;.LogProgress(int, int, double, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+RSO uses rejection sampling to create high-quality training pairs from ranked outputs.
+It samples pairs based on the statistical properties of the ranking to create
+better preference data.
+</p>
+<p><b>For Beginners:</b> RSO takes a list of responses ranked from best to worst
+and intelligently picks pairs to learn from. Instead of just using best vs worst,
+it uses statistical sampling to create more informative training examples.</p>
+<p>
+Original paper: "Statistical Rejection Sampling Improves Preference Optimization"
+by Liu et al. (2024)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3__ctor_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3__ctor_AiDotNet_Models_Options_FineTuningOptions__0__" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.#ctor(AiDotNet.Models.Options.FineTuningOptions{`0})">
+  StatisticalRejectionSampling(FineTuningOptions&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of RSO fine-tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StatisticalRejectionSampling(FineTuningOptions&lt;T&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningOptions-1.html">FineTuningOptions</a>&lt;T&gt;</dt>
+    <dd><p>The fine-tuning configuration options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_Category_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.Category*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_Category" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.Category">
+  Category
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the category of this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override FineTuningCategory Category { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.FineTuningCategory.html">FineTuningCategory</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_MethodName_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.MethodName*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_MethodName" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.MethodName">
+  MethodName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string MethodName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_MethodName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Examples: &quot;DPO&quot;, &quot;RLHF&quot;, &quot;SimPO&quot;, &quot;ORPO&quot;, &quot;SFT&quot;, &quot;Constitutional AI&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresReferenceModel_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.RequiresReferenceModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresReferenceModel" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.RequiresReferenceModel">
+  RequiresReferenceModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this method requires a reference model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool RequiresReferenceModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresReferenceModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Most preference methods (DPO, IPO) require a reference model for KL regularization.
+Reference-free methods (SimPO, ORPO) do not require one, making them more memory efficient.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresRewardModel_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.RequiresRewardModel*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresRewardModel" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.RequiresRewardModel">
+  RequiresRewardModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this method requires a reward model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool RequiresRewardModel { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_RequiresRewardModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+RL-based methods (RLHF, PPO, GRPO) require a reward model.
+Direct preference methods (DPO, IPO, KTO) do not require one.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_EvaluateAsync_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.EvaluateAsync*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_EvaluateAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.EvaluateAsync(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Threading.CancellationToken)">
+  EvaluateAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the fine-tuning quality of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;FineTuningMetrics&lt;T&gt;&gt; EvaluateAsync(IFullModel&lt;T, TInput, TOutput&gt; model, FineTuningData&lt;T, TInput, TOutput&gt; evaluationData, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fine-tuned model to evaluate.</p>
+</dd>
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Evaluation dataset.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token for cancellation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Models.Options.FineTuningMetrics-1.html">FineTuningMetrics</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Metrics describing the fine-tuning quality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_EvaluateAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different fine-tuning methods have different evaluation metrics:
+</p>
+<ul><li><span class="term">Preference methods</span>Win rate against reference, preference accuracy</li><li><span class="term">RL methods</span>Reward scores, KL divergence from base model</li><li><span class="term">Safety methods</span>Harmlessness scores, refusal rates</li></ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_FineTuneAsync_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.FineTuneAsync*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_FineTuneAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.FineTuneAsync(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.FineTuningData{`0,`1,`2},System.Threading.CancellationToken)">
+  FineTuneAsync(IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fine-tunes a model using the configured method and provided training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt; FineTuneAsync(IFullModel&lt;T, TInput, TOutput&gt; baseModel, FineTuningData&lt;T, TInput, TOutput&gt; trainingData, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The pre-trained model to fine-tune.</p>
+</dd>
+    <dt><code>trainingData</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training data appropriate for this fine-tuning method.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token for cancellation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd><p>The fine-tuned model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_FineTuneAsync_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_FineTuningData__0__1__2__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method applies the fine-tuning algorithm to adapt the base model. The specific
+behavior depends on the method category:
+</p>
+<ul><li><span class="term">SFT</span>Uses labeled examples from trainingData</li><li><span class="term">Preference-based (DPO, etc.)</span>Uses preference pairs from trainingData</li><li><span class="term">RL-based (RLHF, PPO)</span>Uses reward model and training data</li></ul>
+<p><b>For Beginners:</b> This is where the actual training happens. You give it a model
+and training data, and it returns an improved model that's better at the specific task.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_ValidateTrainingData_" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.ValidateTrainingData*"></a>
+
+  <h3 id="AiDotNet_FineTuning_StatisticalRejectionSampling_3_ValidateTrainingData_AiDotNet_Models_Options_FineTuningData__0__1__2__" data-uid="AiDotNet.FineTuning.StatisticalRejectionSampling`3.ValidateTrainingData(AiDotNet.Models.Options.FineTuningData{`0,`1,`2})">
+  ValidateTrainingData(FineTuningData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the training data is appropriate for this fine-tuning method.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void ValidateTrainingData(FineTuningData&lt;T, TInput, TOutput&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training data to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if the data is invalid for this method.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FineTuning/StatisticalRejectionSampling.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

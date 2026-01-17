@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum AcquisitionFunctionType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum AcquisitionFunctionType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents different types of acquisition functions used in Bayesian optimization.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_AcquisitionFunctionType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.AcquisitionFunctionType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.AcquisitionFunctionType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_AcquisitionFunctionType" data-uid="AiDotNet.Enums.AcquisitionFunctionType" class="text-break">
+Enum AcquisitionFunctionType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/AcquisitionFunctionType.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents different types of acquisition functions used in Bayesian optimization.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum AcquisitionFunctionType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_AcquisitionFunctionType_ExpectedImprovement"><code>ExpectedImprovement = 1</code></dt>
+  <dd><p>Expected Improvement acquisition function that focuses on areas likely to improve upon the current best solution.</p>
+<p>
+<b>For Beginners:</b> Expected Improvement (EI) is like a strategic explorer who asks: "Where am I most 
+likely to find something better than the best I've seen so far?"
+<p>EI works by:</p>
+<ol>
+<li>Keeping track of the best solution found so far</li>
+<li>For each unexplored point, calculating how much better it might be than the current best</li>
+<li>Weighting this potential improvement by the probability of achieving it</li>
+<li>Selecting the point with the highest expected improvement</li>
+</ol>
+<p>Key characteristics:</p>
+<ul>
+<li>Naturally balances exploration and exploitation without extra parameters</li>
+<li>Focuses more on exploitation as it finds good solutions</li>
+<li>Tends to explore more efficiently than UCB in many cases</li>
+<li>Works well when you want to find the very best solution</li>
+<li>Popular in practical applications like hyperparameter tuning</li>
+</ul>
+<p>EI is often the default choice for many Bayesian optimization problems because it efficiently
+finds good solutions with relatively few evaluations.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_AcquisitionFunctionType_ProbabilityOfImprovement"><code>ProbabilityOfImprovement = 2</code></dt>
+  <dd><p>Probability of Improvement acquisition function that maximizes the probability of finding better solutions.</p>
+<p>
+<b>For Beginners:</b> Probability of Improvement (PI) is like a cautious explorer who asks:
+"What's the chance that this location is better than the best I've found so far?"
+<p>PI works by:</p>
+<ol>
+<li>Keeping track of the best solution found so far</li>
+<li>For each unexplored point, calculating the probability that it's better than the current best</li>
+<li>Selecting the point with the highest probability of improvement</li>
+</ol>
+<p>Key characteristics:</p>
+<ul>
+<li>Simpler than Expected Improvement (focuses on probability, not magnitude)</li>
+<li>Very exploitation-focused once good solutions are found</li>
+<li>Tends to be more conservative than EI or UCB</li>
+<li>Good when you want high confidence of improvement</li>
+<li>May explore less than other methods</li>
+</ul>
+<p>PI is useful when you want to be confident that each new evaluation will be better
+than what you've already found, even if the improvement is small.</p>
+
+</dd>
+  
+    <dt id="AiDotNet_Enums_AcquisitionFunctionType_UpperConfidenceBound"><code>UpperConfidenceBound = 0</code></dt>
+  <dd><p>Upper Confidence Bound acquisition function that balances exploration and exploitation.</p>
+<p>
+<b>For Beginners:</b> The Upper Confidence Bound (UCB) approach is like an optimistic explorer who 
+follows this rule: "I'll check places that either look promising or that I'm very uncertain about."
+<p>UCB works by:</p>
+<ol>
+<li>Calculating the predicted value at each possible point (exploitation)</li>
+<li>Adding an &quot;uncertainty bonus&quot; that's larger for less-explored areas (exploration)</li>
+<li>Selecting the point with the highest combined score</li>
+</ol>
+<p>The formula is essentially: UCB = predicted_value + exploration_weight × uncertainty</p>
+<p>Key characteristics:</p>
+<ul>
+<li>Has a tunable parameter that controls the exploration-exploitation balance</li>
+<li>More exploration-focused than some other methods</li>
+<li>Works well when you want to avoid bad outcomes</li>
+<li>Simple to understand and implement</li>
+<li>Provides theoretical guarantees about finding the optimal solution</li>
+</ul>
+<p>UCB is particularly useful when you want to be cautious and thoroughly explore the space
+before committing to a solution.</p>
+
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_AcquisitionFunctionType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Acquisition functions help an AI system decide where to look next when searching 
+for the best solution to a problem.
+<p>Imagine you're trying to find the highest point in a mountain range that's covered in fog:</p>
+<ul>
+<li>You've already explored a few spots and know their heights</li>
+<li>Based on these measurements, you can make educated guesses about unexplored areas</li>
+<li>But you need to decide: should you explore areas that look promising based on what you know so far,
+or should you check completely unexplored areas that might contain surprises?</li>
+</ul>
+<p>This is the &quot;exploration vs. exploitation&quot; trade-off, and acquisition functions help balance it.</p>
+<p>Acquisition functions are particularly useful when:</p>
+<ul>
+<li>Testing each possible solution is expensive or time-consuming</li>
+<li>You want to find the best solution with as few attempts as possible</li>
+<li>The relationship between inputs and outputs is complex</li>
+</ul>
+<p>Common applications include hyperparameter tuning in machine learning, experimental design,
+and optimizing complex systems where each test is costly.</p>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/AcquisitionFunctionType.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

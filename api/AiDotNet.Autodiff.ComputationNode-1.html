@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ComputationNode&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ComputationNode&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a node in the automatic differentiation computation graph.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Autodiff_ComputationNode_1.md&amp;value=---%0Auid%3A%20AiDotNet.Autodiff.ComputationNode%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Autodiff.ComputationNode`1">
+
+
+
+  <h1 id="AiDotNet_Autodiff_ComputationNode_1" data-uid="AiDotNet.Autodiff.ComputationNode`1" class="text-break">
+Class ComputationNode&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Autodiff.html">Autodiff</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a node in the automatic differentiation computation graph.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ComputationNode&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ComputationNode&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Autodiff.CheckpointingExtensions.html#AiDotNet_Autodiff_CheckpointingExtensions_WithCheckpoint__1_AiDotNet_Autodiff_ComputationNode___0__System_Func_AiDotNet_Autodiff_ComputationNode___0__AiDotNet_Autodiff_ComputationNode___0___">CheckpointingExtensions.WithCheckpoint&lt;T&gt;(ComputationNode&lt;T&gt;, Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Autodiff.CheckpointingExtensions.html#AiDotNet_Autodiff_CheckpointingExtensions_WithSequentialCheckpoint__1_AiDotNet_Autodiff_ComputationNode___0__System_Collections_Generic_IReadOnlyList_System_Func_AiDotNet_Autodiff_ComputationNode___0__AiDotNet_Autodiff_ComputationNode___0____System_Int32_">CheckpointingExtensions.WithSequentialCheckpoint&lt;T&gt;(ComputationNode&lt;T&gt;, IReadOnlyList&lt;Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;&gt;, int)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Autodiff_ComputationNode_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A ComputationNode is a fundamental building block of automatic differentiation.
+It represents a value in a computational graph, along with information about
+how to compute gradients with respect to that value. Each node stores its value,
+gradient, parent nodes (inputs), and a backward function for gradient computation.
+</p>
+<p><b>For Beginners:</b> This represents a single step in a calculation that can be differentiated.
+<p>Think of it like this:</p>
+<ul>
+<li>A node stores a value (like the output of adding two numbers)</li>
+<li>It remembers what inputs were used to create this value (the two numbers)</li>
+<li>It knows how to calculate gradients (derivatives) with respect to its inputs</li>
+<li>Connecting nodes together forms a graph that tracks the entire calculation</li>
+</ul>
+<p>This enables automatic differentiation, where gradients can be computed
+automatically for complex operations by chaining together simple derivatives.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1__ctor_" data-uid="AiDotNet.Autodiff.ComputationNode`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1__ctor_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___System_Action_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String_" data-uid="AiDotNet.Autodiff.ComputationNode`1.#ctor(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean,System.Collections.Generic.List{AiDotNet.Autodiff.ComputationNode{`0}},System.Action{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.String)">
+  ComputationNode(Tensor&lt;T&gt;, bool, List&lt;ComputationNode&lt;T&gt;&gt;?, Action&lt;Tensor&lt;T&gt;&gt;?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ComputationNode(Tensor&lt;T&gt; value, bool requiresGradient = false, List&lt;ComputationNode&lt;T&gt;&gt;? parents = null, Action&lt;Tensor&lt;T&gt;&gt;? backwardFunction = null, string? name = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The value stored in this node.</p>
+</dd>
+    <dt><code>requiresGradient</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether this node requires gradient computation.</p>
+</dd>
+    <dt><code>parents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The parent nodes that were used to compute this value.</p>
+</dd>
+    <dt><code>backwardFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The function to compute gradients during backpropagation.</p>
+</dd>
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional name for this node.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1__ctor_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___System_Action_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new computation node with the specified properties. If requiresGradient
+is true and a backward function is provided, this node will participate in
+automatic differentiation.
+</p>
+<p><b>For Beginners:</b> This creates a new node in the computation graph.
+<p>When creating a node:</p>
+<ul>
+<li>Provide the computed value</li>
+<li>Specify if it needs gradients (usually true for parameters, false for constants)</li>
+<li>List the parent nodes (inputs) if any</li>
+<li>Provide a backward function if gradients are needed</li>
+<li>Optionally give it a name for debugging</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_BackwardFunction_" data-uid="AiDotNet.Autodiff.ComputationNode`1.BackwardFunction*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_BackwardFunction" data-uid="AiDotNet.Autodiff.ComputationNode`1.BackwardFunction">
+  BackwardFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the backward function that computes gradients for parent nodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Action&lt;Tensor&lt;T&gt;&gt;? BackwardFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A function that takes the current gradient and computes parent gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_BackwardFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The backward function implements the chain rule of calculus. Given the gradient
+at this node, it computes how much gradient should flow to each parent node.
+This is the core of automatic differentiation.
+</p>
+<p><b>For Beginners:</b> This function knows how to pass gradients backwards through this operation.
+<p>The backward function:</p>
+<ul>
+<li>Takes the gradient at this node as input</li>
+<li>Calculates what gradients should go to each parent</li>
+<li>Implements the mathematical rule for differentiating this operation</li>
+</ul>
+<p>For example, for addition (c = a + b):</p>
+<ul>
+<li>The backward function would pass the gradient of c equally to both a and b</li>
+<li>For multiplication (c = a * b), it would multiply c's gradient by the other input's value</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_Gradient_" data-uid="AiDotNet.Autodiff.ComputationNode`1.Gradient*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_Gradient" data-uid="AiDotNet.Autodiff.ComputationNode`1.Gradient">
+  Gradient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gradient accumulated at this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt;? Gradient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing the gradient, or null if not yet computed.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_Gradient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The gradient represents the derivative of the loss with respect to this node's value.
+It's computed during the backward pass and accumulated from all paths in the graph
+that use this node's output.
+</p>
+<p><b>For Beginners:</b> This shows how much the final result changes when this value changes.
+<p>The gradient tells you:</p>
+<ul>
+<li>How sensitive the final output is to this value</li>
+<li>Which direction to adjust this value to reduce the loss</li>
+<li>How much to adjust it (larger gradient = bigger adjustment needed)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_Name_" data-uid="AiDotNet.Autodiff.ComputationNode`1.Name*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_Name" data-uid="AiDotNet.Autodiff.ComputationNode`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets an optional name for this node (useful for debugging).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string name for the node, or null if not named.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Node names help with debugging and visualization of the computation graph.
+They're optional but recommended for important nodes like parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_OperationParams_" data-uid="AiDotNet.Autodiff.ComputationNode`1.OperationParams*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_OperationParams" data-uid="AiDotNet.Autodiff.ComputationNode`1.OperationParams">
+  OperationParams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets additional operation-specific parameters (used for JIT compilation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt;? OperationParams { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary of parameter names to values, or null if not set.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_OperationParams_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some operations require additional parameters beyond their inputs. For example,
+convolution needs stride and padding, softmax needs an axis, etc. This dictionary
+stores those parameters for use by the JIT compiler.
+</p>
+<p><b>For Beginners:</b> This stores extra settings for operations.
+<p>For example:</p>
+<ul>
+<li>A Power operation might store {&quot;Exponent&quot;: 2.0}</li>
+<li>A Softmax operation might store {&quot;Axis&quot;: -1}</li>
+<li>A Conv2D operation might store {&quot;Stride&quot;: [1, 1], &quot;Padding&quot;: [0, 0]}</li>
+</ul>
+<p>These parameters tell the JIT compiler exactly how the operation should behave,
+enabling it to generate the correct optimized code.</p>
+<p>This is optional and only needed when using JIT compilation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_OperationType_" data-uid="AiDotNet.Autodiff.ComputationNode`1.OperationType*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_OperationType" data-uid="AiDotNet.Autodiff.ComputationNode`1.OperationType">
+  OperationType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of operation that created this node (used for JIT compilation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OperationType? OperationType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OperationType.html">OperationType</a>?</dt>
+    <dd><p>A string identifying the operation type (e.g., &quot;Add&quot;, &quot;MatMul&quot;, &quot;ReLU&quot;), or null if not set.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_OperationType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property is used by the JIT compiler to convert ComputationNode graphs to IR operations.
+It stores the name of the operation that produced this node's value, enabling the compiler
+to reconstruct the operation graph and optimize it for faster execution.
+</p>
+<p><b>For Beginners:</b> This records what operation created this node's value.
+<p>For example:</p>
+<ul>
+<li>If this node was created by adding two tensors, OperationType would be &quot;Add&quot;</li>
+<li>If created by matrix multiplication, OperationType would be &quot;MatMul&quot;</li>
+<li>If created by ReLU activation, OperationType would be &quot;ReLU&quot;</li>
+</ul>
+<p>This information allows the JIT compiler to:</p>
+<ul>
+<li>Understand what operations are in the graph</li>
+<li>Optimize sequences of operations</li>
+<li>Generate fast compiled code</li>
+</ul>
+<p>This is optional and only needed when using JIT compilation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_Parents_" data-uid="AiDotNet.Autodiff.ComputationNode`1.Parents*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_Parents" data-uid="AiDotNet.Autodiff.ComputationNode`1.Parents">
+  Parents
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the parent nodes (inputs) that were used to compute this node's value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ComputationNode&lt;T&gt;&gt; Parents { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list of parent computation nodes.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_Parents_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Parent nodes are the inputs to the operation that produced this node's value.
+During backpropagation, gradients flow from this node back to its parents.
+</p>
+<p><b>For Beginners:</b> These are the inputs that were combined to create this node's value.
+<p>For example, if this node represents c = a + b:</p>
+<ul>
+<li>a and b would be the parent nodes</li>
+<li>When computing gradients, we need to know how c's gradient affects a and b</li>
+<li>This parent list lets us trace back through the calculation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_RequiresGradient_" data-uid="AiDotNet.Autodiff.ComputationNode`1.RequiresGradient*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_RequiresGradient" data-uid="AiDotNet.Autodiff.ComputationNode`1.RequiresGradient">
+  RequiresGradient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether this node requires gradient computation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RequiresGradient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if gradients should be computed for this node; false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_RequiresGradient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This flag controls whether this node participates in gradient computation.
+Setting it to false can improve performance for constants or intermediate
+values that don't need gradients.
+</p>
+<p><b>For Beginners:</b> This controls whether to track gradients for this value.
+<p>Set to true for:</p>
+<ul>
+<li>Model parameters that need to be trained</li>
+<li>Values you want to optimize</li>
+</ul>
+<p>Set to false for:</p>
+<ul>
+<li>Constants that never change</li>
+<li>Intermediate values you don't need gradients for (saves memory)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_Value_" data-uid="AiDotNet.Autodiff.ComputationNode`1.Value*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_Value" data-uid="AiDotNet.Autodiff.ComputationNode`1.Value">
+  Value
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the value stored in this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Value { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing the computed value.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_Value_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is the forward pass result - the actual output of the operation
+that this node represents.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_Backward_" data-uid="AiDotNet.Autodiff.ComputationNode`1.Backward*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_Backward" data-uid="AiDotNet.Autodiff.ComputationNode`1.Backward">
+  Backward()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs backward propagation from this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Backward()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_Backward_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method triggers backpropagation through the computation graph starting
+from this node. It performs a topological sort to determine the correct order
+for computing gradients, then calls each node's backward function in reverse
+topological order.
+</p>
+<p><b>For Beginners:</b> This computes gradients for all nodes that led to this one.
+<p>The backward process:</p>
+<ol>
+<li>Starts with this node's gradient (usually set to 1 for the final loss)</li>
+<li>Works backwards through the graph in the right order</li>
+<li>Each node passes gradients to its parents</li>
+<li>Gradients accumulate if a node has multiple children</li>
+</ol>
+<p>This is how neural networks learn - by computing gradients and using them
+to update parameters.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradient_" data-uid="AiDotNet.Autodiff.ComputationNode`1.ZeroGradient*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradient" data-uid="AiDotNet.Autodiff.ComputationNode`1.ZeroGradient">
+  ZeroGradient()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Zeros out the gradient for this node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ZeroGradient()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method resets the gradient to zero. It should be called between training
+iterations to prevent gradient accumulation across batches (unless intentional).
+</p>
+<p><b>For Beginners:</b> This clears the gradient to prepare for the next calculation.
+<p>When to use:</p>
+<ul>
+<li>Before each new training iteration</li>
+<li>When you want to start fresh gradient computation</li>
+<li>To prevent gradients from adding up across multiple backward passes</li>
+</ul>
+<p>In most training loops, you zero gradients at the start of each batch.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradientRecursive_" data-uid="AiDotNet.Autodiff.ComputationNode`1.ZeroGradientRecursive*"></a>
+
+  <h3 id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradientRecursive" data-uid="AiDotNet.Autodiff.ComputationNode`1.ZeroGradientRecursive">
+  ZeroGradientRecursive()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L393"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recursively zeros out gradients for this node and all its ancestors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ZeroGradientRecursive()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_ComputationNode_1_ZeroGradientRecursive_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method traverses the computation graph and zeros all gradients.
+It's useful for clearing the entire graph between training iterations.
+</p>
+<p><b>For Beginners:</b> This clears gradients for this node and everything it depends on.
+<p>Use this when:</p>
+<ul>
+<li>You want to reset the entire computation graph</li>
+<li>Starting a new training iteration</li>
+<li>You need to ensure no old gradients remain</li>
+</ul>
+<p>This is more thorough than ZeroGradient() as it clears the whole graph.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/ComputationNode.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

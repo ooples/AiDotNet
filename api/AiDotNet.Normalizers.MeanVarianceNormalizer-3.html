@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MeanVarianceNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MeanVarianceNormalizer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Normalizes data by standardizing it to have zero mean and unit variance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Normalizers_MeanVarianceNormalizer_3.md&amp;value=---%0Auid%3A%20AiDotNet.Normalizers.MeanVarianceNormalizer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3">
+
+
+
+  <h1 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3" class="text-break">
+Class MeanVarianceNormalizer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Normalizers.html">Normalizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Normalizes data by standardizing it to have zero mean and unit variance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MeanVarianceNormalizer&lt;T, TInput, TOutput&gt; : NormalizerBase&lt;T, TInput, TOutput&gt;, INormalizer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data structure.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data structure.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html">NormalizerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MeanVarianceNormalizer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.INormalizer-3.html">INormalizer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NumOps">NormalizerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Engine">NormalizerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeOutput__2_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeOutput(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_NormalizeInput__1_">NormalizerBase&lt;T, TInput, TOutput&gt;.NormalizeInput(TInput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Normalizers.NormalizerBase-3.html#AiDotNet_Normalizers_NormalizerBase_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__">NormalizerBase&lt;T, TInput, TOutput&gt;.Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The MeanVarianceNormalizer transforms data by subtracting the mean and dividing by the standard deviation.
+This process, also known as z-score normalization or standardization, centers the data around zero and
+scales it to have a standard deviation of one. After normalization, the data follows a distribution with
+zero mean and unit variance.
+</p>
+<p>
+The transformation formula is: normalized = (original - mean) / standard_deviation
+</p>
+<p>
+This normalization method is particularly useful for:
+- Features with normal or Gaussian distributions
+- Machine learning algorithms that assume data is centered around zero
+- Comparing features with different units or scales
+- Improving convergence in gradient-based optimization algorithms
+</p>
+<p><b>For Beginners:</b> Mean-variance normalization is like creating a standard scale to compare different measurements.
+<p>Think of it as converting different units into a universal scale:</p>
+<ul>
+<li>First, it finds the average (mean) value in your data</li>
+<li>Then, it measures how spread out your values are (the standard deviation)</li>
+<li>Finally, it expresses each value as &quot;how many standard deviations away from the average&quot; it is</li>
+</ul>
+<p>For example, if you have student test scores:</p>
+<ul>
+<li>Original scores: [70, 80, 90, 100]</li>
+<li>Mean = 85, Standard deviation = ~12.9</li>
+<li>Normalized scores: [-1.16, -0.39, 0.39, 1.16]</li>
+</ul>
+<p>After normalization:</p>
+<ul>
+<li>The average value becomes 0</li>
+<li>Most values fall between -3 and +3</li>
+<li>A value of +1 means &quot;one standard deviation above average&quot;</li>
+<li>A value of -2 means &quot;two standard deviations below average&quot;</li>
+</ul>
+<p>This makes it easy to compare data from different sources or with different units.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3__ctor_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3__ctor" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.#ctor">
+  MeanVarianceNormalizer()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Normalizers.MeanVarianceNormalizer-3.html">MeanVarianceNormalizer&lt;T, TInput, TOutput&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MeanVarianceNormalizer()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new MeanVarianceNormalizer and initializes the numeric operations
+provider for the specified type T. No additional parameters are required as the normalizer
+calculates the necessary statistics (mean and standard deviation) from the data itself.
+</p>
+<p><b>For Beginners:</b> This sets up your standardization system.
+<p>When you create a new MeanVarianceNormalizer:</p>
+<ul>
+<li>It prepares the mathematical tools needed for standardization</li>
+<li>No additional settings are needed because the normalizer will automatically calculate
+the appropriate statistics (average and spread) based on your actual data</li>
+</ul>
+<p>It's like setting up a measurement system that will automatically calibrate itself
+to whatever data you provide.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize(`1,`2,`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TInput, TOutput, TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L412"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the denormalized Y-intercept (constant term) for a linear model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T Denormalize(TInput xMatrix, TOutput y, TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <span class="xref">TInput</span></dt>
+    <dd><p>The original input feature matrix.</p>
+</dd>
+    <dt><code>y</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The original target vector.</p>
+</dd>
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The model coefficients.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The denormalized Y-intercept for use with non-normalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__1__2__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calculates the appropriate y-intercept for a model trained on normalized data
+but applied to unnormalized data. The calculation accounts for the shifts in both the input features
+and the output variable that occurred during normalization.
+</p>
+<p><b>For Beginners:</b> This method determines the correct starting point for predictions with original data.
+<p>In a prediction model, the y-intercept is the baseline value:</p>
+<ul>
+<li>It's the predicted value when all features are at their average values</li>
+<li>When using standardized data, this baseline needs to be adjusted for original data</li>
+</ul>
+<p>The calculation is complex because:</p>
+<ul>
+<li>During standardization, we shifted each feature by subtracting its mean</li>
+<li>We also shifted the output by subtracting its mean</li>
+<li>The model's coefficients were scaled by the ratio of standard deviations</li>
+</ul>
+<p>The method calculates the correct intercept to ensure that:</p>
+<ul>
+<li>If you input the average value for each feature</li>
+<li>The prediction will be the average output value</li>
+</ul>
+<p>This makes the model properly calibrated for use with the original, unstandardized data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize(`2,AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses the normalization of data using the provided normalization parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput data, NormalizationParameters&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The normalized data to denormalize.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters containing mean and standard deviation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>A denormalized data with values converted back to their original scale.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__2_AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method reverses the mean-variance normalization by applying the inverse of the original formula:
+original = (normalized * standard_deviation) + mean
+<p>This transformation restores the values to their original scale and distribution.</p>
+
+<p><b>For Beginners:</b> This method converts your standardized values back to their original scale.
+<p>The process reverses the normalization steps:</p>
+<ol>
+<li>First, it multiplies each value by the original standard deviation (restoring the original spread)</li>
+<li>Then, it adds the original mean (putting values back to their original center)</li>
+</ol>
+<p>For example, if your normalized data was [-1.5, -0.5, 0.5, 1.5] with mean = 172.5cm and standard deviation = 15cm:</p>
+<ul>
+<li>The denormalized values would be [150cm, 165cm, 180cm, 195cm]</li>
+</ul>
+<p>This allows you to go back to the original measurements after performing calculations
+or analysis on the normalized data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0__" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.Denormalize(`2,System.Collections.Generic.List{AiDotNet.Models.NormalizationParameters{`0}},AiDotNet.Models.NormalizationParameters{`0})">
+  Denormalize(TOutput, List&lt;NormalizationParameters&lt;T&gt;&gt;, NormalizationParameters&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Denormalizes coefficients from a regression model that was trained on mean-variance normalized data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override TOutput Denormalize(TOutput coefficients, List&lt;NormalizationParameters&lt;T&gt;&gt; xParams, NormalizationParameters&lt;T&gt; yParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>coefficients</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The regression coefficients to denormalize.</p>
+</dd>
+    <dt><code>xParams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The normalization parameters for the input features.</p>
+</dd>
+    <dt><code>yParams</code> <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;</dt>
+    <dd><p>The normalization parameters for the output variable.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>Denormalized coefficients that can be applied to original, unnormalized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_Denormalize__2_System_Collections_Generic_List_AiDotNet_Models_NormalizationParameters__0___AiDotNet_Models_NormalizationParameters__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adjusts regression coefficients to work with original unnormalized data.
+For mean-variance normalization, this involves scaling each coefficient by the ratio of
+the output standard deviation to the corresponding input standard deviation.
+This adjustment accounts for the different scales that were applied to each feature
+and the output during normalization.
+</p>
+<p><b>For Beginners:</b> This method adjusts prediction model weights for use with original values.
+<p>When you build a model using normalized data:</p>
+<ul>
+<li>The model learns weights (coefficients) based on the standardized values</li>
+<li>To use this model with original, unstandardized data, you need to adjust these weights</li>
+</ul>
+<p>This method performs that adjustment by:</p>
+<ul>
+<li>Calculating how much each input feature was scaled during normalization</li>
+<li>Calculating how much the output was scaled during normalization</li>
+<li>Adjusting each coefficient by the ratio of these scaling factors</li>
+</ul>
+<p>For example, if:</p>
+<ul>
+<li>An input feature's standard deviation was 15 (meaning it was divided by 15 during normalization)</li>
+<li>The output's standard deviation was 5 (meaning it was divided by 5 during normalization)</li>
+<li>The model learned a coefficient of 0.3 for this feature on normalized data</li>
+</ul>
+<p>The denormalized coefficient would be 0.3 × (5 ÷ 15) = 0.1</p>
+<p>This ensures that predictions made using original data will be properly scaled.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeInput_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.NormalizeInput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeInput__1_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.NormalizeInput(`1)">
+  NormalizeInput(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes input data using the mean-variance approach, applying normalization separately to each column.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TInput, List&lt;NormalizationParameters&lt;T&gt;&gt;) NormalizeInput(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TInput, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and a list of normalization parameters for each column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeInput__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes each column of the matrix independently using the mean-variance approach.
+It treats each column as a separate feature that needs its own mean and standard deviation calculation,
+since different features may have different distributions and scales.
+</p>
+<p><b>For Beginners:</b> This method standardizes a table of data, one column at a time.
+<p>When working with a table (matrix) of data:</p>
+<ul>
+<li>Each column might represent a different type of information (height, weight, age, etc.)</li>
+<li>Each column needs its own normalization because the averages and spreads differ</li>
+<li>This method processes each column separately using the vector normalization method</li>
+</ul>
+<p>For example, with a table of health metrics:</p>
+<ul>
+<li>Column 1 (heights) might be around 170cm with a spread of 15cm</li>
+<li>Column 2 (weights) might be around 70kg with a spread of 12kg</li>
+<li>Each column gets its own appropriate adjustment for average and spread</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>A new table with all values standardized to have mean 0 and standard deviation 1</li>
+<li>The statistics for each column, so you can convert back to original values later if needed</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeOutput_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.NormalizeOutput*"></a>
+
+  <h3 id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeOutput__2_" data-uid="AiDotNet.Normalizers.MeanVarianceNormalizer`3.NormalizeOutput(`2)">
+  NormalizeOutput(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes output data using the mean-variance approach.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (TOutput, NormalizationParameters&lt;T&gt;) NormalizeOutput(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The input data to normalize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(TOutput, <a class="xref" href="AiDotNet.Models.NormalizationParameters-1.html">NormalizationParameters</a>&lt;T&gt;)</dt>
+    <dd><p>A tuple containing the normalized data and the normalization parameters, which include the mean and standard deviation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Normalizers_MeanVarianceNormalizer_3_NormalizeOutput__2__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method normalizes data by:
+1. Computing the mean (average) of all values
+2. Computing the variance and standard deviation to measure data spread
+3. Standardizing each value using the formula: (value - mean) / standard_deviation
+<p>The resulting values will have a mean of 0 and a standard deviation of 1.
+The normalization parameters include the mean and standard deviation, which are needed for later denormalization.</p>
+
+<p><b>For Beginners:</b> This method converts your data to a standard scale centered at zero.
+<p>The process works like this:</p>
+<ol>
+<li>First, it calculates the average value in your data</li>
+<li>Then, it measures how spread out your values are (the standard deviation)</li>
+<li>For each value, it:
+<ul>
+<li>Subtracts the average (centering around zero)</li>
+<li>Divides by the standard deviation (scaling to a standard spread)</li>
+</ul>
+</li>
+</ol>
+<p>After normalization:</p>
+<ul>
+<li>Values near the original average will be close to 0</li>
+<li>Values that were higher than average will be positive</li>
+<li>Values that were lower than average will be negative</li>
+<li>Most values will typically fall between -3 and +3</li>
+</ul>
+<p>For example, if your height data was [150cm, 165cm, 180cm, 195cm]:</p>
+<ul>
+<li>The average is 172.5cm</li>
+<li>After normalization, it might become [-1.5, -0.5, 0.5, 1.5]</li>
+<li>Now you can easily see that 150cm is 1.5 standard deviations below average</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Normalizers/MeanVarianceNormalizer.cs/#L47" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

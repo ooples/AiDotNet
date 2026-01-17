@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A fitness calculator that uses Ordinal Regression Loss to evaluate model performance, particularly for ordinal classification tasks.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3">
+
+
+
+  <h1 id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3" data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3" class="text-break">
+Class OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/OrdinalRegressionLossFitnessCalculator.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitnessCalculators.html">FitnessCalculators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A fitness calculator that uses Ordinal Regression Loss to evaluate model performance, particularly for ordinal classification tasks.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt; : FitnessCalculatorBase&lt;T, TInput, TOutput&gt;, IFitnessCalculator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html">FitnessCalculatorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__isHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._isHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__numOps">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__dataSetType">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._dataSetType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness__0__0_">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsBetterFitness(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This calculator helps evaluate how well your model is performing on ordinal classification tasks,
+which are a special type of classification where the categories have a meaningful order or rank.
+<p>Ordinal Regression Loss is designed specifically for problems where:</p>
+<ul>
+<li>You're predicting categories that have a natural order</li>
+<li>The distance between categories matters</li>
+<li>You want to penalize predictions that are further from the true category more heavily</li>
+</ul>
+<p>Examples of ordinal classification problems:</p>
+<ul>
+<li>Rating predictions (1-5 stars)</li>
+<li>Education levels (elementary, middle, high school, college)</li>
+<li>Customer satisfaction levels (very dissatisfied, dissatisfied, neutral, satisfied, very satisfied)</li>
+<li>Disease severity (mild, moderate, severe)</li>
+</ul>
+<p>How Ordinal Regression Loss works:</p>
+<ul>
+<li>It recognizes that predicting a 4 when the true value is 5 is better than predicting a 1</li>
+<li>It penalizes predictions based on how far they are from the true category</li>
+<li>It takes into account the ordered nature of your categories</li>
+</ul>
+<p>Think of it like this:
+Imagine you're predicting movie ratings (1-5 stars):</p>
+<ul>
+<li>Predicting 4 stars when the actual rating is 5 stars is a small error</li>
+<li>Predicting 1 star when the actual rating is 5 stars is a large error</li>
+<li>Ordinal Regression Loss will penalize the second error much more heavily</li>
+</ul>
+<p>Key characteristics:</p>
+<ul>
+<li>It's specifically designed for ordered categories</li>
+<li>It penalizes errors based on the distance between predicted and actual categories</li>
+<li>Lower values are better (0 would be perfect predictions)</li>
+<li>It can automatically detect if your problem is suitable for ordinal regression</li>
+</ul>
+<p>This calculator is smart enough to:</p>
+<ul>
+<li>Use ordinal regression loss when appropriate</li>
+<li>Fall back to other loss functions when your data doesn't fit the ordinal pattern</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3__ctor_" data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3__ctor_System_Nullable_System_Int32__AiDotNet_Enums_DataSetType_" data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3.#ctor(System.Nullable{System.Int32},AiDotNet.Enums.DataSetType)">
+  OrdinalRegressionLossFitnessCalculator(int?, DataSetType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/OrdinalRegressionLossFitnessCalculator.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OrdinalRegressionLossFitnessCalculator class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OrdinalRegressionLossFitnessCalculator(int? numberOfClassifications = null, DataSetType dataSetType = DataSetType.Validation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numberOfClassifications</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The number of distinct classes or categories in your ordinal data (optional).</p>
+</dd>
+    <dt><code>dataSetType</code> <a class="xref" href="AiDotNet.Enums.DataSetType.html">DataSetType</a></dt>
+    <dd><p>The type of dataset to use for fitness calculation (default is Validation).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3__ctor_System_Nullable_System_Int32__AiDotNet_Enums_DataSetType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a new calculator that will use Ordinal Regression Loss
+to evaluate your model's performance on problems where your categories have a meaningful order.
+<p>Parameters:</p>
+<ul>
+<li><p>numberOfClassifications: How many different categories or classes exist in your data</p>
+<ul>
+<li>For example, if you're predicting ratings from 1-5 stars, this would be 5</li>
+<li>If you leave this blank (null), the calculator will try to figure it out automatically</li>
+</ul>
+</li>
+<li><p>dataSetType: Which data to evaluate (default is Validation)</p>
+<ul>
+<li>Training: The data used to train the model (not recommended for evaluation)</li>
+<li>Validation: A separate set of data used to tune the model (recommended)</li>
+<li>Test: A completely separate set of data used for final evaluation</li>
+</ul>
+</li>
+</ul>
+<p>We set the first parameter to &quot;false&quot; in the base constructor because in Ordinal Regression Loss,
+lower values indicate better performance (0 would be perfect).</p>
+<p>When to use this calculator:</p>
+<ul>
+<li>When your categories have a natural order (like ratings, grades, or severity levels)</li>
+<li>When you want to penalize predictions that are further from the true category more heavily</li>
+<li>When the distance between categories matters in your problem</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3_GetFitnessScore_" data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3.GetFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator`3.GetFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/OrdinalRegressionLossFitnessCalculator.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Ordinal Regression Loss fitness score for the given dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset containing predicted and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Ordinal Regression Loss score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_OrdinalRegressionLossFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how well your model is performing using Ordinal Regression Loss.
+<p>It works by:</p>
+<ol>
+<li>Checking if you provided the number of classes when creating the calculator</li>
+<li>If yes, it uses that number to calculate the ordinal regression loss</li>
+<li>If not, it tries to automatically determine the best approach based on your data</li>
+</ol>
+<p>A lower score means better performance (0 would be perfect).</p>
+<p>The ordinal regression loss takes into account that:</p>
+<ul>
+<li>Predictions that are further from the true category should be penalized more</li>
+<li>The categories have a meaningful order</li>
+<li>The distance between categories matters</li>
+</ul>
+<p>This method is smart enough to handle different scenarios:</p>
+<ul>
+<li>If you specified the number of classes, it uses that information directly</li>
+<li>If not, it analyzes your data to determine the best approach</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/OrdinalRegressionLossFitnessCalculator.cs/#L45" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

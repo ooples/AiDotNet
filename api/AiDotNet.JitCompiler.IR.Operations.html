@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace AiDotNet.JitCompiler.IR.Operations | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace AiDotNet.JitCompiler.IR.Operations | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.JitCompiler.IR.Operations">
+
+  <h1 id="AiDotNet_JitCompiler_IR_Operations" data-uid="AiDotNet.JitCompiler.IR.Operations" class="text-break">Namespace AiDotNet.JitCompiler.IR.Operations</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AbsOp.html">AbsOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AddOp.html">AddOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AffineGridOp.html">AffineGridOp</a></dt>
+      <dd><p>Represents affine grid generation for spatial transformer in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ApplyActivationOp.html">ApplyActivationOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AttentionOp.html">AttentionOp</a></dt>
+      <dd><p>Represents a simplified attention operation for GPU code generation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.AvgPool2DOp.html">AvgPool2DOp</a></dt>
+      <dd><p>Represents 2D average pooling in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BackwardOp.html">BackwardOp</a></dt>
+      <dd><p>Base class for backward (gradient) operations in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BatchNormOp.html">BatchNormOp</a></dt>
+      <dd><p>Represents batch normalization in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.BentIdentityOp.html">BentIdentityOp</a></dt>
+      <dd><p>Represents Bent Identity activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.CELUOp.html">CELUOp</a></dt>
+      <dd><p>Represents CELU (Continuously Differentiable ELU) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ComplexMatMulOp.html">ComplexMatMulOp</a></dt>
+      <dd><p>Represents complex matrix multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ComplexMultiplyOp.html">ComplexMultiplyOp</a></dt>
+      <dd><p>Represents element-wise complex multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConcatOp.html">ConcatOp</a></dt>
+      <dd><p>Represents concatenation along an axis in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConstantOp.html">ConstantOp</a></dt>
+      <dd><p>Represents a constant tensor in the IR (result of constant folding).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.Conv2DOp.html">Conv2DOp</a></dt>
+      <dd><p>Represents 2D convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ConvTranspose2DOp.html">ConvTranspose2DOp</a></dt>
+      <dd><p>Represents transposed 2D convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.CropOp.html">CropOp</a></dt>
+      <dd><p>Represents cropping operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DepthwiseConv2DOp.html">DepthwiseConv2DOp</a></dt>
+      <dd><p>Represents depthwise 2D convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DilatedConv2DOp.html">DilatedConv2DOp</a></dt>
+      <dd><p>Represents dilated 2D convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DivideOp.html">DivideOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.DropoutOp.html">DropoutOp</a></dt>
+      <dd><p>Represents dropout operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ELUOp.html">ELUOp</a></dt>
+      <dd><p>Represents ELU (Exponential Linear Unit) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ElementwiseMultiplyOp.html">ElementwiseMultiplyOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.EmbeddingOp.html">EmbeddingOp</a></dt>
+      <dd><p>Represents embedding lookup operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ExpOp.html">ExpOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FakeQuantizationOp.html">FakeQuantizationOp</a></dt>
+      <dd><p>Represents a fake quantization operation with Straight-Through Estimator (STE).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAddLayerNormOp.html">FusedAddLayerNormOp</a></dt>
+      <dd><p>Fused add + layer normalization operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAddReLUOp.html">FusedAddReLUOp</a></dt>
+      <dd><p>Represents fused Add + ReLU operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedAttentionOp.html">FusedAttentionOp</a></dt>
+      <dd><p>Fused attention operation (Q*K^T + softmax + matmul V).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedBatchNormActivationOp.html">FusedBatchNormActivationOp</a></dt>
+      <dd><p>Fused batch normalization + activation operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedBiasActivationOp.html">FusedBiasActivationOp</a></dt>
+      <dd><p>Fused bias + activation operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedConvBatchNormActivationOp.html">FusedConvBatchNormActivationOp</a></dt>
+      <dd><p>Fused Conv2D + BatchNorm + Activation operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedConvBatchNormOp.html">FusedConvBatchNormOp</a></dt>
+      <dd><p>Fused convolution + batch normalization operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedDenseLayerOp.html">FusedDenseLayerOp</a></dt>
+      <dd><p>Fused matrix multiply + add + activation (full dense layer).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedElementwiseActivationOp.html">FusedElementwiseActivationOp</a></dt>
+      <dd><p>Fused element-wise operation with activation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedElementwiseChainOp.html">FusedElementwiseChainOp</a></dt>
+      <dd><p>Fused chain of element-wise operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedGELUOp.html">FusedGELUOp</a></dt>
+      <dd><p>Fused GELU activation operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLayerNormAddOp.html">FusedLayerNormAddOp</a></dt>
+      <dd><p>Fused layer normalization + add operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearActivationOp.html">FusedLinearActivationOp</a></dt>
+      <dd><p>Fused linear + activation operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearOp.html">FusedLinearOp</a></dt>
+      <dd><p>Fused linear operation (MatMul + Add bias).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedLinearReLUOp.html">FusedLinearReLUOp</a></dt>
+      <dd><p>Represents fused Linear + ReLU operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedMatMulAddOp.html">FusedMatMulAddOp</a></dt>
+      <dd><p>Represents fused MatMul + Add operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedMultiHeadAttentionOp.html">FusedMultiHeadAttentionOp</a></dt>
+      <dd><p>Fused multi-head attention operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedResidualBlockOp.html">FusedResidualBlockOp</a></dt>
+      <dd><p>Fused residual block operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.FusedSwishOp.html">FusedSwishOp</a></dt>
+      <dd><p>Fused Swish/SiLU activation (x * sigmoid(x)).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GELUOp.html">GELUOp</a></dt>
+      <dd><p>Represents GELU (Gaussian Error Linear Unit) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GRUCellOp.html">GRUCellOp</a></dt>
+      <dd><p>Represents a GRU (Gated Recurrent Unit) cell operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GaussianOp.html">GaussianOp</a></dt>
+      <dd><p>Represents Gaussian activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GeometricProductOp.html">GeometricProductOp</a></dt>
+      <dd><p>Represents the geometric product of two multivectors in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAccumulateOp.html">GradAccumulateOp</a></dt>
+      <dd><p>Gradient accumulation operation - sums gradients from multiple paths.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAddOp.html">GradAddOp</a></dt>
+      <dd><p>Backward operation for AddOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAttentionOp.html">GradAttentionOp</a></dt>
+      <dd><p>Backward operation for attention (Q*K^T + softmax + matmul V).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradAvgPool2DOp.html">GradAvgPool2DOp</a></dt>
+      <dd><p>Backward operation for AvgPool2DOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBatchNormOp.html">GradBatchNormOp</a></dt>
+      <dd><p>Backward operation for BatchNormOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBentIdentityOp.html">GradBentIdentityOp</a></dt>
+      <dd><p>Backward operation for BentIdentityOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradBroadcastOp.html">GradBroadcastOp</a></dt>
+      <dd><p>Backward operation for BroadcastOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradCELUOp.html">GradCELUOp</a></dt>
+      <dd><p>Backward operation for CELUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConcatOp.html">GradConcatOp</a></dt>
+      <dd><p>Backward operation for ConcatOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConv2DOp.html">GradConv2DOp</a></dt>
+      <dd><p>Backward operation for Conv2DOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradConvTranspose2DOp.html">GradConvTranspose2DOp</a></dt>
+      <dd><p>Backward operation for ConvTranspose2DOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradCropOp.html">GradCropOp</a></dt>
+      <dd><p>Backward operation for CropOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDepthwiseConv2DOp.html">GradDepthwiseConv2DOp</a></dt>
+      <dd><p>Backward operation for DepthwiseConv2DOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDivideOp.html">GradDivideOp</a></dt>
+      <dd><p>Backward operation for DivideOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradDropoutOp.html">GradDropoutOp</a></dt>
+      <dd><p>Backward operation for DropoutOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradELUOp.html">GradELUOp</a></dt>
+      <dd><p>Backward operation for ELUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradElementwiseMultiplyOp.html">GradElementwiseMultiplyOp</a></dt>
+      <dd><p>Backward operation for ElementwiseMultiplyOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradEmbeddingOp.html">GradEmbeddingOp</a></dt>
+      <dd><p>Backward operation for EmbeddingOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradExpOp.html">GradExpOp</a></dt>
+      <dd><p>Backward operation for ExpOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGELUOp.html">GradGELUOp</a></dt>
+      <dd><p>Backward operation for GELUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGRUCellOp.html">GradGRUCellOp</a></dt>
+      <dd><p>Backward operation for GRUCellOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGRUSequenceOp.html">GradGRUSequenceOp</a></dt>
+      <dd><p>Backward operation for full GRU sequence.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGatherOp.html">GradGatherOp</a></dt>
+      <dd><p>Backward operation for GatherOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGaussianOp.html">GradGaussianOp</a></dt>
+      <dd><p>Backward operation for GaussianOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradGeometricProductOp.html">GradGeometricProductOp</a></dt>
+      <dd><p>Represents the gradient of the geometric product in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradHardSigmoidOp.html">GradHardSigmoidOp</a></dt>
+      <dd><p>Backward operation for HardSigmoidOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradHardTanhOp.html">GradHardTanhOp</a></dt>
+      <dd><p>Backward operation for HardTanhOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradISRUOp.html">GradISRUOp</a></dt>
+      <dd><p>Backward operation for ISRUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLSTMCellInputOp.html">GradLSTMCellInputOp</a></dt>
+      <dd><p>Backward operation for LSTMCellOp - computes gradient for input.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLSTMSequenceOp.html">GradLSTMSequenceOp</a></dt>
+      <dd><p>Backward operation for full LSTM sequence.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLayerNormOp.html">GradLayerNormOp</a></dt>
+      <dd><p>Backward operation for LayerNormOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLeakyReLUOp.html">GradLeakyReLUOp</a></dt>
+      <dd><p>Backward operation for LeakyReLUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLiSHTOp.html">GradLiSHTOp</a></dt>
+      <dd><p>Backward operation for LiSHTOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLogOp.html">GradLogOp</a></dt>
+      <dd><p>Backward operation for LogOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradLogSoftmaxOp.html">GradLogSoftmaxOp</a></dt>
+      <dd><p>Backward operation for LogSoftmaxOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMatMulLeftOp.html">GradMatMulLeftOp</a></dt>
+      <dd><p>Backward operation for MatMulOp (left input).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMatMulRightOp.html">GradMatMulRightOp</a></dt>
+      <dd><p>Backward operation for MatMulOp (right input).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMaxPool2DOp.html">GradMaxPool2DOp</a></dt>
+      <dd><p>Backward operation for MaxPool2DOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMeanOp.html">GradMeanOp</a></dt>
+      <dd><p>Backward operation for MeanOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMishOp.html">GradMishOp</a></dt>
+      <dd><p>Backward operation for MishOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMobiusAddOp.html">GradMobiusAddOp</a></dt>
+      <dd><p>Represents the gradient of Mobius addition in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradMultiHeadAttentionOp.html">GradMultiHeadAttentionOp</a></dt>
+      <dd><p>Backward operation for multi-head attention.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradOctonionMultiplyOp.html">GradOctonionMultiplyOp</a></dt>
+      <dd><p>Represents the gradient of octonion multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPReLUOp.html">GradPReLUOp</a></dt>
+      <dd><p>Backward operation for PReLUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPadOp.html">GradPadOp</a></dt>
+      <dd><p>Backward operation for PadOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPoincareExpMapOp.html">GradPoincareExpMapOp</a></dt>
+      <dd><p>Represents the gradient of the Poincare exponential map in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradPowerOp.html">GradPowerOp</a></dt>
+      <dd><p>Backward operation for PowerOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradRReLUOp.html">GradRReLUOp</a></dt>
+      <dd><p>Backward operation for RReLUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradReLUOp.html">GradReLUOp</a></dt>
+      <dd><p>Backward operation for ReLUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradReshapeOp.html">GradReshapeOp</a></dt>
+      <dd><p>Backward operation for ReshapeOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSELUOp.html">GradSELUOp</a></dt>
+      <dd><p>Backward operation for SELUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradScaledTanhOp.html">GradScaledTanhOp</a></dt>
+      <dd><p>Backward operation for ScaledTanhOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSigmoidOp.html">GradSigmoidOp</a></dt>
+      <dd><p>Backward operation for SigmoidOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSliceOp.html">GradSliceOp</a></dt>
+      <dd><p>Backward operation for SliceOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftPlusOp.html">GradSoftPlusOp</a></dt>
+      <dd><p>Backward operation for SoftPlusOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftSignOp.html">GradSoftSignOp</a></dt>
+      <dd><p>Backward operation for SoftSignOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSoftmaxOp.html">GradSoftmaxOp</a></dt>
+      <dd><p>Backward operation for SoftmaxOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSpMMOp.html">GradSpMMOp</a></dt>
+      <dd><p>Represents the gradient of sparse matrix-matrix multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSpMVOp.html">GradSpMVOp</a></dt>
+      <dd><p>Represents the gradient of sparse matrix-vector multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSparsemaxOp.html">GradSparsemaxOp</a></dt>
+      <dd><p>Backward operation for SparsemaxOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSplitOp.html">GradSplitOp</a></dt>
+      <dd><p>Backward operation for SplitOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSqrtOp.html">GradSqrtOp</a></dt>
+      <dd><p>Backward operation for SqrtOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSubtractOp.html">GradSubtractOp</a></dt>
+      <dd><p>Backward operation for SubtractOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSumOp.html">GradSumOp</a></dt>
+      <dd><p>Backward operation for SumOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradSwishOp.html">GradSwishOp</a></dt>
+      <dd><p>Backward operation for SwishOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradTanhOp.html">GradTanhOp</a></dt>
+      <dd><p>Backward operation for TanhOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradThresholdedReLUOp.html">GradThresholdedReLUOp</a></dt>
+      <dd><p>Backward operation for ThresholdedReLUOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradTransposeOp.html">GradTransposeOp</a></dt>
+      <dd><p>Backward operation for TransposeOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GradUpsampleOp.html">GradUpsampleOp</a></dt>
+      <dd><p>Backward operation for UpsampleOp.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GraphConvOp.html">GraphConvOp</a></dt>
+      <dd><p>Represents graph convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.GridSampleOp.html">GridSampleOp</a></dt>
+      <dd><p>Represents grid sampling for spatial transformer in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HardSigmoidOp.html">HardSigmoidOp</a></dt>
+      <dd><p>Represents Hard Sigmoid activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HardTanhOp.html">HardTanhOp</a></dt>
+      <dd><p>Represents Hard Tanh activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.HierarchicalSoftmaxOp.html">HierarchicalSoftmaxOp</a></dt>
+      <dd><p>Represents Hierarchical Softmax activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ISRUOp.html">ISRUOp</a></dt>
+      <dd><p>Represents ISRU (Inverse Square Root Unit) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LSTMCellOp.html">LSTMCellOp</a></dt>
+      <dd><p>Represents an LSTM (Long Short-Term Memory) cell operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LayerNormOp.html">LayerNormOp</a></dt>
+      <dd><p>Represents layer normalization in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LeakyReLUOp.html">LeakyReLUOp</a></dt>
+      <dd><p>Represents Leaky ReLU activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LiSHTOp.html">LiSHTOp</a></dt>
+      <dd><p>Represents LiSHT (Linearly Scaled Hyperbolic Tangent) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LocallyConnectedConv2DOp.html">LocallyConnectedConv2DOp</a></dt>
+      <dd><p>Represents locally connected 2D convolution in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogOp.html">LogOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogSoftmaxOp.html">LogSoftmaxOp</a></dt>
+      <dd><p>Represents LogSoftmax activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.LogSoftminOp.html">LogSoftminOp</a></dt>
+      <dd><p>Represents Log Softmin activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MatMulOp.html">MatMulOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MaxPool2DOp.html">MaxPool2DOp</a></dt>
+      <dd><p>Represents 2D max pooling in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MaxoutOp.html">MaxoutOp</a></dt>
+      <dd><p>Represents Maxout activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MeanOp.html">MeanOp</a></dt>
+      <dd><p>Represents mean reduction in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MishOp.html">MishOp</a></dt>
+      <dd><p>Represents Mish activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MobiusAddOp.html">MobiusAddOp</a></dt>
+      <dd><p>Represents Mobius addition in the Poincare ball model in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.MultiHeadAttentionOp.html">MultiHeadAttentionOp</a></dt>
+      <dd><p>Represents multi-head attention in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.NegateOp.html">NegateOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.NormOp.html">NormOp</a></dt>
+      <dd><p>Represents L2 norm operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.OctonionMatMulOp.html">OctonionMatMulOp</a></dt>
+      <dd><p>Represents octonion matrix multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.OctonionMultiplyOp.html">OctonionMultiplyOp</a></dt>
+      <dd><p>Represents octonion multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PReLUOp.html">PReLUOp</a></dt>
+      <dd><p>Represents PReLU (Parametric ReLU) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PadOp.html">PadOp</a></dt>
+      <dd><p>Represents padding operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PixelShuffleOp.html">PixelShuffleOp</a></dt>
+      <dd><p>Represents pixel shuffle (depth-to-space) operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PoincareExpMapOp.html">PoincareExpMapOp</a></dt>
+      <dd><p>Represents the exponential map in the Poincare ball model in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PoincareLogMapOp.html">PoincareLogMapOp</a></dt>
+      <dd><p>Represents the logarithmic map in the Poincare ball model in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.PowerOp.html">PowerOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.RBFKernelOp.html">RBFKernelOp</a></dt>
+      <dd><p>Represents RBF (Radial Basis Function) kernel computation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.RReLUOp.html">RReLUOp</a></dt>
+      <dd><p>Represents RReLU (Randomized Leaky ReLU) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReLUOp.html">ReLUOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceLogVarianceOp.html">ReduceLogVarianceOp</a></dt>
+      <dd><p>Represents log variance reduction in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceMaxOp.html">ReduceMaxOp</a></dt>
+      <dd><p>Represents max reduction in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReduceMeanOp.html">ReduceMeanOp</a></dt>
+      <dd><p>Represents mean reduction in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ReshapeOp.html">ReshapeOp</a></dt>
+      <dd><p>Represents reshape operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SELUOp.html">SELUOp</a></dt>
+      <dd><p>Represents SELU (Scaled Exponential Linear Unit) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SQRBFOp.html">SQRBFOp</a></dt>
+      <dd><p>Represents SQRBF (Squared Radial Basis Function) activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScalarConstantOp.html">ScalarConstantOp</a></dt>
+      <dd><p>Represents a scalar constant in the IR (single value).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScaledDotProductAttentionOp.html">ScaledDotProductAttentionOp</a></dt>
+      <dd><p>Represents scaled dot-product attention in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ScaledTanhOp.html">ScaledTanhOp</a></dt>
+      <dd><p>Represents Scaled Tanh activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SigmoidOp.html">SigmoidOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SignOp.html">SignOp</a></dt>
+      <dd><p>Represents Sign activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SliceOp.html">SliceOp</a></dt>
+      <dd><p>Represents slice operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftKNNOp.html">SoftKNNOp</a></dt>
+      <dd><p>Represents a soft K-Nearest Neighbors operation for differentiable instance-based learning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftLocallyWeightedOp.html">SoftLocallyWeightedOp</a></dt>
+      <dd><p>Represents a soft locally-weighted regression operation for differentiable instance-based learning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftPlusOp.html">SoftPlusOp</a></dt>
+      <dd><p>Represents SoftPlus activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftSignOp.html">SoftSignOp</a></dt>
+      <dd><p>Represents SoftSign activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftSplitOp.html">SoftSplitOp</a></dt>
+      <dd><p>Represents a soft split operation for differentiable decision trees in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftmaxOp.html">SoftmaxOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SoftminOp.html">SoftminOp</a></dt>
+      <dd><p>Represents Softmin activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SpMMOp.html">SpMMOp</a></dt>
+      <dd><p>Represents sparse matrix-matrix multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SpMVOp.html">SpMVOp</a></dt>
+      <dd><p>Represents sparse matrix-vector multiplication in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SparsemaxOp.html">SparsemaxOp</a></dt>
+      <dd><p>Represents Sparsemax activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SphericalSoftmaxOp.html">SphericalSoftmaxOp</a></dt>
+      <dd><p>Represents Spherical Softmax activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SplitOp.html">SplitOp</a></dt>
+      <dd><p>Represents split operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SqrtOp.html">SqrtOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SquareOp.html">SquareOp</a></dt>
+      <dd><p>Represents square operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SquashOp.html">SquashOp</a></dt>
+      <dd><p>Represents Squash activation in the IR (for Capsule Networks).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SubtractOp.html">SubtractOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SumOp.html">SumOp</a></dt>
+      <dd><p>Represents sum reduction in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.SwishOp.html">SwishOp</a></dt>
+      <dd><p>Represents Swish/SiLU activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TanhOp.html">TanhOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TaylorSoftmaxOp.html">TaylorSoftmaxOp</a></dt>
+      <dd><p>Represents Taylor Softmax activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.ThresholdedReLUOp.html">ThresholdedReLUOp</a></dt>
+      <dd><p>Represents Thresholded ReLU activation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.TransposeOp.html">TransposeOp</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledElementwiseOp.html">UnrolledElementwiseOp</a></dt>
+      <dd><p>Represents an unrolled element-wise operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledReductionOp.html">UnrolledReductionOp</a></dt>
+      <dd><p>Represents an unrolled reduction operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UnrolledSequenceOp.html">UnrolledSequenceOp</a></dt>
+      <dd><p>Represents an unrolled sequence of operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.UpsampleOp.html">UpsampleOp</a></dt>
+      <dd><p>Represents upsampling operation in the IR.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedBinaryOp.html">VectorizedBinaryOp</a></dt>
+      <dd><p>Vectorized binary operation (Add, Subtract, Multiply, Divide).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedMatMulOp.html">VectorizedMatMulOp</a></dt>
+      <dd><p>Vectorized matrix multiplication operation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedReductionOp.html">VectorizedReductionOp</a></dt>
+      <dd><p>Vectorized reduction operation (Sum, Mean, Max).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedUnaryOp.html">VectorizedUnaryOp</a></dt>
+      <dd><p>Vectorized unary operation (Negate, Exp, Log, Sqrt, ReLU, etc.).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.WedgeProductOp.html">WedgeProductOp</a></dt>
+      <dd><p>Represents the wedge (outer) product of two multivectors in the IR.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedBinaryOpType.html">VectorizedBinaryOpType</a></dt>
+      <dd><p>Types of vectorized binary operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedReductionType.html">VectorizedReductionType</a></dt>
+      <dd><p>Types of vectorized reduction operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.JitCompiler.IR.Operations.VectorizedUnaryOpType.html">VectorizedUnaryOpType</a></dt>
+      <dd><p>Types of vectorized unary operations.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

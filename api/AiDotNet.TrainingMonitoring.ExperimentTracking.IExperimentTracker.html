@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IExperimentTracker | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IExperimentTracker | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for experiment tracking systems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker.md&amp;value=---%0Auid%3A%20AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker">
+
+
+
+  <h1 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker" class="text-break">
+Interface IExperimentTracker  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.html">TrainingMonitoring</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.html">ExperimentTracking</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for experiment tracking systems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IExperimentTracker : IDisposable</code></pre>
+  </div>
+
+
+
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable.dispose">IDisposable.Dispose()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Experiment tracking is essential for machine learning
+workflows. It helps you:</p>
+<ul>
+<li>Keep track of different experiments and their parameters</li>
+<li>Compare results across runs</li>
+<li>Reproduce experiments by logging all relevant information</li>
+<li>Organize and search through past experiments</li>
+</ul>
+<p>Think of it like MLflow or Weights &amp; Biases - it's a central place
+to log everything about your training runs.</p>
+<p>Key concepts:</p>
+<ul>
+<li>Experiment: A named project (e.g., &quot;image-classification&quot;)</li>
+<li>Run: A single execution of training (e.g., &quot;run_20241220_143052&quot;)</li>
+<li>Parameters: Configuration values (learning_rate, batch_size, etc.)</li>
+<li>Metrics: Measured values (loss, accuracy, etc.)</li>
+<li>Artifacts: Files produced (model weights, plots, etc.)</li>
+<li>Tags: Labels for organization (dev, production, etc.)</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ActiveExperiment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ActiveExperiment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ActiveExperiment" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ActiveExperiment">
+  ActiveExperiment
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the active experiment name, if any.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string? ActiveExperiment { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ActiveRunId_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ActiveRunId*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ActiveRunId" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ActiveRunId">
+  ActiveRunId
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the active run ID, if any.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string? ActiveRunId { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_TrackingUri_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.TrackingUri*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_TrackingUri" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.TrackingUri">
+  TrackingUri
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the tracking URI.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string TrackingUri { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_CompareRuns_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.CompareRuns*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_CompareRuns_System_String___" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.CompareRuns(System.String[])">
+  CompareRuns(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares multiple runs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">RunComparison CompareRuns(params string[] runIds)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runIds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Run IDs to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunComparison.html">RunComparison</a></dt>
+    <dd><p>Comparison data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_CreateExperiment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.CreateExperiment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_CreateExperiment_System_String_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.CreateExperiment(System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  CreateExperiment(string, string?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates or gets an experiment by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ExperimentInfo CreateExperiment(string name, string? description = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Experiment name.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional description.</p>
+</dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional tags.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ExperimentInfo.html">ExperimentInfo</a></dt>
+    <dd><p>Experiment information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_DeleteExperiment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.DeleteExperiment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_DeleteExperiment_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.DeleteExperiment(System.String)">
+  DeleteExperiment(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes an experiment and all its runs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void DeleteExperiment(string experimentName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experimentName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Experiment name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_DeleteRun_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.DeleteRun*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_DeleteRun_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.DeleteRun(System.String)">
+  DeleteRun(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void DeleteRun(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Run ID to delete.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_EndRun_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.EndRun*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_EndRun_AiDotNet_TrainingMonitoring_ExperimentTracking_RunStatus_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.EndRun(AiDotNet.TrainingMonitoring.ExperimentTracking.RunStatus)">
+  EndRun(RunStatus)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ends the active run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void EndRun(RunStatus status = RunStatus.Completed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>status</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunStatus.html">RunStatus</a></dt>
+    <dd><p>Final status of the run.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetExperiment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetExperiment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetExperiment_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetExperiment(System.String)">
+  GetExperiment(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets an experiment by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">ExperimentInfo? GetExperiment(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Experiment name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ExperimentInfo.html">ExperimentInfo</a></dt>
+    <dd><p>Experiment info or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetMetricHistory_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetMetricHistory*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetMetricHistory_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetMetricHistory(System.String,System.String)">
+  GetMetricHistory(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets metric history for a run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;MetricValue&gt; GetMetricHistory(string runId, string metricKey)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Run ID.</p>
+</dd>
+    <dt><code>metricKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Metric name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.MetricValue.html">MetricValue</a>&gt;</dt>
+    <dd><p>List of metric values with steps.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetRun_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetRun*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_GetRun_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.GetRun(System.String)">
+  GetRun(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a run by ID.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">RunInfo? GetRun(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Run ID.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunInfo.html">RunInfo</a></dt>
+    <dd><p>Run info or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ListExperiments_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ListExperiments*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ListExperiments" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ListExperiments">
+  ListExperiments()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all experiments.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;ExperimentInfo&gt; ListExperiments()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ExperimentInfo.html">ExperimentInfo</a>&gt;</dt>
+    <dd><p>List of experiments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ListRuns_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ListRuns*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_ListRuns_System_String_System_String_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.ListRuns(System.String,System.String,System.String,System.Int32)">
+  ListRuns(string?, string?, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists runs in an experiment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;RunInfo&gt; ListRuns(string? experimentName = null, string? filter = null, string? orderBy = null, int maxResults = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experimentName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Experiment name.</p>
+</dd>
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional filter query.</p>
+</dd>
+    <dt><code>orderBy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional ordering.</p>
+</dd>
+    <dt><code>maxResults</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum results to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunInfo.html">RunInfo</a>&gt;</dt>
+    <dd><p>List of runs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogArtifact_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogArtifact*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogArtifact_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogArtifact(System.String,System.String)">
+  LogArtifact(string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs an artifact file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogArtifact(string localPath, string? artifactPath = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>localPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the local file.</p>
+</dd>
+    <dt><code>artifactPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional path within the artifact directory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogArtifacts_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogArtifacts*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogArtifacts_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogArtifacts(System.String,System.String)">
+  LogArtifacts(string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs all files in a directory as artifacts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogArtifacts(string localDir, string? artifactPath = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>localDir</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the local directory.</p>
+</dd>
+    <dt><code>artifactPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional path within the artifact directory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogMetric_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogMetric*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogMetric_System_String_System_Double_System_Nullable_System_Int64__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogMetric(System.String,System.Double,System.Nullable{System.Int64})">
+  LogMetric(string, double, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a metric at a specific step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogMetric(string key, double value, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Metric name.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Metric value.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Training step (optional).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogMetrics_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogMetrics*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogMetrics_System_Collections_Generic_Dictionary_System_String_System_Double__System_Nullable_System_Int64__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogMetrics(System.Collections.Generic.Dictionary{System.String,System.Double},System.Nullable{System.Int64})">
+  LogMetrics(Dictionary&lt;string, double&gt;, long?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs multiple metrics at a specific step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogMetrics(Dictionary&lt;string, double&gt; metrics, long? step = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metrics</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary of metrics.</p>
+</dd>
+    <dt><code>step</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a>?</dt>
+    <dd><p>Training step (optional).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogModel_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogModel*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogModel_System_String_System_String_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogModel(System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  LogModel(string, string, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a model artifact.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogModel(string modelPath, string modelName, Dictionary&lt;string, object&gt;? metadata = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the model file or directory.</p>
+</dd>
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name for the model.</p>
+</dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Optional model metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogParameter_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogParameter*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogParameter_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogParameter(System.String,System.String)">
+  LogParameter(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs a parameter (configuration value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogParameter(string key, string value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Parameter name.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Parameter value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogParameters_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogParameters*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_LogParameters_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.LogParameters(System.Collections.Generic.Dictionary{System.String,System.String})">
+  LogParameters(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Logs multiple parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void LogParameters(Dictionary&lt;string, string&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_RestoreRun_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.RestoreRun*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_RestoreRun_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.RestoreRun(System.String)">
+  RestoreRun(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restores a deleted run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void RestoreRun(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Run ID to restore.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SearchRuns_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SearchRuns*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SearchRuns_System_Collections_Generic_IEnumerable_System_String__System_String_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SearchRuns(System.Collections.Generic.IEnumerable{System.String},System.String,System.String,System.Int32)">
+  SearchRuns(IEnumerable&lt;string&gt;?, string?, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for runs matching criteria.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;RunInfo&gt; SearchRuns(IEnumerable&lt;string&gt;? experimentNames = null, string? filter = null, string? orderBy = null, int maxResults = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experimentNames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Experiment names to search.</p>
+</dd>
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Filter expression (e.g., &quot;metrics.accuracy &gt; 0.9&quot;).</p>
+</dd>
+    <dt><code>orderBy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Order by expression (e.g., &quot;metrics.loss ASC&quot;).</p>
+</dd>
+    <dt><code>maxResults</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum results.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunInfo.html">RunInfo</a>&gt;</dt>
+    <dd><p>Matching runs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetExperiment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetExperiment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetExperiment_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetExperiment(System.String)">
+  SetExperiment(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the active experiment for subsequent runs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetExperiment(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Experiment name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetTag_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetTag*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetTag_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetTag(System.String,System.String)">
+  SetTag(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a tag on the active run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTag(string key, string value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tag key.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tag value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetTags_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetTags*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_SetTags_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.SetTags(System.Collections.Generic.Dictionary{System.String,System.String})">
+  SetTags(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets multiple tags on the active run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTags(Dictionary&lt;string, string&gt; tags)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Dictionary of tags.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_StartRun_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.StartRun*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_IExperimentTracker_StartRun_System_String_System_Collections_Generic_Dictionary_System_String_System_String__System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.IExperimentTracker.StartRun(System.String,System.Collections.Generic.Dictionary{System.String,System.String},System.String)">
+  StartRun(string?, Dictionary&lt;string, string&gt;?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Starts a new run within the active experiment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">RunInfo StartRun(string? runName = null, Dictionary&lt;string, string&gt;? tags = null, string? description = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional run name.</p>
+</dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional run tags.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional run description.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RunInfo.html">RunInfo</a></dt>
+    <dd><p>Run information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/IExperimentTracker.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

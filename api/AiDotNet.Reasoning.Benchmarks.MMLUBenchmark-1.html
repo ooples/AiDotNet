@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MMLUBenchmark&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MMLUBenchmark&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="MMLU (Massive Multitask Language Understanding) benchmark for evaluating world knowledge.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Benchmarks.MMLUBenchmark%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1" class="text-break">
+Class MMLUBenchmark&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Benchmarks.html">Benchmarks</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>MMLU (Massive Multitask Language Understanding) benchmark for evaluating world knowledge.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MMLUBenchmark&lt;T&gt; : IBenchmark&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MMLUBenchmark&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBenchmark-1.html">IBenchmark</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> MMLU is like a comprehensive standardized test for AI,
+covering 57 subjects from elementary to professional level.
+<p><strong>What is MMLU?</strong>
+MMLU tests knowledge across diverse academic and professional domains:</p>
+<ul>
+<li>STEM: Mathematics, Physics, Chemistry, Biology, Computer Science</li>
+<li>Humanities: History, Philosophy, Law</li>
+<li>Social Sciences: Psychology, Economics, Sociology</li>
+<li>Other: Medicine, Business, Professional Knowledge</li>
+</ul>
+<p><strong>Format:</strong>
+Multiple choice questions (A, B, C, D) spanning different difficulty levels:</p>
+<ul>
+<li>Elementary</li>
+<li>High School</li>
+<li>College</li>
+<li>Professional</li>
+</ul>
+<p><strong>Example questions:</strong></p>
+<p><em>Elementary Math:</em>
+Q: What is 7 × 8?
+A) 54  B) 56  C) 64  D) 48
+Answer: B</p>
+<p><em>College Physics:</em>
+Q: What is the ground state energy of a hydrogen atom?
+A) -13.6 eV  B) -27.2 eV  C) -6.8 eV  D) 0 eV
+Answer: A</p>
+<p><em>Professional Medicine:</em>
+Q: A 45-year-old presents with sudden chest pain. What is the most appropriate first test?
+A) CT scan  B) ECG  C) Blood test  D) X-ray
+Answer: B</p>
+<p><strong>Why it's important:</strong></p>
+<ul>
+<li>Comprehensive knowledge evaluation</li>
+<li>Tests reasoning + memorization</li>
+<li>Standard benchmark for LLMs</li>
+<li>Measures real-world applicability</li>
+</ul>
+<p><strong>Performance levels:</strong></p>
+<ul>
+<li>Random guessing: 25%</li>
+<li>Average human expert: ~90% (in their domain)</li>
+<li>GPT-3.5: ~70%</li>
+<li>GPT-4: ~86%</li>
+<li>Claude 3 Opus: ~87%</li>
+<li>Claude 3.5 Sonnet: ~89%</li>
+<li>ChatGPT o1: ~91%</li>
+<li>Gemini Pro 1.5: ~90%</li>
+</ul>
+<p><strong>57 Subject categories:</strong></p>
+<p><strong>STEM (18 subjects):</strong></p>
+<ul>
+<li>Abstract Algebra, Astronomy, College Biology, College Chemistry</li>
+<li>College Computer Science, College Mathematics, College Physics</li>
+<li>Conceptual Physics, Electrical Engineering, Elementary Mathematics</li>
+<li>High School Biology, High School Chemistry, High School Computer Science</li>
+<li>High School Mathematics, High School Physics, High School Statistics</li>
+<li>Machine Learning</li>
+</ul>
+<p><strong>Humanities (13 subjects):</strong></p>
+<ul>
+<li>Formal Logic, High School European History, High School US History</li>
+<li>High School World History, International Law, Jurisprudence</li>
+<li>Logical Fallacies, Moral Disputes, Moral Scenarios</li>
+<li>Philosophy, Prehistory, Professional Law, World Religions</li>
+</ul>
+<p><strong>Social Sciences (12 subjects):</strong></p>
+<ul>
+<li>Econometrics, High School Geography, High School Government and Politics</li>
+<li>High School Macroeconomics, High School Microeconomics</li>
+<li>High School Psychology, Human Sexuality, Professional Psychology</li>
+<li>Public Relations, Security Studies, Sociology, US Foreign Policy</li>
+</ul>
+<p><strong>Other (14 subjects):</strong></p>
+<ul>
+<li>Anatomy, Business Ethics, Clinical Knowledge, College Medicine</li>
+<li>Global Facts, Human Aging, Management, Marketing</li>
+<li>Medical Genetics, Miscellaneous, Nutrition, Professional Accounting</li>
+<li>Professional Medicine, Virology</li>
+</ul>
+<p><strong>Research:</strong></p>
+<ul>
+<li>&quot;Measuring Massive Multitask Language Understanding&quot; (Hendrycks et al., 2021)</li>
+<li><a href="https://arxiv.org/abs/2009.03300">https://arxiv.org/abs/2009.03300</a></li>
+<li>Dataset: 15,908 questions across 57 tasks</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1__ctor_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1__ctor" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.#ctor">
+  MMLUBenchmark()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MMLUBenchmark()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_BenchmarkName_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.BenchmarkName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_BenchmarkName" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.BenchmarkName">
+  BenchmarkName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string BenchmarkName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_Description_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.Description*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_Description" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of what this benchmark measures.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_TotalProblems_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.TotalProblems*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_TotalProblems" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.TotalProblems">
+  TotalProblems
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of problems in this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalProblems { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_EvaluateAsync_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.EvaluateAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_EvaluateAsync_System_Func_System_String_System_Threading_Tasks_Task_System_String___System_Nullable_System_Int32__System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.EvaluateAsync(System.Func{System.String,System.Threading.Tasks.Task{System.String}},System.Nullable{System.Int32},System.Threading.CancellationToken)">
+  EvaluateAsync(Func&lt;string, Task&lt;string&gt;&gt;, int?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates a reasoning strategy on this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;BenchmarkResult&lt;T&gt;&gt; EvaluateAsync(Func&lt;string, Task&lt;string&gt;&gt; evaluateFunction, int? sampleSize = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluateFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd><p>Function that takes a problem and returns an answer.</p>
+</dd>
+    <dt><code>sampleSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of problems to evaluate (null for all).</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult-1.html">BenchmarkResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Benchmark results with accuracy and detailed metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_EvaluateAsync_System_Func_System_String_System_Threading_Tasks_Task_System_String___System_Nullable_System_Int32__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This runs the benchmark by:
+1. Selecting problems (either all or a random sample)
+2. Asking the reasoning system to solve each one
+3. Comparing answers to the correct solutions
+4. Calculating accuracy and other metrics
+<p>The evaluateFunction is your reasoning system - it takes a problem string and returns
+an answer string.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_LoadProblemsAsync_" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.LoadProblemsAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_LoadProblemsAsync_System_Nullable_System_Int32__" data-uid="AiDotNet.Reasoning.Benchmarks.MMLUBenchmark`1.LoadProblemsAsync(System.Nullable{System.Int32})">
+  LoadProblemsAsync(int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads benchmark problems (for inspection or custom evaluation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;List&lt;BenchmarkProblem&gt;&gt; LoadProblemsAsync(int? count = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of problems to load (null for all).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkProblem.html">BenchmarkProblem</a>&gt;&gt;</dt>
+    <dd><p>List of benchmark problems.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_MMLUBenchmark_1_LoadProblemsAsync_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns the actual problems and their correct answers
+so you can inspect them or run custom evaluations.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MMLUBenchmark.cs/#L99" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

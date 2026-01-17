@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DynamicRegressionWithARIMAErrorsOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DynamicRegressionWithARIMAErrorsOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Dynamic Regression with ARIMA Errors, a powerful time series forecasting method that combines regression with time series error correction.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1" class="text-break">
+Class DynamicRegressionWithARIMAErrorsOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Dynamic Regression with ARIMA Errors, a powerful time series forecasting method
+that combines regression with time series error correction.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DynamicRegressionWithARIMAErrorsOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically double or float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">DynamicRegressionWithARIMAErrorsOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Dynamic Regression with ARIMA Errors (sometimes called RegARIMA) is a hybrid forecasting approach that uses
+external variables (regressors) to explain the main trend while modeling the residual errors with ARIMA
+(AutoRegressive Integrated Moving Average) to capture temporal patterns not explained by the regressors.
+</p>
+<p><b>For Beginners:</b> This is a forecasting method that combines two powerful techniques. First, it uses
+regression to find relationships between your target variable (what you're trying to predict) and other variables
+that might influence it (like temperature affecting ice cream sales). Then, it analyzes the errors in that
+prediction to find patterns over time (like seasonal trends or cycles). By combining both approaches, it often
+produces more accurate forecasts than either method alone. Think of it as not just predicting based on related
+factors, but also learning from its own mistakes.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_AROrder_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.AROrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_AROrder" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.AROrder">
+  AROrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AutoRegressive (AR) order for the ARIMA component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AROrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The AR order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_AROrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The AR order (p) specifies how many previous time steps of the error term are used to predict the current error.
+Higher values capture longer-term dependencies but increase model complexity.
+</p>
+<p><b>For Beginners:</b> This determines how far back in time the model looks when analyzing its errors.
+With the default value of 1, the model considers errors from one time step ago to help predict the current value.
+For example, if yesterday's forecast was too high, the model might adjust today's forecast downward.
+Higher values (like 2 or 3) would make the model consider patterns from multiple previous time periods.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used for solving the regression equations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to LU decomposition.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different matrix decomposition methods offer trade-offs between numerical stability, computational efficiency,
+and accuracy. LU decomposition is a good general-purpose choice for many problems.
+</p>
+<p><b>For Beginners:</b> This is a technical setting that controls how the math behind the model is solved.
+The default (LU decomposition) works well for most situations. You typically won't need to change this unless
+you're dealing with special cases like highly correlated variables or numerical precision issues.
+Think of it as selecting which mathematical technique the computer uses to solve the equations in your model.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DifferenceOrder_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.DifferenceOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DifferenceOrder" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.DifferenceOrder">
+  DifferenceOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the differencing order for the ARIMA component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DifferenceOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The differencing order, defaulting to 0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_DifferenceOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The differencing order (d) specifies how many times the data is differenced to achieve stationarity.
+Differencing helps remove trends and seasonality by computing the differences between consecutive observations.
+</p>
+<p><b>For Beginners:</b> This determines whether and how much the model transforms your data to remove
+upward or downward trends. With the default value of 0, no differencing is applied. A value of 1 means the
+model will work with the changes between consecutive values rather than the raw values themselves.
+This is useful when your data has a strong trend (like consistently increasing sales year over year).
+Think of it as focusing on the rate of change rather than the absolute values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_ExternalRegressors_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.ExternalRegressors*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_ExternalRegressors" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.ExternalRegressors">
+  ExternalRegressors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of external regressor variables to use in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ExternalRegressors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of external regressors, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_ExternalRegressors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+External regressors are independent variables that help explain the behavior of the target variable.
+This setting determines how many such variables will be included in the regression component of the model.
+</p>
+<p><b>For Beginners:</b> This controls how many outside factors your model will consider when making
+predictions. With the default value of 1, the model will use one external factor (like temperature when
+predicting ice cream sales). If you have multiple factors that might influence your prediction (like
+temperature, day of week, and whether it's a holiday), you would increase this number accordingly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_MAOrder_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.MAOrder*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_MAOrder" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.MAOrder">
+  MAOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Moving Average (MA) order for the ARIMA component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MAOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The MA order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_MAOrder_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The MA order (q) specifies how many previous random shock terms are used in the prediction equation.
+It captures the short-term effects of random events on the time series.
+</p>
+<p><b>For Beginners:</b> This controls how the model handles unexpected events or "shocks" in your data.
+With the default value of 1, the model remembers the surprise factor from one time period ago.
+For example, if there was an unexpected spike in sales yesterday, the model accounts for how that surprise
+might affect today's prediction. Higher values make the model consider the lingering effects of surprises
+from multiple previous time periods.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_Regularization_" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.Regularization*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_Regularization" data-uid="AiDotNet.Models.Options.DynamicRegressionWithARIMAErrorsOptions`1.Regularization">
+  Regularization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the regularization method used to prevent overfitting in the regression component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRegularization&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;? Regularization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IRegularization-3.html">IRegularization</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The regularization method, defaulting to null (no regularization).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DynamicRegressionWithARIMAErrorsOptions_1_Regularization_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Regularization adds penalties to the model's complexity to prevent it from fitting noise in the training data.
+Common regularization methods include Ridge (L2), Lasso (L1), and ElasticNet (combination of L1 and L2).
+</p>
+<p><b>For Beginners:</b> This controls whether and how the model prevents itself from becoming too complex
+and "memorizing" your training data instead of learning general patterns. Without regularization (the default),
+the model might perform very well on your training data but poorly on new data. Adding regularization helps the
+model generalize better to new situations. Think of it as encouraging the model to find simpler explanations
+rather than complicated ones that might just be capturing noise in your data.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DynamicRegressionWithARIMAErrorsOptions.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

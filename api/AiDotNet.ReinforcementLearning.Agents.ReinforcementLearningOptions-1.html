@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ReinforcementLearningOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ReinforcementLearningOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for reinforcement learning agents.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1">
+
+
+
+  <h1 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1" class="text-break">
+Class ReinforcementLearningOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L526"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.html">ReinforcementLearning</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.Agents.html">Agents</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for reinforcement learning agents.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ReinforcementLearningOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ReinforcementLearningOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.A3COptions-1.html">A3COptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DecisionTransformerOptions-1.html">DecisionTransformerOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DoubleQLearningOptions-1.html">DoubleQLearningOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DreamerOptions-1.html">DreamerOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DynaQOptions-1.html">DynaQOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.DynaQPlusOptions-1.html">DynaQPlusOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.EpsilonGreedyBanditOptions-1.html">EpsilonGreedyBanditOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ExpectedSARSAOptions-1.html">ExpectedSARSAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GradientBanditOptions-1.html">GradientBanditOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LSPIOptions-1.html">LSPIOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LSTDOptions-1.html">LSTDOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LinearQLearningOptions-1.html">LinearQLearningOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.LinearSARSAOptions-1.html">LinearSARSAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MADDPGOptions-1.html">MADDPGOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModifiedPolicyIterationOptions-1.html">ModifiedPolicyIterationOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MonteCarloExploringStartsOptions-1.html">MonteCarloExploringStartsOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MonteCarloOptions-1.html">MonteCarloOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.MuZeroOptions-1.html">MuZeroOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NStepQLearningOptions-1.html">NStepQLearningOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NStepSARSAOptions-1.html">NStepSARSAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OffPolicyMonteCarloOptions-1.html">OffPolicyMonteCarloOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OnPolicyMonteCarloOptions-1.html">OnPolicyMonteCarloOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PolicyIterationOptions-1.html">PolicyIterationOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.PrioritizedSweepingOptions-1.html">PrioritizedSweepingOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.QLambdaOptions-1.html">QLambdaOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.QMIXOptions-1.html">QMIXOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RainbowDQNOptions-1.html">RainbowDQNOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SARSALambdaOptions-1.html">SARSALambdaOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.SARSAOptions-1.html">SARSAOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TD3Options-1.html">TD3Options&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TRPOOptions-1.html">TRPOOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TabularActorCriticOptions-1.html">TabularActorCriticOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TabularQLearningOptions-1.html">TabularQLearningOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ThompsonSamplingOptions-1.html">ThompsonSamplingOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.UCBBanditOptions-1.html">UCBBanditOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ValueIterationOptions-1.html">ValueIterationOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.WatkinsQLambdaOptions-1.html">WatkinsQLambdaOptions&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.WorldModelsOptions-1.html">WorldModelsOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_BatchSize_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_BatchSize" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L551"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch size for training updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_DiscountFactor_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.DiscountFactor*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_DiscountFactor" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.DiscountFactor">
+  DiscountFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Discount factor (gamma) for future rewards.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? DiscountFactor { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonDecay_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonDecay*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonDecay" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonDecay">
+  EpsilonDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L581"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Exploration decay rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EpsilonDecay { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonEnd_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonEnd*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonEnd" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonEnd">
+  EpsilonEnd
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Final exploration rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EpsilonEnd { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonStart_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonStart*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_EpsilonStart" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.EpsilonStart">
+  EpsilonStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L571"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initial exploration rate (for epsilon-greedy policies).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EpsilonStart { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_LearningRate_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_LearningRate" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L531"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for gradient updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? LearningRate { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_LossFunction_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.LossFunction*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_LossFunction" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L541"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loss function to use for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_MaxGradientNorm_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.MaxGradientNorm*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_MaxGradientNorm" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.MaxGradientNorm">
+  MaxGradientNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L591"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Maximum gradient norm for clipping (0 = no clipping).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradientNorm { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_ReplayBufferSize_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.ReplayBufferSize*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_ReplayBufferSize" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.ReplayBufferSize">
+  ReplayBufferSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L556"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Size of the replay buffer (if applicable).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ReplayBufferSize { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_Seed_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.Seed*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_Seed" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.Seed">
+  Seed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random seed for reproducibility (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? Seed { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_TargetUpdateFrequency_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.TargetUpdateFrequency*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_TargetUpdateFrequency" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.TargetUpdateFrequency">
+  TargetUpdateFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L561"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Frequency of target network updates (if applicable).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TargetUpdateFrequency { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_UsePrioritizedReplay_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.UsePrioritizedReplay*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_UsePrioritizedReplay" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.UsePrioritizedReplay">
+  UsePrioritizedReplay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L566"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to use prioritized experience replay.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UsePrioritizedReplay { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_WarmupSteps_" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.WarmupSteps*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Agents_ReinforcementLearningOptions_1_WarmupSteps" data-uid="AiDotNet.ReinforcementLearning.Agents.ReinforcementLearningOptions`1.WarmupSteps">
+  WarmupSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L586"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of warmup steps before training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WarmupSteps { get; init; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Agents/ReinforcementLearningAgentBase.cs/#L526" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

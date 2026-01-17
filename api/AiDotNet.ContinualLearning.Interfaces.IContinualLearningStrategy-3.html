@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IContinualLearningStrategy&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IContinualLearningStrategy&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Strategy interface for continual learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3" class="text-break">
+Interface IContinualLearningStrategy&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Strategy interface for continual learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IContinualLearningStrategy&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Different continual learning methods use different strategies
+to prevent forgetting. This interface allows the trainer to work with any strategy.</p>
+<p><b>Strategy Types:</b>
+<ul><li><b>Regularization-based:</b> Add penalty terms to protect important weights (EWC, SI, MAS)</li><li><b>Replay-based:</b> Store and replay old examples (Experience Replay, GEM)</li><li><b>Architecture-based:</b> Use separate parameters for different tasks (Progressive Networks, PackNet)</li><li><b>Distillation-based:</b> Use teacher model to preserve old knowledge (LwF)</li></ul>
+
+<p><b>Reference:</b> De Lange et al. "A Continual Learning Survey: Defying Forgetting" (2021)</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_MemoryUsageBytes_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.MemoryUsageBytes*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_MemoryUsageBytes" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.MemoryUsageBytes">
+  MemoryUsageBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current memory usage of the strategy in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">long MemoryUsageBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_ModifiesArchitecture_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.ModifiesArchitecture*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_ModifiesArchitecture" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.ModifiesArchitecture">
+  ModifiesArchitecture
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this strategy modifies the model architecture.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ModifiesArchitecture { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Name_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Name*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Name" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of the strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_RequiresMemoryBuffer_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.RequiresMemoryBuffer*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_RequiresMemoryBuffer" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.RequiresMemoryBuffer">
+  RequiresMemoryBuffer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this strategy requires storing examples from previous tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool RequiresMemoryBuffer { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_AdjustGradients_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.AdjustGradients*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_AdjustGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.AdjustGradients(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  AdjustGradients(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adjusts gradients to prevent forgetting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; AdjustGradients(Vector&lt;T&gt; gradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients from the current task loss.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Adjusted gradients that respect previous task constraints.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_AdjustGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This modifies gradients before they're applied:
+- GEM: Project gradients to not increase loss on previous tasks
+- A-GEM: Project onto average gradient of reference samples
+- OWM: Project gradients into orthogonal subspace
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_ComputeRegularizationLoss_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.ComputeRegularizationLoss*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_ComputeRegularizationLoss_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.ComputeRegularizationLoss(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  ComputeRegularizationLoss(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the regularization loss to prevent forgetting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeRegularizationLoss(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The regularization loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_ComputeRegularizationLoss_AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is added to the task loss during training:
+- EWC: Sum of (current params - optimal params)^2 * Fisher Information
+- SI: Sum of (current params - optimal params)^2 * importance
+- MAS: Sum of (current params - optimal params)^2 * gradient magnitude
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_FinalizeTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.FinalizeTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_FinalizeTask_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.FinalizeTask(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  FinalizeTask(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finalizes the task after training is complete.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void FinalizeTask(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The trained model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_FinalizeTask_AiDotNet_Interfaces_IFullModel__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is called after training on a task completes. Strategies use this to:
+- EWC: Compute Fisher Information Matrix
+- SI: Compute path integral importance
+- PackNet: Prune and freeze weights
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_GetIncompatibilityReason_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.GetIncompatibilityReason*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_GetIncompatibilityReason_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.GetIncompatibilityReason(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  GetIncompatibilityReason(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of why the strategy is incompatible with a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string? GetIncompatibilityReason(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of incompatibility, or null if compatible.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_GetMetrics_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.GetMetrics*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_GetMetrics" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.GetMetrics">
+  GetMetrics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets strategy-specific metrics for monitoring.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyDictionary&lt;string, object&gt; GetMetrics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlydictionary-2">IReadOnlyDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Dictionary of metric name to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_IsCompatibleWith_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.IsCompatibleWith*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_IsCompatibleWith_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.IsCompatibleWith(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  IsCompatibleWith(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that the strategy is compatible with the given model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsCompatibleWith(IFullModel&lt;T, TInput, TOutput&gt; model)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to validate against.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if compatible, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Load_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Load*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Load_System_String_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Load(System.String)">
+  Load(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the strategy state from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Load(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to load the state from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_PrepareForTask_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.PrepareForTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_PrepareForTask_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.PrepareForTask(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.IDataset{`0,`1,`2})">
+  PrepareForTask(IFullModel&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prepares the strategy for learning a new task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void PrepareForTask(IFullModel&lt;T, TInput, TOutput&gt; model, IDataset&lt;T, TInput, TOutput&gt; taskData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model being trained.</p>
+</dd>
+    <dt><code>taskData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The data for the new task.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_PrepareForTask_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is called at the start of training on a new task. Strategies use this to:
+- EWC: Store current parameters as optimal for previous tasks
+- LwF: Create a copy of the model as the teacher
+- GEM: Compute reference gradients from stored examples
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Reset_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Reset*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Reset" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the strategy to its initial state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Save_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Save*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy_3_Save_System_String_" data-uid="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy`3.Save(System.String)">
+  Save(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the strategy state to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Save(string path)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to save the state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Interfaces/IContinualLearningStrategy.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,2086 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MathHelper | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MathHelper | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides mathematical utility methods for various numeric operations used in AI algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Helpers_MathHelper.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Helpers.MathHelper%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Helpers.MathHelper">
+
+
+
+  <h1 id="AiDotNet_Tensors_Helpers_MathHelper" data-uid="AiDotNet.Tensors.Helpers.MathHelper" class="text-break">
+Class MathHelper  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Helpers.html">Helpers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides mathematical utility methods for various numeric operations used in AI algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class MathHelper</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MathHelper</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Helpers_MathHelper_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This helper class contains various mathematical functions that are commonly
+used in AI and machine learning algorithms. These functions work with different numeric types
+(like double, float, decimal) and handle the calculations in a consistent way.
+<p>Think of this class as a mathematical toolbox that provides specialized tools beyond what's
+available in the standard Math class.</p>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.AlmostEqual*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.AlmostEqual``1(``0,``0)">
+  AlmostEqual&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L616"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if two numeric values are approximately equal using a default tolerance of 1e-8.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool AlmostEqual&lt;T&gt;(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the values are approximately equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to compare.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a simplified version of the AlmostEqual method that uses a 
+pre-defined small tolerance value (0.00000001). Use this when you want to check if 
+two numbers are practically the same without specifying the exact tolerance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.AlmostEqual*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual__1___0___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.AlmostEqual``1(``0,``0,``0)">
+  AlmostEqual&lt;T&gt;(T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L596"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if two numeric values are approximately equal within a specified tolerance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool AlmostEqual&lt;T&gt;(T a, T b, T tolerance)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+    <dt><code>tolerance</code> <span class="xref">T</span></dt>
+    <dd><p>The maximum allowed difference between values to consider them equal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the absolute difference between a and b is less than the tolerance; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to compare.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_AlmostEqual__1___0___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> When working with decimal numbers in computers, exact equality comparisons 
+can be problematic due to tiny rounding errors. This method allows you to check if two 
+numbers are "close enough" to be considered equal by specifying how much difference 
+you're willing to accept.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_ArcCos_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcCos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_ArcCos__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcCos``1(``0)">
+  ArcCos&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1077"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the arc cosine (inverse cosine) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ArcCos&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The value whose arc cosine is to be calculated. Must be between -1 and 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The arc cosine of the specified value, in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_ArcCos__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The arc cosine function is the inverse of the cosine function. While cosine 
+takes an angle and returns a value between -1 and 1, arc cosine takes a value between -1 and 1 
+and returns the corresponding angle in radians. For example, since cos(0) = 1, arccos(1) = 0.
+This is useful when you know the cosine value and need to find the original angle.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_ArcSin_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcSin*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_ArcSin__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcSin``1(``0)">
+  ArcSin&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the arc sine (inverse sine) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ArcSin&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The value whose arc sine is to be calculated. Must be between -1 and 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The arc sine of the specified value, in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_ArcSin__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The arc sine function is the inverse of the sine function. While sine 
+takes an angle and returns a value between -1 and 1, arc sine takes a value between -1 and 1 
+and returns the corresponding angle in radians. For example, since sin(p/2) = 1, arcsin(1) = p/2.
+This is useful when you know the sine value and need to find the original angle.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when x is less than -1 or greater than 1.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_ArcTan_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcTan*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_ArcTan__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.ArcTan``1(``0)">
+  ArcTan&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the arc tangent (inverse tangent) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T ArcTan&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The value whose arc tangent is to be calculated.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The arc tangent of the specified value, in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_ArcTan__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The arc tangent function is the inverse of the tangent function. While tangent
+takes an angle and returns a ratio, arc tangent takes a ratio and returns the corresponding
+angle in radians. For example, since tan(0) = 0, arctan(0) = 0.
+</p>
+<p>
+This implementation uses a Taylor series approximation for |x| &lt;= 1, which is a mathematical technique
+that represents a function as an infinite sum of terms. For |x| &gt; 1, we use range reduction:
+atan(x) = sgn(x) * (π/2 - atan(1/|x|)) to transform the problem into the convergent range.
+This ensures accurate results for all input values.
+</p>
+<p>
+<b>Why range reduction is needed:</b>
+The Taylor series atan(x) = x - x³/3 + x⁵/5 - x⁷/7 + ... only converges for |x| ≤ 1.
+For larger values, we use the identity atan(x) + atan(1/x) = π/2 (for x &gt; 0) to transform
+the problem. This way, we compute atan(1/x) instead, which is guaranteed to be in the convergent
+range when |x| &gt; 1.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Atanh_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Atanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Atanh_System_Double_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Atanh(System.Double)">
+  Atanh(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L262"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the inverse hyperbolic tangent (atanh) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Atanh(double x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The inverse hyperbolic tangent of <code class="paramref">x</code>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Atanh_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Inverse hyperbolic tangent: atanh(x) = 0.5 * log((1 + x) / (1 - x)).
+</p>
+<p>
+This method is provided for .NET Framework compatibility where <code>Math.Atanh</code> is not available.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_BesselI0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselI0*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_BesselI0__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselI0``1(``0)">
+  BesselI0&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the modified Bessel function of the first kind of order 0.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T BesselI0&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the Bessel function I0(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_BesselI0__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
+AI and physics problems, especially those involving circular or cylindrical shapes.
+<p>The modified Bessel function I0(x) is used in probability distributions (like the
+von Mises distribution) which are important in directional statistics and some
+machine learning algorithms.</p>
+<p>This method calculates an approximation of this function using a series expansion.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_BesselJ_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselJ*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_BesselJ__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselJ``1(``0,``0)">
+  BesselJ&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L690"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Bessel function of the first kind of order nu at point x.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T BesselJ&lt;T&gt;(T nu, T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nu</code> <span class="xref">T</span></dt>
+    <dd><p>The order of the Bessel function.</p>
+</dd>
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The point at which to evaluate the function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the Bessel function J_nu(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_BesselJ__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
+physics and engineering problems, especially those involving wave propagation, heat 
+conduction in cylindrical objects, and vibrations. This particular Bessel function (J) 
+is used when modeling oscillations or waves in a system. Think of it as a more complex 
+version of sine or cosine functions, but specifically designed for problems with 
+cylindrical symmetry.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_BesselK_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselK*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_BesselK__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.BesselK``1(``0,``0)">
+  BesselK&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L394"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the modified Bessel function of the second kind of order nu at point x.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T BesselK&lt;T&gt;(T nu, T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nu</code> <span class="xref">T</span></dt>
+    <dd><p>The order of the Bessel function.</p>
+</dd>
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The point at which to evaluate the function (must be positive).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the modified Bessel function K_nu(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_BesselK__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Bessel functions are special mathematical functions that appear in many 
+physics and engineering problems, especially those involving wave propagation, heat 
+conduction in cylindrical objects, and electromagnetic waves. This particular Bessel 
+function (K) is used when modeling damped oscillations or exponential decay in a system.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when x is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_CalculateYIntercept_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.CalculateYIntercept*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_CalculateYIntercept__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__" data-uid="AiDotNet.Tensors.Helpers.MathHelper.CalculateYIntercept``1(AiDotNet.Tensors.LinearAlgebra.Matrix{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0})">
+  CalculateYIntercept&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the y-intercept for a linear regression model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T CalculateYIntercept&lt;T&gt;(Matrix&lt;T&gt; xMatrix, Vector&lt;T&gt; y, Vector&lt;T&gt; coefficients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xMatrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix of independent variables (features).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of dependent variables (target values).</p>
+</dd>
+    <dt><code>coefficients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector of coefficients (slopes) for each feature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The y-intercept value that makes the regression line pass through the mean of the data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_CalculateYIntercept__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> In linear regression, the y-intercept is the value of the dependent variable 
+when all independent variables are zero. It represents the baseline value of your prediction 
+before considering any features.
+</p>
+<p>
+This method uses the formula: y-intercept = mean(y) - (coefficient1 * mean(x1) + coefficient2 * mean(x2) + ...)
+which ensures that the regression line passes through the point of means (the average of all data points).
+</p>
+<p>
+For example, in a house price prediction model, if you have features like square footage and 
+number of bedrooms, the y-intercept would be the baseline price of a house before considering 
+these features.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the dimensions of xMatrix, y, and coefficients are not compatible.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Clamp_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Clamp*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Clamp__1___0___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Clamp``1(``0,``0,``0)">
+  Clamp&lt;T&gt;(T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Restricts a value to be within a specified range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Clamp&lt;T&gt;(T value, T min, T max)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to clamp.</p>
+</dd>
+    <dt><code>min</code> <span class="xref">T</span></dt>
+    <dd><p>The minimum value of the range.</p>
+</dd>
+    <dt><code>max</code> <span class="xref">T</span></dt>
+    <dd><p>The maximum value of the range.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value if it's within the range; otherwise, the nearest boundary value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Clamp__1___0___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method ensures a number stays within a certain range.
+<p>For example, if you have a value of 15, but want to keep it between 0 and 10,
+Clamp(15, 0, 10) will return 10 (the maximum allowed).</p>
+<p>Similarly, Clamp(-5, 0, 10) will return 0 (the minimum allowed).</p>
+<p>This is useful in AI when you need to keep values within valid ranges,
+like probabilities between 0 and 1.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Cos_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Cos__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Cos``1(``0)">
+  Cos&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L964"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the cosine of an angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Cos&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The cosine of the specified angle as type T.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Cos__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The cosine function is a fundamental trigonometric function that relates the 
+angles of a right triangle to the ratios of the lengths of its sides. In the context of 
+a unit circle, cosine represents the x-coordinate of a point on the circle at a given angle.
+The input angle must be in radians, not degrees (2p radians = 360 degrees).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Erf_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Erf*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Erf__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Erf``1(``0)">
+  Erf&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the error function (erf) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Erf&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The value for which to calculate the error function.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The error function value for the specified input.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Erf__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The error function (erf) is a special mathematical function that appears in 
+probability, statistics, and partial differential equations. It describes the probability that 
+a random variable with normal distribution will fall within a certain range.
+</p>
+<p>
+This implementation uses Abramowitz and Stegun's numerical approximation, which provides 
+a good balance between accuracy and computational efficiency. The error function always 
+returns values between -1 and 1, and erf(0) = 0.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Factorial_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Factorial*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Factorial__1_System_Int32_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Factorial``1(System.Int32)">
+  Factorial&lt;T&gt;(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L895"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the factorial of a non-negative integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Factorial&lt;T&gt;(int n)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The non-negative integer for which to calculate the factorial.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The factorial of n as type T.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for the result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Factorial__1_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The factorial of a number (written as n!) is the product of all positive 
+integers less than or equal to n. For example, 5! = 5 * 4 * 3 * 2 * 1 = 120.
+Factorials are used in many probability and statistics calculations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Gamma_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Gamma*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Gamma__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Gamma``1(``0)">
+  Gamma&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Gamma function for a given value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Gamma&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Gamma function value G(x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Gamma__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The Gamma function is an extension of the factorial function to real numbers.
+While factorial (n!) is only defined for positive integers, the Gamma function works for 
+almost any real number.
+<p>For positive integers n: G(n) = (n-1)!</p>
+<p>This function is important in many probability distributions used in machine learning,
+like the Beta and Dirichlet distributions, which are used in Bayesian methods.</p>
+<p>This method uses the Lanczos approximation to calculate the Gamma function.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_GetAccelerationSupport_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetAccelerationSupport*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_GetAccelerationSupport__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetAccelerationSupport``1">
+  GetAccelerationSupport&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets both CPU and GPU acceleration support for the specified numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (bool Cpu, bool Gpu) GetAccelerationSupport&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.boolean-.cpu">Cpu</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.boolean-.gpu">Gpu</a>)</dt>
+    <dd><p>A tuple containing (SupportsCpu, SupportsGpu) flags.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_GetNormalRandom_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetNormalRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_GetNormalRandom__1___0___0_System_Random_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetNormalRandom``1(``0,``0,System.Random)">
+  GetNormalRandom&lt;T&gt;(T, T, Random?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L652"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a normally distributed random number using the Box-Muller transform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T GetNormalRandom&lt;T&gt;(T mean, T stdDev, Random? random = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mean</code> <span class="xref">T</span></dt>
+    <dd><p>The mean of the normal distribution.</p>
+</dd>
+    <dt><code>stdDev</code> <span class="xref">T</span></dt>
+    <dd><p>The standard deviation of the normal distribution.</p>
+</dd>
+    <dt><code>random</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd><p>Optional Random instance to use. If null, creates a new unseeded Random instance.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A random number from the specified normal distribution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to return.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_GetNormalRandom__1___0___0_System_Random__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method uses the Box-Muller transform to convert uniform random numbers into normally
+distributed random numbers. This is useful for initializing neural network weights.
+</p>
+<p><b>For Beginners:</b> Normal distribution (also called Gaussian distribution) is a
+bell-shaped probability distribution that is symmetric around its mean.
+<p>This method generates random numbers that follow this distribution, which is important for
+neural network initialization. Using normally distributed values helps prevent issues during
+training and improves convergence.</p>
+
+<p>
+For reproducible results, pass in a seeded Random instance. Otherwise, a new unseeded
+Random will be created on each call, which breaks reproducibility.
+</p>
+<p><b>Type Requirements:</b> This method requires that type T can be converted to and from
+double via <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.convert.todouble#system-convert-todouble(system-boolean)">ToDouble(bool)</a> and <a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html#AiDotNet_Tensors_Interfaces_INumericOperations_1_FromDouble_System_Double_">FromDouble(double)</a>.
+This works for all built-in numeric types (int, float, double, decimal, etc.) but may not
+work for custom numeric types that don't support double conversion.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_GetNumericOperations_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_GetNumericOperations__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations``1">
+  GetNumericOperations&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the appropriate numeric operations implementation for the specified type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static INumericOperations&lt;T&gt; GetNumericOperations&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd><p>An implementation of INumericOperations for the specified type.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to get operations for.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_GetNumericOperations__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method determines how to perform basic math operations (like addition,
+multiplication) based on what type of number you're working with.
+<p>For example, adding two doubles is different from adding two integers at the computer level.
+This method returns the right &quot;calculator&quot; for your number type.</p>
+
+<p>
+<b>Performance:</b> This method caches the operations instances, so calling it multiple times
+for the same type T is very fast after the first call.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown when the specified type is not supported.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_IsFloatingPoint_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsFloatingPoint*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_IsFloatingPoint__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsFloatingPoint``1">
+  IsFloatingPoint&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the type T is a floating-point type (float, double, or Half).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsFloatingPoint&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if T is float, double, or Half; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_IsIntegerType_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsIntegerType*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_IsIntegerType__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsIntegerType``1">
+  IsIntegerType&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the type T is an integer type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsIntegerType&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if T is an integer type; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_IsInteger_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsInteger*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_IsInteger__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsInteger``1(``0)">
+  IsInteger&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L552"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a numeric value is an integer (has no fractional part).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsInteger&lt;T&gt;(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is an integer; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_IsInteger__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method checks if a number has any decimal/fractional part.
+For example, 5.0 is an integer (returns true), while 5.1 is not (returns false).
+This is useful when you need to ensure a value is a whole number before performing
+certain operations that only work with integers.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_IsTensorPrimitivesSupported_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsTensorPrimitivesSupported*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_IsTensorPrimitivesSupported__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.IsTensorPrimitivesSupported``1">
+  IsTensorPrimitivesSupported&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the type T is float or double (the types that support TensorPrimitives operations).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsTensorPrimitivesSupported&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if T is float or double; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_IsTensorPrimitivesSupported__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Many SIMD-optimized operations in .NET's TensorPrimitives only support float and double.
+Use this method to check if you can use TensorPrimitives instead of generic fallback code.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Log2_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Log2_System_Double_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Log2(System.Double)">
+  Log2(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1007"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the base-2 logarithm of a number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double Log2(double x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The positive number to calculate the logarithm for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The base-2 logarithm of the specified number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Log2_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The base-2 logarithm (log2) tells you what power you need to raise 2 to in order 
+to get a specific number. For example, log2(8) = 3 because 2^3 = 8. Base-2 logarithms are commonly 
+used in computer science and information theory because computers use binary (base-2) number systems.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when x is less than or equal to zero.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Log2_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Log2_System_Single_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Log2(System.Single)">
+  Log2(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1020"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the base-2 logarithm (log2) of a single-precision floating point value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static float Log2(float x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value to calculate the logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The base-2 logarithm of x.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown if x is less than or equal to 0.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Max_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Max__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Max``1(``0,``0)">
+  Max&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1058"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the larger of two values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Max&lt;T&gt;(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The larger of the two values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the values to compare.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Max__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method simply compares two numbers and returns whichever one is larger.
+For example, Max(5, 10) would return 10.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Min_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Min__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Min``1(``0,``0)">
+  Min&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L1040"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smaller of two values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Min&lt;T&gt;(T a, T b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <span class="xref">T</span></dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <span class="xref">T</span></dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The smaller of the two values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the values to compare.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Min__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method simply compares two numbers and returns whichever one is smaller.
+For example, Min(5, 10) would return 5.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Modulo_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Modulo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Modulo__1___0___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Modulo``1(``0,``0)">
+  Modulo&lt;T&gt;(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L524"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the modulo (remainder after division) of x divided by y.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Modulo&lt;T&gt;(T x, T y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The dividend (number being divided).</p>
+</dd>
+    <dt><code>y</code> <span class="xref">T</span></dt>
+    <dd><p>The divisor (number dividing into x).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The remainder after dividing x by y.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Modulo__1___0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The modulo operation finds the remainder after division of one number by another.
+For example, 7 modulo 3 equals 1 because 7 divided by 3 is 2 with a remainder of 1.
+This is useful in many programming scenarios, like determining if a number is even or odd,
+or when you need to cycle through a range of values (like hours on a clock).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.dividebyzeroexception">DivideByZeroException</a></dt>
+    <dd><p>Thrown when y is zero.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Pi_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Pi*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Pi__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Pi``1">
+  Pi&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L926"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the mathematical constant Pi (p) converted to the specified numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Pi&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of Pi as type T.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to convert Pi to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Pi__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Pi (p) is a fundamental mathematical constant representing the ratio of a 
+circle's circumference to its diameter, approximately equal to 3.14159. It appears in many 
+mathematical formulas, especially those involving circles, waves, and periodic functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Reciprocal_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Reciprocal*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Reciprocal__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Reciprocal``1(``0)">
+  Reciprocal&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L471"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the reciprocal (1/x) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Reciprocal&lt;T&gt;(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to calculate the reciprocal of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The reciprocal of the input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Reciprocal__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The reciprocal of a number is simply 1 divided by that number. 
+For example, the reciprocal of 4 is 1/4 or 0.25, and the reciprocal of 0.5 is 1/0.5 or 2.
+Reciprocals are useful in many mathematical operations, especially when you need to 
+convert division into multiplication.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.dividebyzeroexception">DivideByZeroException</a></dt>
+    <dd><p>Thrown when the input value is zero.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Sigmoid_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Sigmoid__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sigmoid``1(``0)">
+  Sigmoid&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L574"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sigmoid function (1/(1+e^(-x))) for a given value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Sigmoid&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sigmoid of the input value (between 0 and 1).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Sigmoid__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The sigmoid function is one of the most important functions in machine learning.
+It transforms any input value into a number between 0 and 1, creating an S-shaped curve.
+This is especially useful in neural networks and logistic regression where you need to 
+convert a raw score into a probability or make a binary decision (like yes/no classification).
+Large negative inputs produce values close to 0, while large positive inputs produce values close to 1.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Sin_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Sin__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sin``1(``0)">
+  Sin&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L945"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sine of an angle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Sin&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sine of the specified angle as type T.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Sin__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The sine function is a fundamental trigonometric function that relates the 
+angles of a right triangle to the ratios of the lengths of its sides. In the context of 
+a unit circle, sine represents the y-coordinate of a point on the circle at a given angle.
+The input angle must be in radians, not degrees (2p radians = 360 degrees).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Sinc_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sinc*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Sinc__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Sinc``1(``0)">
+  Sinc&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L496"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sinc function (sin(px)/(px)) for a given value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Sinc&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The sinc of the input value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Sinc__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The sinc function is a mathematical function that appears frequently in 
+signal processing and Fourier analysis. It's defined as sin(px)/(px) for x ? 0, and 1 for x = 0.
+The sinc function creates a wave that gradually diminishes as you move away from the center,
+making it useful for filtering and interpolation in digital signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_SupportsCpuAcceleration__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.SupportsCpuAcceleration``1">
+  SupportsCpuAcceleration&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the specified numeric type supports SIMD/CPU acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool SupportsCpuAcceleration&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the type supports CPU acceleration; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_SupportsCpuAcceleration__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.
+</p>
+<p>
+This method caches the result for performance - use it instead of checking
+typeof(T) == typeof(float) patterns in hot paths.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_SupportsGpuAcceleration__1" data-uid="AiDotNet.Tensors.Helpers.MathHelper.SupportsGpuAcceleration``1">
+  SupportsGpuAcceleration&lt;T&gt;()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the specified numeric type supports GPU acceleration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool SupportsGpuAcceleration&lt;T&gt;()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the type supports GPU acceleration; otherwise, false.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to check.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_SupportsGpuAcceleration__1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float and double are typically supported on GPUs, while decimal and
+complex types may only run on CPU.
+</p>
+<p>
+This method caches the result for performance - use it instead of checking
+typeof(T) == typeof(float) patterns in hot paths.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Helpers_MathHelper_Tanh_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_Helpers_MathHelper_Tanh__1___0_" data-uid="AiDotNet.Tensors.Helpers.MathHelper.Tanh``1(``0)">
+  Tanh&lt;T&gt;(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L984"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the hyperbolic tangent of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static T Tanh&lt;T&gt;(T x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <span class="xref">T</span></dt>
+    <dd><p>The value to calculate the hyperbolic tangent for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The hyperbolic tangent of the specified value as type T.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type to use for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Helpers_MathHelper_Tanh__1___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The hyperbolic tangent (tanh) is a function commonly used in neural networks 
+as an activation function. Unlike the regular tangent function, which can grow infinitely large, 
+tanh always outputs values between -1 and 1. This makes it useful for creating models that need 
+to predict values within a specific range. The function has an S-shape (sigmoid) and maps any 
+input value to an output between -1 and 1.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Helpers/MathHelper.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

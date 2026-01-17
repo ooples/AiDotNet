@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>DataLoader and Batching Utilities Design Document | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="DataLoader and Batching Utilities Design Document | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/design/DataLoader-Design-Decisions.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="dataloader-and-batching-utilities-design-document">DataLoader and Batching Utilities Design Document</h1>
+
+<h2 id="issue-reference">Issue Reference</h2>
+<p>GitHub Issue: #443</p>
+<h2 id="design-decisions">Design Decisions</h2>
+<h3 id="architecture-approach">Architecture Approach</h3>
+<p><strong>Decision</strong>: Extend existing DataLoader infrastructure</p>
+<ul>
+<li>Modify existing <code>DataLoaderBase&lt;T&gt;</code> and derived classes</li>
+<li>Add methods to existing <code>IBatchIterable&lt;TBatch&gt;</code> interface</li>
+<li>Create extension methods for fluent API</li>
+</ul>
+<h3 id="scope">Scope</h3>
+<p><strong>Decision</strong>: All phases in a single comprehensive PR</p>
+<h3 id="backward-compatibility">Backward Compatibility</h3>
+<p><strong>Decision</strong>: Focus on production-readiness and exceeding industry standards</p>
+<ul>
+<li>Backward compatibility is NOT a priority</li>
+<li>Code must be mathematically accurate and fully production-ready</li>
+</ul>
+<h3 id="industry-standards">Industry Standards</h3>
+<p><strong>Decision</strong>: Support BOTH PyTorch and TensorFlow paradigms</p>
+<ul>
+<li>PyTorch patterns: num_workers, pin_memory, prefetch_factor, collate_fn, Sampler interface</li>
+<li>TensorFlow patterns: map, filter, cache, prefetch, interleave, padded_batch</li>
+</ul>
+<h3 id="threadingparallelism">Threading/Parallelism</h3>
+<p><strong>Decision</strong>: Support BOTH async prefetching AND parallel workers</p>
+<h3 id="memory-model">Memory Model</h3>
+<p><strong>Decision</strong>: Support BOTH in-memory AND streaming datasets</p>
+<h3 id="sampling-strategies">Sampling Strategies</h3>
+<p><strong>Decision</strong>: Comprehensive sampling support</p>
+<ul>
+<li>Random sampling</li>
+<li>Stratified sampling</li>
+<li>Weighted sampling</li>
+<li>Curriculum learning</li>
+<li>Importance sampling</li>
+<li>Active learning</li>
+<li>Custom sampler interface</li>
+</ul>
+<h2 id="implementation-progress">Implementation Progress</h2>
+<h3 id="phase-1-core-batching-infrastructure">Phase 1: Core Batching Infrastructure</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1A: Add GetBatches() with yield return</td>
+<td>COMPLETE</td>
+<td>45870c8</td>
+</tr>
+<tr>
+<td>1B: Add CreateBatches fluent API</td>
+<td>COMPLETE</td>
+<td>dc8b256</td>
+</tr>
+<tr>
+<td>1C: dropLast, shuffle, seed parameters</td>
+<td>COMPLETE</td>
+<td>(included in 1A)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-2-sampling-strategies">Phase 2: Sampling Strategies</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2A: IDataSampler interface + Random/Stratified/Weighted</td>
+<td>COMPLETE</td>
+<td>9ff9833</td>
+</tr>
+<tr>
+<td>2B: Curriculum/Importance/Active learning</td>
+<td>COMPLETE</td>
+<td>f5bea56</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-3-async-and-parallel-support">Phase 3: Async and Parallel Support</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3A: Async prefetching with Channel</td>
+<td>COMPLETE</td>
+<td>(included in 1A)</td>
+</tr>
+<tr>
+<td>3B: Parallel worker support</td>
+<td>COMPLETE</td>
+<td>908b09d</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-4-advanced-features">Phase 4: Advanced Features</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4A: StreamingDataLoader</td>
+<td>COMPLETE</td>
+<td>32879d3</td>
+</tr>
+<tr>
+<td>4B: TensorFlow-style operators</td>
+<td>COMPLETE</td>
+<td>4cd9a11</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-5-optimizer-integration">Phase 5: Optimizer Integration</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5A: Create DataSamplerBase, WeightedSamplerBase, EpochAdaptiveSamplerBase</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+<tr>
+<td>5B: Refactor all samplers to use base classes</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+<tr>
+<td>5C: Add OnEpochStart to IDataSampler interface</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+<tr>
+<td>5D: Add DataLoader options to GradientBasedOptimizerOptions</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+<tr>
+<td>5E: Add CreateBatcher helpers to GradientBasedOptimizerBase</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+<tr>
+<td>5F: Refactor MiniBatchGradientDescentOptimizer to use batcher</td>
+<td>COMPLETE</td>
+<td>7e3bf51</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-6-testing">Phase 6: Testing</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6: Unit tests (90%+ coverage)</td>
+<td>PENDING</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-7-benchmarks">Phase 7: Benchmarks</h3>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>Status</th>
+<th>Commit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7: Performance benchmarks</td>
+<td>PENDING</td>
+<td>-</td>
+</tr>
+</tbody>
+</table>
+<h2 id="files-modifiedcreated">Files Modified/Created</h2>
+<h3 id="interface-changes">Interface Changes</h3>
+<ul>
+<li><code>src/Interfaces/IBatchIterable.cs</code> - Added GetBatches() and GetBatchesAsync()</li>
+</ul>
+<h3 id="base-class-implementations">Base Class Implementations</h3>
+<ul>
+<li><code>src/Data/Loaders/InputOutputDataLoaderBase.cs</code> - Full batch iteration support</li>
+<li><code>src/Data/Loaders/EpisodicDataLoaderBase.cs</code> - Meta-learning batch support</li>
+<li><code>src/Data/Loaders/GraphDataLoaderBase.cs</code> - Graph batch support</li>
+<li><code>src/Data/Loaders/RLDataLoaderBase.cs</code> - RL experience batch support</li>
+</ul>
+<h3 id="extension-methods">Extension Methods</h3>
+<ul>
+<li><code>src/Extensions/DataLoaderExtensions.cs</code> - Fluent API builders</li>
+</ul>
+<h3 id="sampling-infrastructure">Sampling Infrastructure</h3>
+<ul>
+<li><code>src/Interfaces/IDataSampler.cs</code> - Sampler interfaces (IDataSampler, IBatchSampler, IWeightedSampler, IStratifiedSampler)</li>
+<li><code>src/Data/Sampling/DataSamplerBase.cs</code> - Base classes (DataSamplerBase, WeightedSamplerBase<t>, EpochAdaptiveSamplerBase<t>)</t></t></li>
+<li><code>src/Data/Sampling/RandomSampler.cs</code> - Random, Sequential, Subset samplers</li>
+<li><code>src/Data/Sampling/StratifiedSampler.cs</code> - Stratified and StratifiedBatch samplers</li>
+<li><code>src/Data/Sampling/WeightedSampler.cs</code> - Weighted sampling with class balancing</li>
+<li><code>src/Data/Sampling/CurriculumSampler.cs</code> - Curriculum and Self-paced learning</li>
+<li><code>src/Data/Sampling/ImportanceSampler.cs</code> - Importance and Active learning samplers</li>
+<li><code>src/Data/Sampling/Samplers.cs</code> - Static facade with factory methods</li>
+</ul>
+<h3 id="optimizer-integration">Optimizer Integration</h3>
+<ul>
+<li><code>src/Models/Options/GradientBasedOptimizerOptions.cs</code> - Added DataSampler, ShuffleData, DropLastBatch, RandomSeed</li>
+<li><code>src/Optimizers/GradientBasedOptimizerBase.cs</code> - Added CreateBatcher helpers, NotifyEpochStart</li>
+<li><code>src/Optimizers/MiniBatchGradientDescentOptimizer.cs</code> - Refactored to use DataLoader batcher</li>
+<li><code>src/Optimizers/OptimizationDataBatcher.cs</code> - Made public for optimizer access</li>
+</ul>
+<h3 id="parallel-loading">Parallel Loading</h3>
+<ul>
+<li><code>src/Data/Loaders/ParallelBatchLoader.cs</code> - Multi-worker batch loading with prefetch</li>
+</ul>
+<h3 id="streaming-data-loaders">Streaming Data Loaders</h3>
+<ul>
+<li><code>src/Data/Loaders/StreamingDataLoader.cs</code> - Streaming, File, CSV, and MemoryMapped loaders</li>
+</ul>
+<h3 id="pipeline-operators">Pipeline Operators</h3>
+<ul>
+<li><code>src/Data/Pipeline/DataPipeline.cs</code> - TensorFlow-style pipeline operators</li>
+</ul>
+<h2 id="api-design">API Design</h2>
+<h3 id="pytorch-style-batch-iteration">PyTorch-Style Batch Iteration</h3>
+<pre><code class="lang-csharp">// Direct method call
+foreach (var (x, y) in dataLoader.GetBatches(batchSize: 32, shuffle: true))
+{
+    model.TrainOnBatch(x, y);
+}
+
+// Fluent API
+foreach (var batch in dataLoader.CreateBatches(32).Shuffled().DropLast())
+{
+    model.TrainOnBatch(batch);
+}
+
+// Async with prefetching
+await foreach (var batch in dataLoader.GetBatchesAsync(prefetchCount: 2))
+{
+    await model.TrainOnBatchAsync(batch);
+}
+</code></pre>
+<h3 id="tensorflow-style-pipeline-phase-4">TensorFlow-Style Pipeline (Phase 4)</h3>
+<pre><code class="lang-csharp">// Planned API
+var pipeline = dataLoader
+    .Map(Augment)
+    .Filter(IsValid)
+    .Cache()
+    .Shuffle(bufferSize: 1000)
+    .Batch(32)
+    .Prefetch(2);
+</code></pre>
+<h2 id="success-criteria">Success Criteria</h2>
+<ul>
+<li>[ ] All phases complete</li>
+<li>[ ] Build succeeds on net8.0 and net471</li>
+<li>[ ] 90%+ test coverage</li>
+<li>[ ] Performance matches or exceeds manual batching</li>
+<li>[ ] All optimizers refactored to use new API</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/design/DataLoader-Design-Decisions.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

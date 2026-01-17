@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ClipImagePreprocessor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ClipImagePreprocessor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Preprocesses images for CLIP (Contrastive Language-Image Pre-training) models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Preprocessing.Image.ClipImagePreprocessor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1">
+
+
+
+  <h1 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1" class="text-break">
+Class ClipImagePreprocessor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Preprocessing.html">Preprocessing</a>.<a class="xref" href="AiDotNet.Preprocessing.Image.html">Image</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Preprocesses images for CLIP (Contrastive Language-Image Pre-training) models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ClipImagePreprocessor&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ClipImagePreprocessor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CLIP models expect images to be preprocessed in a specific way:
+1. Resize to a square size (typically 224x224 or 336x336)
+2. Normalize pixel values using ImageNet mean and standard deviation
+3. Convert to tensor format [channels, height, width]
+</p>
+<p><b>For Beginners:</b> Before CLIP can "see" an image, it needs to be prepared:
+<ol>
+<li><p><b>Resize</b>: Images come in all sizes (1000x2000, 50x50, etc.)
+CLIP expects a specific size (like 224x224 pixels).</p>
+</li>
+<li><p><b>Normalize</b>: Pixel values (0-255) are scaled and shifted using
+standard values from ImageNet dataset. This helps the model work consistently.</p>
+</li>
+<li><p><b>Format</b>: The image is arranged as [R, G, B] channels first,
+then height and width. This is called &quot;channels-first&quot; format.</p>
+</li>
+</ol>
+<p>Example:</p>
+<ul>
+<li>Original: 1920x1080 photo with RGB values 0-255</li>
+<li>After preprocessing: 224x224 tensor with normalized values around [-2, 2]</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1__ctor_" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1__ctor_System_Int32__0____0___" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.#ctor(System.Int32,`0[],`0[])">
+  ClipImagePreprocessor(int, T[]?, T[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ClipImagePreprocessor class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ClipImagePreprocessor(int imageSize = 224, T[]? mean = null, T[]? std = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The target image size (default: 224 for CLIP ViT-B/32).</p>
+</dd>
+    <dt><code>mean</code> T[]</dt>
+    <dd><p>The normalization mean values for RGB. If null, uses ImageNet mean.</p>
+</dd>
+    <dt><code>std</code> T[]</dt>
+    <dd><p>The normalization std values for RGB. If null, uses ImageNet std.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1__ctor_System_Int32__0____0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The default normalization values are from ImageNet:
+- Mean: [0.48145466, 0.4578275, 0.40821073]
+- Std: [0.26862954, 0.26130258, 0.27577711]
+These are the standard values used by OpenAI's CLIP models.
+</p>
+<p><b>For Beginners:</b> You usually don't need to change the default values.
+<p>The mean and std values are &quot;magic numbers&quot; that were calculated from
+millions of images in the ImageNet dataset. Using them helps CLIP
+process images consistently with how it was trained.</p>
+<p>Common image sizes:</p>
+<ul>
+<li>224: Standard CLIP (ViT-B/32, RN50)</li>
+<li>336: Higher resolution CLIP (ViT-L/14@336px)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_ImageSize_" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.ImageSize*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_ImageSize" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.ImageSize">
+  ImageSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target image size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ImageSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_Preprocess_" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.Preprocess*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.Preprocess(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Preprocess(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Preprocesses an image for CLIP input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Preprocess(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor with shape [height, width, channels] or [channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A normalized tensor with shape [3, ImageSize, ImageSize].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The preprocessing pipeline:
+1. Detect input format (HWC or CHW)
+2. Resize to target size using bilinear interpolation
+3. Normalize each channel: (pixel - mean) / std
+4. Convert to channels-first format if needed
+</p>
+<p><b>For Beginners:</b> This method takes any image and prepares it for CLIP.
+<p>Input can be:</p>
+<ul>
+<li>Any size (will be resized to 224x224 or your chosen size)</li>
+<li>Any format (height-width-channels or channels-height-width)</li>
+<li>Values 0-255 (standard image) or 0-1 (normalized)</li>
+</ul>
+<p>Output is always:</p>
+<ul>
+<li>Size: [3, 224, 224] (or your chosen size)</li>
+<li>Format: Channels-first (RGB)</li>
+<li>Values: Normalized using ImageNet statistics</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_PreprocessBatch_" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.PreprocessBatch*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Image_ClipImagePreprocessor_1_PreprocessBatch_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Preprocessing.Image.ClipImagePreprocessor`1.PreprocessBatch(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}})">
+  PreprocessBatch(IEnumerable&lt;Tensor&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Preprocesses a batch of images for CLIP input.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Tensor&lt;T&gt;&gt; PreprocessBatch(IEnumerable&lt;Tensor&lt;T&gt;&gt; images)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The input images.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A batch of normalized tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Image/ClipImagePreprocessor.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

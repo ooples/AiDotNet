@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Brightness&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Brightness&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Adjusts the brightness of an image by adding a random offset to all pixel values.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Augmentation_Image_Brightness_1.md&amp;value=---%0Auid%3A%20AiDotNet.Augmentation.Image.Brightness%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Augmentation.Image.Brightness`1">
+
+
+
+  <h1 id="AiDotNet_Augmentation_Image_Brightness_1" data-uid="AiDotNet.Augmentation.Image.Brightness`1" class="text-break">
+Class Brightness&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Augmentation.html">Augmentation</a>.<a class="xref" href="AiDotNet.Augmentation.Image.html">Image</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Adjusts the brightness of an image by adding a random offset to all pixel values.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Brightness&lt;T&gt; : AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;, IAugmentation&lt;T, ImageTensor&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html">AugmentationBase</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">Brightness&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Augmentation.IAugmentation-2.html">IAugmentation</a>&lt;T, <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_NumOps">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_OnAugmentationApplied">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.OnAugmentationApplied</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Name">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Probability">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Probability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsTrainingOnly">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.IsTrainingOnly</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_IsEnabled">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.IsEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_Apply__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.Apply(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_ApplyAugmentation__1_AiDotNet_Augmentation_AugmentationContext__0__">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.ApplyAugmentation(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_GetParameters">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Augmentation.AugmentationBase-2.html#AiDotNet_Augmentation_AugmentationBase_2_RaiseAugmentationApplied_AiDotNet_Augmentation_AugmentationContext__0__System_Boolean_">AugmentationBase&lt;T, ImageTensor&lt;T&gt;&gt;.RaiseAugmentationApplied(AugmentationContext&lt;T&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Augmentation_Image_Brightness_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Brightness adjustment simulates different lighting conditions by uniformly increasing
+or decreasing all pixel values. This helps models become robust to variations in
+ambient lighting and exposure settings.
+</p>
+<p><b>For Beginners:</b> Think of this like adjusting the brightness slider on your phone.
+Making an image brighter adds light to all pixels, making it darker subtracts light.
+This teaches your model to recognize objects whether they're in bright sunlight or shade.
+</p>
+<p><b>When to use:</b>
+<ul><li>Outdoor photography where lighting varies by time of day</li><li>Indoor scenes with different lighting conditions</li><li>Any task where exposure/lighting might vary between training and deployment</li></ul>
+
+<p><b>When NOT to use:</b>
+<ul><li>Tasks where absolute brightness is meaningful (e.g., astronomy)</li><li>Images already normalized to a specific brightness range</li><li>Medical imaging where pixel intensity has diagnostic meaning</li></ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Brightness_1__ctor_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Brightness_1__ctor_System_Double_System_Double_System_Double_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.#ctor(System.Double,System.Double,System.Double)">
+  Brightness(double, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new brightness augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Brightness(double minFactor = 0.8, double maxFactor = 1.2, double probability = 0.5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>minFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum brightness factor. Values below 1.0 darken the image.
+Industry standard default is 0.8 (20% darker at minimum).</p>
+</dd>
+    <dt><code>maxFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum brightness factor. Values above 1.0 brighten the image.
+Industry standard default is 1.2 (20% brighter at maximum).</p>
+</dd>
+    <dt><code>probability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of applying this augmentation (0.0 to 1.0).
+Industry standard default is 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Image_Brightness_1__ctor_System_Double_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The factor range of 0.8 to 1.2 creates subtle brightness
+variations that look natural. A range like 0.5 to 1.5 would create more dramatic changes.
+Factor of 0.0 would make the image completely black, factor of 2.0 would make it very bright.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Brightness_1_MaxFactor_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.MaxFactor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Brightness_1_MaxFactor" data-uid="AiDotNet.Augmentation.Image.Brightness`1.MaxFactor">
+  MaxFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum brightness adjustment factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Image_Brightness_1_MaxFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Values greater than 1.0 brighten the image.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Brightness_1_MinFactor_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.MinFactor*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Brightness_1_MinFactor" data-uid="AiDotNet.Augmentation.Image.Brightness`1.MinFactor">
+  MinFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum brightness adjustment factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Augmentation_Image_Brightness_1_MinFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>A factor of 1.0 means no change. Values less than 1.0 darken the image.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Augmentation_Image_Brightness_1_ApplyAugmentation_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.ApplyAugmentation*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Brightness_1_ApplyAugmentation_AiDotNet_Augmentation_Image_ImageTensor__0__AiDotNet_Augmentation_AugmentationContext__0__" data-uid="AiDotNet.Augmentation.Image.Brightness`1.ApplyAugmentation(AiDotNet.Augmentation.Image.ImageTensor{`0},AiDotNet.Augmentation.AugmentationContext{`0})">
+  ApplyAugmentation(ImageTensor&lt;T&gt;, AugmentationContext&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the brightness adjustment to the image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ImageTensor&lt;T&gt; ApplyAugmentation(ImageTensor&lt;T&gt; data, AugmentationContext&lt;T&gt; context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>context</code> <a class="xref" href="AiDotNet.Augmentation.AugmentationContext-1.html">AugmentationContext</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Augmentation.Image.ImageTensor-1.html">ImageTensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Augmentation_Image_Brightness_1_GetParameters_" data-uid="AiDotNet.Augmentation.Image.Brightness`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Augmentation_Image_Brightness_1_GetParameters" data-uid="AiDotNet.Augmentation.Image.Brightness`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters of this augmentation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IDictionary&lt;string, object&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.idictionary-2">IDictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary of parameter names to values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Augmentation/Image/Brightness.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

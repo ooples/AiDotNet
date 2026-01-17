@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Ant Colony Optimization algorithm, which is inspired by the foraging behavior of ants to find optimal paths through a search space.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_AntColonyOptimizationOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.AntColonyOptimizationOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3" class="text-break">
+Class AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Ant Colony Optimization algorithm, which is inspired by the foraging behavior of ants
+to find optimal paths through a search space.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">AntColonyOptimizationOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Ant Colony Optimization (ACO) is a probabilistic technique for solving computational problems that can be reduced to finding
+good paths through graphs. It simulates the behavior of ants seeking a path between their colony and a food source.
+</p>
+<p><b>For Beginners:</b> Ant Colony Optimization works like real ants finding food. When ants find food, they leave
+a chemical trail (pheromone) on their way back to the nest. Other ants follow strong trails, making them stronger.
+Trails that don't lead to food gradually fade away. This algorithm mimics this behavior to solve problems by having
+virtual "ants" explore possible solutions and leave "trails" on good solutions that guide future searches.
+It's especially good at finding efficient routes or combinations when there are many possibilities to consider.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_AntCount_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.AntCount*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_AntCount" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.AntCount">
+  AntCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of artificial ants used in each iteration of the algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AntCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of ants, defaulting to 50.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_AntCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Each ant constructs a potential solution to the problem. More ants can explore the solution space more thoroughly
+but require more computational resources.
+</p>
+<p><b>For Beginners:</b> This is simply how many virtual "ants" will search for solutions at the same time.
+More ants means a more thorough search but takes more computing power. The default value of 50 is a good balance
+for most problems. Think of it like sending out 50 scouts to explore different paths - enough to cover a good area
+without overwhelming your computer.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_Beta_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.Beta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_Beta" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.Beta">
+  Beta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the importance of heuristic information (problem-specific knowledge) relative to pheromone trails.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Beta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The beta parameter, defaulting to 2.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_Beta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Beta controls the balance between exploitation (following strong pheromone trails) and exploration (trying new paths
+based on heuristic information). Higher values give more weight to the heuristic information.
+</p>
+<p><b>For Beginners:</b> Beta determines how much the ants rely on their "instinct" (problem-specific knowledge)
+versus following existing trails. A higher value (like the default 2.0) means ants will pay more attention to what
+looks like a good path based on the problem's characteristics, rather than just following where others have gone before.
+It's like deciding whether to follow a map (instinct) or follow footprints (trails) when exploring.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneEvaporationRate_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.InitialPheromoneEvaporationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneEvaporationRate" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.InitialPheromoneEvaporationRate">
+  InitialPheromoneEvaporationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial rate at which pheromone trails evaporate over time.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialPheromoneEvaporationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial pheromone evaporation rate, defaulting to 0.1 (10% per iteration).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneEvaporationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Pheromone evaporation prevents the algorithm from converging too quickly to suboptimal solutions by reducing
+the influence of older pheromone deposits.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the "trails" left by ants fade away. The default value of 0.1
+means that 10% of each trail disappears after each round of searching. If trails didn't fade, the algorithm might get
+stuck following the first decent path it found instead of discovering better ones. Think of it like footprints in sand
+that gradually get washed away by waves, ensuring that only consistently good paths remain visible over time.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneIntensity_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.InitialPheromoneIntensity*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneIntensity" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.InitialPheromoneIntensity">
+  InitialPheromoneIntensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial strength of pheromone deposits left by ants.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialPheromoneIntensity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The initial pheromone intensity, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_InitialPheromoneIntensity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This value determines how strongly each ant's solution influences future iterations. The actual pheromone deposit
+is typically scaled by the quality of the solution found.
+</p>
+<p><b>For Beginners:</b> This is how strong the initial "trails" are when ants find a good path. The default
+value of 1.0 provides a baseline intensity. When an ant finds a good solution, it leaves a trail with this strength
+(adjusted by how good the solution is). Think of it as how much ink each ant has in its pen to mark the path - 
+enough to be visible but not so much that a single ant's path dominates everything else.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneEvaporationRate_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MaxPheromoneEvaporationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneEvaporationRate" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MaxPheromoneEvaporationRate">
+  MaxPheromoneEvaporationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for the pheromone evaporation rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxPheromoneEvaporationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum pheromone evaporation rate, defaulting to 0.5 (50% per iteration).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneEvaporationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This prevents the evaporation rate from becoming too large during adaptive adjustments, which could cause
+the algorithm to forget good solutions too quickly and fail to converge.
+</p>
+<p><b>For Beginners:</b> This sets a ceiling for how quickly trails can fade. Even if the algorithm wants
+to encourage lots of exploration, trails won't fade more than 50% per round. This ensures that promising paths
+have a chance to be reinforced before disappearing completely. It's like making sure footprints don't vanish
+instantly in a sandstorm, giving other ants at least some chance to follow them.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneIntensity_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MaxPheromoneIntensity*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneIntensity" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MaxPheromoneIntensity">
+  MaxPheromoneIntensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum allowed value for pheromone intensity on any path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxPheromoneIntensity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum pheromone intensity, defaulting to 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MaxPheromoneIntensity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This prevents pheromone levels from becoming excessively high during the optimization process, which could cause
+the algorithm to over-commit to certain paths and lose diversity in the search process.
+</p>
+<p><b>For Beginners:</b> This sets a ceiling for how strong a trail can become. Even if a path is used 
+repeatedly, its "scent" won't get stronger than this value. The default value of 10.0 prevents any single path 
+from becoming so attractive that ants ignore all other possibilities. It's like limiting how much ink can 
+accumulate on a popular trail, ensuring that the ants don't become so fixated on one path that they completely 
+stop exploring alternatives that might actually be better in the long run.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneEvaporationRate_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MinPheromoneEvaporationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneEvaporationRate" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MinPheromoneEvaporationRate">
+  MinPheromoneEvaporationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for the pheromone evaporation rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinPheromoneEvaporationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum pheromone evaporation rate, defaulting to 0.01 (1% per iteration).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneEvaporationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This prevents the evaporation rate from becoming too small during adaptive adjustments, which could cause
+the algorithm to over-exploit existing solutions and get stuck in local optima.
+</p>
+<p><b>For Beginners:</b> This sets a floor for how slowly trails can fade. Even if the algorithm wants
+to preserve trails for a long time, they will still fade at least 1% per round. This ensures that very old
+paths don't stick around forever, preventing the ants from getting permanently stuck following a decent but
+not optimal path.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneIntensity_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MinPheromoneIntensity*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneIntensity" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.MinPheromoneIntensity">
+  MinPheromoneIntensity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum allowed value for pheromone intensity on any path.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinPheromoneIntensity { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum pheromone intensity, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_MinPheromoneIntensity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This prevents pheromone levels from becoming too low during the optimization process, ensuring that all paths
+maintain at least some probability of being selected. This helps maintain diversity in the search process.
+</p>
+<p><b>For Beginners:</b> This sets a floor for how faint a trail can become. Even if a path hasn't been used 
+for a while, it will still have at least this much "scent" left on it. The default value of 0.1 ensures that no 
+path is ever completely forgotten, giving the algorithm a chance to revisit previously unexplored or abandoned 
+paths. Think of it like making sure every path has at least a faint trail marker, so ants might occasionally 
+check it again rather than completely ignoring it forever.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateDecay_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneEvaporationRateDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateDecay" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneEvaporationRateDecay">
+  PheromoneEvaporationRateDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to decrease the pheromone evaporation rate when adaptation is needed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PheromoneEvaporationRateDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The pheromone evaporation rate decay factor, defaulting to 0.95 (5% reduction).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the algorithm needs to focus more on exploitation of known good solutions, the evaporation rate can be decreased
+by this factor to preserve existing pheromone trails longer.
+</p>
+<p><b>For Beginners:</b> This controls how much to slow down the trail fading process when the algorithm needs
+to focus more on using what it has already learned. The default value of 0.95 means reducing the fade rate by 5%.
+It's like deciding to preserve existing paths a bit longer so ants can make the most of promising discoveries before
+they fade away.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateIncrease_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneEvaporationRateIncrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateIncrease" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneEvaporationRateIncrease">
+  PheromoneEvaporationRateIncrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to increase the pheromone evaporation rate when adaptation is needed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PheromoneEvaporationRateIncrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The pheromone evaporation rate increase factor, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneEvaporationRateIncrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the algorithm needs to focus more on exploration of new solutions, the evaporation rate can be increased
+by this factor to make existing pheromone trails fade faster.
+</p>
+<p><b>For Beginners:</b> This controls how much to speed up the trail fading process when the algorithm needs
+to explore new possibilities. The default value of 1.05 means increasing the fade rate by 5%. It's like deciding
+to erase existing paths more quickly to encourage ants to discover completely new routes instead of just refining
+known ones.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityDecay_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneIntensityDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityDecay" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneIntensityDecay">
+  PheromoneIntensityDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to decrease the pheromone intensity when adaptation is needed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PheromoneIntensityDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The pheromone intensity decay factor, defaulting to 0.95 (5% reduction).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the algorithm needs to reduce the influence of new solutions, the pheromone intensity can be decreased
+by this factor to make new pheromone deposits less significant.
+</p>
+<p><b>For Beginners:</b> This controls how much to reduce the strength of new trails when the algorithm
+wants to be more conservative. The default value of 0.95 means reducing new trail strength by 5%. It's like
+giving ants less ink for their pens when you want them to make more subtle marks that don't overwhelm existing
+information.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityIncrease_" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneIntensityIncrease*"></a>
+
+  <h3 id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityIncrease" data-uid="AiDotNet.Models.Options.AntColonyOptimizationOptions`3.PheromoneIntensityIncrease">
+  PheromoneIntensityIncrease
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the factor by which to increase the pheromone intensity when adaptation is needed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PheromoneIntensityIncrease { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The pheromone intensity increase factor, defaulting to 1.05 (5% increase).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_AntColonyOptimizationOptions_3_PheromoneIntensityIncrease_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When the algorithm needs to increase the influence of new solutions, the pheromone intensity can be increased
+by this factor to make new pheromone deposits more significant.
+</p>
+<p><b>For Beginners:</b> This controls how much to increase the strength of new trails when the algorithm
+wants to emphasize new discoveries. The default value of 1.05 means increasing new trail strength by 5%. It's like
+giving ants more vibrant ink when you want new findings to stand out and have a stronger influence on future
+exploration.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/AntColonyOptimizationOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

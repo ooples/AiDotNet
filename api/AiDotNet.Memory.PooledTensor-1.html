@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PooledTensor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PooledTensor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A RAII wrapper that automatically returns a pooled tensor to its pool when disposed. This class ensures tensors are properly returned to the pool even if an exception occurs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Memory_PooledTensor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Memory.PooledTensor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Memory.PooledTensor`1">
+
+
+
+  <h1 id="AiDotNet_Memory_PooledTensor_1" data-uid="AiDotNet.Memory.PooledTensor`1" class="text-break">
+Class PooledTensor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Memory.html">Memory</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A RAII wrapper that automatically returns a pooled tensor to its pool when disposed.
+This class ensures tensors are properly returned to the pool even if an exception occurs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class PooledTensor&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type of the tensor (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PooledTensor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Memory_PooledTensor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+PooledTensor provides a safe way to use pooled tensors with the using statement,
+ensuring the tensor is returned to the pool when it goes out of scope.
+</p>
+<p>
+This is implemented as a class (not struct) to ensure reference semantics.
+Multiple references to the same PooledTensor share disposal state, preventing
+double-dispose issues that could corrupt the pool.
+</p>
+<p>
+Example usage:
+<pre><code class="lang-csharp">var pool = new TensorPool&lt;float&gt;();
+using (var pooled = pool.RentPooled(new[] { 32, 32 }))
+{
+    var tensor = pooled.Tensor;
+    // Use tensor for computations...
+    // Tensor is automatically returned to pool when block exits
+}</code></pre>
+
+<p>
+Alternative explicit cast usage:
+<pre><code class="lang-csharp">using var pooled = pool.RentPooled(new[] { 32, 32 });
+Tensor&lt;float&gt; tensor = (Tensor&lt;float&gt;)pooled;</code></pre>
+
+<p>
+<b>Thread Safety:</b> The Dispose method is idempotent - calling it multiple times
+is safe and will only return the tensor to the pool once.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Memory_PooledTensor_1__ctor_" data-uid="AiDotNet.Memory.PooledTensor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Memory_PooledTensor_1__ctor_AiDotNet_Memory_TensorPool__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Memory.PooledTensor`1.#ctor(AiDotNet.Memory.TensorPool{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  PooledTensor(TensorPool&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Memory.PooledTensor-1.html">PooledTensor&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PooledTensor(TensorPool&lt;T&gt; pool, Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pool</code> <a class="xref" href="AiDotNet.Memory.TensorPool-1.html">TensorPool</a>&lt;T&gt;</dt>
+    <dd><p>The tensor pool that owns this tensor and will receive it back on disposal.</p>
+</dd>
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor being wrapped.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PooledTensor_1__ctor_AiDotNet_Memory_TensorPool__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typically you should not create PooledTensor instances directly.
+Instead, use <a class="xref" href="AiDotNet.Memory.TensorPool-1.html#AiDotNet_Memory_TensorPool_1_RentPooled_System_Int32___">RentPooled(int[])</a> to obtain a properly initialized wrapper.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when <code class="paramref">pool</code> or <code class="paramref">tensor</code> is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Memory_PooledTensor_1_IsDisposed_" data-uid="AiDotNet.Memory.PooledTensor`1.IsDisposed*"></a>
+
+  <h3 id="AiDotNet_Memory_PooledTensor_1_IsDisposed" data-uid="AiDotNet.Memory.PooledTensor`1.IsDisposed">
+  IsDisposed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this wrapper has been disposed and the tensor returned to the pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDisposed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_PooledTensor_1_Tensor_" data-uid="AiDotNet.Memory.PooledTensor`1.Tensor*"></a>
+
+  <h3 id="AiDotNet_Memory_PooledTensor_1_Tensor" data-uid="AiDotNet.Memory.PooledTensor`1.Tensor">
+  Tensor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying tensor managed by this wrapper.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Tensor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The pooled tensor instance.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PooledTensor_1_Tensor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Access the tensor through this property for computations.
+Do not hold a reference to this tensor after the PooledTensor is disposed.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Memory_PooledTensor_1_Dispose_" data-uid="AiDotNet.Memory.PooledTensor`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Memory_PooledTensor_1_Dispose" data-uid="AiDotNet.Memory.PooledTensor`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the tensor to the pool.
+After disposal, the tensor should not be used as it may be rented by another operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PooledTensor_1_Dispose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is idempotent - calling it multiple times is safe and will only
+return the tensor to the pool on the first call.
+</p>
+<p>
+Thread-safe: Uses atomic compare-and-swap to ensure only one thread
+can successfully dispose and return the tensor, even under concurrent calls.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Memory_PooledTensor_1_op_Explicit_" data-uid="AiDotNet.Memory.PooledTensor`1.op_Explicit*"></a>
+
+  <h3 id="AiDotNet_Memory_PooledTensor_1_op_Explicit_AiDotNet_Memory_PooledTensor__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0_" data-uid="AiDotNet.Memory.PooledTensor`1.op_Explicit(AiDotNet.Memory.PooledTensor{`0})~AiDotNet.Tensors.LinearAlgebra.Tensor{`0}">
+  explicit operator Tensor&lt;T&gt;(PooledTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Explicitly converts a PooledTensor to its underlying Tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static explicit operator Tensor&lt;T&gt;(PooledTensor&lt;T&gt; pooled)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pooled</code> <a class="xref" href="AiDotNet.Memory.PooledTensor-1.html">PooledTensor</a>&lt;T&gt;</dt>
+    <dd><p>The pooled tensor wrapper.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The underlying tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_PooledTensor_1_op_Explicit_AiDotNet_Memory_PooledTensor__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This cast is explicit to remind users that they are responsible for the tensor's lifecycle.
+The returned tensor reference should not outlive the PooledTensor wrapper.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when <code class="paramref">pooled</code> is null.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/PooledTensor.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

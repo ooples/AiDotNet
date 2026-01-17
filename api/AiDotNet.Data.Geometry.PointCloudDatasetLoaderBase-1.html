@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PointCloudDatasetLoaderBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PointCloudDatasetLoaderBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for point cloud dataset loaders that expose tensor inputs and outputs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1">
+
+
+
+  <h1 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1" class="text-break">
+Class PointCloudDatasetLoaderBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Geometry.html">Geometry</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for point cloud dataset loaders that expose tensor inputs and outputs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class PointCloudDatasetLoaderBase&lt;T&gt; : InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IInputOutputDataLoader&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;(Tensor&lt;T&gt; Features, Tensor&lt;T&gt; Labels)&gt;, IShuffleable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html">InputOutputDataLoaderBase</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><span class="xref">PointCloudDatasetLoaderBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.features">Features</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.labels">Labels</a>)&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IShuffleable.html">IShuffleable</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Data.Geometry.ModelNet40ClassificationDataLoader-1.html">ModelNet40ClassificationDataLoader&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Geometry.ScanNetSemanticSegmentationDataLoader-1.html">ScanNetSemanticSegmentationDataLoader&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Geometry.ShapeNetCorePartSegmentationDataLoader-1.html">ShapeNetCorePartSegmentationDataLoader&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_NumOps">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_LoadedFeatures">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.LoadedFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_LoadedLabels">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.LoadedLabels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Indices">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Indices</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Features">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Features</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Labels">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Labels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_FeatureCount">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.FeatureCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OutputDimension">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.OutputDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_BatchSize">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_HasNext">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.HasNext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_IsShuffled">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.IsShuffled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetNextBatch">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetNextBatch()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_TryGetNextBatch_System_ValueTuple__1__2___">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.TryGetNextBatch(out (Tensor&lt;T&gt; Features, Tensor&lt;T&gt; Labels))</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Shuffle_System_Nullable_System_Int32__">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Shuffle(int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Unshuffle">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Unshuffle()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_Split_System_Double_System_Double_System_Nullable_System_Int32__">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.Split(double, double, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_OnReset">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_InitializeIndices_System_Int32_">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.InitializeIndices(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ExtractBatch_System_Int32___">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ExtractBatch(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ValidateSplitRatios_System_Double_System_Double_">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ValidateSplitRatios(double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_ComputeSplitSizes_System_Int32_System_Double_System_Double_">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.ComputeSplitSizes(int, double, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetBatches(int?, bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.InputOutputDataLoaderBase-3.html#AiDotNet_Data_Loaders_InputOutputDataLoaderBase_3_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_">InputOutputDataLoaderBase&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;.GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Name">DataLoaderBase&lt;T&gt;.Name</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Description">DataLoaderBase&lt;T&gt;.Description</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchSize">DataLoaderBase&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadDataCoreAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadDataCoreAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_UnloadDataCore">DataLoaderBase&lt;T&gt;.UnloadDataCore()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_OnReset">DataLoaderBase&lt;T&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_FeatureCount_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.FeatureCount*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_FeatureCount" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.FeatureCount">
+  FeatureCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of features per sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int FeatureCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_FeatureDimension_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.FeatureDimension*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_FeatureDimension" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.FeatureDimension">
+  FeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of features per point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_OutputDimension_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_OutputDimension" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of output dimensions (1 for regression/binary classification,
+N for multi-class with N classes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int OutputDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_PointsPerSample_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.PointsPerSample*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_PointsPerSample" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.PointsPerSample">
+  PointsPerSample
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of points per sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PointsPerSample { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_TotalCount_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.TotalCount*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_TotalCount" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.TotalCount">
+  TotalCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of samples in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int TotalCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_BuildSampleIndices_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.BuildSampleIndices*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_BuildSampleIndices_System_Int32_System_Int32_AiDotNet_Data_Geometry_PointSamplingStrategy_AiDotNet_Data_Geometry_PointPaddingStrategy_System_Random_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.BuildSampleIndices(System.Int32,System.Int32,AiDotNet.Data.Geometry.PointSamplingStrategy,AiDotNet.Data.Geometry.PointPaddingStrategy,System.Random)">
+  BuildSampleIndices(int, int, PointSamplingStrategy, PointPaddingStrategy, Random)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds sample indices for point selection with sampling and padding strategies.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static int[] BuildSampleIndices(int pointCount, int pointsPerSample, PointSamplingStrategy samplingStrategy, PointPaddingStrategy paddingStrategy, Random random)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>pointCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>pointsPerSample</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>samplingStrategy</code> <a class="xref" href="AiDotNet.Data.Geometry.PointSamplingStrategy.html">PointSamplingStrategy</a></dt>
+    <dd></dd>
+    <dt><code>paddingStrategy</code> <a class="xref" href="AiDotNet.Data.Geometry.PointPaddingStrategy.html">PointPaddingStrategy</a></dt>
+    <dd></dd>
+    <dt><code>random</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_ExtractBatch_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.ExtractBatch*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_ExtractBatch_System_Int32___" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.ExtractBatch(System.Int32[])">
+  ExtractBatch(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a batch of features and labels at the specified indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override (Tensor&lt;T&gt; Features, Tensor&lt;T&gt; Labels) ExtractBatch(int[] indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The indices of samples to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>A tuple containing the features and labels for the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_ExtractBatch_System_Int32____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes must implement this to extract data based on their specific
+TInput and TOutput types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_SetLoadedData_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.SetLoadedData*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_SetLoadedData_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.SetLoadedData(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetLoadedData(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Assigns loaded tensors and initializes indexing metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void SetLoadedData(Tensor&lt;T&gt; features, Tensor&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>features</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_Split_" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.Split*"></a>
+
+  <h3 id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_Split_System_Double_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Geometry.PointCloudDatasetLoaderBase`1.Split(System.Double,System.Double,System.Nullable{System.Int32})">
+  Split(double, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a train/validation/test split of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (IInputOutputDataLoader&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; Train, IInputOutputDataLoader&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; Validation, IInputOutputDataLoader&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; Test) Split(double trainRatio = 0.7, double validationRatio = 0.15, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Fraction of data for training (0.0 to 1.0).</p>
+</dd>
+    <dt><code>validationRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Fraction of data for validation (0.0 to 1.0).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducible splits.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0---.train">Train</a>, <a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0---.validation">Validation</a>, <a class="xref" href="AiDotNet.Interfaces.IInputOutputDataLoader-3.html">IInputOutputDataLoader</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--,aidotnet.interfaces.iinputoutputdataloader--0,aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0---.test">Test</a>)</dt>
+    <dd><p>A tuple containing three data loaders: (train, validation, test).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Geometry_PointCloudDatasetLoaderBase_1_Split_System_Double_System_Double_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The test ratio is implicitly 1 - trainRatio - validationRatio.
+</p>
+<p><b>For Beginners:</b> Splitting data is crucial for evaluating your model:
+- **Training set**: Data the model learns from
+- **Validation set**: Data used to tune hyperparameters and prevent overfitting
+- **Test set**: Data used only once at the end to get an unbiased performance estimate
+<p>Common splits are 60/20/20 or 70/15/15 (train/validation/test).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Geometry/PointCloudDatasetLoaderBase.cs/#L11" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

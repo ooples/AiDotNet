@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class HLIRToLLIRLowering&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class HLIRToLLIRLowering&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Lowers High-Level IR to Low-Level IR. Transforms semantic operations into hardware-optimized operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1.md&amp;value=---%0Auid%3A%20AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1">
+
+
+
+  <h1 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1" class="text-break">
+Class HLIRToLLIRLowering&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.InferenceOptimization.html">InferenceOptimization</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.html">IR</a>.<a class="xref" href="AiDotNet.InferenceOptimization.IR.Lowering.html">Lowering</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Lowers High-Level IR to Low-Level IR.
+Transforms semantic operations into hardware-optimized operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class HLIRToLLIRLowering&lt;T&gt; where T : struct</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">HLIRToLLIRLowering&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Design Philosophy:</b></p>
+<p>
+The lowering process transforms high-level semantic operations into low-level
+hardware-optimized operations. This is similar to MLIR's progressive lowering
+or TVM's Relay to TIR conversion.
+</p>
+<p><b>Lowering Stages:</b></p>
+<ol><li>Type conversion: Generic T -&gt; concrete types (float32, etc.)</li><li>Operation mapping: Semantic ops -&gt; hardware ops</li><li>Layout selection: Choose optimal memory layouts</li><li>Scheduling: Generate schedules for loops</li><li>Memory planning: Allocate and reuse buffers</li></ol>
+<p><b>Exceeds Standards By:</b></p>
+<ul><li>Preserves fusion information from HLIR</li><li>Automatic algorithm selection (Winograd, FFT, etc.)</li><li>Multi-device lowering in single pass</li><li>Quantization-aware lowering</li></ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_AutoSchedule_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.AutoSchedule*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_AutoSchedule" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.AutoSchedule">
+  AutoSchedule
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to auto-schedule operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AutoSchedule { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_DeviceConfig_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.DeviceConfig*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_DeviceConfig" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.DeviceConfig">
+  DeviceConfig
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Device configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeviceConfiguration DeviceConfig { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.DeviceConfiguration.html">DeviceConfiguration</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_OptimizeMemory_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.OptimizeMemory*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_OptimizeMemory" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.OptimizeMemory">
+  OptimizeMemory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to optimize memory usage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool OptimizeMemory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_PreferredLayout_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.PreferredLayout*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_PreferredLayout" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.PreferredLayout">
+  PreferredLayout
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Preferred memory layout.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryLayout PreferredLayout { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.Common.MemoryLayout.html">MemoryLayout</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_TargetDataType_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.TargetDataType*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_TargetDataType" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.TargetDataType">
+  TargetDataType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Target data type (for type conversion).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IRDataType TargetDataType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.Common.IRDataType.html">IRDataType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_TargetDevice_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.TargetDevice*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_TargetDevice" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.TargetDevice">
+  TargetDevice
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Target device for lowering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeviceType TargetDevice { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.Common.DeviceType.html">DeviceType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_Lower_" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.Lower*"></a>
+
+  <h3 id="AiDotNet_InferenceOptimization_IR_Lowering_HLIRToLLIRLowering_1_Lower_AiDotNet_InferenceOptimization_IR_HighLevel_HLIRGraph__0__" data-uid="AiDotNet.InferenceOptimization.IR.Lowering.HLIRToLLIRLowering`1.Lower(AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph{`0})">
+  Lower(HLIRGraph&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lowers an HLIR graph to an LLIR graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LLIRGraph Lower(HLIRGraph&lt;T&gt; hlirGraph)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>hlirGraph</code> <a class="xref" href="AiDotNet.InferenceOptimization.IR.HighLevel.HLIRGraph-1.html">HLIRGraph</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.InferenceOptimization.IR.LowLevel.LLIRGraph.html">LLIRGraph</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/InferenceOptimization/IR/Lowering/HLIRToLLIRLowering.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

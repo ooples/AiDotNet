@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IGaussianProcess&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IGaussianProcess&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for Gaussian Process regression, a powerful probabilistic machine learning technique.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IGaussianProcess_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IGaussianProcess%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IGaussianProcess`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IGaussianProcess_1" data-uid="AiDotNet.Interfaces.IGaussianProcess`1" class="text-break">
+Interface IGaussianProcess&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGaussianProcess.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for Gaussian Process regression, a powerful probabilistic machine learning technique.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IGaussianProcess&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IGaussianProcess_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A Gaussian Process is a flexible machine learning approach that not only makes predictions
+but also tells you how confident it is about each prediction.</p>
+<p>Imagine you're trying to predict house prices in different neighborhoods:</p>
+<ul>
+<li>Traditional models might just say &quot;this house costs $300,000&quot;</li>
+<li>A Gaussian Process would say &quot;this house costs about $300,000, and I'm very confident
+the price is between $290,000 and $310,000&quot;</li>
+</ul>
+<p>This is especially useful when:</p>
+<ul>
+<li>You have limited data</li>
+<li>You need to know how certain the model is about its predictions</li>
+<li>You want to make decisions that account for uncertainty</li>
+</ul>
+<p>Unlike many other machine learning methods, Gaussian Processes:</p>
+<ul>
+<li>Don't assume a specific form for the relationship between inputs and outputs</li>
+<li>Automatically adapt to the complexity of your data</li>
+<li>Provide uncertainty estimates for each prediction</li>
+</ul>
+<p>The &quot;Gaussian&quot; part refers to the normal distribution (bell curve) used to represent uncertainty.
+The &quot;Process&quot; part means it works with functions rather than simple values.</p>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGaussianProcess_1_Fit_" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.Fit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGaussianProcess_1_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Fit(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGaussianProcess.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the Gaussian Process model on the provided data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Fit(Matrix&lt;T&gt; X, Vector&lt;T&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>X</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input features matrix, where each row represents an observation and each column represents a feature.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The target values vector corresponding to each observation in X.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGaussianProcess_1_Fit_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method teaches the model using your training data.</p>
+<p>The parameters:</p>
+<ul>
+<li>X: Your input data organized as a matrix (a table of numbers)
+<ul>
+<li>Each row represents one example (like one house)</li>
+<li>Each column represents one feature (like size, location, age of the house)</li>
+</ul>
+</li>
+<li>y: Your output data as a vector (a list of numbers)
+<ul>
+<li>Each value is what you want to predict (like the price of each house)</li>
+</ul>
+</li>
+</ul>
+<p>During fitting, the Gaussian Process:</p>
+<ol>
+<li>Analyzes patterns in your data</li>
+<li>Learns how different features relate to the target values</li>
+<li>Builds an internal model of the relationships</li>
+<li>Prepares to make predictions with uncertainty estimates</li>
+</ol>
+<p>Unlike many other models, Gaussian Processes don't just find coefficients or weights.
+Instead, they remember the training data and use it directly when making predictions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGaussianProcess_1_Predict_" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.Predict*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGaussianProcess_1_Predict_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.Predict(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Predict(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGaussianProcess.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Predicts the mean value and variance (uncertainty) for a new input point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(T mean, T variance) Predict(Vector&lt;T&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input feature vector for which to make a prediction.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.accuracy">Accuracy</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,-0-.loss">Loss</a>)</dt>
+    <dd><p>A tuple containing the predicted mean value and the variance (uncertainty) of the prediction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGaussianProcess_1_Predict_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method makes a prediction and tells you how confident it is about that prediction.</p>
+<p>The parameter:</p>
+<ul>
+<li>x: The features of the new example you want to predict (like the size, location, and age of a house)</li>
+</ul>
+<p>The method returns two values:</p>
+<ol>
+<li>mean: The predicted value (like the estimated house price)</li>
+<li>variance: How uncertain the model is about this prediction
+<ul>
+<li>A small variance means the model is confident (narrow range of likely values)</li>
+<li>A large variance means the model is uncertain (wide range of possible values)</li>
+</ul>
+</li>
+</ol>
+<p>This uncertainty information is what makes Gaussian Processes special. It helps you:</p>
+<ul>
+<li>Know when to trust or question the model's predictions</li>
+<li>Identify areas where you need more training data</li>
+<li>Make better decisions when the prediction is uncertain</li>
+</ul>
+<p>For example, if predicting house prices:</p>
+<ul>
+<li>&quot;This house costs $300,000 ± $5,000&quot; (low variance, high confidence)</li>
+<li>&quot;This house costs $300,000 ± $50,000&quot; (high variance, low confidence)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGaussianProcess_1_UpdateKernel_" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.UpdateKernel*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGaussianProcess_1_UpdateKernel_AiDotNet_Interfaces_IKernelFunction__0__" data-uid="AiDotNet.Interfaces.IGaussianProcess`1.UpdateKernel(AiDotNet.Interfaces.IKernelFunction{`0})">
+  UpdateKernel(IKernelFunction&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGaussianProcess.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the kernel function used by the Gaussian Process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateKernel(IKernelFunction&lt;T&gt; kernel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="AiDotNet.Interfaces.IKernelFunction-1.html">IKernelFunction</a>&lt;T&gt;</dt>
+    <dd><p>The new kernel function to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGaussianProcess_1_UpdateKernel_AiDotNet_Interfaces_IKernelFunction__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method changes how the model measures similarity between data points.</p>
+<p>The parameter:</p>
+<ul>
+<li>kernel: A function that determines how similar two data points are</li>
+</ul>
+<p>The kernel function is at the heart of a Gaussian Process. It defines:</p>
+<ul>
+<li>How influence spreads between data points</li>
+<li>What patterns the model can recognize (linear, periodic, etc.)</li>
+<li>How smooth the resulting predictions will be</li>
+</ul>
+<p>Think of the kernel as defining the &quot;personality&quot; of your model:</p>
+<ul>
+<li>Some kernels make the model see smooth, gradual changes</li>
+<li>Others allow the model to capture more abrupt changes</li>
+<li>Some can detect periodic patterns (like seasonal effects)</li>
+</ul>
+<p>Changing the kernel can dramatically change how your model behaves, even with the same training data.
+This method allows you to update the kernel without retraining the entire model from scratch.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGaussianProcess.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

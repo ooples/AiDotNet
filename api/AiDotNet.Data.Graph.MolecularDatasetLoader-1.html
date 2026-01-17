@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MolecularDatasetLoader&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MolecularDatasetLoader&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Loads molecular graph datasets (ZINC, QM9) for graph-level property prediction and generation.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Graph_MolecularDatasetLoader_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Graph.MolecularDatasetLoader%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1">
+
+
+
+  <h1 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1" class="text-break">
+Class MolecularDatasetLoader&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Graph.html">Graph</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Loads molecular graph datasets (ZINC, QM9) for graph-level property prediction and generation.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MolecularDatasetLoader&lt;T&gt; : GraphDataLoaderBase&lt;T&gt;, IGraphDataLoader&lt;T&gt;, IDataLoader&lt;T&gt;, IResettable, ICountable, IBatchIterable&lt;GraphData&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html">DataLoaderBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html">GraphDataLoaderBase</a>&lt;T&gt;</div>
+      <div><span class="xref">MolecularDatasetLoader&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGraphDataLoader-1.html">IGraphDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataLoader-1.html">IDataLoader</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IResettable.html">IResettable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICountable.html">ICountable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBatchIterable-1.html">IBatchIterable</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NumOps">GraphDataLoaderBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_LoadedGraphData">GraphDataLoaderBase&lt;T&gt;.LoadedGraphData</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_LoadedGraphs">GraphDataLoaderBase&lt;T&gt;.LoadedGraphs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NumGraphs">GraphDataLoaderBase&lt;T&gt;.NumGraphs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_TotalCount">GraphDataLoaderBase&lt;T&gt;.TotalCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NodeFeatures">GraphDataLoaderBase&lt;T&gt;.NodeFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_AdjacencyMatrix">GraphDataLoaderBase&lt;T&gt;.AdjacencyMatrix</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_EdgeIndex">GraphDataLoaderBase&lt;T&gt;.EdgeIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NodeLabels">GraphDataLoaderBase&lt;T&gt;.NodeLabels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_GraphLabels">GraphDataLoaderBase&lt;T&gt;.GraphLabels</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NumNodeFeatures">GraphDataLoaderBase&lt;T&gt;.NumNodeFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NumNodes">GraphDataLoaderBase&lt;T&gt;.NumNodes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_NumEdges">GraphDataLoaderBase&lt;T&gt;.NumEdges</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_BatchSize">GraphDataLoaderBase&lt;T&gt;.BatchSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_HasNext">GraphDataLoaderBase&lt;T&gt;.HasNext</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_GetNextBatch">GraphDataLoaderBase&lt;T&gt;.GetNextBatch()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_TryGetNextBatch_AiDotNet_Data_Structures_GraphData__0___">GraphDataLoaderBase&lt;T&gt;.TryGetNextBatch(out GraphData&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_OnReset">GraphDataLoaderBase&lt;T&gt;.OnReset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_GetBatches_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__">GraphDataLoaderBase&lt;T&gt;.GetBatches(int?, bool, bool, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.GraphDataLoaderBase-1.html#AiDotNet_Data_Loaders_GraphDataLoaderBase_1_GetBatchesAsync_System_Nullable_System_Int32__System_Boolean_System_Boolean_System_Nullable_System_Int32__System_Int32_System_Threading_CancellationToken_">GraphDataLoaderBase&lt;T&gt;.GetBatchesAsync(int?, bool, bool, int?, int, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_IsLoaded">DataLoaderBase&lt;T&gt;.IsLoaded</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentIndex">DataLoaderBase&lt;T&gt;.CurrentIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_BatchCount">DataLoaderBase&lt;T&gt;.BatchCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_CurrentBatchIndex">DataLoaderBase&lt;T&gt;.CurrentBatchIndex</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Progress">DataLoaderBase&lt;T&gt;.Progress</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Reset">DataLoaderBase&lt;T&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_LoadAsync_System_Threading_CancellationToken_">DataLoaderBase&lt;T&gt;.LoadAsync(CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_Unload">DataLoaderBase&lt;T&gt;.Unload()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_EnsureLoaded">DataLoaderBase&lt;T&gt;.EnsureLoaded()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceIndex_System_Int32_">DataLoaderBase&lt;T&gt;.AdvanceIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.DataLoaderBase-1.html#AiDotNet_Data_Loaders_DataLoaderBase_1_AdvanceBatchIndex">DataLoaderBase&lt;T&gt;.AdvanceBatchIndex()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Loaders.ParallelBatchLoaderExtensions.html#AiDotNet_Data_Loaders_ParallelBatchLoaderExtensions_WithParallelLoading__1_AiDotNet_Interfaces_IBatchIterable___0__System_Func_System_Int32_____0__System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__">ParallelBatchLoaderExtensions.WithParallelLoading&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, Func&lt;int[], TBatch&gt;, int, int?, int?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_AiDotNet_Interfaces_IBatchIterable___0__">DataPipelineExtensions.ToPipeline&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatchesAsync__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__System_Int32_">DataLoaderExtensions.CreateBatchesAsync&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.DataLoaderExtensions.html#AiDotNet_Extensions_DataLoaderExtensions_CreateBatches__1_AiDotNet_Interfaces_IBatchIterable___0__System_Nullable_System_Int32__">DataLoaderExtensions.CreateBatches&lt;TBatch&gt;(IBatchIterable&lt;TBatch&gt;, int?)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Molecular datasets represent molecules as graphs where atoms are nodes and chemical bonds are edges.
+These datasets are fundamental benchmarks for graph neural networks in drug discovery and
+materials science.
+</p>
+<p><b>For Beginners:</b> Molecular graphs represent chemistry as networks.
+<p><strong>Graph Representation of Molecules:</strong></p>
+<pre><code>Water (H₂O):
+- Nodes: 3 atoms (O, H, H)
+- Edges: 2 bonds (O-H, O-H)
+- Node features: Atom type, charge, hybridization
+- Edge features: Bond type (single, double, triple)
+</code></pre>
+<p><strong>Why model molecules as graphs?</strong></p>
+<ul>
+<li><strong>Structure matters</strong>: Same atoms, different arrangement = different properties
+<ul>
+<li>Example: Diamond vs Graphite (both pure carbon!)</li>
+</ul>
+</li>
+<li><strong>Bonds are relationships</strong>: Like social networks, but for atoms</li>
+<li><strong>GNNs excel</strong>: Message passing mimics electron delocalization</li>
+</ul>
+<p><strong>Major Molecular Datasets:</strong></p>
+<p><strong>ZINC:</strong></p>
+<ul>
+<li><strong>Size</strong>: 250,000 drug-like molecules (subset: 12,000)</li>
+<li><strong>Source</strong>: ZINC database (commercially available compounds)</li>
+<li><strong>Tasks</strong>: Graph regression on constrained solubility</li>
+<li><strong>Features</strong>:
+<ul>
+<li>Atoms: C, N, O, F, P, S, Cl, Br, I (28 atom types)</li>
+<li>Bonds: Single, double, triple, aromatic</li>
+</ul>
+</li>
+<li><strong>Use case</strong>: Drug discovery, molecular generation</li>
+</ul>
+<p><strong>QM9:</strong></p>
+<ul>
+<li><strong>Size</strong>: 134,000 small organic molecules</li>
+<li><strong>Source</strong>: Quantum mechanical calculations</li>
+<li><strong>Tasks</strong>: Regression on 19 quantum properties
+<ul>
+<li>Energy, enthalpy, heat capacity</li>
+<li>HOMO/LUMO gap (electronic properties)</li>
+<li>Dipole moment, polarizability</li>
+</ul>
+</li>
+<li><strong>Atoms</strong>: C, H, N, O, F (up to 9 heavy atoms)</li>
+<li><strong>Use case</strong>: Property prediction, molecular design</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1__ctor_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1__ctor_AiDotNet_Data_Graph_MolecularDatasetLoader__0__MolecularDataset_System_Int32_System_String_System_Boolean_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.#ctor(AiDotNet.Data.Graph.MolecularDatasetLoader{`0}.MolecularDataset,System.Int32,System.String,System.Boolean)">
+  MolecularDatasetLoader(MolecularDataset, int, string?, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Data.Graph.MolecularDatasetLoader-1.html">MolecularDatasetLoader&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MolecularDatasetLoader(MolecularDatasetLoader&lt;T&gt;.MolecularDataset dataset, int batchSize = 32, string? dataPath = null, bool autoDownload = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataset</code> <a class="xref" href="AiDotNet.Data.Graph.MolecularDatasetLoader-1.html">MolecularDatasetLoader</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Data.Graph.MolecularDatasetLoader-1.MolecularDataset.html">MolecularDataset</a></dt>
+    <dd><p>Which molecular dataset to load.</p>
+</dd>
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of molecules per batch.</p>
+</dd>
+    <dt><code>dataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to dataset files (optional, will download if not found).</p>
+</dd>
+    <dt><code>autoDownload</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to automatically download the dataset if not found locally.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Graph_MolecularDatasetLoader_1__ctor_AiDotNet_Data_Graph_MolecularDatasetLoader__0__MolecularDataset_System_Int32_System_String_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Molecular datasets are loaded from SMILES strings or SDF files and converted
+to graph representations with appropriate features.
+</p>
+<p><b>For Beginners:</b> Using molecular datasets:
+<pre><code class="lang-csharp">// Load QM9 for property prediction
+var loader = new MolecularDatasetLoader&lt;double&gt;(
+    MolecularDatasetLoader&lt;double&gt;.MolecularDataset.QM9,
+    batchSize: 32,
+    autoDownload: true);
+
+// Load the data
+await loader.LoadAsync();
+
+// Create graph classification task
+var task = loader.CreateGraphClassificationTask();
+
+// Or for generation
+var genTask = loader.CreateGraphGenerationTask();
+</code></pre>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_Description_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.Description*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_Description" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of the dataset and its intended use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_Name_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.Name*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_Name" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the human-readable name of this data loader.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Examples: &quot;MNIST&quot;, &quot;Cora Citation Network&quot;, &quot;IMDB Reviews&quot;</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_NumClasses_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.NumClasses*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_NumClasses" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.NumClasses">
+  NumClasses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of classes for classification tasks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int NumClasses { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateGraphClassificationTask_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateGraphClassificationTask*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateGraphClassificationTask_System_Double_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateGraphClassificationTask(System.Double,System.Double,System.Nullable{System.Int32})">
+  CreateGraphClassificationTask(double, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L1096"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a graph classification task for datasets with multiple graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override GraphClassificationTask&lt;T&gt; CreateGraphClassificationTask(double trainRatio = 0.8, double valRatio = 0.1, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>valRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.GraphClassificationTask-1.html">GraphClassificationTask</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateGraphGenerationTask_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateGraphGenerationTask*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateGraphGenerationTask" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateGraphGenerationTask">
+  CreateGraphGenerationTask()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L1197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a graph generation task for molecular generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public GraphGenerationTask&lt;T&gt; CreateGraphGenerationTask()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.GraphGenerationTask-1.html">GraphGenerationTask</a>&lt;T&gt;</dt>
+    <dd><p>Graph generation task configured for molecular generation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateGraphGenerationTask_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Molecular generation with GNNs:
+<p><strong>Goal:</strong> Create new, valid molecules with desired properties</p>
+<p><strong>Why it's hard:</strong></p>
+<ul>
+<li><strong>Validity</strong>: Generated molecules must obey chemistry rules</li>
+<li><strong>Diversity</strong>: Don't generate same molecules repeatedly</li>
+<li><strong>Novelty</strong>: Create new molecules, not just copy training set</li>
+<li><strong>Property control</strong>: Generate molecules with specific properties</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateLinkPredictionTask_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateLinkPredictionTask*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateLinkPredictionTask_System_Double_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateLinkPredictionTask(System.Double,System.Double,System.Nullable{System.Int32})">
+  CreateLinkPredictionTask(double, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L1145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a link prediction task for predicting missing edges.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override LinkPredictionTask&lt;T&gt; CreateLinkPredictionTask(double trainRatio = 0.85, double negativeRatio = 1, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>negativeRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.LinkPredictionTask-1.html">LinkPredictionTask</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateNodeClassificationTask_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateNodeClassificationTask*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_CreateNodeClassificationTask_System_Double_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.CreateNodeClassificationTask(System.Double,System.Double,System.Nullable{System.Int32})">
+  CreateNodeClassificationTask(double, double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L1084"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a node classification task with train/val/test split.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override NodeClassificationTask&lt;T&gt; CreateNodeClassificationTask(double trainRatio = 0.1, double valRatio = 0.1, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>valRatio</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Data.Structures.NodeClassificationTask-1.html">NodeClassificationTask</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_LoadDataCoreAsync_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.LoadDataCoreAsync*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_LoadDataCoreAsync_System_Threading_CancellationToken_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.LoadDataCoreAsync(System.Threading.CancellationToken)">
+  LoadDataCoreAsync(CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L184"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core data loading implementation to be provided by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task LoadDataCoreAsync(CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token for async operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task">Task</a></dt>
+    <dd><p>A task that completes when loading is finished.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_LoadDataCoreAsync_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes must implement this to perform actual data loading:
+- Load from files, databases, or remote sources
+- Parse and validate data format
+- Store in appropriate internal structures
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_UnloadDataCore_" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.UnloadDataCore*"></a>
+
+  <h3 id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_UnloadDataCore" data-uid="AiDotNet.Data.Graph.MolecularDatasetLoader`1.UnloadDataCore">
+  UnloadDataCore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core data unloading implementation to be provided by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override void UnloadDataCore()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Graph_MolecularDatasetLoader_1_UnloadDataCore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes should implement this to release resources:
+- Clear internal data structures
+- Release file handles or connections
+- Allow garbage collection of loaded data
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Graph/MolecularDatasetLoader.cs/#L62" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AnthropicChatModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AnthropicChatModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of IChatModel for Anthropic&#39;s Claude models (Claude 2, Claude 3 family). Supports the Messages API with configurable parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LanguageModels_AnthropicChatModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.LanguageModels.AnthropicChatModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1">
+
+
+
+  <h1 id="AiDotNet_LanguageModels_AnthropicChatModel_1" data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1" class="text-break">
+Class AnthropicChatModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AnthropicChatModel.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LanguageModels.html">LanguageModels</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of IChatModel for Anthropic's Claude models (Claude 2, Claude 3 family).
+Supports the Messages API with configurable parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AnthropicChatModel&lt;T&gt; : ChatModelBase&lt;T&gt;, IChatModel&lt;T&gt;, ILanguageModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html">ChatModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">AnthropicChatModel&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChatModel-1.html">IChatModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILanguageModel-1.html">ILanguageModel</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_HttpClient">ChatModelBase&lt;T&gt;.HttpClient</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxRetries">ChatModelBase&lt;T&gt;.MaxRetries</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_InitialRetryDelayMs">ChatModelBase&lt;T&gt;.InitialRetryDelayMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_TimeoutMs">ChatModelBase&lt;T&gt;.TimeoutMs</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_EnableDetailedLogging">ChatModelBase&lt;T&gt;.EnableDetailedLogging</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_ModelName">ChatModelBase&lt;T&gt;.ModelName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxContextTokens">ChatModelBase&lt;T&gt;.MaxContextTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_MaxGenerationTokens">ChatModelBase&lt;T&gt;.MaxGenerationTokens</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_GenerateAsync_System_String_System_Threading_CancellationToken_">ChatModelBase&lt;T&gt;.GenerateAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_Generate_System_String_">ChatModelBase&lt;T&gt;.Generate(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_GenerateResponseAsync_System_String_System_Threading_CancellationToken_">ChatModelBase&lt;T&gt;.GenerateResponseAsync(string, CancellationToken)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_EstimateTokenCount_System_String_">ChatModelBase&lt;T&gt;.EstimateTokenCount(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_IsRetryable_System_Net_Http_HttpRequestException_">ChatModelBase&lt;T&gt;.IsRetryable(HttpRequestException)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LanguageModels.ChatModelBase-1.html#AiDotNet_LanguageModels_ChatModelBase_1_ValidateApiKey_System_String_System_String_">ChatModelBase&lt;T&gt;.ValidateApiKey(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LanguageModels_AnthropicChatModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+This class lets you use Anthropic's Claude models in your code.</p>
+<p>What you need:</p>
+<ul>
+<li>An Anthropic API key (get one at console.anthropic.com)</li>
+<li>Internet connection (calls Anthropic's cloud API)</li>
+<li>Budget (API calls cost money, but there's a free tier for testing)</li>
+</ul>
+<p>Supported models:</p>
+<ul>
+<li>claude-3-opus-20240229: Most capable, best for complex tasks ($15/$75 per million tokens)</li>
+<li>claude-3-sonnet-20240229: Balanced performance/cost ($3/$15 per million tokens)</li>
+<li>claude-3-haiku-20240307: Fastest, most affordable ($0.25/$1.25 per million tokens)</li>
+<li>claude-2.1: Previous generation, still very capable ($8/$24 per million tokens)</li>
+</ul>
+<p>Why choose Claude:</p>
+<ul>
+<li>Longer context windows (up to 200K tokens)</li>
+<li>Strong reasoning capabilities</li>
+<li>More nuanced understanding</li>
+<li>Better at following complex instructions</li>
+<li>Good for analysis, writing, coding</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var model = new AnthropicChatModel&lt;double&gt;("your-api-key-here");
+
+// Simple question
+string answer = await model.GenerateAsync("Explain quantum entanglement");
+
+// With custom settings
+var customModel = new AnthropicChatModel&lt;double&gt;(
+    apiKey: "your-api-key",
+    modelName: "claude-3-opus-20240229",
+    temperature: 0.7,
+    maxTokens: 2048
+);</code></pre>
+<p>API key security:</p>
+<ul>
+<li>Never commit API keys to git</li>
+<li>Use environment variables or secure vaults</li>
+<li>Monitor usage at console.anthropic.com</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_AnthropicChatModel_1__ctor_" data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_AnthropicChatModel_1__ctor_System_String_System_String_System_Double_System_Int32_System_Double_System_Int32_System_Net_Http_HttpClient_System_String_" data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1.#ctor(System.String,System.String,System.Double,System.Int32,System.Double,System.Int32,System.Net.Http.HttpClient,System.String)">
+  AnthropicChatModel(string, string, double, int, double, int, HttpClient?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AnthropicChatModel.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.LanguageModels.AnthropicChatModel-1.html">AnthropicChatModel&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AnthropicChatModel(string apiKey, string modelName = &quot;claude-3-sonnet-20240229&quot;, double temperature = 0.7, int maxTokens = 2048, double topP = 1, int topK = 0, HttpClient? httpClient = null, string? endpoint = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>apiKey</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Your Anthropic API key.</p>
+</dd>
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The model to use (default: claude-3-sonnet-20240229).</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Controls randomness (0.0 = deterministic, 1.0 = creative). Default: 0.7.</p>
+</dd>
+    <dt><code>maxTokens</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate. Default: 2048.</p>
+</dd>
+    <dt><code>topP</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Nucleus sampling parameter (0.0-1.0). Default: 1.0.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Top-K sampling parameter. Default: 0 (disabled).</p>
+</dd>
+    <dt><code>httpClient</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.net.http.httpclient">HttpClient</a></dt>
+    <dd><p>Optional HTTP client.</p>
+</dd>
+    <dt><code>endpoint</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional custom API endpoint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_AnthropicChatModel_1__ctor_System_String_System_String_System_Double_System_Int32_System_Double_System_Int32_System_Net_Http_HttpClient_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:</p>
+<p><strong>Required parameter:</strong></p>
+<ul>
+<li>apiKey: Your secret key from Anthropic (keep this safe!)</li>
+</ul>
+<p><strong>Model selection:</strong></p>
+<ul>
+<li>&quot;claude-3-opus-20240229&quot;: Most intelligent, expensive, best quality</li>
+<li>&quot;claude-3-sonnet-20240229&quot;: Balanced (recommended for most uses)</li>
+<li>&quot;claude-3-haiku-20240307&quot;: Fastest, cheapest, still very good</li>
+<li>&quot;claude-2.1&quot;: Previous generation, lower cost</li>
+</ul>
+<p><strong>Temperature (creativity control):</strong></p>
+<ul>
+<li>0.0: Very focused, deterministic</li>
+<li>0.7: Balanced (default)</li>
+<li>1.0: Maximum creativity</li>
+</ul>
+<p><strong>MaxTokens (response length):</strong></p>
+<ul>
+<li>256: Short answer</li>
+<li>1024: Medium answer</li>
+<li>2048: Long answer (default)</li>
+<li>4096: Very detailed response</li>
+<li>Note: Claude supports up to 4096 output tokens</li>
+</ul>
+<p><strong>Advanced parameters:</strong></p>
+<ul>
+<li>topP: Alternative sampling method (usually leave at 1.0)</li>
+<li>topK: Limits vocabulary considered (0 = disabled)</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LanguageModels_AnthropicChatModel_1_GenerateAsyncCore_" data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1.GenerateAsyncCore*"></a>
+
+  <h3 id="AiDotNet_LanguageModels_AnthropicChatModel_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.LanguageModels.AnthropicChatModel`1.GenerateAsyncCore(System.String,System.Threading.CancellationToken)">
+  GenerateAsyncCore(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AnthropicChatModel.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core generation logic to be implemented by derived classes.
+This method should make the actual API call to the language model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override Task&lt;string&gt; GenerateAsyncCore(string prompt, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated prompt string.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains the generated response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LanguageModels_AnthropicChatModel_1_GenerateAsyncCore_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is where you implement the specific logic for your language model API.
+The base class handles retries, timeouts, and error handling, so you only need to:</p>
+<ol>
+<li>Build the API request (JSON body, headers, etc.)</li>
+<li>Send it to the API endpoint</li>
+<li>Parse the response</li>
+<li>Return the generated text</li>
+</ol>
+<p>If anything goes wrong, just throw an exception - the base class will handle retries.</p>
+<p>IMPORTANT: Pass the cancellationToken to your HTTP calls (e.g., HttpClient.PostAsync)
+to enable proper cancellation support.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LanguageModels/AnthropicChatModel.cs/#L58" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TelemetryConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TelemetryConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for telemetry - tracking and monitoring model inference metrics.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Deployment_Configuration_TelemetryConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Deployment.Configuration.TelemetryConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig">
+
+
+
+  <h1 id="AiDotNet_Deployment_Configuration_TelemetryConfig" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig" class="text-break">
+Class TelemetryConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Deployment.html">Deployment</a>.<a class="xref" href="AiDotNet.Deployment.Configuration.html">Configuration</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for telemetry - tracking and monitoring model inference metrics.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TelemetryConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TelemetryConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Deployment_Configuration_TelemetryConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Telemetry collects data about how your model is performing in production.
+Think of it like a fitness tracker for your AI model - it tracks important health metrics so
+you know when something goes wrong or when performance degrades.
+<p>What gets tracked:</p>
+<ul>
+<li>Latency: How long each inference takes (helps identify slowdowns)</li>
+<li>Throughput: How many inferences per second (measures capacity)</li>
+<li>Errors: When predictions fail (helps identify issues)</li>
+<li>Cache hits/misses: How often cached models are used (optimizes memory)</li>
+<li>Version usage: Which model versions are being used (helps with rollouts)</li>
+</ul>
+<p>Why it's important:</p>
+<ul>
+<li>Detect performance degradation before users complain</li>
+<li>Understand usage patterns to optimize resources</li>
+<li>Debug production issues with real data</li>
+<li>Make data-driven decisions about model updates</li>
+</ul>
+<p>Privacy Note: Telemetry doesn't collect user data or predictions, only metadata
+like timing and version information.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_CustomTags_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.CustomTags*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_CustomTags" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.CustomTags">
+  CustomTags
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom tags to include with all telemetry events.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, string&gt; CustomTags { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_CustomTags_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Add custom labels to telemetry data (e.g., environment, region).
+Useful for filtering and organizing metrics from different deployments.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_Enabled_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.Enabled*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_Enabled" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether telemetry is enabled (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_Enabled_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Set to true to collect performance metrics, false to disable telemetry.
+Recommended to keep enabled for production monitoring.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_ExportEndpoint_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.ExportEndpoint*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_ExportEndpoint" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.ExportEndpoint">
+  ExportEndpoint
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L118"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the telemetry export endpoint URL (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ExportEndpoint { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_ExportEndpoint_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> URL to send telemetry data for centralized monitoring.
+Leave null to only store locally. Set to your monitoring system's endpoint.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_FlushIntervalSeconds_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.FlushIntervalSeconds*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_FlushIntervalSeconds" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.FlushIntervalSeconds">
+  FlushIntervalSeconds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the telemetry flush interval in seconds (default: 60).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FlushIntervalSeconds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_FlushIntervalSeconds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How often to send telemetry data to the export endpoint.
+Default is every minute. Lower values = more real-time, higher values = less network traffic.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_SamplingRate_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.SamplingRate*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_SamplingRate" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.SamplingRate">
+  SamplingRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sampling rate for telemetry (default: 1.0 = 100%).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SamplingRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_SamplingRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> What percentage of requests to track (0.0 to 1.0).
+1.0 = track everything, 0.1 = track 10% of requests. Lower values reduce overhead.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackCacheMetrics_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackCacheMetrics*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackCacheMetrics" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackCacheMetrics">
+  TrackCacheMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track cache hit/miss rates (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackCacheMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackCacheMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tracks how often models are found in cache vs loaded from disk.
+Helps optimize cache size and eviction policies.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackDetailedTiming_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackDetailedTiming*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackDetailedTiming" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackDetailedTiming">
+  TrackDetailedTiming
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track detailed timing breakdowns (default: false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackDetailedTiming { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackDetailedTiming_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tracks pre-processing, inference, and post-processing times separately.
+More detailed but slight performance overhead. Use for debugging performance issues.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackErrors_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackErrors*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackErrors" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackErrors">
+  TrackErrors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track errors and exceptions (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackErrors { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackErrors_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records when predictions fail or errors occur.
+Critical for debugging and maintaining system health.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackLatency_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackLatency*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackLatency" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackLatency">
+  TrackLatency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track inference latency (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackLatency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackLatency_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tracks how long each prediction takes.
+Helps identify performance problems and slow requests.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackThroughput_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackThroughput*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackThroughput" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackThroughput">
+  TrackThroughput
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track throughput metrics (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackThroughput { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackThroughput_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Tracks how many predictions per second your system handles.
+Helps understand capacity and plan for scaling.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackVersionUsage_" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackVersionUsage*"></a>
+
+  <h3 id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackVersionUsage" data-uid="AiDotNet.Deployment.Configuration.TelemetryConfig.TrackVersionUsage">
+  TrackVersionUsage
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track model version usage (default: true).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackVersionUsage { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Deployment_Configuration_TelemetryConfig_TrackVersionUsage_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Records which model versions are being used.
+Helps track rollouts and A/B test results.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Deployment/Configuration/TelemetryConfig.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

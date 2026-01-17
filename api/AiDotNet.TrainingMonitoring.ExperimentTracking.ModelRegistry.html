@@ -1,0 +1,1176 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ModelRegistry | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ModelRegistry | AiDotNet Documentation ">
+      
+      <meta name="description" content="Local file-based model registry for managing model versions and deployments.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry.md&amp;value=---%0Auid%3A%20AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry">
+
+
+
+  <h1 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry" class="text-break">
+Class ModelRegistry  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.html">TrainingMonitoring</a>.<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.html">ExperimentTracking</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Local file-based model registry for managing model versions and deployments.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ModelRegistry : IModelRegistry, IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ModelRegistry</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.IModelRegistry.html">IModelRegistry</a></div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> ModelRegistry provides a centralized place to store,
+version, and manage your trained models. It tracks:</p>
+<ul>
+<li>Different versions of your models</li>
+<li>Which version is in production</li>
+<li>How models were created (lineage)</li>
+<li>Deployment history</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">// Create registry
+var registry = new ModelRegistry("./model_registry");
+
+// Register a new model
+registry.CreateRegisteredModel("fraud-detector", "Detects fraudulent transactions");
+
+// Create a version from a trained model
+var version = registry.CreateModelVersion(
+    "fraud-detector",
+    "./trained_model",
+    runId: "run_123");
+
+// Promote to production
+registry.TransitionModelVersionStage("fraud-detector", 1, ModelStage.Production);
+
+// Record deployment
+registry.RecordDeployment("fraud-detector", 1, new DeploymentInfo
+{
+    Target = "kubernetes-cluster",
+    Status = DeploymentStatus.Succeeded,
+    EndpointUrl = "https://api.example.com/predict"
+});</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry__ctor_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.#ctor*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry__ctor_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.#ctor(System.String)">
+  ModelRegistry(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new model registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelRegistry(string? registryUri = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>registryUri</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Base directory for the registry.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RegistryUri_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RegistryUri*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RegistryUri" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RegistryUri">
+  RegistryUri
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the registry URI.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string RegistryUri { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_CreateModelVersion_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.CreateModelVersion*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_CreateModelVersion_System_String_System_String_System_String_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.CreateModelVersion(System.String,System.String,System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  CreateModelVersion(string, string, string?, string?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelVersion CreateModelVersion(string modelName, string sourcePath, string? runId = null, string? description = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Registered model name.</p>
+</dd>
+    <dt><code>sourcePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to model artifacts.</p>
+</dd>
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional run ID that created this model.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional description.</p>
+</dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional tags.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelVersion.html">ModelVersion</a></dt>
+    <dd><p>Model version info.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_CreateRegisteredModel_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.CreateRegisteredModel*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_CreateRegisteredModel_System_String_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.CreateRegisteredModel(System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  CreateRegisteredModel(string, string?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers a new model or gets existing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RegisteredModel CreateRegisteredModel(string name, string? description = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional description.</p>
+</dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional tags.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RegisteredModel.html">RegisteredModel</a></dt>
+    <dd><p>Registered model info.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteModelVersion_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteModelVersion*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteModelVersion_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteModelVersion(System.String,System.Int32)">
+  DeleteModelVersion(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DeleteModelVersion(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteModelVersionTag_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteModelVersionTag*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteModelVersionTag_System_String_System_Int32_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteModelVersionTag(System.String,System.Int32,System.String)">
+  DeleteModelVersionTag(string, int, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a tag from a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DeleteModelVersionTag(string modelName, int version, string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tag key.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteRegisteredModel_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteRegisteredModel*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_DeleteRegisteredModel_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.DeleteRegisteredModel(System.String)">
+  DeleteRegisteredModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L158"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a registered model and all its versions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DeleteRegisteredModel(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_Dispose_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.Dispose*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_Dispose" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L652"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetCurrentDeployment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetCurrentDeployment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetCurrentDeployment_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetCurrentDeployment(System.String)">
+  GetCurrentDeployment(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L430"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current production deployment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeploymentInfo? GetCurrentDeployment(string modelName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.DeploymentInfo.html">DeploymentInfo</a></dt>
+    <dd><p>Current deployment or null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetDeploymentHistory_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetDeploymentHistory*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetDeploymentHistory_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetDeploymentHistory(System.String,System.Int32)">
+  GetDeploymentHistory(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L406"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets deployment history for a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;DeploymentInfo&gt; GetDeploymentHistory(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.DeploymentInfo.html">DeploymentInfo</a>&gt;</dt>
+    <dd><p>List of deployments.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetLatestVersion_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetLatestVersion*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetLatestVersion_System_String_AiDotNet_TrainingMonitoring_ExperimentTracking_ModelStage___" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetLatestVersion(System.String,AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage[])">
+  GetLatestVersion(string, params ModelStage[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the latest model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelVersion? GetLatestVersion(string modelName, params ModelStage[] stages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>stages</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage.html">ModelStage</a>[]</dt>
+    <dd><p>Optional stages to filter by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelVersion.html">ModelVersion</a></dt>
+    <dd><p>Latest version or null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetModelLineage_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetModelLineage*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetModelLineage_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetModelLineage(System.String,System.Int32)">
+  GetModelLineage(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets model lineage information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelLineage? GetModelLineage(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelLineage.html">ModelLineage</a></dt>
+    <dd><p>Lineage info or null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetModelVersion_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetModelVersion*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetModelVersion_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetModelVersion(System.String,System.Int32)">
+  GetModelVersion(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a specific model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelVersion? GetModelVersion(string modelName, int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelVersion.html">ModelVersion</a></dt>
+    <dd><p>Model version or null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetRegisteredModel_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetRegisteredModel*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_GetRegisteredModel_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.GetRegisteredModel(System.String)">
+  GetRegisteredModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a registered model by name.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RegisteredModel? GetRegisteredModel(string name)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RegisteredModel.html">RegisteredModel</a></dt>
+    <dd><p>Model info or null if not found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_ListModelVersions_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.ListModelVersions*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_ListModelVersions_System_String_AiDotNet_TrainingMonitoring_ExperimentTracking_ModelStage___" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.ListModelVersions(System.String,AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage[])">
+  ListModelVersions(string, params ModelStage[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all versions of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ModelVersion&gt; ListModelVersions(string modelName, params ModelStage[] stages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>stages</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage.html">ModelStage</a>[]</dt>
+    <dd><p>Optional stages to filter by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelVersion.html">ModelVersion</a>&gt;</dt>
+    <dd><p>List of versions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_ListRegisteredModels_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.ListRegisteredModels*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_ListRegisteredModels_System_String_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.ListRegisteredModels(System.String,System.String,System.Int32)">
+  ListRegisteredModels(string?, string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all registered models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;RegisteredModel&gt; ListRegisteredModels(string? filter = null, string? orderBy = null, int maxResults = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional filter (e.g., &quot;name LIKE 'fraud%'&quot;).</p>
+</dd>
+    <dt><code>orderBy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional ordering.</p>
+</dd>
+    <dt><code>maxResults</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum results.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.RegisteredModel.html">RegisteredModel</a>&gt;</dt>
+    <dd><p>List of registered models.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_LoadModelArtifacts_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.LoadModelArtifacts*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_LoadModelArtifacts_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.LoadModelArtifacts(System.String)">
+  LoadModelArtifacts(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L444"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a model from the registry.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string LoadModelArtifacts(string modelUri)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelUri</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>URI in format &quot;models:/model-name/version&quot; or &quot;models:/model-name/stage&quot;.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the model artifacts.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RecordDeployment_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RecordDeployment*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RecordDeployment_System_String_System_Int32_AiDotNet_TrainingMonitoring_ExperimentTracking_DeploymentInfo_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RecordDeployment(System.String,System.Int32,AiDotNet.TrainingMonitoring.ExperimentTracking.DeploymentInfo)">
+  RecordDeployment(string, int, DeploymentInfo)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records a deployment of a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RecordDeployment(string modelName, int version, DeploymentInfo deployment)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>deployment</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.DeploymentInfo.html">DeploymentInfo</a></dt>
+    <dd><p>Deployment information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RecordModelLineage_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RecordModelLineage*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_RecordModelLineage_System_String_System_Int32_AiDotNet_TrainingMonitoring_ExperimentTracking_ModelLineage_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.RecordModelLineage(System.String,System.Int32,AiDotNet.TrainingMonitoring.ExperimentTracking.ModelLineage)">
+  RecordModelLineage(string, int, ModelLineage)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records model lineage information.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RecordModelLineage(string modelName, int version, ModelLineage lineage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>lineage</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelLineage.html">ModelLineage</a></dt>
+    <dd><p>Lineage information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_SearchModelVersions_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.SearchModelVersions*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_SearchModelVersions_System_String_System_Int32_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.SearchModelVersions(System.String,System.Int32)">
+  SearchModelVersions(string?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L479"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for model versions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ModelVersion&gt; SearchModelVersions(string? filter = null, int maxResults = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Filter expression.</p>
+</dd>
+    <dt><code>maxResults</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum results.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelVersion.html">ModelVersion</a>&gt;</dt>
+    <dd><p>Matching versions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_SetModelVersionTag_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.SetModelVersionTag*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_SetModelVersionTag_System_String_System_Int32_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.SetModelVersionTag(System.String,System.Int32,System.String,System.String)">
+  SetModelVersionTag(string, int, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a tag on a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetModelVersionTag(string modelName, int version, string key, string value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tag key.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Tag value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_TransitionModelVersionStage_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.TransitionModelVersionStage*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_TransitionModelVersionStage_System_String_System_Int32_AiDotNet_TrainingMonitoring_ExperimentTracking_ModelStage_System_Boolean_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.TransitionModelVersionStage(System.String,System.Int32,AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage,System.Boolean)">
+  TransitionModelVersionStage(string, int, ModelStage, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transitions a model version to a new stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void TransitionModelVersionStage(string modelName, int version, ModelStage stage, bool archiveExisting = false)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>stage</code> <a class="xref" href="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelStage.html">ModelStage</a></dt>
+    <dd><p>New stage.</p>
+</dd>
+    <dt><code>archiveExisting</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to archive existing versions in the target stage.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_UpdateModelVersion_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.UpdateModelVersion*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_UpdateModelVersion_System_String_System_Int32_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.UpdateModelVersion(System.String,System.Int32,System.String)">
+  UpdateModelVersion(string, int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates a model version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateModelVersion(string modelName, int version, string? description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>modelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Version number.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>New description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_UpdateRegisteredModel_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.UpdateRegisteredModel*"></a>
+
+  <h3 id="AiDotNet_TrainingMonitoring_ExperimentTracking_ModelRegistry_UpdateRegisteredModel_System_String_System_String_" data-uid="AiDotNet.TrainingMonitoring.ExperimentTracking.ModelRegistry.UpdateRegisteredModel(System.String,System.String)">
+  UpdateRegisteredModel(string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates a registered model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateRegisteredModel(string name, string? description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Model name.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>New description.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/TrainingMonitoring/ExperimentTracking/ModelRegistry.cs/#L50" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

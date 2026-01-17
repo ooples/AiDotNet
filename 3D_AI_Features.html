@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>3D AI Features - Point Clouds and Neural Radiance Fields | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="3D AI Features - Point Clouds and Neural Radiance Fields | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/3D_AI_Features.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="3d-ai-features---point-clouds-and-neural-radiance-fields">3D AI Features - Point Clouds and Neural Radiance Fields</h1>
+
+<p>This document describes the 3D AI capabilities added to AiDotNet, including point cloud processing and neural radiance fields for novel view synthesis.</p>
+<h2 id="overview">Overview</h2>
+<p>This implementation adds two major categories of 3D AI functionality:</p>
+<ol>
+<li><strong>Point Cloud Processing</strong>: Deep learning models for processing 3D point cloud data</li>
+<li><strong>Neural Radiance Fields</strong>: Methods for 3D scene representation and novel view synthesis</li>
+</ol>
+<h2 id="point-cloud-processing">Point Cloud Processing</h2>
+<p>Point clouds are collections of 3D points representing object surfaces or scenes, commonly captured by LIDAR sensors, depth cameras, or 3D scanners.</p>
+<h3 id="models-implemented">Models Implemented</h3>
+<h4 id="1-pointnet">1. PointNet</h4>
+<p>The pioneering architecture for directly processing unordered point sets.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Permutation invariant (order of points doesn't matter)</li>
+<li>Spatial transformer networks (T-Net) for alignment</li>
+<li>Global and local feature extraction</li>
+<li>Suitable for classification and segmentation</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.PointCloud.Models;
+using AiDotNet.PointCloud.Data;
+
+// Create PointNet model for 40-class classification (e.g., ModelNet40)
+var pointNet = new PointNet&lt;double&gt;(
+    numClasses: 40,
+    useInputTransform: true,
+    useFeatureTransform: true
+);
+
+// Load point cloud data
+var pointCloud = PointCloudData&lt;double&gt;.FromCoordinates(coordinates);
+
+// Classify point cloud
+var predictions = pointNet.ClassifyPointCloud(pointCloud.Points);
+
+// Extract global features
+var globalFeatures = pointNet.ExtractGlobalFeatures(pointCloud.Points);
+</code></pre>
+<p><strong>Reference:</strong> &quot;PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation&quot; (Qi et al., CVPR 2017)</p>
+<h4 id="2-pointnet">2. PointNet++</h4>
+<p>Hierarchical extension of PointNet with multi-scale feature learning.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Hierarchical feature learning at multiple resolutions</li>
+<li>Set abstraction layers with local grouping</li>
+<li>Better handling of non-uniform point density</li>
+<li>Improved performance on complex shapes</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.PointCloud.Models;
+
+// Create PointNet++ with hierarchical sampling
+var pointNetPP = new PointNetPlusPlus&lt;double&gt;(
+    numClasses: 40,
+    samplingRates: new[] { 512, 128, 32 },
+    searchRadii: new[] { 0.1, 0.2, 0.4 },
+    mlpDimensions: new[] {
+        new[] { 64, 64, 128 },
+        new[] { 128, 128, 256 },
+        new[] { 256, 512, 1024 }
+    },
+    useMultiScaleGrouping: false
+);
+
+// Classify point cloud
+var predictions = pointNetPP.ClassifyPointCloud(pointCloud.Points);
+
+// Segment point cloud (per-point labels)
+var segmentation = pointNetPP.SegmentPointCloud(pointCloud.Points);
+</code></pre>
+<p><strong>Reference:</strong> &quot;PointNet++: Deep Hierarchical Feature Learning on Point Sets in a Metric Space&quot; (Qi et al., NeurIPS 2017)</p>
+<h4 id="3-dgcnn-dynamic-graph-cnn">3. DGCNN (Dynamic Graph CNN)</h4>
+<p>Graph-based approach using edge convolutions and dynamic k-NN graphs.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Dynamic graph construction based on learned features</li>
+<li>Edge convolution for capturing local geometry</li>
+<li>Adapts neighborhood structure at each layer</li>
+<li>State-of-the-art classification performance</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.PointCloud.Models;
+
+// Create DGCNN model
+var dgcnn = new DGCNN&lt;double&gt;(
+    numClasses: 40,
+    knnK: 20,  // Number of nearest neighbors
+    edgeConvChannels: new[] { 64, 64, 128, 256 },
+    useDropout: true,
+    dropoutRate: 0.5
+);
+
+// Classify point cloud
+var predictions = dgcnn.ClassifyPointCloud(pointCloud.Points);
+
+// Extract hierarchical features
+var features = dgcnn.ExtractPointFeatures(pointCloud.Points);
+</code></pre>
+<p><strong>Reference:</strong> &quot;Dynamic Graph CNN for Learning on Point Clouds&quot; (Wang et al., ACM TOG 2019)</p>
+<h3 id="point-cloud-data-structure">Point Cloud Data Structure</h3>
+<pre><code class="lang-csharp">using AiDotNet.PointCloud.Data;
+
+// Create point cloud with XYZ coordinates only
+var coordinates = new Matrix&lt;double&gt;(1000, 3);  // 1000 points
+var pointCloud = PointCloudData&lt;double&gt;.FromCoordinates(coordinates);
+
+// Create point cloud with additional features (e.g., RGB colors)
+var pointsWithFeatures = new Tensor&lt;double&gt;(data, new[] { 1000, 6 });  // XYZ + RGB
+var pointCloudWithColors = new PointCloudData&lt;double&gt;(pointsWithFeatures);
+
+// Extract coordinates
+var coords = pointCloud.GetCoordinates();
+
+// Extract additional features
+var features = pointCloudWithColors.GetFeatures();  // Returns RGB features
+</code></pre>
+<h3 id="interfaces">Interfaces</h3>
+<p>All point cloud models implement these interfaces:</p>
+<ul>
+<li><code>IPointCloudModel&lt;T&gt;</code>: Base interface for point cloud processing</li>
+<li><code>IPointCloudClassification&lt;T&gt;</code>: For whole-cloud classification</li>
+<li><code>IPointCloudSegmentation&lt;T&gt;</code>: For per-point segmentation</li>
+</ul>
+<h2 id="neural-radiance-fields-nerf">Neural Radiance Fields (NeRF)</h2>
+<p>Neural radiance fields represent 3D scenes as continuous functions, enabling photorealistic novel view synthesis.</p>
+<h3 id="models-implemented-1">Models Implemented</h3>
+<h4 id="1-nerf-neural-radiance-fields">1. NeRF (Neural Radiance Fields)</h4>
+<p>The original NeRF architecture for representing scenes as neural networks.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Continuous 5D function: (x, y, z, θ, φ) → (r, g, b, σ)</li>
+<li>Positional encoding for high-frequency details</li>
+<li>Volume rendering for photorealistic images</li>
+<li>Hierarchical sampling for efficiency</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.NeuralRadianceFields.Models;
+
+// Create NeRF model
+var nerf = new NeRF&lt;double&gt;(
+    positionEncodingLevels: 10,
+    directionEncodingLevels: 4,
+    hiddenDim: 256,
+    numLayers: 8,
+    useHierarchicalSampling: true
+);
+
+// Query radiance field at specific positions
+var positions = CreatePositionTensor();  // [N, 3]
+var viewingDirections = CreateDirectionTensor();  // [N, 3]
+var (rgb, density) = nerf.QueryField(positions, viewingDirections);
+
+// Render image from camera view
+var cameraPosition = new Vector&lt;double&gt;(new[] { 0.0, 0.0, 5.0 });
+var cameraRotation = Matrix&lt;double&gt;.Identity(3);
+var focalLength = 50.0;
+
+var renderedImage = nerf.RenderImage(
+    cameraPosition,
+    cameraRotation,
+    imageWidth: 512,
+    imageHeight: 512,
+    focalLength: focalLength
+);
+</code></pre>
+<p><strong>Reference:</strong> &quot;NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis&quot; (Mildenhall et al., ECCV 2020)</p>
+<h4 id="2-instant-ngp-instant-neural-graphics-primitives">2. Instant-NGP (Instant Neural Graphics Primitives)</h4>
+<p>Ultra-fast NeRF variant using multiresolution hash encoding.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>100× faster training than NeRF (minutes vs hours)</li>
+<li>1000× faster rendering (milliseconds vs seconds)</li>
+<li>Multiresolution hash encoding</li>
+<li>Tiny MLP (2-4 layers vs 8)</li>
+<li>Occupancy grids for efficient sampling</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.NeuralRadianceFields.Models;
+
+// Create Instant-NGP model
+var instantNGP = new InstantNGP&lt;double&gt;(
+    hashTableSize: 524288,  // 2^19 entries
+    numLevels: 16,
+    featuresPerLevel: 2,
+    finestResolution: 2048,
+    coarsestResolution: 16,
+    mlpHiddenDim: 64,
+    mlpNumLayers: 2,
+    occupancyGridResolution: 128
+);
+
+// Query radiance field (same interface as NeRF)
+var (rgb, density) = instantNGP.QueryField(positions, viewingDirections);
+
+// Render image (much faster than NeRF)
+var image = instantNGP.RenderImage(
+    cameraPosition,
+    cameraRotation,
+    imageWidth: 512,
+    imageHeight: 512,
+    focalLength: focalLength
+);
+</code></pre>
+<p><strong>Reference:</strong> &quot;Instant Neural Graphics Primitives with a Multiresolution Hash Encoding&quot; (Müller et al., ACM TOG 2022)</p>
+<h4 id="3-3d-gaussian-splatting">3. 3D Gaussian Splatting</h4>
+<p>State-of-the-art real-time rendering using explicit 3D Gaussians.</p>
+<p><strong>Key Features:</strong></p>
+<ul>
+<li>Real-time rendering (100+ FPS)</li>
+<li>Explicit representation (no neural network evaluation)</li>
+<li>Photorealistic quality</li>
+<li>Adaptive Gaussian densification</li>
+<li>Easy scene editing and manipulation</li>
+</ul>
+<p><strong>Example Usage:</strong></p>
+<pre><code class="lang-csharp">using AiDotNet.NeuralRadianceFields.Models;
+
+// Initialize from Structure-from-Motion point cloud
+var initialPoints = LoadCOLMAPPointCloud(&quot;scene.ply&quot;);
+var initialColors = LoadCOLMAPColors(&quot;scene.ply&quot;);
+
+var gaussianSplatting = new GaussianSplatting&lt;double&gt;(
+    initialPointCloud: initialPoints,
+    initialColors: initialColors,
+    useSphericalHarmonics: true,
+    shDegree: 3  // Spherical harmonics degree for view-dependence
+);
+
+// Render image (real-time performance)
+var image = gaussianSplatting.RenderImage(
+    cameraPosition,
+    cameraRotation,
+    imageWidth: 1920,
+    imageHeight: 1080,
+    focalLength: focalLength
+);
+
+// Get number of Gaussians
+var numGaussians = gaussianSplatting.GaussianCount;
+</code></pre>
+<p><strong>Reference:</strong> &quot;3D Gaussian Splatting for Real-Time Radiance Field Rendering&quot; (Kerbl et al., SIGGRAPH 2023)</p>
+<h3 id="ray-data-structure">Ray Data Structure</h3>
+<pre><code class="lang-csharp">using AiDotNet.NeuralRadianceFields.Data;
+
+// Create a ray
+var origin = new Vector&lt;double&gt;(new[] { 0.0, 0.0, 0.0 });
+var direction = new Vector&lt;double&gt;(new[] { 0.0, 0.0, -1.0 });
+var ray = new Ray&lt;double&gt;(
+    origin: origin,
+    direction: direction,
+    nearBound: 2.0,
+    farBound: 6.0
+);
+
+// Get point along ray at distance t
+var point = ray.PointAt(5.0);  // Returns 3D position
+</code></pre>
+<h3 id="interfaces-1">Interfaces</h3>
+<p>All radiance field models implement:</p>
+<ul>
+<li><code>IRadianceField&lt;T&gt;</code>: Base interface for radiance fields
+<ul>
+<li><code>QueryField()</code>: Query RGB and density at positions</li>
+<li><code>RenderImage()</code>: Render full image from camera</li>
+<li><code>RenderRays()</code>: Render specific rays</li>
+</ul>
+</li>
+</ul>
+<h2 id="performance-comparison">Performance Comparison</h2>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Training Time</th>
+<th>Rendering Speed</th>
+<th>Memory</th>
+<th>Quality</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NeRF</td>
+<td>1-2 days</td>
+<td>30 sec/image</td>
+<td>5 MB</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Instant-NGP</td>
+<td>5-10 min</td>
+<td>30 ms/image</td>
+<td>50-100 MB</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Gaussian Splatting</td>
+<td>10-30 min</td>
+<td>10 ms/image (100+ FPS)</td>
+<td>200-500 MB</td>
+<td>Very High</td>
+</tr>
+</tbody>
+</table>
+<h2 id="applications">Applications</h2>
+<h3 id="point-clouds">Point Clouds</h3>
+<ul>
+<li>Autonomous driving (LIDAR processing)</li>
+<li>Robotics (object recognition and grasping)</li>
+<li>AR/VR (3D scene understanding)</li>
+<li>3D object classification and retrieval</li>
+<li>Part segmentation</li>
+<li>Semantic scene segmentation</li>
+</ul>
+<h3 id="neural-radiance-fields">Neural Radiance Fields</h3>
+<ul>
+<li>Virtual reality and AR</li>
+<li>Film and gaming (photorealistic asset capture)</li>
+<li>Real estate (virtual property tours)</li>
+<li>Cultural heritage preservation</li>
+<li>Robotics (3D mapping and navigation)</li>
+<li>Telepresence and remote collaboration</li>
+</ul>
+<h2 id="directory-structure">Directory Structure</h2>
+<pre><code>src/
+├── PointCloud/
+│   ├── Interfaces/
+│   │   ├── IPointCloudModel.cs
+│   │   ├── IPointCloudClassification.cs
+│   │   └── IPointCloudSegmentation.cs
+│   ├── Layers/
+│   │   ├── PointConvolutionLayer.cs
+│   │   ├── MaxPoolingLayer.cs
+│   │   └── TNetLayer.cs
+│   ├── Models/
+│   │   ├── PointNet.cs
+│   │   ├── PointNetPlusPlus.cs
+│   │   └── DGCNN.cs
+│   ├── Data/
+│   │   └── PointCloudData.cs
+│   └── Tasks/
+│
+└── NeuralRadianceFields/
+    ├── Interfaces/
+    │   └── IRadianceField.cs
+    ├── Models/
+    │   ├── NeRF.cs
+    │   ├── InstantNGP.cs
+    │   └── GaussianSplatting.cs
+    ├── Layers/
+    ├── Data/
+    │   └── Ray.cs
+    └── Rendering/
+
+tests/
+└── AiDotNet.Tests/
+    └── UnitTests/
+        ├── PointCloud/
+        │   └── PointNetTests.cs
+        └── NeuralRadianceFields/
+            └── NeRFTests.cs
+</code></pre>
+<h2 id="future-enhancements">Future Enhancements</h2>
+<h3 id="point-cloud-processing-1">Point Cloud Processing</h3>
+<ul>
+<li>3D object detection implementations</li>
+<li>Instance segmentation</li>
+<li>Point cloud completion</li>
+<li>Point cloud upsampling</li>
+<li>Integration with more benchmarks (ScanNet, S3DIS)</li>
+</ul>
+<h3 id="neural-radiance-fields-1">Neural Radiance Fields</h3>
+<ul>
+<li>Dynamic NeRF (time-varying scenes)</li>
+<li>NeRF for unbounded scenes</li>
+<li>NeRF editing and manipulation tools</li>
+<li>Multi-view consistency losses</li>
+<li>Mip-NeRF (anti-aliasing)</li>
+<li>TensoRF (tensor factorization)</li>
+</ul>
+<h2 id="references">References</h2>
+<ol>
+<li>Qi et al. &quot;PointNet: Deep Learning on Point Sets for 3D Classification and Segmentation&quot; CVPR 2017</li>
+<li>Qi et al. &quot;PointNet++: Deep Hierarchical Feature Learning on Point Sets in a Metric Space&quot; NeurIPS 2017</li>
+<li>Wang et al. &quot;Dynamic Graph CNN for Learning on Point Clouds&quot; ACM TOG 2019</li>
+<li>Mildenhall et al. &quot;NeRF: Representing Scenes as Neural Radiance Fields for View Synthesis&quot; ECCV 2020</li>
+<li>Müller et al. &quot;Instant Neural Graphics Primitives with a Multiresolution Hash Encoding&quot; ACM TOG 2022</li>
+<li>Kerbl et al. &quot;3D Gaussian Splatting for Real-Time Radiance Field Rendering&quot; SIGGRAPH 2023</li>
+</ol>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/3D_AI_Features.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ChainOfThoughtRetriever&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ChainOfThoughtRetriever&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Chain-of-Thought retriever that generates reasoning steps before retrieving documents.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1" class="text-break">
+Class ChainOfThoughtRetriever&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.html">AdvancedPatterns</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Chain-of-Thought retriever that generates reasoning steps before retrieving documents.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ChainOfThoughtRetriever&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ChainOfThoughtRetriever&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This advanced retrieval pattern uses large language models to break down complex queries
+into intermediate reasoning steps before retrieving documents. By generating a chain of
+thought, the retriever can identify key concepts, sub-questions, and the logical order
+in which information should be gathered, leading to more comprehensive and relevant results.
+</p>
+<p><b>For Beginners:</b> Think of this like asking a research assistant to explain their thought process.
+<p>Normal retriever:</p>
+<ul>
+<li>Question: &quot;How does photosynthesis impact climate change?&quot;</li>
+<li>Action: Search for documents about &quot;photosynthesis&quot; and &quot;climate change&quot;</li>
+</ul>
+<p>Chain-of-Thought retriever:</p>
+<ul>
+<li>Question: &quot;How does photosynthesis impact climate change?&quot;</li>
+<li>Reasoning: &quot;First, I need to understand what photosynthesis is. Then, I need to know how it
+relates to carbon dioxide. Finally, I need to connect CO2 to climate change.&quot;</li>
+<li>Actions:
+<ol>
+<li>Search for &quot;what is photosynthesis&quot;</li>
+<li>Search for &quot;photosynthesis carbon dioxide absorption&quot;</li>
+<li>Search for &quot;CO2 levels and climate change&quot;</li>
+</ol>
+</li>
+<li>Result: More complete answer because we gathered all prerequisite knowledge</li>
+</ul>
+<p>This is especially useful for complex questions that require understanding multiple concepts
+in a specific order.</p>
+
+<p><b>Example Usage:</b>
+<pre><code class="lang-csharp">// Create generator (StubGenerator for testing, or real LLM for production)
+var generator = new StubGenerator&lt;double&gt;();
+
+// Create base retriever
+var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+// Create chain-of-thought retriever
+var cotRetriever = new ChainOfThoughtRetriever&lt;double&gt;(generator, baseRetriever);
+
+// Retrieve with reasoning
+var documents = cotRetriever.Retrieve(
+    "What are the economic impacts of renewable energy adoption?",
+    topK: 10
+);
+
+// With self-consistency (multiple reasoning paths)
+var documentsWithConsistency = cotRetriever.RetrieveWithSelfConsistency(
+    "What are the economic impacts of renewable energy adoption?",
+    topK: 10,
+    numPaths: 3  // Generate 3 different reasoning paths and aggregate
+);
+
+// The retriever will:
+// 1. Generate reasoning steps (costs, benefits, job creation, etc.)
+// 2. Retrieve documents for each reasoning step
+// 3. Deduplicate and return top-10 most relevant documents</code></pre>
+
+<p><b>Production Readiness:</b>
+Current implementation uses IGenerator interface which can accept:
+- StubGenerator for development/testing
+- Real LLM (GPT-4, Claude, Gemini) for production
+<p>To make production-ready:</p>
+<ol>
+<li>Replace StubGenerator with real LLM generator</li>
+<li>Optionally tune the reasoning prompt for your domain</li>
+<li>Adjust max sub-queries limit based on LLM costs</li>
+<li>Consider caching reasoning for common queries</li>
+</ol>
+
+<p><b>Benefits:</b>
+- More comprehensive results for complex queries
+- Better coverage of prerequisite knowledge
+- Improved relevance through structured reasoning
+- Transparent reasoning process for debugging
+- Self-consistency improves robustness
+</p>
+<p><b>Limitations:</b>
+- Requires LLM access (costs/latency)
+- Quality depends on LLM reasoning ability
+- May retrieve redundant documents if reasoning overlaps
+- Slower than direct retrieval
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1__ctor_AiDotNet_Interfaces_IGenerator__0__AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase__0__System_Collections_Generic_List_System_String__" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.#ctor(AiDotNet.Interfaces.IGenerator{`0},AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase{`0},System.Collections.Generic.List{System.String})">
+  ChainOfThoughtRetriever(IGenerator&lt;T&gt;, RetrieverBase&lt;T&gt;, List&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever-1.html">ChainOfThoughtRetriever&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ChainOfThoughtRetriever(IGenerator&lt;T&gt; generator, RetrieverBase&lt;T&gt; baseRetriever, List&lt;string&gt;? fewShotExamples = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The LLM generator for reasoning (use StubGenerator or real LLM).</p>
+</dd>
+    <dt><code>baseRetriever</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</dt>
+    <dd><p>The underlying retriever to use.</p>
+</dd>
+    <dt><code>fewShotExamples</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional few-shot examples for better reasoning quality.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_Retrieve_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.Retrieve*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_Retrieve_System_String_System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.Retrieve(System.String,System.Int32)">
+  Retrieve(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents using chain-of-thought reasoning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Document&lt;T&gt;&gt; Retrieve(string query, int topK)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's query that requires reasoning.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of documents to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of documents ranked by relevance, gathered through reasoning steps.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_Retrieve_System_String_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method generates intermediate reasoning steps using the LLM, extracts sub-queries
+from those steps, retrieves documents for each sub-query, deduplicates results, and
+returns the top-K most relevant documents.
+</p>
+<p><b>For Beginners:</b> This is the main method you call to get documents.
+<p>The process:</p>
+<ol>
+<li>Send your question to an LLM to break it down into reasoning steps</li>
+<li>Extract sub-questions from those steps</li>
+<li>Retrieve documents for each sub-question (limit: 5 docs per sub-question)</li>
+<li>Remove duplicates</li>
+<li>Sort by relevance and return top-K documents</li>
+</ol>
+<p>Example:</p>
+<ul>
+<li>Query: &quot;How do vaccines work and why are they important?&quot;</li>
+<li>Reasoning: &quot;1. Understand immune system basics, 2. Explain vaccine mechanism,
+3. Discuss disease prevention benefits&quot;</li>
+<li>Sub-queries: [&quot;immune system&quot;, &quot;how vaccines work&quot;, &quot;vaccine benefits&quot;]</li>
+<li>Retrieves: 5 docs about immune system + 5 about vaccines + 5 about benefits</li>
+<li>Returns: Top-10 unique documents (topK=10)</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when query is null or whitespace.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when topK is not positive.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_Retrieve_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.Retrieve*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_Retrieve_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.Retrieve(System.String,System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  Retrieve(string, int, Dictionary&lt;string, object&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents using chain-of-thought reasoning with metadata filtering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Document&lt;T&gt;&gt; Retrieve(string query, int topK, Dictionary&lt;string, object&gt; metadataFilters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query to retrieve documents for</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of documents to return</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Metadata filters to apply during retrieval (e.g., tenant scoping, access control)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Retrieved documents sorted by relevance</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_RetrieveWithSelfConsistency_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.RetrieveWithSelfConsistency*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_RetrieveWithSelfConsistency_System_String_System_Int32_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.ChainOfThoughtRetriever`1.RetrieveWithSelfConsistency(System.String,System.Int32,System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  RetrieveWithSelfConsistency(string, int, int, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents using self-consistency chain-of-thought reasoning.
+Generates multiple reasoning paths and aggregates results for improved robustness.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Document&lt;T&gt;&gt; RetrieveWithSelfConsistency(string query, int topK, int numPaths = 3, Dictionary&lt;string, object&gt;? metadataFilters = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query to retrieve documents for.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of documents to return.</p>
+</dd>
+    <dt><code>numPaths</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of different reasoning paths to generate (default: 3).</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Metadata filters to apply during retrieval.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Retrieved documents aggregated from multiple reasoning paths.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_ChainOfThoughtRetriever_1_RetrieveWithSelfConsistency_System_String_System_Int32_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Self-consistency improves reasoning quality by generating multiple independent
+reasoning chains and aggregating their results. This helps reduce the impact of
+any single poor reasoning path and increases overall result diversity.
+</p>
+<p><b>For Beginners:</b> Instead of asking once, we ask the LLM to reason about
+the question multiple times from different angles, then combine all the documents
+we find. This gives us more comprehensive and reliable results.
+<p>Example with numPaths=3:</p>
+<ul>
+<li>Path 1 might focus on technical aspects</li>
+<li>Path 2 might focus on practical applications</li>
+<li>Path 3 might focus on theoretical foundations</li>
+<li>Final result: Documents covering all three perspectives</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/ChainOfThoughtRetriever.cs/#L96" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

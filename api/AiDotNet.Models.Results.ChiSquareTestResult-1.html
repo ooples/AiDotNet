@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ChiSquareTestResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ChiSquareTestResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of a Chi-Square statistical test, which is used to determine whether there is a significant association between two categorical variables.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_ChiSquareTestResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.ChiSquareTestResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_ChiSquareTestResult_1" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1" class="text-break">
+Class ChiSquareTestResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of a Chi-Square statistical test, which is used to determine whether there is a significant
+association between two categorical variables.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ChiSquareTestResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for statistical values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ChiSquareTestResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_ChiSquareTestResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Chi-Square test is a statistical hypothesis test that evaluates whether observed frequencies differ significantly 
+from expected frequencies. It is commonly used to test the independence of two categorical variables or to assess 
+the goodness of fit between observed data and a theoretical distribution. This class stores the results of such a 
+test, including the test statistic, p-value, degrees of freedom, observed and expected frequencies, and whether 
+the result is statistically significant. The class uses generic type parameter T to support different numeric types 
+for the statistical values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> The Chi-Square test helps determine if there's a meaningful relationship between two categorical variables.
+<p>For example, you might use this test to answer questions like:</p>
+<ul>
+<li>Is there a relationship between gender and preference for a product?</li>
+<li>Does treatment type affect recovery rates?</li>
+<li>Are survey responses distributed as expected?</li>
+</ul>
+<p>The test works by:</p>
+<ol>
+<li>Comparing observed frequencies (what you actually counted) with expected frequencies (what you would expect if there's no relationship)</li>
+<li>Calculating a statistic that measures how different these frequencies are</li>
+<li>Determining if this difference is statistically significant</li>
+</ol>
+<p>This class stores all the information about the test results, helping you interpret whether
+the observed differences are likely due to chance or represent a real association.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1__ctor_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1__ctor" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.#ctor">
+  ChiSquareTestResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L326"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ChiSquareTestResult class with all statistical values set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ChiSquareTestResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new ChiSquareTestResult instance and initializes all statistical values 
+(ChiSquareStatistic, PValue, CriticalValue) to zero and all frequency vectors (LeftObserved, RightObserved, 
+LeftExpected, RightExpected) to empty vectors. It uses the MathHelper.GetNumericOperations method to obtain 
+the appropriate numeric operations for the generic type T, which allows the class to work with different 
+numeric types such as float, double, or decimal. This initialization ensures that the statistical values 
+start at a well-defined state before being updated with actual results from the Chi-Square test.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with all values initialized to zero.
+<p>When a new ChiSquareTestResult is created:</p>
+<ul>
+<li>All statistical values are set to zero</li>
+<li>All frequency vectors are initialized as empty</li>
+<li>The constructor uses MathHelper to handle different numeric types</li>
+<li>This provides a clean starting point before actual results are calculated</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized values</li>
+<li>It makes the code more robust across different numeric types</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally by the Chi-Square test implementation.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_ChiSquareStatistic_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.ChiSquareStatistic*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_ChiSquareStatistic" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.ChiSquareStatistic">
+  ChiSquareStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Chi-Square test statistic value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ChiSquareStatistic { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated Chi-Square statistic, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_ChiSquareStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the Chi-Square test statistic, which measures the difference between observed and 
+expected frequencies. It is calculated as the sum of (observed - expected)²/expected across all categories. 
+Larger values indicate greater differences between observed and expected frequencies, suggesting a stronger 
+association between the variables or a poorer fit to the expected distribution. The Chi-Square statistic 
+follows a Chi-Square distribution with degrees of freedom determined by the number of categories in the data. 
+This statistic is used in conjunction with the degrees of freedom to calculate the p-value, which determines 
+statistical significance.
+</p>
+<p><b>For Beginners:</b> This value measures how different your observed data is from what you expected.
+<p>The Chi-Square statistic:</p>
+<ul>
+<li>Quantifies the total difference between observed and expected frequencies</li>
+<li>Is always positive (or zero if observed exactly matches expected)</li>
+<li>Larger values indicate greater differences</li>
+</ul>
+<p>This value is calculated by:</p>
+<ol>
+<li>Finding the difference between each observed and expected frequency</li>
+<li>Squaring each difference (to make all values positive)</li>
+<li>Dividing by the expected frequency (to standardize)</li>
+<li>Summing all these values</li>
+</ol>
+<p>For example, a Chi-Square statistic of 0 means perfect agreement between observed and expected,
+while a value of 15.3 indicates substantial differences that may be statistically significant.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_CriticalValue_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.CriticalValue*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_CriticalValue" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.CriticalValue">
+  CriticalValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the critical value for the Chi-Square test at the specified significance level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CriticalValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The critical value from the Chi-Square distribution, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_CriticalValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the critical value from the Chi-Square distribution for the given degrees of freedom 
+and significance level (typically 0.05). The critical value is the threshold value of the Chi-Square statistic 
+above which the null hypothesis would be rejected at the specified significance level. If the calculated 
+Chi-Square statistic exceeds this critical value, the result is considered statistically significant. The 
+critical value is determined by the inverse cumulative distribution function of the Chi-Square distribution, 
+using the degrees of freedom and the complement of the significance level.
+</p>
+<p><b>For Beginners:</b> This value is the threshold that determines statistical significance.
+<p>The critical value:</p>
+<ul>
+<li>Is the cutoff point for the Chi-Square statistic to be considered significant</li>
+<li>Depends on the degrees of freedom and chosen significance level (typically 0.05)</li>
+<li>If the Chi-Square statistic exceeds this value, the result is statistically significant</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It provides a clear threshold for decision-making</li>
+<li>It's directly related to your chosen significance level</li>
+<li>It allows for quick determination of significance without checking p-values</li>
+</ul>
+<p>For example, with 2 degrees of freedom and a significance level of 0.05,
+the critical value is approximately 5.99. Any Chi-Square statistic above
+this value would be considered statistically significant.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_DegreesOfFreedom_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.DegreesOfFreedom*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_DegreesOfFreedom" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.DegreesOfFreedom">
+  DegreesOfFreedom
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DegreesOfFreedom { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_IsSignificant_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.IsSignificant*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_IsSignificant" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.IsSignificant">
+  IsSignificant
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the Chi-Square test result is statistically significant.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSignificant { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the result is statistically significant; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_IsSignificant_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the Chi-Square test result is statistically significant at the specified 
+significance level (typically 0.05). A result is considered significant if the p-value is less than or equal 
+to the significance level, or equivalently, if the Chi-Square statistic is greater than or equal to the 
+critical value. Statistical significance suggests that the observed differences between the observed and 
+expected frequencies are unlikely to have occurred by chance alone, leading to the rejection of the null 
+hypothesis. This property provides a convenient boolean indicator of significance without requiring the 
+user to compare the p-value or Chi-Square statistic to thresholds.
+</p>
+<p><b>For Beginners:</b> This tells you whether your result is statistically significant or not.
+<p>The significance indicator:</p>
+<ul>
+<li>Provides a simple yes/no answer about statistical significance</li>
+<li>True means the relationship or difference is statistically significant</li>
+<li>False means the result could reasonably be due to random chance</li>
+</ul>
+<p>This is determined by:</p>
+<ul>
+<li>Comparing the p-value to the significance level (typically 0.05)</li>
+<li>Or comparing the Chi-Square statistic to the critical value</li>
+</ul>
+<p>This value makes it easy to interpret your results without having to manually
+check if the p-value is below the significance threshold. It's particularly
+useful when automating analysis or presenting results to non-statisticians.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftExpected_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.LeftExpected*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftExpected" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.LeftExpected">
+  LeftExpected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the expected frequencies for the left variable or category.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; LeftExpected { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of expected frequencies, initialized to an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftExpected_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the expected frequencies for the left variable or category in the Chi-Square test. 
+Expected frequencies are the counts that would be expected if the null hypothesis were true (i.e., if there 
+were no association between the variables or if the data followed the expected distribution). In a test of 
+independence, expected frequencies are calculated based on the marginal totals of the contingency table. 
+These expected frequencies are compared with the observed frequencies to calculate the Chi-Square statistic.
+</p>
+<p><b>For Beginners:</b> This contains the counts you would expect for the first variable if there's no relationship.
+<p>The left expected frequencies:</p>
+<ul>
+<li>Represent what you would expect to see if the null hypothesis is true</li>
+<li>Are calculated based on the marginal totals and sample size</li>
+<li>The difference between these and observed frequencies drives the Chi-Square statistic</li>
+</ul>
+<p>For example, in a gender and product preference test, this might contain the expected
+counts of males and females based on the overall proportions in your sample.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftObserved_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.LeftObserved*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftObserved" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.LeftObserved">
+  LeftObserved
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the observed frequencies for the left variable or category.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; LeftObserved { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of observed frequencies, initialized to an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_LeftObserved_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the observed frequencies for the left variable or category in the Chi-Square test. 
+Observed frequencies are the actual counts or occurrences of each category in the sample data. In a test of 
+independence, this might represent the counts for different categories of one variable, while in a goodness-of-fit 
+test, it might represent the observed counts for each category being tested against an expected distribution. 
+These observed frequencies are compared with the expected frequencies to calculate the Chi-Square statistic.
+</p>
+<p><b>For Beginners:</b> This contains the actual counts you observed in your data for the first variable.
+<p>The left observed frequencies:</p>
+<ul>
+<li>Represent the actual counts from your data collection</li>
+<li>Are compared against expected frequencies to calculate the Chi-Square statistic</li>
+<li>For a contingency table, these would be the counts for one of the variables</li>
+</ul>
+<p>For example, if testing the relationship between gender and product preference,
+this might contain the counts of males and females in your sample.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_PValue_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.PValue*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_PValue" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.PValue">
+  PValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the p-value associated with the Chi-Square test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated p-value, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_PValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the p-value of the Chi-Square test, which is the probability of observing a test 
+statistic as extreme as, or more extreme than, the one calculated from the sample data, assuming the null 
+hypothesis is true. The null hypothesis typically states that there is no association between the variables 
+or that the data follows the expected distribution. A small p-value (typically = 0.05) suggests that the 
+observed data is unlikely under the null hypothesis, leading to its rejection in favor of the alternative 
+hypothesis. The p-value is calculated from the Chi-Square statistic and the degrees of freedom using the 
+cumulative distribution function of the Chi-Square distribution.
+</p>
+<p><b>For Beginners:</b> This value tells you how likely your results could occur by random chance.
+<p>The p-value:</p>
+<ul>
+<li>Ranges from 0 to 1</li>
+<li>Smaller values indicate stronger evidence against the null hypothesis</li>
+<li>Represents the probability of seeing your results (or more extreme) if there's no real relationship</li>
+</ul>
+<p>Common interpretation:</p>
+<ul>
+<li>p = 0.05: Results are statistically significant (commonly used threshold)</li>
+<li>p = 0.01: Results are highly significant</li>
+<li>p &gt; 0.05: Results are not statistically significant</li>
+</ul>
+<p>For example, a p-value of 0.03 means there's only a 3% chance of seeing your results
+if there's no real relationship between the variables, suggesting the relationship
+is likely real and not due to random chance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightExpected_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.RightExpected*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightExpected" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.RightExpected">
+  RightExpected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the expected frequencies for the right variable or category.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RightExpected { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of expected frequencies, initialized to an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightExpected_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the expected frequencies for the right variable or category in the Chi-Square test. 
+Expected frequencies are the counts that would be expected if the null hypothesis were true (i.e., if there 
+were no association between the variables or if the data followed the expected distribution). In a test of 
+independence, expected frequencies are calculated based on the marginal totals of the contingency table. 
+These expected frequencies are compared with the observed frequencies to calculate the Chi-Square statistic.
+</p>
+<p><b>For Beginners:</b> This contains the counts you would expect for the second variable if there's no relationship.
+<p>The right expected frequencies:</p>
+<ul>
+<li>Represent what you would expect to see if the null hypothesis is true</li>
+<li>Are calculated based on the marginal totals and sample size</li>
+<li>The difference between these and observed frequencies drives the Chi-Square statistic</li>
+</ul>
+<p>For example, in a gender and product preference test, this might contain the expected
+counts for each product option based on the overall proportions in your sample.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightObserved_" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.RightObserved*"></a>
+
+  <h3 id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightObserved" data-uid="AiDotNet.Models.Results.ChiSquareTestResult`1.RightObserved">
+  RightObserved
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the observed frequencies for the right variable or category.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RightObserved { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of observed frequencies, initialized to an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_ChiSquareTestResult_1_RightObserved_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the observed frequencies for the right variable or category in the Chi-Square test. 
+Observed frequencies are the actual counts or occurrences of each category in the sample data. In a test of 
+independence, this might represent the counts for different categories of the second variable. These observed 
+frequencies are compared with the expected frequencies to calculate the Chi-Square statistic.
+</p>
+<p><b>For Beginners:</b> This contains the actual counts you observed in your data for the second variable.
+<p>The right observed frequencies:</p>
+<ul>
+<li>Represent the actual counts from your data collection</li>
+<li>Are compared against expected frequencies to calculate the Chi-Square statistic</li>
+<li>For a contingency table, these would be the counts for the other variable</li>
+</ul>
+<p>For example, if testing the relationship between gender and product preference,
+this might contain the counts of people preferring each product option.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/ChiSquareTestResult.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

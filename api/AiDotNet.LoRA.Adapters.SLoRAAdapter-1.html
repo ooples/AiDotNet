@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SLoRAAdapter&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SLoRAAdapter&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="S-LoRA adapter for scalable serving of thousands of concurrent LoRA adapters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LoRA_Adapters_SLoRAAdapter_1.md&amp;value=---%0Auid%3A%20AiDotNet.LoRA.Adapters.SLoRAAdapter%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1">
+
+
+
+  <h1 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1" class="text-break">
+Class SLoRAAdapter&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LoRA.html">LoRA</a>.<a class="xref" href="AiDotNet.LoRA.Adapters.html">Adapters</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>S-LoRA adapter for scalable serving of thousands of concurrent LoRA adapters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SLoRAAdapter&lt;T&gt; : LoRAAdapterBase&lt;T&gt;, IDisposable, ILoRAAdapter&lt;T&gt;, ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html">LoRAAdapterBase</a>&lt;T&gt;</div>
+      <div><span class="xref">SLoRAAdapter&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILoRAAdapter-1.html">ILoRAAdapter</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html">IDiagnosticsProvider</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html">IWeightLoadable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__baseLayer">LoRAAdapterBase&lt;T&gt;._baseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__loraLayer">LoRAAdapterBase&lt;T&gt;._loraLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1__freezeBaseLayer">LoRAAdapterBase&lt;T&gt;._freezeBaseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_BaseLayer">LoRAAdapterBase&lt;T&gt;.BaseLayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_LoRALayer">LoRAAdapterBase&lt;T&gt;.LoRALayer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_IsBaseLayerFrozen">LoRAAdapterBase&lt;T&gt;.IsBaseLayerFrozen</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Rank">LoRAAdapterBase&lt;T&gt;.Rank</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Alpha">LoRAAdapterBase&lt;T&gt;.Alpha</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_ParameterCount">LoRAAdapterBase&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_SupportsTraining">LoRAAdapterBase&lt;T&gt;.SupportsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_CreateLoRALayer_System_Int32_System_Double_">LoRAAdapterBase&lt;T&gt;.CreateLoRALayer(int, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LoRAAdapterBase&lt;T&gt;.Forward(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LoRAAdapterBase&lt;T&gt;.Backward(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_UpdateParameters__0_">LoRAAdapterBase&lt;T&gt;.UpdateParameters(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_GetParameters">LoRAAdapterBase&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LoRAAdapterBase&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_CreateMergedLayerWithClone_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LoRAAdapterBase&lt;T&gt;.CreateMergedLayerWithClone(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_MergeToDenseOrFullyConnected">LoRAAdapterBase&lt;T&gt;.MergeToDenseOrFullyConnected()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_UpdateParametersFromLayers">LoRAAdapterBase&lt;T&gt;.UpdateParametersFromLayers()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_ResetState">LoRAAdapterBase&lt;T&gt;.ResetState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_SupportsJitCompilation">LoRAAdapterBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LoRA.Adapters.LoRAAdapterBase-1.html#AiDotNet_LoRA_Adapters_LoRAAdapterBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">LoRAAdapterBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Engine">LayerBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ScalarActivation">LayerBase&lt;T&gt;.ScalarActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_VectorActivation">LayerBase&lt;T&gt;.VectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UsingVectorActivation">LayerBase&lt;T&gt;.UsingVectorActivation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NumOps">LayerBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Random">LayerBase&lt;T&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Parameters">LayerBase&lt;T&gt;.Parameters</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ParameterGradients">LayerBase&lt;T&gt;.ParameterGradients</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShape">LayerBase&lt;T&gt;.InputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InputShapes">LayerBase&lt;T&gt;.InputShapes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateInputShape_System_Int32___">LayerBase&lt;T&gt;.UpdateInputShape(int[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_OutputShape">LayerBase&lt;T&gt;.OutputShape</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsTrainingMode">LayerBase&lt;T&gt;.IsTrainingMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationStrategy">LayerBase&lt;T&gt;.InitializationStrategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_IsInitialized">LayerBase&lt;T&gt;.IsInitialized</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InitializationLock">LayerBase&lt;T&gt;.InitializationLock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_EnsureInitialized">LayerBase&lt;T&gt;.EnsureInitialized()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UseAutodiff">LayerBase&lt;T&gt;.UseAutodiff</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetTrainingMode_System_Boolean_">LayerBase&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterGradients">LayerBase&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ClearGradients">LayerBase&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShape">LayerBase&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetInputShapes">LayerBase&lt;T&gt;.GetInputShapes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetOutputShape">LayerBase&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetWeights">LayerBase&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetBiases">LayerBase&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_MapActivationToFused">LayerBase&lt;T&gt;.MapActivationToFused()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuExecution">LayerBase&lt;T&gt;.SupportsGpuExecution</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SupportsGpuTraining">LayerBase&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanExecuteOnGpu">LayerBase&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanTrainOnGpu">LayerBase&lt;T&gt;.CanTrainOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____">LayerBase&lt;T&gt;.ForwardGpu(params IGpuTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BackwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LayerBase&lt;T&gt;.BackwardGpu(IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">LayerBase&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UploadWeightsToGpu">LayerBase&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DownloadWeightsFromGpu">LayerBase&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ZeroGradientsGpu">LayerBase&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetActivationTypes">LayerBase&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____">LayerBase&lt;T&gt;.Forward(params Tensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivation(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivation_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivation(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ActivateTensor_AiDotNet_Interfaces_IVectorActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ActivateTensor(IVectorActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateInputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateInputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CalculateOutputShape_System_Int32_System_Int32_System_Int32_">LayerBase&lt;T&gt;.CalculateOutputShape(int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Clone">LayerBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_DerivativeTensor_AiDotNet_Interfaces_IActivationFunction__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.DerivativeTensor(IActivationFunction&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative__0__0_">LayerBase&lt;T&gt;.ApplyActivationDerivative(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ComputeActivationJacobian_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ComputeActivationJacobian(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.ApplyActivationDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">LayerBase&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Serialize_System_IO_BinaryWriter_">LayerBase&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Deserialize_System_IO_BinaryReader_">LayerBase&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetDiagnostics">LayerBase&lt;T&gt;.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationToGraph_AiDotNet_Autodiff_ComputationNode__0__">LayerBase&lt;T&gt;.ApplyActivationToGraph(ComputationNode&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_CanActivationBeJitted">LayerBase&lt;T&gt;.CanActivationBeJitted()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_RegisterTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_Engines_PersistentTensorRole_">LayerBase&lt;T&gt;.RegisterTrainableParameter(Tensor&lt;T&gt;, PersistentTensorRole)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_InvalidateTrainableParameter_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.InvalidateTrainableParameter(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_HasGpuActivation">LayerBase&lt;T&gt;.HasGpuActivation()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationForwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationForwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyActivationBackwardGpu_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_">LayerBase&lt;T&gt;.ApplyActivationBackwardGpu(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetFusedActivationType">LayerBase&lt;T&gt;.GetFusedActivationType()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivation_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_">LayerBase&lt;T&gt;.ApplyGpuActivation(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, int, FusedActivationType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ApplyGpuActivationBackward_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_AiDotNet_Tensors_Engines_FusedActivationType_System_Single_">LayerBase&lt;T&gt;.ApplyGpuActivationBackward(IDirectGpuBackend, IGpuBuffer, IGpuBuffer, IGpuBuffer, IGpuBuffer, int, FusedActivationType, float)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose">LayerBase&lt;T&gt;.Dispose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_Dispose_System_Boolean_">LayerBase&lt;T&gt;.Dispose(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_WeightParameterName">LayerBase&lt;T&gt;.WeightParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_BiasParameterName">LayerBase&lt;T&gt;.BiasParameterName</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetWeights_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetWeights(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetBiases_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetBiases(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterNames">LayerBase&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">LayerBase&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">LayerBase&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_GetParameterShape_System_String_">LayerBase&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_NamedParameterCount">LayerBase&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">LayerBase&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html#AiDotNet_NeuralNetworks_Layers_LayerBase_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">LayerBase&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+S-LoRA (Scalable LoRA) is a system designed for efficient serving of many LoRA adapters simultaneously.
+Published in November 2023, it addresses the challenge of deploying thousands of task-specific LoRA adapters
+in production environments with limited GPU memory.
+</p>
+<p><b>For Beginners:</b> S-LoRA solves a real-world problem in production AI systems.
+<p>The problem:</p>
+<ul>
+<li>You have a large base model (like GPT or LLaMA)</li>
+<li>You want to serve thousands of different LoRA adapters (one per customer, task, or use case)</li>
+<li>Each adapter is small (few MB), but thousands of them won't fit in GPU memory</li>
+<li>Naive approaches either: load one adapter at a time (slow) or reserve memory for all (wasteful)</li>
+</ul>
+<p>S-LoRA's solution:</p>
+<ul>
+<li>Unified memory pool: Dynamically manage adapter weights and cache together</li>
+<li>Batched computation: Process multiple adapters in parallel efficiently</li>
+<li>Adapter clustering: Group adapters by rank for optimized computation</li>
+<li>On-demand loading: Fetch adapters from CPU to GPU memory only when needed</li>
+</ul>
+<p>Key features implemented:</p>
+<ol>
+<li><strong>Unified Memory Pool</strong>: Single pool for adapter weights (no pre-allocation waste)</li>
+<li><strong>Adapter Clustering</strong>: Group adapters by rank for batched computation</li>
+<li><strong>Dynamic Loading</strong>: Load adapters on-demand, evict when not needed</li>
+<li><strong>Batched Forward Pass</strong>: Process multiple requests with different adapters simultaneously</li>
+<li><strong>Memory Efficiency</strong>: Serve 100x more adapters than naive approaches</li>
+</ol>
+<p>Research Paper Reference:
+&quot;S-LoRA: Serving Thousands of Concurrent LoRA Adapters&quot;
+Ying Sheng, Shiyi Cao, et al. (November 2023)
+arXiv:2311.03285</p>
+<p>Performance (from paper):</p>
+<ul>
+<li>Throughput: 4x improvement over vLLM, 30x over HuggingFace PEFT</li>
+<li>Adapter capacity: 2,000+ concurrent adapters on single server</li>
+<li>Memory efficiency: 75-90% GPU memory utilization</li>
+<li>Scalability: Superlinear throughput scaling with more GPUs</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">// Create S-LoRA serving system for base layer
+var sloraAdapter = new SLoRAAdapter&lt;double&gt;(baseLayer, rank: 8);
+
+// Register multiple adapters for different tasks
+sloraAdapter.RegisterAdapter(&quot;customer_1&quot;, adapter1);
+sloraAdapter.RegisterAdapter(&quot;customer_2&quot;, adapter2);
+sloraAdapter.RegisterAdapter(&quot;task_classification&quot;, adapter3);
+
+// Process batched requests efficiently
+var outputs = sloraAdapter.BatchForward(inputs, adapterIds);
+</code></pre>
+<p>When to use S-LoRA:</p>
+<ul>
+<li>Serving multiple LoRA adapters in production</li>
+<li>Multi-tenant AI systems (one adapter per tenant)</li>
+<li>Task-specific fine-tuning at scale</li>
+<li>Limited GPU memory but many adapters</li>
+<li>Need high throughput with many concurrent users</li>
+</ul>
+<p>Differences from standard LoRA:</p>
+<ul>
+<li>Standard LoRA: Single adapter, simple forward/backward pass</li>
+<li>S-LoRA: Multiple adapters, optimized for concurrent serving, memory pooling</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1__ctor_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1__ctor_AiDotNet_Interfaces_ILayer__0__System_Int32_System_Double_System_Int32_System_Boolean_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.#ctor(AiDotNet.Interfaces.ILayer{`0},System.Int32,System.Double,System.Int32,System.Boolean)">
+  SLoRAAdapter(ILayer&lt;T&gt;, int, double, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L228"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new S-LoRA adapter for scalable multi-adapter serving.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SLoRAAdapter(ILayer&lt;T&gt; baseLayer, int rank, double alpha = -1, int maxLoadedAdapters = 100, bool freezeBaseLayer = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseLayer</code> <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>The base layer to adapt with S-LoRA.</p>
+</dd>
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The default rank for the primary LoRA decomposition.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The LoRA scaling factor (defaults to rank if negative).</p>
+</dd>
+    <dt><code>maxLoadedAdapters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of adapters to keep loaded simultaneously (default: 100).</p>
+</dd>
+    <dt><code>freezeBaseLayer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to freeze the base layer's parameters during training.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1__ctor_AiDotNet_Interfaces_ILayer__0__System_Int32_System_Double_System_Int32_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an S-LoRA serving system for efficient multi-adapter deployment.
+<p>Parameters:</p>
+<ul>
+<li>baseLayer: The shared base model that all adapters modify</li>
+<li>rank: Default rank for new adapters (typical: 8-32)</li>
+<li>alpha: Scaling factor for LoRA contributions</li>
+<li>maxLoadedAdapters: How many adapters to cache in &quot;GPU memory&quot; (100 = good balance)</li>
+<li>freezeBaseLayer: Lock base weights (true for serving, false for continued training)</li>
+</ul>
+<p>How S-LoRA works:</p>
+<ol>
+<li>One base model shared across all adapters (memory efficient)</li>
+<li>Thousands of small adapters registered in unified pool</li>
+<li>Only popular adapters kept loaded in fast memory</li>
+<li>Unpopular adapters evicted and loaded on-demand</li>
+<li>Batched computation for multiple adapters simultaneously</li>
+</ol>
+<p>Example: Serving 10,000 customer-specific adapters:</p>
+<ul>
+<li>Base model: 7B parameters (14 GB)</li>
+<li>Each adapter: rank 16 (few MB)</li>
+<li>Total pool: 10,000 adapters (few GB in CPU memory)</li>
+<li>Loaded cache: 100 most-used adapters (hundreds of MB in GPU memory)</li>
+<li>Result: Serve 10,000 adapters with GPU memory for 1 base model + 100 adapters!</li>
+</ul>
+<p>This is 100x more efficient than loading full fine-tuned models.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when baseLayer is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when maxLoadedAdapters is less than 1.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadedAdapterCount_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.LoadedAdapterCount*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadedAdapterCount" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.LoadedAdapterCount">
+  LoadedAdapterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of adapters currently loaded in memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LoadedAdapterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadedAdapterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This represents the &quot;hot&quot; adapters actively being used or cached.
+S-LoRA dynamically loads/evicts adapters based on request patterns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MaxLoadedAdapters_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.MaxLoadedAdapters*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MaxLoadedAdapters" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.MaxLoadedAdapters">
+  MaxLoadedAdapters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of adapters that can be loaded simultaneously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxLoadedAdapters { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MaxLoadedAdapters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This simulates GPU memory constraints. S-LoRA's unified paging mechanism
+efficiently manages this limited resource.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RankClusterCount_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.RankClusterCount*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RankClusterCount" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.RankClusterCount">
+  RankClusterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of rank clusters for batched computation optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RankClusterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RankClusterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Adapters with the same rank are clustered together for efficient batched computation.
+This is a key optimization in S-LoRA for heterogeneous adapter serving.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_TotalAdapterCount_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.TotalAdapterCount*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_TotalAdapterCount" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.TotalAdapterCount">
+  TotalAdapterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of registered adapters in the pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalAdapterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_TotalAdapterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This represents all adapters in the system, including those not currently loaded.
+S-LoRA can serve thousands of adapters from a unified pool.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_BatchForward_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.BatchForward*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_BatchForward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_String___" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.BatchForward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0}[],System.String[])">
+  BatchForward(Tensor&lt;T&gt;[], string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L606"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs batched forward pass with multiple adapters simultaneously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt;[] BatchForward(Tensor&lt;T&gt;[] inputs, string[] adapterIds)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of input tensors.</p>
+</dd>
+    <dt><code>adapterIds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Array of adapter IDs corresponding to each input.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of output tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_BatchForward_AiDotNet_Tensors_LinearAlgebra_Tensor__0____System_String____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method demonstrates S-LoRA's key innovation: efficient batched computation across
+heterogeneous adapters. Adapters are clustered by rank for optimized computation.
+</p>
+<p><b>For Beginners:</b> This is S-LoRA's killer feature - processing many requests efficiently!
+<p>The problem with naive batching:</p>
+<ul>
+<li>Request 1: Use customer A's adapter (rank 8)</li>
+<li>Request 2: Use customer B's adapter (rank 16)</li>
+<li>Request 3: Use customer C's adapter (rank 8)</li>
+<li>Naive approach: Process one by one (slow) or merge adapters (memory expensive)</li>
+</ul>
+<p>S-LoRA's solution:</p>
+<ol>
+<li>Group requests by adapter rank (rank-based clustering)</li>
+<li>Process same-rank adapters in optimized batches</li>
+<li>Use custom kernels for heterogeneous batching</li>
+<li>Minimize memory overhead and maximize throughput</li>
+</ol>
+<p>Batching strategy:</p>
+<ul>
+<li>Cluster 1 (rank 8): [customer A, customer C] - batch process together</li>
+<li>Cluster 2 (rank 16): [customer B] - process separately</li>
+<li>Base model: Shared computation for all requests</li>
+</ul>
+<p>Performance benefits (from paper):</p>
+<ul>
+<li>4x throughput vs. non-batched serving</li>
+<li>30x throughput vs. merging adapters per request</li>
+<li>Near-linear scaling with more concurrent requests</li>
+<li>75-90% GPU utilization</li>
+</ul>
+<p>Example: Multi-tenant API serving</p>
+<pre><code class="lang-csharp">// Batch of 100 requests from different customers
+var inputs = new Tensor&lt;T&gt;[100];
+var adapterIds = new string[100];
+
+for (int i = 0; i &lt; 100; i++)
+{
+    inputs[i] = GetCustomerRequest(i);
+    adapterIds[i] = $&quot;customer_{GetCustomerId(i)}&quot;;
+}
+
+// Process entire batch efficiently (S-LoRA magic!)
+var outputs = slora.BatchForward(inputs, adapterIds);
+</code></pre>
+<p>This enables high-throughput multi-tenant AI serving!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when inputs or adapterIds is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when array lengths don't match or adapter not found.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_ClearAdapters_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.ClearAdapters*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_ClearAdapters" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.ClearAdapters">
+  ClearAdapters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L905"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all adapters from the pool (useful for testing or reset).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ClearAdapters()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_ClearAdapters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method removes all adapters from the unified pool except the primary adapter.
+Useful for resetting the system or clearing adapters during reconfiguration.
+</p>
+<p><b>For Beginners:</b> This wipes all registered adapters (except the default one).
+<p>Use cases:</p>
+<ul>
+<li>Testing: Reset between test runs</li>
+<li>Maintenance: Clear old adapters no longer in use</li>
+<li>Reconfiguration: Remove all adapters before registering new set</li>
+<li>Memory cleanup: Free memory from unused adapters</li>
+</ul>
+<p>Example: Periodic cleanup</p>
+<pre><code class="lang-csharp">// Monthly cleanup of inactive customer adapters
+slora.ClearAdapters();
+
+// Re-register only active customers
+foreach (var customer in GetActiveCustomers())
+{
+    var adapter = LoadCustomerAdapter(customer.Id);
+    slora.RegisterAdapter(customer.Id, adapter, customer.Rank);
+}
+</code></pre>
+<p>Note: Primary adapter is preserved to maintain base functionality.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_Forward_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.Forward*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  Forward(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L510"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs batched forward pass with a specific adapter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input, string adapterId = &quot;primary&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input tensor.</p>
+</dd>
+    <dt><code>adapterId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The ID of the adapter to use (default: &quot;primary&quot;).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Output tensor with adapter applied.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs S-LoRA's optimized forward pass with automatic adapter loading
+and reference tracking.
+</p>
+<p><b>For Beginners:</b> This runs inference with a specific adapter efficiently.
+<p>What happens during forward pass:</p>
+<ol>
+<li>Load adapter if not already cached (automatic on-demand loading)</li>
+<li>Increment reference count (prevent eviction during processing)</li>
+<li>Run base model forward pass</li>
+<li>Run adapter-specific LoRA computation</li>
+<li>Combine base output + adapter output</li>
+<li>Decrement reference count (allow eviction if needed)</li>
+</ol>
+<p>Key S-LoRA optimizations simulated:</p>
+<ul>
+<li>Separated base and adapter computation (can batch differently)</li>
+<li>Automatic loading from unified pool</li>
+<li>Reference counting prevents eviction during processing</li>
+<li>LRU access tracking for cache management</li>
+</ul>
+<p>Example: Multi-customer request handling</p>
+<pre><code class="lang-csharp">// Request from customer A
+var outputA = slora.Forward(inputA, &quot;customer_a&quot;);
+
+// Request from customer B (different adapter)
+var outputB = slora.Forward(inputB, &quot;customer_b&quot;);
+
+// Request from customer A again (adapter still cached)
+var outputA2 = slora.Forward(inputA2, &quot;customer_a&quot;);
+</code></pre>
+<p>Each customer gets their personalized model behavior efficiently!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when adapter ID is not found.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetRankCluster_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.GetRankCluster*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetRankCluster_System_Int32_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.GetRankCluster(System.Int32)">
+  GetRankCluster(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L724"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the list of adapter IDs in a specific rank cluster.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;string&gt; GetRankCluster(int rank)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank to query.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of adapter IDs with the specified rank, or empty list if none.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetRankCluster_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides access to S-LoRA's rank-based clustering information.
+Adapters with the same rank can be batched together more efficiently.
+</p>
+<p><b>For Beginners:</b> This shows which adapters can be batched together efficiently.
+<p>Why rank clustering matters:</p>
+<ul>
+<li>Adapters with same rank have same computational cost</li>
+<li>Can use same CUDA kernels / computation paths</li>
+<li>Better memory access patterns</li>
+<li>Higher GPU utilization</li>
+</ul>
+<p>Example: Analyzing your adapter distribution</p>
+<pre><code class="lang-csharp">var slora = new SLoRAAdapter&lt;double&gt;(baseModel, rank: 8);
+
+// Register many adapters with different ranks
+// ...
+
+// See how adapters are distributed
+var rank8Adapters = slora.GetRankCluster(8);   // Maybe 500 adapters
+var rank16Adapters = slora.GetRankCluster(16); // Maybe 300 adapters
+var rank32Adapters = slora.GetRankCluster(32); // Maybe 200 adapters
+
+Console.WriteLine($&quot;Rank 8: {rank8Adapters.Count} adapters&quot;);
+Console.WriteLine($&quot;Rank 16: {rank16Adapters.Count} adapters&quot;);
+Console.WriteLine($&quot;Rank 32: {rank32Adapters.Count} adapters&quot;);
+</code></pre>
+<p>This helps optimize batch sizes and resource allocation!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetStatistics_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.GetStatistics*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetStatistics" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.GetStatistics">
+  GetStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L770"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about the current state of the S-LoRA system.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt; GetStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd><p>Dictionary containing system statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_GetStatistics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides detailed statistics about S-LoRA's memory usage, cache efficiency,
+and adapter distribution.
+</p>
+<p><b>For Beginners:</b> This gives you insights into how well your S-LoRA system is performing.
+<p>Key metrics returned:</p>
+<ul>
+<li>TotalAdapters: How many adapters registered in pool</li>
+<li>LoadedAdapters: How many currently cached in &quot;GPU memory&quot;</li>
+<li>CacheUtilization: Percentage of cache capacity used</li>
+<li>RankClusters: Number of different rank groups</li>
+<li>AverageRank: Mean rank across all adapters</li>
+<li>ActiveReferences: Adapters currently processing requests</li>
+</ul>
+<p>Example: Monitoring production system</p>
+<pre><code class="lang-csharp">var stats = slora.GetStatistics();
+
+Console.WriteLine($&quot;Total adapters: {stats[&quot;TotalAdapters&quot;]}&quot;);
+Console.WriteLine($&quot;Loaded adapters: {stats[&quot;LoadedAdapters&quot;]}&quot;);
+Console.WriteLine($&quot;Cache utilization: {stats[&quot;CacheUtilization&quot;]}%&quot;);
+
+// Alert if cache too small
+if ((double)stats[&quot;CacheUtilization&quot;] &gt; 95)
+{
+    Console.WriteLine(&quot;Warning: Cache nearly full, consider increasing maxLoadedAdapters&quot;);
+}
+</code></pre>
+<p>Use this to tune your S-LoRA configuration for optimal performance!</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadAdapter_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.LoadAdapter*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadAdapter_System_String_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.LoadAdapter(System.String)">
+  LoadAdapter(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads an adapter from the pool into active memory (simulates GPU loading).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LoadAdapter(string adapterId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>adapterId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The ID of the adapter to load.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_LoadAdapter_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method simulates S-LoRA's dynamic adapter loading from CPU to GPU memory.
+If the loaded adapter cache is full, it evicts the least recently used adapter.
+</p>
+<p><b>For Beginners:</b> This moves an adapter from slow storage to fast cache.
+<p>In S-LoRA's architecture:</p>
+<ul>
+<li>CPU memory: All adapters stored here (slow but large capacity)</li>
+<li>GPU memory: Hot adapters cached here (fast but limited capacity)</li>
+</ul>
+<p>Loading process:</p>
+<ol>
+<li>Check if adapter already loaded (if yes, update access time and return)</li>
+<li>Check if cache is full (if yes, evict least recently used adapter)</li>
+<li>Load adapter into cache</li>
+<li>Mark as loaded and update access timestamp</li>
+</ol>
+<p>LRU eviction policy:</p>
+<ul>
+<li>Adapters with oldest last access time evicted first</li>
+<li>Adapters with active references (in-flight requests) never evicted</li>
+<li>This keeps popular adapters hot in cache</li>
+</ul>
+<p>Example: Customer request patterns</p>
+<pre><code>Time 0: Customer A requests (load adapter A)
+Time 1: Customer B requests (load adapter B)
+...
+Time 99: Customer Z requests (load adapter Z, cache now full at 100)
+Time 100: Customer AA requests (evict least-used, load adapter AA)
+Time 101: Customer A requests again (adapter A was evicted, reload)
+</code></pre>
+<p>Popular customers stay cached, inactive ones evicted automatically!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when adapter ID is not found in pool.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MergeToOriginalLayer_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.MergeToOriginalLayer*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MergeToOriginalLayer" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.MergeToOriginalLayer">
+  MergeToOriginalLayer()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L829"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Merges the primary adapter into the base layer and returns the merged layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override ILayer&lt;T&gt; MergeToOriginalLayer()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILayer-1.html">ILayer</a>&lt;T&gt;</dt>
+    <dd><p>A new layer with primary LoRA weights merged into the base layer's weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_MergeToOriginalLayer_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For S-LoRA, this merges the primary adapter (the one created during initialization).
+In production S-LoRA deployments, individual adapters typically remain separate for
+efficient multi-adapter serving rather than being merged.
+</p>
+<p><b>For Beginners:</b> This merges the default adapter for deployment.
+<p>When to merge adapters:</p>
+<ul>
+<li>Deploying a single-adapter model (no longer need multi-adapter serving)</li>
+<li>Want maximum inference speed for one specific adapter</li>
+<li>Converting S-LoRA deployment back to standard model</li>
+</ul>
+<p>When NOT to merge:</p>
+<ul>
+<li>Serving multiple adapters (defeats purpose of S-LoRA)</li>
+<li>Need to swap adapters dynamically</li>
+<li>Want memory efficiency of shared base model</li>
+</ul>
+<p>S-LoRA's strength is NOT merging:</p>
+<ul>
+<li>Keep base model frozen and shared</li>
+<li>Keep all adapters separate in pool</li>
+<li>Swap adapters per request efficiently</li>
+<li>Serve thousands of adapters from one base model</li>
+</ul>
+<p>This method is mainly for compatibility or transitioning away from S-LoRA architecture.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the base layer type is not supported.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RegisterAdapter_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.RegisterAdapter*"></a>
+
+  <h3 id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RegisterAdapter_System_String_AiDotNet_LoRA_LoRALayer__0__System_Int32_" data-uid="AiDotNet.LoRA.Adapters.SLoRAAdapter`1.RegisterAdapter(System.String,AiDotNet.LoRA.LoRALayer{`0},System.Int32)">
+  RegisterAdapter(string, LoRALayer&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Registers a new adapter in the unified memory pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void RegisterAdapter(string adapterId, LoRALayer&lt;T&gt; loraLayer, int rank)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>adapterId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Unique identifier for this adapter.</p>
+</dd>
+    <dt><code>loraLayer</code> <a class="xref" href="AiDotNet.LoRA.LoRALayer-1.html">LoRALayer</a>&lt;T&gt;</dt>
+    <dd><p>The LoRA layer to register.</p>
+</dd>
+    <dt><code>rank</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The rank of this adapter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LoRA_Adapters_SLoRAAdapter_1_RegisterAdapter_System_String_AiDotNet_LoRA_LoRALayer__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adds a new adapter to S-LoRA's unified memory pool. The adapter is not immediately
+loaded into GPU memory but is available for on-demand loading when needed.
+</p>
+<p><b>For Beginners:</b> This is like adding a new customer or task-specific adapter to your system.
+<p>What happens when you register an adapter:</p>
+<ol>
+<li>Adapter stored in CPU memory pool (cheap storage)</li>
+<li>Added to rank cluster for batched computation optimization</li>
+<li>Not loaded to GPU yet (only loaded when first used)</li>
+<li>Can register thousands of adapters this way</li>
+</ol>
+<p>Example: Multi-tenant SaaS application</p>
+<pre><code class="lang-csharp">var slora = new SLoRAAdapter&lt;double&gt;(baseModel, rank: 8, maxLoadedAdapters: 100);
+
+// Register 1000 customer adapters
+for (int i = 0; i &lt; 1000; i++)
+{
+    var adapter = LoadCustomerAdapter(i);
+    slora.RegisterAdapter($&quot;customer_{i}&quot;, adapter, rank: 8);
+}
+
+// All 1000 adapters registered, but only 100 will be loaded at once
+// Popular customers get fast GPU-cached access
+// Inactive customers loaded on-demand from CPU pool
+</code></pre>
+<p>This enables serving far more adapters than GPU memory allows!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when adapterId or loraLayer is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an adapter with this ID already exists.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LoRA/Adapters/SLoRAAdapter.cs/#L75" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

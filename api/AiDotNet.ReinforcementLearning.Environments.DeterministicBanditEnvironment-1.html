@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DeterministicBanditEnvironment&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DeterministicBanditEnvironment&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A deterministic multi-armed bandit environment for testing purposes.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1.md&amp;value=---%0Auid%3A%20AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1">
+
+
+
+  <h1 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1" class="text-break">
+Class DeterministicBanditEnvironment&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.html">ReinforcementLearning</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.Environments.html">Environments</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A deterministic multi-armed bandit environment for testing purposes.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DeterministicBanditEnvironment&lt;T&gt; : IEnvironment&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (typically double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DeterministicBanditEnvironment&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IEnvironment-1.html">IEnvironment</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This environment provides a simple bandit setting where each action has a fixed deterministic reward.
+It's useful for testing RL data loaders and agents with predictable outcomes.
+</p>
+<p><b>For Beginners:</b>
+A bandit is like a slot machine. Each "arm" (action) has a fixed reward.
+This deterministic version always gives the same reward for the same action,
+making it perfect for testing - you always know what reward to expect.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1__ctor_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32)">
+  DeterministicBanditEnvironment(int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment-1.html">DeterministicBanditEnvironment&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DeterministicBanditEnvironment(int actionSpaceSize = 10, int observationSpaceDimension = 1, int maxSteps = 100, int seed = 42)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>actionSpaceSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of arms/actions (default: 10).</p>
+</dd>
+    <dt><code>observationSpaceDimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The observation dimension (default: 1).</p>
+</dd>
+    <dt><code>maxSteps</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum steps per episode (default: 100).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Random seed for reproducibility (default: 42).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ActionSpaceSize_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.ActionSpaceSize*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ActionSpaceSize" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.ActionSpaceSize">
+  ActionSpaceSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the size of the action space (number of possible discrete actions or continuous action dimensions).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ActionSpaceSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ActionSpaceSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For discrete action spaces (like CartPole): this is the number of possible actions (e.g., 2 for left/right).
+For continuous action spaces: this is the dimensionality of the action vector.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_IsContinuousActionSpace_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.IsContinuousActionSpace*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_IsContinuousActionSpace" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.IsContinuousActionSpace">
+  IsContinuousActionSpace
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the action space is continuous (true) or discrete (false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsContinuousActionSpace { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ObservationSpaceDimension_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.ObservationSpaceDimension*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ObservationSpaceDimension" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.ObservationSpaceDimension">
+  ObservationSpaceDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dimension of the observation space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ObservationSpaceDimension { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_ObservationSpaceDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is the length of the Vector returned by Reset() and Step().
+For example, CartPole has 4 dimensions: cart position, cart velocity, pole angle, pole angular velocity.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Close_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Close*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Close" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Close">
+  Close()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Closes the environment and cleans up resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Close()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Reset_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Reset*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Reset" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the environment to an initial state and returns the initial observation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Reset()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Initial state observation as a Vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Reset_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this at the start of each episode to get a fresh starting state.
+Like pressing &quot;restart&quot; on a game.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Seed_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Seed*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Seed_System_Int32_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Seed(System.Int32)">
+  Seed(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Seeds the random number generator for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Seed(int seed)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The random seed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Step_" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Step*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.ReinforcementLearning.Environments.DeterministicBanditEnvironment`1.Step(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Step(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Takes an action in the environment and returns the result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Vector&lt;T&gt; NextState, T Reward, bool Done, Dictionary&lt;string, object&gt; Info) Step(Vector&lt;T&gt; action)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>action</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>For discrete action spaces: a one-hot encoded Vector (length = ActionSpaceSize) or a Vector with a single element containing the action index.
+For continuous action spaces: a Vector of continuous values (length = ActionSpaceSize).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,-0,system.boolean,system.collections.generic.dictionary-system.string,system.object--.nextstate">NextState</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,-0,system.boolean,system.collections.generic.dictionary-system.string,system.object--.reward">Reward</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,-0,system.boolean,system.collections.generic.dictionary-system.string,system.object--.done">Done</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,-0,system.boolean,system.collections.generic.dictionary-system.string,system.object--.info">Info</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>NextState: The resulting state observation</li>
+<li>Reward: The reward received for this action</li>
+<li>Done: Whether the episode has terminated</li>
+<li>Info: Optional diagnostic information as a dictionary</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_Environments_DeterministicBanditEnvironment_1_Step_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like taking one action in the game - you press a button (action),
+and the game tells you what happened (new state, reward, whether game is over).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/Environments/DeterministicBanditEnvironment.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

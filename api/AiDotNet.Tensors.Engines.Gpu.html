@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace AiDotNet.Tensors.Engines.Gpu | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace AiDotNet.Tensors.Engines.Gpu | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu">
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu" data-uid="AiDotNet.Tensors.Engines.Gpu" class="text-break">Namespace AiDotNet.Tensors.Engines.Gpu</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="namespaces">
+Namespaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.html">AiDotNet.Tensors.Engines.Gpu.Graph</a></dt>
+      <dd></dd>
+    </dl>
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.CsrGpuTensorFactory.html">CsrGpuTensorFactory</a></dt>
+      <dd><p>Factory methods for creating CSR GPU tensors.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.CsrGpuTensor-1.html">CsrGpuTensor&lt;T&gt;</a></dt>
+      <dd><p>GPU-resident sparse tensor in CSR format.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredDownload.html">DeferredDownload</a></dt>
+      <dd><p>Represents a deferred GPU-to-CPU download that will be executed as part of an execution graph.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredDownload-1.html">DeferredDownload&lt;T&gt;</a></dt>
+      <dd><p>Generic version of DeferredDownload that converts to the target type.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScope.html">DeferredScope</a></dt>
+      <dd><p>Concrete implementation of IDeferredScope that records operations
+and executes them as an optimized execution graph.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeExtensions.html">DeferredScopeExtensions</a></dt>
+      <dd><p>Extension methods for creating deferred scopes.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DeferredScopeStatistics.html">DeferredScopeStatistics</a></dt>
+      <dd><p>Statistics collected from a deferred scope execution.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.DelegatingGpuBackend.html">DelegatingGpuBackend</a></dt>
+      <dd><p>Base class that delegates all IDirectGpuBackend calls to an inner backend.
+Subclasses can override specific methods to add behavior (e.g., recording, profiling).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a></dt>
+      <dd><p>Abstract base class for nodes in an execution graph.
+Each node represents an operation that can be executed on the GPU.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionContext.html">GpuExecutionContext</a></dt>
+      <dd><p>Thread-local execution context for GPU operations.
+Provides a facade for GPU-resident tensor management with auto-detection.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionContextExtensions.html">GpuExecutionContextExtensions</a></dt>
+      <dd><p>Extension methods for using GPU execution context.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+      <dd><p>Configuration options for GPU execution behavior.
+Can be configured via code or environment variables.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuMemoryStats.html">GpuMemoryStats</a></dt>
+      <dd><p>GPU memory statistics.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamPool.html">GpuStreamPool</a></dt>
+      <dd><p>Manages a pool of GPU streams for efficient compute/transfer overlap.
+Streams are created lazily and reused to minimize creation overhead.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamPoolExtensions.html">GpuStreamPoolExtensions</a></dt>
+      <dd><p>Extension methods for stream pool usage patterns.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuSyncPoint.html">GpuSyncPoint</a></dt>
+      <dd><p>Abstract base class for deferred GPU synchronization.
+A sync point represents a point in the GPU execution timeline that can be waited on.
+Concrete implementations use backend-specific events (CUDA events, OpenCL events, HIP events).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuTensorFactory.html">GpuTensorFactory</a></dt>
+      <dd><p>Factory methods for creating GPU tensors.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuTensorRegistry.html">GpuTensorRegistry</a></dt>
+      <dd><p>Manages the lifecycle of GPU tensors with memory pressure handling.
+Tracks tensor usage and can evict least-recently-used tensors when memory is low.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuTensor-1.html">GpuTensor&lt;T&gt;</a></dt>
+      <dd><p>GPU-resident tensor implementation with lazy CPU synchronization.
+Data remains on GPU until explicitly downloaded via GetCpuData() or ToTensor().</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.RecordingGpuBackend.html">RecordingGpuBackend</a></dt>
+      <dd><p>GPU backend wrapper that records operations to an ExecutionGraphBuilder
+instead of executing them immediately when in recording mode.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.TensorRegistration.html">TensorRegistration</a></dt>
+      <dd><p>Handle for a tensor registration that automatically unregisters when disposed.</p>
+</dd>
+    </dl>
+    <h3 id="interfaces">
+Interfaces
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.html">IAsyncGpuBackend</a></dt>
+      <dd><p>Extended GPU backend interface with async operations, streams, and events.
+Backends that support async execution implement this interface for improved performance.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor-1.html">ICsrGpuTensor&lt;T&gt;</a></dt>
+      <dd><p>Interface for GPU-resident sparse tensors in CSR (Compressed Sparse Row) format.
+CSR format is efficient for sparse matrix-dense matrix multiplication (SpMM) operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IDeferredScope.html">IDeferredScope</a></dt>
+      <dd><p>Interface for a deferred execution scope that records operations
+and executes them as an optimized graph.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuEvent.html">IGpuEvent</a></dt>
+      <dd><p>Represents a GPU event for synchronization between streams.
+Events are recorded on one stream and can be waited on by other streams.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a></dt>
+      <dd><p>Represents a GPU stream (CUDA stream, OpenCL command queue, HIP stream).
+Streams enable concurrent execution and compute/transfer overlap.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+      <dd><p>Non-generic interface for GPU tensors when element type is not known at compile time.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor&lt;T&gt;</a></dt>
+      <dd><p>Represents a GPU-resident tensor with lazy CPU synchronization.
+Data remains on GPU until explicitly downloaded via GetCpuData() or ToTensor().</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNodeType.html">ExecutionNodeType</a></dt>
+      <dd><p>Defines the type of node in an execution graph.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionMode.html">GpuExecutionMode</a></dt>
+      <dd><p>Defines the execution mode for GPU operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuStreamType.html">GpuStreamType</a></dt>
+      <dd><p>Defines the type of GPU stream for operation scheduling.
+Different stream types enable compute/transfer overlap.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuTensorRole.html">GpuTensorRole</a></dt>
+      <dd><p>Defines the role of a GPU-resident tensor for memory management and optimization decisions.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

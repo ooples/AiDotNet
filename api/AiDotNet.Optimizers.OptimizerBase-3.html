@@ -1,0 +1,2404 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OptimizerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OptimizerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the base class for all optimization algorithms, providing common functionality and interfaces.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Optimizers_OptimizerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.Optimizers.OptimizerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Optimizers.OptimizerBase`3">
+
+
+
+  <h1 id="AiDotNet_Optimizers_OptimizerBase_3" data-uid="AiDotNet.Optimizers.OptimizerBase`3" class="text-break">
+Class OptimizerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Optimizers.html">Optimizers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the base class for all optimization algorithms, providing common functionality and interfaces.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class OptimizerBase&lt;T, TInput, TOutput&gt; : IOptimizer&lt;T, TInput, TOutput&gt;, IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OptimizerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IOptimizer-3.html">IOptimizer</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Optimizers.AntColonyOptimizer-3.html">AntColonyOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.BayesianOptimizer-3.html">BayesianOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.CMAESOptimizer-3.html">CMAESOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.DifferentialEvolutionOptimizer-3.html">DifferentialEvolutionOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.GeneticAlgorithmOptimizer-3.html">GeneticAlgorithmOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.GradientBasedOptimizerBase-3.html">GradientBasedOptimizerBase&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.NelderMeadOptimizer-3.html">NelderMeadOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.NormalOptimizer-3.html">NormalOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.ParticleSwarmOptimizer-3.html">ParticleSwarmOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Optimizers.TabuSearchOptimizer-3.html">TabuSearchOptimizer&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IOptimizer___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IOptimizer&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Optimizers_OptimizerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+OptimizerBase is an abstract class that serves as the foundation for all optimization algorithms. It defines 
+the common structure and functionality that all optimizers must implement, such as solution evaluation, 
+caching, and adaptive parameter management. This class handles the core mechanics of optimization processes, 
+allowing derived classes to focus on their specific optimization strategies.
+</p>
+<p><b>For Beginners:</b> This is the blueprint that all optimization algorithms follow.
+<p>Think of OptimizerBase as the common foundation that all optimizers are built upon:</p>
+<ul>
+<li>It defines what every optimizer must be able to do (evaluate solutions, manage caching)</li>
+<li>It provides shared tools that all optimizers can use (like adaptive learning rates and early stopping)</li>
+<li>It manages the evaluation of solutions and tracks the optimization progress</li>
+<li>It handles saving and loading optimizer states</li>
+</ul>
+<p>All specific optimizer types (like genetic algorithms, particle swarm, etc.) inherit from this class,
+which ensures they all work together consistently in the optimization process.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3__ctor_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Options.OptimizationAlgorithmOptions{`0,`1,`2})">
+  OptimizerBase(IFullModel&lt;T, TInput, TOutput&gt;?, OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OptimizerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected OptimizerBase(IFullModel&lt;T, TInput, TOutput&gt;? model, OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to be optimized (can be null if set later).</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimization algorithm options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CurrentLearningRate" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CurrentLearningRate">
+  CurrentLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The current learning rate used in the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T CurrentLearningRate</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CurrentMomentum" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CurrentMomentum">
+  CurrentMomentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The current momentum used in the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected T CurrentMomentum</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_FitDetector" data-uid="AiDotNet.Optimizers.OptimizerBase`3.FitDetector">
+  FitDetector
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects the quality of fit for models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IFitDetector&lt;T, TInput, TOutput&gt; FitDetector</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitDetector-3.html">IFitDetector</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_FitnessCalculator" data-uid="AiDotNet.Optimizers.OptimizerBase`3.FitnessCalculator">
+  FitnessCalculator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the fitness score of models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IFitnessCalculator&lt;T, TInput, TOutput&gt; FitnessCalculator</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_FitnessList" data-uid="AiDotNet.Optimizers.OptimizerBase`3.FitnessList">
+  FitnessList
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores the fitness scores of evaluated models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;T&gt; FitnessList</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_IterationHistoryList" data-uid="AiDotNet.Optimizers.OptimizerBase`3.IterationHistoryList">
+  IterationHistoryList
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores information about each optimization iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;OptimizationIterationInfo&lt;T&gt;&gt; IterationHistoryList</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.OptimizationIterationInfo-1.html">OptimizationIterationInfo</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_IterationsWithImprovement" data-uid="AiDotNet.Optimizers.OptimizerBase`3.IterationsWithImprovement">
+  IterationsWithImprovement
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Counts the number of consecutive iterations with improvement.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int IterationsWithImprovement</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_IterationsWithoutImprovement" data-uid="AiDotNet.Optimizers.OptimizerBase`3.IterationsWithoutImprovement">
+  IterationsWithoutImprovement
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Counts the number of consecutive iterations without improvement.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int IterationsWithoutImprovement</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ModelCache" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ModelCache">
+  ModelCache
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Caches evaluated models to avoid redundant calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IModelCache&lt;T, TInput, TOutput&gt; ModelCache</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelCache-3.html">IModelCache</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ModelEvaluator" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ModelEvaluator">
+  ModelEvaluator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates the performance of models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly IModelEvaluator&lt;T, TInput, TOutput&gt; ModelEvaluator</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ModelStatsOptions" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ModelStatsOptions">
+  ModelStatsOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Options for model statistics calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly ModelStatsOptions ModelStatsOptions</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.ModelStatsOptions.html">ModelStatsOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_NumOps" data-uid="AiDotNet.Optimizers.OptimizerBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Options" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Contains the configuration options for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; Options</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_PredictionOptions" data-uid="AiDotNet.Optimizers.OptimizerBase`3.PredictionOptions">
+  PredictionOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Options for prediction statistics calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly PredictionStatsOptions PredictionOptions</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.PredictionStatsOptions.html">PredictionStatsOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Random" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides random number generation for all derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly Random Random</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Engine_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Engine*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Engine" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global execution engine for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Model_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Model*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Model" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Model">
+  Model
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the model that this optimizer is configured to optimize.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? Model { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_Model_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides access to the model that the optimizer is working with.
+It implements the IOptimizer interface property to expose the protected Model field.
+</p>
+<p><b>For Beginners:</b> This property lets external code see which model
+the optimizer is currently working with, without being able to change it.
+It's like a window that lets you look at the model but not touch it.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_AdjustModelParameters_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.AdjustModelParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_AdjustModelParameters_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double_System_Double_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.AdjustModelParameters(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Double,System.Double)">
+  AdjustModelParameters(IFullModel&lt;T, TInput, TOutput&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adjusts the parameters (weights) of a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void AdjustModelParameters(IFullModel&lt;T, TInput, TOutput&gt; model, double adjustmentScale = 0.1, double signFlipProbability = 0.05)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model whose parameters should be adjusted.</p>
+</dd>
+    <dt><code>adjustmentScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Scale factor for parameter adjustments.</p>
+</dd>
+    <dt><code>signFlipProbability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Probability of flipping a parameter's sign.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_AdjustModelParameters_AiDotNet_Interfaces_IFullModel__0__1__2__System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like adjusting the quantities of ingredients in your recipe.
+While keeping the same ingredients, you're changing how much of each one you use to
+find the perfect balance.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_AdjustParameters_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.AdjustParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_AdjustParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_System_Double_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.AdjustParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double,System.Double)">
+  AdjustParameters(Vector&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adjusts a vector of parameters by applying random modifications.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; AdjustParameters(Vector&lt;T&gt; parameters, double adjustmentScale, double signFlipProbability)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The original parameters.</p>
+</dd>
+    <dt><code>adjustmentScale</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Scale factor for parameter adjustments.</p>
+</dd>
+    <dt><code>signFlipProbability</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Probability of flipping a parameter's sign.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with adjusted parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ApplyFeatureSelection*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_Int32__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ApplyFeatureSelection(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Collections.Generic.List{System.Int32})">
+  ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L265"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the selected features to a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt; model, List&lt;int&gt; selectedFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to apply feature selection to.</p>
+</dd>
+    <dt><code>selectedFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The list of selected feature indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ApplyFeatureSelection*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Int32_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ApplyFeatureSelection(AiDotNet.Interfaces.IFullModel{`0,`1,`2},System.Int32)">
+  ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L540"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies feature selection to a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ApplyFeatureSelection(IFullModel&lt;T, TInput, TOutput&gt; model, int totalFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to apply feature selection to.</p>
+</dd>
+    <dt><code>totalFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of available features.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_ApplyFeatureSelection_AiDotNet_Interfaces_IFullModel__0__1__2__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method selects a subset of features to be used by the model, potentially
+improving its performance by focusing on the most relevant data dimensions.
+</p>
+<p><b>For Beginners:</b>
+This is like deciding which ingredients to include in your recipe. Some ingredients
+might not be necessary or might even make the dish worse, so you're experimenting
+with different combinations to find which ones are truly important.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CacheStepData_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CacheStepData*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CacheStepData_System_String_AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CacheStepData(System.String,AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  CacheStepData(string, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Caches step data for a given solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void CacheStepData(string key, OptimizationStepData&lt;T, TInput, TOutput&gt; stepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The cache key for the solution.</p>
+</dd>
+    <dt><code>stepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The step data to cache.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CalculateLoss_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateLoss*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CalculateLoss_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateLoss(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  CalculateLoss(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L451"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the loss for a given solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T CalculateLoss(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The solution to evaluate.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for evaluation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateUpdate*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateUpdate(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateUpdate(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the parameter updates based on the gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Vector&lt;T&gt; CalculateUpdate(Vector&lt;T&gt; gradients, Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The gradients of the loss function with respect to the parameters.</p>
+</dd>
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The current parameter values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The updates to be applied to the parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This base implementation returns the gradients as-is,
+which represents vanilla gradient descent. Derived classes should override this
+to implement specific optimization algorithms (like Adam, SGD with momentum, etc.).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateUpdate*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CalculateUpdate_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CalculateUpdate(System.Collections.Generic.Dictionary{System.String,AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  CalculateUpdate(Dictionary&lt;string, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the parameter update based on the provided gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual Dictionary&lt;string, Vector&lt;T&gt;&gt; CalculateUpdate(Dictionary&lt;string, Vector&lt;T&gt;&gt; gradients)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gradients</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The gradients used to compute the parameter updates.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The calculated parameter updates as a dictionary mapping parameter names to their update vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CreateOptimizationResult_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CreateOptimizationResult*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CreateOptimizationResult_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CreateOptimizationResult(AiDotNet.Models.OptimizationStepData{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  CreateOptimizationResult(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L482"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new optimization result based on the best step data found during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected OptimizationResult&lt;T, TInput, TOutput&gt; CreateOptimizationResult(OptimizationStepData&lt;T, TInput, TOutput&gt; bestStepData, OptimizationInputData&lt;T, TInput, TOutput&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>bestStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The data from the best optimization step.</p>
+</dd>
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The original input data used for optimization.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A structured optimization result containing all relevant information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_CreateOptimizationResult_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method packages all the optimization results into a single structured object that can be returned to the caller.
+It includes the best solution found, its fitness score, training metrics, validation metrics, and test metrics.
+</p>
+<p><b>For Beginners:</b> Think of this method as packaging up all the results from your optimization process
+into one neat container.
+<p>It's like finishing a science experiment and organizing all your findings into a clear report:</p>
+<ul>
+<li>It includes the best solution found</li>
+<li>It shows how well that solution performed (fitness score)</li>
+<li>It contains detailed statistics about how the solution performed on different datasets</li>
+<li>It records other important information like selected features and iteration count</li>
+</ul>
+<p>This makes it easy for you or other code to work with the results.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_CreateSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CreateSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_CreateSolution__1_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.CreateSolution(`1)">
+  CreateSolution(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L567"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a potential solution based on the optimization mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual IFullModel&lt;T, TInput, TOutput&gt; CreateSolution(TInput xTrain)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>xTrain</code> <span class="xref">TInput</span></dt>
+    <dd><p>Training data used to determine data dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new potential solution (model variant).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_CreateSolution__1__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method creates a new model variant by either selecting features, adjusting parameters,
+or both, depending on the optimization mode.
+</p>
+<p><b>For Beginners:</b> This is like creating a new version of the recipe. Depending on what you're focusing on,
+you might change which ingredients you use, how much of each ingredient you add,
+or both aspects at once.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Deserialize_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L974"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs the optimizer from a serialized byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method rebuilds the optimizer's state from a serialized byte array. It verifies that the
+serialized type matches the current type, restores configuration options, and calls into derived
+classes to restore any additional data.
+</p>
+<p><b>For Beginners:</b> This method loads a previously saved optimizer state.
+<p>It's like restoring a snapshot:</p>
+<ul>
+<li>It takes a byte array that was previously created with Serialize()</li>
+<li>It checks that the type matches (you can't load settings from a different type of optimizer)</li>
+<li>It reconstructs all the settings and values</li>
+</ul>
+<p>This allows you to:</p>
+<ul>
+<li>Continue working with an optimizer that you previously saved</li>
+<li>Use an optimizer that someone else created and shared</li>
+<li>Recover from backups if needed</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the serialized type doesn't match the current type.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_DeserializeAdditionalData_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.DeserializeAdditionalData*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_DeserializeAdditionalData_System_IO_BinaryReader_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.DeserializeAdditionalData(System.IO.BinaryReader)">
+  DeserializeAdditionalData(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1047"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes additional data specific to derived optimizer classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void DeserializeAdditionalData(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to use for deserialization.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_DeserializeAdditionalData_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This protected virtual method allows derived optimizer classes to deserialize additional data
+beyond what is handled by the base implementation. The base implementation does nothing.
+</p>
+<p><b>For Beginners:</b> This method allows specialized optimizers to load their unique settings.
+<p>Think of it as reading extra details from the snapshot:</p>
+<ul>
+<li>The base optimizer loads the common information</li>
+<li>This method lets specialized optimizers load their specific settings</li>
+<li>It's empty in the base class since it doesn't have any special data to load</li>
+</ul>
+<p>This complements the SerializeAdditionalData method to allow different optimizers
+to save and load their specialized settings.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_EvaluateSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.EvaluateSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_EvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.EvaluateSolution(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  EvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates a solution, using cached results if available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual OptimizationStepData&lt;T, TInput, TOutput&gt; EvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The solution to evaluate.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for evaluation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The evaluation results for the solution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_GenerateCacheKey_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GenerateCacheKey*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_GenerateCacheKey_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GenerateCacheKey(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L582"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a cache key for the given solution and input data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual string GenerateCacheKey(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The solution model.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The optimization input data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A unique cache key string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_GetCachedStepData_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GetCachedStepData*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_GetCachedStepData_System_String_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GetCachedStepData(System.String)">
+  GetCachedStepData(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves cached step data for a given solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected OptimizationStepData&lt;T, TInput, TOutput&gt;? GetCachedStepData(string key)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>key</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The cache key for the solution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The cached step data, if available; otherwise, null.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_GetOptions_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_GetOptions" data-uid="AiDotNet.Optimizers.OptimizerBase`3.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current options for this optimizer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current optimization algorithm options.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to return their current
+configuration options.
+</p>
+<p><b>For Beginners:</b> This method retrieves the current settings of the optimizer.
+<p>It's like checking the current configuration of your device:</p>
+<ul>
+<li>It returns all the settings that control how the optimizer behaves</li>
+<li>Each type of optimizer will implement this differently to return its specific settings</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Seeing what settings are currently active</li>
+<li>Making a copy of settings to modify and apply later</li>
+<li>Comparing settings between different optimizers</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_InitializeAdaptiveParameters_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_InitializeAdaptiveParameters" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeAdaptiveParameters">
+  InitializeAdaptiveParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L696"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes the adaptive parameters used during optimization to their starting values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void InitializeAdaptiveParameters()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_InitializeAdaptiveParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method sets the initial values for parameters that can adapt during optimization, such as
+learning rate and momentum. It also resets tracking variables for monitoring improvement.
+</p>
+<p><b>For Beginners:</b> This method sets up the starting values for parameters that will change
+during the optimization process.
+<p>Think of it like setting up a car before a long journey:</p>
+<ul>
+<li>Setting the initial speed (learning rate)</li>
+<li>Setting the initial acceleration (momentum)</li>
+<li>Resetting the trip counters (improvement trackers)</li>
+</ul>
+<p>These values will adjust automatically during optimization to help find the best solution efficiently.
+The learning rate controls how big each step is, while momentum helps move through flat areas.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeRandomSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeRandomSolution(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  InitializeRandomSolution(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a random solution within the given bounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Vector&lt;T&gt; InitializeRandomSolution(Vector&lt;T&gt; lowerBounds, Vector&lt;T&gt; upperBounds)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>lowerBounds</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Lower bounds for each parameter.</p>
+</dd>
+    <dt><code>upperBounds</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Upper bounds for each parameter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector representing a random solution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeRandomSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_InitializeRandomSolution__1_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.InitializeRandomSolution(`1)">
+  InitializeRandomSolution(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual IFullModel&lt;T, TInput, TOutput&gt; InitializeRandomSolution(TInput trainingData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainingData</code> <span class="xref">TInput</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_LoadModel_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.LoadModel*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_LoadModel_System_String_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.LoadModel(System.String)">
+  LoadModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the optimizer state from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void LoadModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path to the file containing the saved optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_LoadModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method loads the complete state of the optimizer from a file, including all configuration
+options and any optimizer-specific data.
+</p>
+<p><b>For Beginners:</b> This loads a previously saved optimizer from a file.
+<p>It's like loading a saved game:</p>
+<ul>
+<li>It restores all the optimizer's settings and state</li>
+<li>You can continue optimization from where you left off</li>
+<li>You can reuse optimizer configurations that worked well previously</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Optimize_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Optimize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Optimize_AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Optimize(AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the optimization process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract OptimizationResult&lt;T, TInput, TOutput&gt; Optimize(OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for the optimization process.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The result of the optimization process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_PrepareAndEvaluateSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.PrepareAndEvaluateSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_PrepareAndEvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.PrepareAndEvaluateSolution(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Models.Inputs.OptimizationInputData{`0,`1,`2})">
+  PrepareAndEvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt;, OptimizationInputData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L350"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Prepares and evaluates a solution, applying feature selection before checking the cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected OptimizationStepData&lt;T, TInput, TOutput&gt; PrepareAndEvaluateSolution(IFullModel&lt;T, TInput, TOutput&gt; solution, OptimizationInputData&lt;T, TInput, TOutput&gt; inputData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>solution</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The solution to evaluate.</p>
+</dd>
+    <dt><code>inputData</code> <a class="xref" href="AiDotNet.Models.Inputs.OptimizationInputData-3.html">OptimizationInputData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The input data for evaluation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The evaluation results for the solution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_PrepareAndEvaluateSolution_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Models_Inputs_OptimizationInputData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method prepares a model with a specific set of features,
+checks if we've already trained this exact configuration before, and if not,
+trains and evaluates the model with the selected features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_RandomlySelectFeatures_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.RandomlySelectFeatures*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_RandomlySelectFeatures_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.RandomlySelectFeatures(System.Int32,System.Nullable{System.Int32},System.Nullable{System.Int32})">
+  RandomlySelectFeatures(int, int?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Randomly selects a subset of features to use in a model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual List&lt;int&gt; RandomlySelectFeatures(int totalFeatures, int? minFeatures = null, int? maxFeatures = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>totalFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of available features.</p>
+</dd>
+    <dt><code>minFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The minimum number of features to select.</p>
+</dd>
+    <dt><code>maxFeatures</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>The maximum number of features to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>A list of selected feature indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_RandomlySelectFeatures_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like randomly selecting a subset of ingredients from
+your pantry to include in your recipe experiment.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Reset_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Reset*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Reset" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L707"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the optimizer state, clearing the model cache.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_ResetAdaptiveParameters_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ResetAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ResetAdaptiveParameters" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ResetAdaptiveParameters">
+  ResetAdaptiveParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L731"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the adaptive parameters back to their initial values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ResetAdaptiveParameters()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_ResetAdaptiveParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method calls InitializeAdaptiveParameters to reset all adaptive parameters to their starting values.
+This can be useful when the optimization process needs to be restarted or when a significant change occurs.
+</p>
+<p><b>For Beginners:</b> This method resets the optimization process parameters to start fresh.
+<p>It's like restarting a navigation system when you've gone off course:</p>
+<ul>
+<li>You reset your speed back to the initial value</li>
+<li>You reset your direction and momentum</li>
+<li>You clear any history of previous attempts</li>
+</ul>
+<p>This gives the optimization a clean slate to try again from the beginning.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_SaveModel_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.SaveModel*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_SaveModel_System_String_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.SaveModel(System.String)">
+  SaveModel(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the optimizer state to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SaveModel(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the optimizer should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_SaveModel_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the complete state of the optimizer, including all configuration options
+and any optimizer-specific data, to a file.
+</p>
+<p><b>For Beginners:</b> This saves your optimizer's current settings and state to a file.
+<p>Think of it like saving your progress:</p>
+<ul>
+<li>It captures all the optimizer's settings and current state</li>
+<li>This can be loaded later to resume optimization or reuse the same settings</li>
+<li>It's useful for checkpointing long-running optimizations</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Serialize_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Serialize" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L932"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the optimizer state to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized optimizer state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method saves the current state of the optimizer, including its options and any derived class-specific data.
+The serialized data can be used to reconstruct the optimizer's state later or to transfer it between processes.
+</p>
+<p><b>For Beginners:</b> This method saves all the important information about the optimizer's current state.
+<p>Think of it like taking a snapshot of the optimizer:</p>
+<ul>
+<li>It captures all the current settings and progress</li>
+<li>This snapshot can be saved to a file or sent to another computer</li>
+<li>Later, you can use this snapshot to continue from where you left off</li>
+</ul>
+<p>This is useful for:</p>
+<ul>
+<li>Saving your progress in case the program crashes</li>
+<li>Sharing your optimizer's state with others</li>
+<li>Continuing a long optimization process after a break</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_SerializeAdditionalData_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.SerializeAdditionalData*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_SerializeAdditionalData_System_IO_BinaryWriter_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.SerializeAdditionalData(System.IO.BinaryWriter)">
+  SerializeAdditionalData(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1022"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes additional data specific to derived optimizer classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void SerializeAdditionalData(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to use for serialization.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_SerializeAdditionalData_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This protected virtual method allows derived optimizer classes to serialize additional data
+beyond what is handled by the base implementation. The base implementation does nothing.
+</p>
+<p><b>For Beginners:</b> This method allows specialized optimizers to save their unique settings.
+<p>Think of it as adding extra details to the snapshot:</p>
+<ul>
+<li>The base optimizer saves the common information</li>
+<li>This method lets specialized optimizers save their specific settings</li>
+<li>It's empty in the base class since it doesn't have any special data to save</li>
+</ul>
+<p>This is part of the extensible design that allows different types of optimizers
+to all use the same saving and loading system.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_ShouldEarlyStop_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ShouldEarlyStop*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_ShouldEarlyStop" data-uid="AiDotNet.Optimizers.OptimizerBase`3.ShouldEarlyStop">
+  ShouldEarlyStop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L863"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the optimization process should stop early based on the recent history of fitness scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool ShouldEarlyStop()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if early stopping criteria are met, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_ShouldEarlyStop_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method checks if the fitness score has not improved significantly over a specified number of iterations.
+If the improvement is below a threshold for a consecutive number of iterations, it suggests stopping early.
+</p>
+<p><b>For Beginners:</b> This method decides if it's time to stop trying to improve the solution.
+<p>Imagine you're trying to beat your personal best in a game:</p>
+<ul>
+<li>You keep playing and tracking your scores</li>
+<li>If your score hasn't improved much after several attempts, you might decide to stop</li>
+<li>This method does that for the optimization process</li>
+</ul>
+<p>It's useful because:</p>
+<ul>
+<li>It prevents wasting time when the solution isn't getting much better</li>
+<li>It helps avoid overfitting, where the model becomes too specific to the training data</li>
+<li>It can save computational resources by stopping when further improvement is unlikely</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_Step_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Step*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_Step" data-uid="AiDotNet.Optimizers.OptimizerBase`3.Step">
+  Step()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1098"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a single optimization step, updating the model parameters based on gradients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Step()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_Step_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method performs one iteration of parameter updates. The default implementation
+throws a NotImplementedException, and gradient-based optimizers should override this method
+to implement their specific parameter update logic.
+</p>
+<p>
+<b>For Beginners:</b> This is like taking one small step toward a better model.
+After calculating how wrong the model is (gradients), this method adjusts the
+model's parameters slightly to make it more accurate.
+<p>Think of it like adjusting a recipe:</p>
+<ol>
+<li>You taste the dish (check model performance)</li>
+<li>You determine what needs changing (calculate gradients)</li>
+<li>You adjust the ingredients (this Step method updates parameters)</li>
+<li>Repeat until the dish tastes good (model is accurate)</li>
+</ol>
+<p>Most training loops call this method many times, each time making the model
+a little bit better.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_UpdateAdaptiveParameters_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateAdaptiveParameters*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateAdaptiveParameters(AiDotNet.Models.OptimizationStepData{`0,`1,`2},AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt;, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L761"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the adaptive parameters based on the progress of optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void UpdateAdaptiveParameters(OptimizationStepData&lt;T, TInput, TOutput&gt; currentStepData, OptimizationStepData&lt;T, TInput, TOutput&gt; previousStepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current optimization step data.</p>
+</dd>
+    <dt><code>previousStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The previous optimization step data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_UpdateAdaptiveParameters_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adjusts the learning rate and momentum based on whether the optimization is improving.
+If the fitness is improving, it may increase certain parameters to move faster.
+If the fitness is not improving, it may decrease certain parameters to explore more carefully.
+</p>
+<p><b>For Beginners:</b> This method changes how the optimization behaves based on its progress.
+<p>Think of it like adjusting your driving based on the road conditions:</p>
+<ul>
+<li>If you're making good progress, you might speed up (decrease learning rate, increase momentum)</li>
+<li>If you're not improving, you might slow down and try different directions (increase learning rate, decrease momentum)</li>
+</ul>
+<p>These automatic adjustments help the optimizer find better solutions by being more efficient:</p>
+<ul>
+<li>When close to a good solution, it takes smaller, more precise steps</li>
+<li>When stuck in a difficult area, it tries different approaches</li>
+</ul>
+<p>The learning rate controls how big each step is in the optimization process.
+The momentum helps maintain direction through flat or noisy areas.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_UpdateBestSolution_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateBestSolution*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_UpdateBestSolution_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2___" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateBestSolution(AiDotNet.Models.OptimizationStepData{`0,`1,`2},AiDotNet.Models.OptimizationStepData{`0,`1,`2}@)">
+  UpdateBestSolution(OptimizationStepData&lt;T, TInput, TOutput&gt;, ref OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L646"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the best step data if the current step data has a better solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void UpdateBestSolution(OptimizationStepData&lt;T, TInput, TOutput&gt; currentStepData, ref OptimizationStepData&lt;T, TInput, TOutput&gt; bestStepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current optimization step data.</p>
+</dd>
+    <dt><code>bestStepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The best optimization step data found so far, passed by reference to be updated.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_UpdateBestSolution_AiDotNet_Models_OptimizationStepData__0__1__2__AiDotNet_Models_OptimizationStepData__0__1__2____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method wraps the current and best step data in ModelResult objects and calls UpdateAndApplyBestSolution
+to determine if the current step data is better. If it is, the bestStepData reference is updated with values
+from the current step data.
+</p>
+<p><b>For Beginners:</b> This method compares two sets of optimization results to keep the better one.
+<p>Think of it like a talent competition:</p>
+<ul>
+<li>You have a current contestant (currentStepData)</li>
+<li>You have the current champion (bestStepData)</li>
+<li>This method compares them to see who performs better</li>
+<li>If the contestant wins, they become the new champion</li>
+</ul>
+<p>This is a key part of optimization - always keeping track of the best solution found so far.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_UpdateIterationHistoryAndCheckEarlyStopping_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateIterationHistoryAndCheckEarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_UpdateIterationHistoryAndCheckEarlyStopping_System_Int32_AiDotNet_Models_OptimizationStepData__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateIterationHistoryAndCheckEarlyStopping(System.Int32,AiDotNet.Models.OptimizationStepData{`0,`1,`2})">
+  UpdateIterationHistoryAndCheckEarlyStopping(int, OptimizationStepData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L823"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the iteration history with the current step data and checks if early stopping should be applied.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool UpdateIterationHistoryAndCheckEarlyStopping(int iteration, OptimizationStepData&lt;T, TInput, TOutput&gt; stepData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iteration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The current iteration number.</p>
+</dd>
+    <dt><code>stepData</code> <a class="xref" href="AiDotNet.Models.OptimizationStepData-3.html">OptimizationStepData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The current step data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if optimization should stop early, false if it should continue.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_UpdateIterationHistoryAndCheckEarlyStopping_System_Int32_AiDotNet_Models_OptimizationStepData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method adds the current iteration's data to the history list and then checks if early stopping
+criteria have been met. Early stopping helps prevent overfitting by stopping the optimization process
+when progress stagnates for a number of iterations.
+</p>
+<p><b>For Beginners:</b> This method keeps track of progress and decides if it's time to stop trying.
+<p>Imagine you're trying to climb a hill to find the highest point:</p>
+<ul>
+<li>You keep a record of your altitude at each step (the iteration history)</li>
+<li>If you haven't gone any higher after walking for a while, you might decide to stop</li>
+<li>This saves time and prevents you from wandering too far</li>
+</ul>
+<p>Early stopping is important because:</p>
+<ul>
+<li>It saves computation time when further optimization isn't helping</li>
+<li>It can prevent overfitting (when a model works too well on training data but poorly on new data)</li>
+<li>It tells you when you've found a good enough solution</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Optimizers_OptimizerBase_3_UpdateOptions_" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateOptions*"></a>
+
+  <h3 id="AiDotNet_Optimizers_OptimizerBase_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2__" data-uid="AiDotNet.Optimizers.OptimizerBase`3.UpdateOptions(AiDotNet.Models.Options.OptimizationAlgorithmOptions{`0,`1,`2})">
+  UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L1072"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the optimizer's options with the provided options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void UpdateOptions(OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The options to apply to this optimizer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Optimizers_OptimizerBase_3_UpdateOptions_AiDotNet_Models_Options_OptimizationAlgorithmOptions__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This abstract method must be implemented by derived classes to update their specific options
+based on the provided generic optimization options.
+</p>
+<p><b>For Beginners:</b> This method configures the optimizer with specific settings.
+<p>Think of it like updating the settings on your device:</p>
+<ul>
+<li>You provide a set of options (settings)</li>
+<li>This method applies those options to the optimizer</li>
+<li>Each type of optimizer will implement this differently based on what options it supports</li>
+</ul>
+<p>This is important because different optimizers might interpret the same options differently,
+or might have additional specialized options.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Optimizers/OptimizerBase.cs/#L34" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

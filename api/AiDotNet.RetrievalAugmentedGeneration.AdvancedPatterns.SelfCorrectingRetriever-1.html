@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SelfCorrectingRetriever&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SelfCorrectingRetriever&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Self-correcting retriever that iteratively refines answers through critique, error detection, and targeted re-retrieval.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1" class="text-break">
+Class SelfCorrectingRetriever&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.html">AdvancedPatterns</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Self-correcting retriever that iteratively refines answers through critique, error detection, and targeted re-retrieval.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SelfCorrectingRetriever&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SelfCorrectingRetriever&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This advanced RAG pattern implements a self-correction loop: retrieve documents, generate answer,
+critique the answer for errors or gaps, retrieve additional targeted documents, and repeat until
+the answer is satisfactory. This mirrors how humans refine their understanding through iteration.
+</p>
+<p><b>For Beginners:</b> Think of this like writing an essay with self-editing.
+<p>Normal approach:</p>
+<ul>
+<li>Research topic once → Write essay → Submit (might have errors!)</li>
+</ul>
+<p>Self-correcting approach:</p>
+<ul>
+<li>Research → Write draft → Read and critique → &quot;Wait, I'm missing data about X&quot;</li>
+<li>Research X specifically → Add to essay → Critique again → &quot;This part contradicts that part&quot;</li>
+<li>Research to resolve → Fix contradiction → Final review → Submit when satisfied</li>
+</ul>
+<p>Example:
+Question: &quot;What caused the fall of the Roman Empire?&quot;</p>
+<p>Iteration 1:</p>
+<ul>
+<li>Retrieved: General docs about Roman Empire</li>
+<li>Answer: &quot;Economic problems and barbarian invasions caused the fall&quot;</li>
+<li>Critique: &quot;Too vague - which economic problems? When did invasions happen?&quot;</li>
+<li>Satisfied: NO</li>
+</ul>
+<p>Iteration 2:</p>
+<ul>
+<li>Re-retrieve: &quot;Roman Empire economic problems inflation&quot;</li>
+<li>Answer: &quot;Currency debasement and inflation in the 3rd century, plus Germanic invasions in 410 AD&quot;</li>
+<li>Critique: &quot;Better, but missing Eastern vs Western Empire distinction&quot;</li>
+<li>Satisfied: NO</li>
+</ul>
+<p>Iteration 3:</p>
+<ul>
+<li>Re-retrieve: &quot;Western Roman Empire Eastern Byzantine&quot;</li>
+<li>Answer: &quot;Western Empire fell in 476 AD due to economics + invasions; Eastern continued as Byzantine&quot;</li>
+<li>Critique: &quot;Complete and accurate!&quot;</li>
+<li>Satisfied: YES → Return answer</li>
+</ul>
+
+<p><b>How It Works:</b>
+The self-correction process:
+1. Initial Retrieval - Get top-K relevant documents for query
+2. Generate Answer - Create initial answer from retrieved documents
+3. Generate Critique - LLM critiques its own answer for errors/gaps
+4. Check Satisfaction - Parse critique for approval keywords
+5. If Not Satisfied:
+   a. Extract gaps - Identify what information is missing
+   b. Re-retrieve - Get documents about missing topics
+   c. Generate improved answer with all documents
+   d. Repeat critique (max 3 iterations)
+6. Return final answer
+<p>Current implementation uses keyword detection for satisfaction.
+Production should use structured critique (JSON) with explicit quality scores.</p>
+
+<p><b>Benefits:</b>
+- Higher accuracy through iterative refinement
+- Catches and corrects initial mistakes
+- Identifies and fills knowledge gaps automatically
+- More comprehensive answers
+- Transparent - shows reasoning through critique
+</p>
+<p><b>Limitations:</b>
+- Multiple LLM calls (higher cost/latency)
+- May not converge if critique is inconsistent
+- Depends heavily on LLM's self-critique ability
+- Limited to max iterations (prevents infinite loops)
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1__ctor_AiDotNet_Interfaces_IGenerator__0__AiDotNet_RetrievalAugmentedGeneration_Retrievers_RetrieverBase__0__System_Int32_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1.#ctor(AiDotNet.Interfaces.IGenerator{`0},AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase{`0},System.Int32)">
+  SelfCorrectingRetriever(IGenerator&lt;T&gt;, RetrieverBase&lt;T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever-1.html">SelfCorrectingRetriever&lt;T&gt;</a> class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SelfCorrectingRetriever(IGenerator&lt;T&gt; generator, RetrieverBase&lt;T&gt; baseRetriever, int maxIterations = 3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generator</code> <a class="xref" href="AiDotNet.Interfaces.IGenerator-1.html">IGenerator</a>&lt;T&gt;</dt>
+    <dd><p>The LLM generator (use StubGenerator or real LLM).</p>
+</dd>
+    <dt><code>baseRetriever</code> <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Retrievers.RetrieverBase-1.html">RetrieverBase</a>&lt;T&gt;</dt>
+    <dd><p>The underlying retriever to use.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of correction iterations (default: 3).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1_RetrieveAndAnswer_" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1.RetrieveAndAnswer*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1_RetrieveAndAnswer_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns.SelfCorrectingRetriever`1.RetrieveAndAnswer(System.String,System.Int32,System.Collections.Generic.Dictionary{System.String,System.Object})">
+  RetrieveAndAnswer(string, int, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves documents and generates a self-corrected, refined answer through iterative critique.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string RetrieveAndAnswer(string query, int topK, Dictionary&lt;string, object&gt;? metadataFilters = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's question requiring a high-quality answer.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of documents to retrieve in each iteration.</p>
+</dd>
+    <dt><code>metadataFilters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>Optional metadata filters for document scoping (e.g., tenant ID, permissions).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Final refined answer after self-correction iterations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_RetrievalAugmentedGeneration_AdvancedPatterns_SelfCorrectingRetriever_1_RetrieveAndAnswer_System_String_System_Int32_System_Collections_Generic_Dictionary_System_String_System_Object___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method implements the self-correction loop: retrieve → generate → critique → refine.
+It continues iterating until the answer passes self-critique or max iterations is reached.
+</p>
+<p><b>For Beginners:</b> This is like having a built-in editor that keeps improving your answer.
+<p>The process:</p>
+<ol>
+<li>Retrieve: Get topK documents about the query</li>
+<li>Generate: Create answer from those documents</li>
+<li>Critique: Ask LLM &quot;Is this answer complete and accurate?&quot;</li>
+<li>Evaluate Critique:
+<ul>
+<li>If critique contains &quot;satisfactory&quot;, &quot;complete&quot;, &quot;accurate&quot; → Done!</li>
+<li>If critique mentions gaps/errors → Continue improving</li>
+</ul>
+</li>
+<li>Extract Gaps: What information is missing from critique?</li>
+<li>Re-Retrieve: Get more documents about the gaps</li>
+<li>Re-Generate: Create improved answer with ALL documents (old + new)</li>
+<li>Repeat: Back to step 3 (max 3 times total)</li>
+<li>Return: Best answer achieved</li>
+</ol>
+<p>Safety: Maximum 3 iterations prevent infinite loops if model keeps finding issues.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when query is null or whitespace.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when topK is not positive.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/AdvancedPatterns/SelfCorrectingRetriever.cs/#L84" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

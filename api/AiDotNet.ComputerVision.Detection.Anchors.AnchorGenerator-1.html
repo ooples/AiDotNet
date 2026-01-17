@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AnchorGenerator&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AnchorGenerator&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Generates anchor boxes for object detection models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1.md&amp;value=---%0Auid%3A%20AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1">
+
+
+
+  <h1 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1" class="text-break">
+Class AnchorGenerator&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ComputerVision.html">ComputerVision</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.html">Detection</a>.<a class="xref" href="AiDotNet.ComputerVision.Detection.Anchors.html">Anchors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Generates anchor boxes for object detection models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AnchorGenerator&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AnchorGenerator&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Anchor boxes (also called prior boxes) are pre-defined boxes
+of various sizes and aspect ratios placed at each location in the feature map.
+The detector predicts how to adjust these anchors to fit actual objects.
+Using anchors helps the model handle objects of different sizes and shapes.</p>
+<p>For example, a feature map of 80x80 with 3 anchors per location generates
+80 x 80 x 3 = 19,200 anchor boxes, each representing a potential object location.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1__ctor" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.#ctor">
+  AnchorGenerator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new anchor generator with default YOLO-style anchors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AnchorGenerator()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1__ctor_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1__ctor_System_Double___System_Double___System_Double___System_Int32___" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.#ctor(System.Double[],System.Double[],System.Double[],System.Int32[])">
+  AnchorGenerator(double[], double[], double[], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new anchor generator with custom settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AnchorGenerator(double[] baseSizes, double[] aspectRatios, double[] scales, int[] strides)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseSizes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Base anchor sizes at each feature level.</p>
+</dd>
+    <dt><code>aspectRatios</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Anchor aspect ratios (height/width).</p>
+</dd>
+    <dt><code>scales</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd><p>Scales to apply to base sizes.</p>
+</dd>
+    <dt><code>strides</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Feature map strides.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_AspectRatios_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.AspectRatios*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_AspectRatios" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.AspectRatios">
+  AspectRatios
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Aspect ratios for anchors (height/width).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] AspectRatios { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_BaseSizes_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.BaseSizes*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_BaseSizes" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.BaseSizes">
+  BaseSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Base sizes for anchors at each feature level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] BaseSizes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_NumAnchorsPerLocation_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.NumAnchorsPerLocation*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_NumAnchorsPerLocation" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.NumAnchorsPerLocation">
+  NumAnchorsPerLocation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of anchors per feature map location.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumAnchorsPerLocation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_Scales_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.Scales*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_Scales" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.Scales">
+  Scales
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Scales to apply to base sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double[] Scales { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_Strides_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.Strides*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_Strides" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.Strides">
+  Strides
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Strides (downsampling factors) at each feature level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[] Strides { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateFasterRCNNAnchors_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateFasterRCNNAnchors*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateFasterRCNNAnchors" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateFasterRCNNAnchors">
+  CreateFasterRCNNAnchors()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an anchor generator with Faster R-CNN style anchors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AnchorGenerator&lt;T&gt; CreateFasterRCNNAnchors()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator-1.html">AnchorGenerator</a>&lt;T&gt;</dt>
+    <dd><p>Anchor generator for Faster R-CNN.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateRetinaNetAnchors_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateRetinaNetAnchors*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateRetinaNetAnchors" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateRetinaNetAnchors">
+  CreateRetinaNetAnchors()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an anchor generator with RetinaNet style anchors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AnchorGenerator&lt;T&gt; CreateRetinaNetAnchors()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator-1.html">AnchorGenerator</a>&lt;T&gt;</dt>
+    <dd><p>Anchor generator for RetinaNet.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateYOLOAnchors_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateYOLOAnchors*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_CreateYOLOAnchors_System_Double_0__0___System_Int32___" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.CreateYOLOAnchors(System.Double[0:,0:],System.Int32[])">
+  CreateYOLOAnchors(double[,], int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an anchor generator with YOLO-style anchors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static AnchorGenerator&lt;T&gt; CreateYOLOAnchors(double[,] anchors, int[] strides)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>anchors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>[,]</dt>
+    <dd><p>Array of (width, height) anchor pairs for each level.</p>
+</dd>
+    <dt><code>strides</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Feature map strides.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator-1.html">AnchorGenerator</a>&lt;T&gt;</dt>
+    <dd><p>Configured anchor generator.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchors_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchors*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchors_System_Collections_Generic_List_System_ValueTuple_System_Int32_System_Int32___" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchors(System.Collections.Generic.List{System.ValueTuple{System.Int32,System.Int32}})">
+  GenerateAnchors(List&lt;(int Height, int Width)&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates anchors for all feature levels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;List&lt;BoundingBox&lt;T&gt;&gt;&gt; GenerateAnchors(List&lt;(int Height, int Width)&gt; featureSizes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureSizes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>)&gt;</dt>
+    <dd><p>List of (height, width) for each feature level.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>List of anchors for each level.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchorsForImage_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchorsForImage*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchorsForImage_System_Int32_System_Int32_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchorsForImage(System.Int32,System.Int32)">
+  GenerateAnchorsForImage(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates anchors for an image of specified size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;BoundingBox&lt;T&gt;&gt; GenerateAnchorsForImage(int imageHeight, int imageWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height in pixels.</p>
+</dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width in pixels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Flattened list of all anchors across all levels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchorsForLevel_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchorsForLevel*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchorsForLevel_System_Int32_System_Int32_System_Int32_System_Double_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GenerateAnchorsForLevel(System.Int32,System.Int32,System.Int32,System.Double)">
+  GenerateAnchorsForLevel(int, int, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates anchors for a single feature map level.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;BoundingBox&lt;T&gt;&gt; GenerateAnchorsForLevel(int featureHeight, int featureWidth, int stride, double baseSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>featureHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Height of the feature map.</p>
+</dd>
+    <dt><code>featureWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Width of the feature map.</p>
+</dd>
+    <dt><code>stride</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Stride (downsampling factor) of this level.</p>
+</dd>
+    <dt><code>baseSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Base anchor size for this level.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Augmentation.Image.BoundingBox-1.html">BoundingBox</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of anchor boxes centered at each feature map location.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GenerateAnchorsForLevel_System_Int32_System_Int32_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For each location (x, y) in the feature map, this method
+creates multiple anchor boxes of different sizes and aspect ratios. The anchor centers
+are converted to image coordinates using the stride.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GetTotalAnchorCount_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GetTotalAnchorCount*"></a>
+
+  <h3 id="AiDotNet_ComputerVision_Detection_Anchors_AnchorGenerator_1_GetTotalAnchorCount_System_Int32_System_Int32_" data-uid="AiDotNet.ComputerVision.Detection.Anchors.AnchorGenerator`1.GetTotalAnchorCount(System.Int32,System.Int32)">
+  GetTotalAnchorCount(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of anchors for an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetTotalAnchorCount(int imageHeight, int imageWidth)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>imageHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image height.</p>
+</dd>
+    <dt><code>imageWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Image width.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total anchor count.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ComputerVision/Detection/Anchors/AnchorGenerator.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

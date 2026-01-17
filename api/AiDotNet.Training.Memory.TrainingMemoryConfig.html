@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TrainingMemoryConfig | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TrainingMemoryConfig | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration for training memory management including gradient checkpointing, activation pooling, and model sharding.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Training_Memory_TrainingMemoryConfig.md&amp;value=---%0Auid%3A%20AiDotNet.Training.Memory.TrainingMemoryConfig%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig">
+
+
+
+  <h1 id="AiDotNet_Training_Memory_TrainingMemoryConfig" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig" class="text-break">
+Class TrainingMemoryConfig  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Training.html">Training</a>.<a class="xref" href="AiDotNet.Training.Memory.html">Memory</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration for training memory management including gradient checkpointing,
+activation pooling, and model sharding.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TrainingMemoryConfig</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TrainingMemoryConfig</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Training_Memory_TrainingMemoryConfig_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Training neural networks requires a lot of memory:
+<ol>
+<li><strong>Model weights</strong>: The parameters being trained</li>
+<li><strong>Activations</strong>: Intermediate results saved for backpropagation</li>
+<li><strong>Gradients</strong>: Computed during backward pass</li>
+</ol>
+<p>This configuration helps reduce memory usage through:</p>
+<ul>
+<li><strong>Gradient Checkpointing</strong>: Trade compute for memory by recomputing activations</li>
+<li><strong>Activation Pooling</strong>: Reuse memory buffers to reduce garbage collection</li>
+<li><strong>Model Sharding</strong>: Split large models across multiple GPUs</li>
+</ul>
+
+<p>
+Example usage with PredictionModelBuilder:
+<pre><code class="lang-csharp">// Using a preset for common scenarios
+var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+    .ConfigureMemoryManagement(TrainingMemoryConfig.ForTransformers());
+<p>// Or with custom settings
+var builder = new PredictionModelBuilder&lt;double, double[], double&gt;()
+.ConfigureMemoryManagement(new TrainingMemoryConfig
+{
+UseGradientCheckpointing = true,
+CheckpointEveryNLayers = 2,
+UseActivationPooling = true,
+MaxPoolMemoryMB = 2048
+});</p></code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointAttentionLayers_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointAttentionLayers*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointAttentionLayers" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointAttentionLayers">
+  CheckpointAttentionLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to checkpoint attention layers specifically.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CheckpointAttentionLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointAttentionLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Attention layers are memory-intensive (O(n^2) for sequence length n).
+Checkpointing them can significantly reduce memory for transformer models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointEveryNLayers_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointEveryNLayers*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointEveryNLayers" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointEveryNLayers">
+  CheckpointEveryNLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to create checkpoints (every N layers).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointEveryNLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointEveryNLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Lower values = more memory savings but more recomputation.
+Higher values = less recomputation but more memory usage.
+Typical values: 1-4 for transformers, 2-3 for CNNs.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointResidualBlocks_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointResidualBlocks*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_CheckpointResidualBlocks" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.CheckpointResidualBlocks">
+  CheckpointResidualBlocks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to checkpoint residual blocks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool CheckpointResidualBlocks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_DefaultInitializationStrategy_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.DefaultInitializationStrategy*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_DefaultInitializationStrategy" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.DefaultInitializationStrategy">
+  DefaultInitializationStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the default initialization strategy type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public InitializationStrategyType DefaultInitializationStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Initialization.InitializationStrategyType.html">InitializationStrategyType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_DefaultInitializationStrategy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This controls how layer weights are initialized:
+- <a class="xref" href="AiDotNet.Initialization.InitializationStrategyType.html#AiDotNet_Initialization_InitializationStrategyType_Eager">Eager</a>: Initialize immediately (traditional)
+- <a class="xref" href="AiDotNet.Initialization.InitializationStrategyType.html#AiDotNet_Initialization_InitializationStrategyType_Lazy">Lazy</a>: Defer until first use (faster construction)
+- <a class="xref" href="AiDotNet.Initialization.InitializationStrategyType.html#AiDotNet_Initialization_InitializationStrategyType_Zero">Zero</a>: All zeros (for testing only)
+- <a class="xref" href="AiDotNet.Initialization.InitializationStrategyType.html#AiDotNet_Initialization_InitializationStrategyType_FromFile">FromFile</a>: Load from a file (transfer learning)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_MaxPoolMemoryMB_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MaxPoolMemoryMB*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_MaxPoolMemoryMB" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MaxPoolMemoryMB">
+  MaxPoolMemoryMB
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum memory for the activation pool in megabytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long MaxPoolMemoryMB { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_MemoryWarningThreshold_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MemoryWarningThreshold*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_MemoryWarningThreshold" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MemoryWarningThreshold">
+  MemoryWarningThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the warning threshold for memory usage (as fraction of max).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MemoryWarningThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_MicroBatchCount_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MicroBatchCount*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_MicroBatchCount" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MicroBatchCount">
+  MicroBatchCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of micro-batches for pipeline parallelism.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MicroBatchCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_NumDevices_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.NumDevices*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_NumDevices" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.NumDevices">
+  NumDevices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L117"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of devices for model sharding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumDevices { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_NumDevices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Set to 1 for single-device training. Values &gt; 1 enable model parallelism.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_ShardingStrategy_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ShardingStrategy*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_ShardingStrategy" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ShardingStrategy">
+  ShardingStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sharding strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ShardingStrategy ShardingStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Diffusion.Memory.ShardingStrategy.html">ShardingStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_TensorPoolOptions_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.TensorPoolOptions*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_TensorPoolOptions" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.TensorPoolOptions">
+  TensorPoolOptions
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L178"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the tensor pooling options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PoolingOptions? TensorPoolOptions { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Memory.PoolingOptions.html">PoolingOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_TensorPoolOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Configure advanced pooling behavior including:
+- Maximum pool size in MB
+- Maximum elements per buffer to pool
+- Whether to use weak references (allows GC under memory pressure)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_TrackMemoryStatistics_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.TrackMemoryStatistics*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_TrackMemoryStatistics" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.TrackMemoryStatistics">
+  TrackMemoryStatistics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to track detailed memory statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool TrackMemoryStatistics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseActivationPooling_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseActivationPooling*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseActivationPooling" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseActivationPooling">
+  UseActivationPooling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use activation pooling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseActivationPooling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseActivationPooling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Activation pooling reuses tensor memory instead of
+allocating new memory for each operation. This reduces garbage collection
+pressure and can significantly improve training speed for large models.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseGradientCheckpointing_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseGradientCheckpointing*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseGradientCheckpointing" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseGradientCheckpointing">
+  UseGradientCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use gradient checkpointing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseGradientCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseGradientCheckpointing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Gradient checkpointing saves memory by not storing
+all intermediate activations. Instead, it saves checkpoints and recomputes
+activations during the backward pass. This trades ~30% extra compute time
+for ~40-50% memory savings.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_UsePipelineParallelism_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UsePipelineParallelism*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_UsePipelineParallelism" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UsePipelineParallelism">
+  UsePipelineParallelism
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use pipeline parallelism.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UsePipelineParallelism { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_UsePipelineParallelism_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Pipeline parallelism overlaps computation across shards for better GPU utilization.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseSharedTensorPool_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseSharedTensorPool*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseSharedTensorPool" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseSharedTensorPool">
+  UseSharedTensorPool
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a shared global tensor pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseSharedTensorPool { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseSharedTensorPool_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When true, uses TensorPoolManager.Shared for all pooling operations.
+When false, each training session creates its own pool.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseTensorPooling_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseTensorPooling*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseTensorPooling" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.UseTensorPooling">
+  UseTensorPooling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether tensor pooling is enabled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseTensorPooling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_UseTensorPooling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Tensor pooling reduces memory allocations by reusing
+tensor buffers. When enabled, tensors are borrowed from and returned to a pool
+instead of being allocated and garbage collected each time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_WeightsFileFormat_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.WeightsFileFormat*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_WeightsFileFormat" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.WeightsFileFormat">
+  WeightsFileFormat
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the format of the weights file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public WeightFileFormat WeightsFileFormat { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Initialization.WeightFileFormat.html">WeightFileFormat</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_WeightsFilePath_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.WeightsFilePath*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_WeightsFilePath" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.WeightsFilePath">
+  WeightsFilePath
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the path to a weights file for FromFile initialization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? WeightsFilePath { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_WeightsFilePath_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Only used when <a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html#AiDotNet_Training_Memory_TrainingMemoryConfig_DefaultInitializationStrategy">DefaultInitializationStrategy</a> is set to FromFile.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_AggressivePooling_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.AggressivePooling*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_AggressivePooling_System_Int32_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.AggressivePooling(System.Int32)">
+  AggressivePooling(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L349"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration with aggressive memory pooling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig AggressivePooling(int maxPoolSizeMB = 512)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxPoolSizeMB</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum size of the tensor pool in MB.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_AggressivePooling_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Maximizes tensor reuse to minimize garbage collection.
+Best for training loops where the same tensor shapes are used repeatedly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_Default_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.Default*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_Default" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.Default">
+  Default()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a default configuration with minimal memory optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig Default()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_FastConstruction_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.FastConstruction*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_FastConstruction" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.FastConstruction">
+  FastConstruction()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration for fast model construction (good for testing).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig FastConstruction()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_FastConstruction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses lazy initialization to defer weight allocation, making network construction fast.
+Useful when you just want to inspect the network architecture or run tests.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForConvNets_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForConvNets*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForConvNets" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForConvNets">
+  ForConvNets()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for convolutional networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig ForConvNets()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForTransferLearning_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransferLearning*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForTransferLearning_System_String_AiDotNet_Initialization_WeightFileFormat_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransferLearning(System.String,AiDotNet.Initialization.WeightFileFormat)">
+  ForTransferLearning(string, WeightFileFormat)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration for transfer learning from a pre-trained model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig ForTransferLearning(string weightsPath, WeightFileFormat format = WeightFileFormat.Auto)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weightsPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the pre-trained weights file.</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.Initialization.WeightFileFormat.html">WeightFileFormat</a></dt>
+    <dd><p>Format of the weights file. Default is auto-detect.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForTransferLearning_System_String_AiDotNet_Initialization_WeightFileFormat__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Transfer learning lets you start with a model that was
+already trained on a similar task. This is much faster than training from scratch
+and often produces better results, especially with limited data.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForTransformers_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransformers*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_ForTransformers" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.ForTransformers">
+  ForTransformers()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L279"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration optimized for transformer models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig ForTransformers()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_MemoryEfficient_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MemoryEfficient*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_MemoryEfficient" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MemoryEfficient">
+  MemoryEfficient()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a memory-efficient configuration for large models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig MemoryEfficient()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_MemoryEfficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Enables gradient checkpointing and activation pooling for maximum memory savings.
+Best for training models that don't fit in GPU memory otherwise.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_MultiGpu_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MultiGpu*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_MultiGpu_System_Int32_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.MultiGpu(System.Int32)">
+  MultiGpu(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a configuration for multi-GPU training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig MultiGpu(int numDevices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numDevices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of GPUs to use.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Training_Memory_TrainingMemoryConfig_SpeedOptimized_" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.SpeedOptimized*"></a>
+
+  <h3 id="AiDotNet_Training_Memory_TrainingMemoryConfig_SpeedOptimized" data-uid="AiDotNet.Training.Memory.TrainingMemoryConfig.SpeedOptimized">
+  SpeedOptimized()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a speed-optimized configuration (less memory optimization).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static TrainingMemoryConfig SpeedOptimized()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Training.Memory.TrainingMemoryConfig.html">TrainingMemoryConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Training_Memory_TrainingMemoryConfig_SpeedOptimized_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Disables gradient checkpointing for maximum speed.
+Best when you have enough GPU memory for your model.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Training/Memory/TrainingMemoryConfig.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

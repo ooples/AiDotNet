@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TensorPool&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TensorPool&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A high-performance, thread-safe memory pool for reusing tensors during neural network operations. Reduces memory allocations and garbage collection pressure by pooling tensor buffers.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Memory_TensorPool_1.md&amp;value=---%0Auid%3A%20AiDotNet.Memory.TensorPool%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Memory.TensorPool`1">
+
+
+
+  <h1 id="AiDotNet_Memory_TensorPool_1" data-uid="AiDotNet.Memory.TensorPool`1" class="text-break">
+Class TensorPool&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Memory.html">Memory</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A high-performance, thread-safe memory pool for reusing tensors during neural network operations.
+Reduces memory allocations and garbage collection pressure by pooling tensor buffers.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TensorPool&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric element type of tensors in this pool (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TensorPool&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Memory_TensorPool_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The tensor pool maintains buckets of pre-allocated tensors grouped by shape.
+When a tensor is requested via <a class="xref" href="AiDotNet.Memory.TensorPool-1.html#AiDotNet_Memory_TensorPool_1_Rent_System_Int32___">Rent(int[])</a>, the pool returns an existing tensor
+from the appropriate bucket if available, otherwise allocates a new one.
+</p>
+<p>
+When tensors are returned via <a class="xref" href="AiDotNet.Memory.TensorPool-1.html#AiDotNet_Memory_TensorPool_1_Return_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">Return(Tensor&lt;T&gt;)</a>, they are cleared and added
+back to the pool for future reuse, up to the configured memory limits.
+</p>
+<p>
+Basic usage example:
+<pre><code class="lang-csharp">using var pool = new TensorPool&lt;float&gt;(maxPoolSizeMB: 256);
+<p>// Rent a tensor from the pool
+var tensor = pool.Rent(new[] { 32, 784 });</p>
+<p>// Use the tensor for computations...</p>
+<p>// Return it to the pool when done
+pool.Return(tensor);</p></code></pre>
+
+<p>
+For automatic lifetime management, use <a class="xref" href="AiDotNet.Memory.TensorPool-1.html#AiDotNet_Memory_TensorPool_1_RentPooled_System_Int32___">RentPooled(int[])</a> which returns
+a <a class="xref" href="AiDotNet.Memory.PooledTensor-1.html">PooledTensor&lt;T&gt;</a> that automatically returns itself when disposed:
+<pre><code class="lang-csharp">using var pooled = pool.RentPooled(new[] { 32, 784 });
+// Use pooled.Tensor for computations...
+// Tensor is automatically returned when 'using' block exits</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Memory_TensorPool_1__ctor_" data-uid="AiDotNet.Memory.TensorPool`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1__ctor" data-uid="AiDotNet.Memory.TensorPool`1.#ctor">
+  TensorPool()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Memory.TensorPool-1.html">TensorPool&lt;T&gt;</a> class with default options.
+Default max pool size is 256 MB.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorPool()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1__ctor_" data-uid="AiDotNet.Memory.TensorPool`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1__ctor_AiDotNet_Memory_PoolingOptions_" data-uid="AiDotNet.Memory.TensorPool`1.#ctor(AiDotNet.Memory.PoolingOptions)">
+  TensorPool(PoolingOptions)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Memory.TensorPool-1.html">TensorPool&lt;T&gt;</a> class with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorPool(PoolingOptions options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Memory.PoolingOptions.html">PoolingOptions</a></dt>
+    <dd><p>The pooling configuration options. If null, default options are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1__ctor_" data-uid="AiDotNet.Memory.TensorPool`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1__ctor_System_Int32_" data-uid="AiDotNet.Memory.TensorPool`1.#ctor(System.Int32)">
+  TensorPool(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.Memory.TensorPool-1.html">TensorPool&lt;T&gt;</a> class with the specified maximum pool size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TensorPool(int maxPoolSizeMB)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>maxPoolSizeMB</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum memory size for the pool in megabytes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_CurrentMemoryBytes_" data-uid="AiDotNet.Memory.TensorPool`1.CurrentMemoryBytes*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_CurrentMemoryBytes" data-uid="AiDotNet.Memory.TensorPool`1.CurrentMemoryBytes">
+  CurrentMemoryBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current memory usage of all pooled tensors, in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long CurrentMemoryBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_CurrentPoolSizeBytes_" data-uid="AiDotNet.Memory.TensorPool`1.CurrentPoolSizeBytes*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_CurrentPoolSizeBytes" data-uid="AiDotNet.Memory.TensorPool`1.CurrentPoolSizeBytes">
+  CurrentPoolSizeBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current size of the pool in bytes. Alias for <a class="xref" href="AiDotNet.Memory.TensorPool-1.html#AiDotNet_Memory_TensorPool_1_CurrentMemoryBytes">CurrentMemoryBytes</a>.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long CurrentPoolSizeBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_MaxPoolSizeBytes_" data-uid="AiDotNet.Memory.TensorPool`1.MaxPoolSizeBytes*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_MaxPoolSizeBytes" data-uid="AiDotNet.Memory.TensorPool`1.MaxPoolSizeBytes">
+  MaxPoolSizeBytes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum allowed memory size for the pool, in bytes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public long MaxPoolSizeBytes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_Options_" data-uid="AiDotNet.Memory.TensorPool`1.Options*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_Options" data-uid="AiDotNet.Memory.TensorPool`1.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the pooling options configured for this pool.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PoolingOptions Options { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Memory.PoolingOptions.html">PoolingOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_TotalPooledTensors_" data-uid="AiDotNet.Memory.TensorPool`1.TotalPooledTensors*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_TotalPooledTensors" data-uid="AiDotNet.Memory.TensorPool`1.TotalPooledTensors">
+  TotalPooledTensors
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of tensors currently held in the pool across all buckets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalPooledTensors { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_Clear_" data-uid="AiDotNet.Memory.TensorPool`1.Clear*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_Clear" data-uid="AiDotNet.Memory.TensorPool`1.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L293"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Removes all tensors and memory from the pool and resets memory tracking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_TensorPool_1_Clear_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>After calling Clear, all pooled tensors and memory become eligible for garbage collection.
+New tensors and memory can still be rented and returned after clearing.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_Dispose_" data-uid="AiDotNet.Memory.TensorPool`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_Dispose" data-uid="AiDotNet.Memory.TensorPool`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Disposes the tensor pool and releases all pooled tensors.
+After disposal, the pool cannot be used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_GetStatistics_" data-uid="AiDotNet.Memory.TensorPool`1.GetStatistics*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_GetStatistics" data-uid="AiDotNet.Memory.TensorPool`1.GetStatistics">
+  GetStatistics()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets current statistics about the pool's state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PoolStatistics GetStatistics()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Memory.PoolStatistics.html">PoolStatistics</a></dt>
+    <dd><p>A <a class="xref" href="AiDotNet.Memory.PoolStatistics.html">PoolStatistics</a> object containing pool metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_TensorPool_1_GetStatistics_examples">Examples</h4>
+  <pre><code class="lang-csharp">var stats = pool.GetStatistics();
+Console.WriteLine($"Pool utilization: {stats.MemoryUtilizationPercent:F1}%");
+Console.WriteLine($"Tensors in pool: {stats.PooledTensorCount}");</code></pre>
+
+
+
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_Rent_" data-uid="AiDotNet.Memory.TensorPool`1.Rent*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_Rent_System_Int32___" data-uid="AiDotNet.Memory.TensorPool`1.Rent(System.Int32[])">
+  Rent(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L112"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rents a tensor with the specified shape from the pool.
+If a matching tensor is available in the pool, it is returned after being cleared.
+Otherwise, a new tensor is allocated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Rent(int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the tensor to rent (e.g., [32, 784] for a 2D tensor).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor with the requested shape, either from the pool or newly allocated.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>Thrown if the pool has been disposed.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown if shape is null, empty, or contains non-positive dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_RentMemory_" data-uid="AiDotNet.Memory.TensorPool`1.RentMemory*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_RentMemory_System_Int32_" data-uid="AiDotNet.Memory.TensorPool`1.RentMemory(System.Int32)">
+  RentMemory(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rents raw memory from the pool for lower-level operations.
+Returns an IMemoryOwner that automatically returns the memory when disposed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMemoryOwner&lt;T&gt; RentMemory(int elementCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>elementCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to allocate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.buffers.imemoryowner-1">IMemoryOwner</a>&lt;T&gt;</dt>
+    <dd><p>An IMemoryOwner wrapping the pooled memory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_TensorPool_1_RentMemory_System_Int32__examples">Examples</h4>
+  <pre><code class="lang-csharp">using var memory = pool.RentMemory(1024);
+var span = memory.Memory.Span;
+// Use span... memory is automatically returned when block exits</code></pre>
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>Thrown if the pool has been disposed.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_RentPooled_" data-uid="AiDotNet.Memory.TensorPool`1.RentPooled*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_RentPooled_System_Int32___" data-uid="AiDotNet.Memory.TensorPool`1.RentPooled(System.Int32[])">
+  RentPooled(int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rents a tensor wrapped in a <a class="xref" href="AiDotNet.Memory.PooledTensor-1.html">PooledTensor&lt;T&gt;</a> for automatic pool return on disposal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PooledTensor&lt;T&gt; RentPooled(int[] shape)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>shape</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The shape of the tensor to rent.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Memory.PooledTensor-1.html">PooledTensor</a>&lt;T&gt;</dt>
+    <dd><p>A pooled tensor wrapper that returns the tensor to the pool when disposed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_TensorPool_1_RentPooled_System_Int32____examples">Examples</h4>
+  <pre><code class="lang-csharp">using var pooled = pool.RentPooled(new[] { 32, 32 });
+var tensor = pooled.Tensor;
+// Use tensor... it's automatically returned when block exits</code></pre>
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>Thrown if the pool has been disposed.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Memory_TensorPool_1_Return_" data-uid="AiDotNet.Memory.TensorPool`1.Return*"></a>
+
+  <h3 id="AiDotNet_Memory_TensorPool_1_Return_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Memory.TensorPool`1.Return(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Return(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a tensor to the pool for future reuse.
+The tensor is cleared and added to the appropriate shape bucket if memory limits allow.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Return(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to return to the pool.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Memory_TensorPool_1_Return_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If the tensor is null, too large for pooling, or the pool is at capacity,
+the tensor is not pooled and will be garbage collected normally.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.objectdisposedexception">ObjectDisposedException</a></dt>
+    <dd><p>Thrown if the pool has been disposed.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Memory/TensorPool.cs/#L45" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

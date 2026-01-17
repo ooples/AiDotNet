@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MATHBenchmark&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MATHBenchmark&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="MATH benchmark for evaluating advanced mathematical reasoning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1.md&amp;value=---%0Auid%3A%20AiDotNet.Reasoning.Benchmarks.MATHBenchmark%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1">
+
+
+
+  <h1 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1" class="text-break">
+Class MATHBenchmark&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Reasoning.html">Reasoning</a>.<a class="xref" href="AiDotNet.Reasoning.Benchmarks.html">Benchmarks</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>MATH benchmark for evaluating advanced mathematical reasoning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MATHBenchmark&lt;T&gt; : IBenchmark&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for scoring (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MATHBenchmark&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IBenchmark-1.html">IBenchmark</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> The MATH dataset contains 12,500 challenging competition mathematics problems
+from high school math competitions (AMC, AIME, etc.). These are significantly harder than GSM8K.
+<p><strong>Example problems:</strong></p>
+<ul>
+<li>&quot;Find the sum of all positive integers n such that sqrt(n^2 + 85) is an integer.&quot;</li>
+<li>&quot;A square is inscribed in a circle. What is the ratio of the area of the circle to the square?&quot;</li>
+<li>&quot;Solve the system of equations: x + y + z = 6, xy + xz + yz = 11, xyz = 6&quot;</li>
+</ul>
+<p><strong>Why it's important:</strong></p>
+<ul>
+<li>Tests advanced mathematical reasoning</li>
+<li>Requires complex multi-step solutions</li>
+<li>Includes algebra, geometry, number theory, calculus</li>
+<li>Benchmark for reasoning capability at competition level</li>
+</ul>
+<p><strong>Performance levels:</strong></p>
+<ul>
+<li>Human (expert): 90-95%</li>
+<li>GPT-3.5: ~7%</li>
+<li>GPT-4: ~42%</li>
+<li>ChatGPT o1: ~85%</li>
+<li>DeepSeek-R1: ~79.8%</li>
+<li>Minerva (540B): ~50%</li>
+</ul>
+<p><strong>Research:</strong>
+&quot;Measuring Mathematical Problem Solving With the MATH Dataset&quot; (Hendrycks et al., 2021)
+<a href="https://arxiv.org/abs/2103.03874">https://arxiv.org/abs/2103.03874</a></p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1__ctor_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1__ctor" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.#ctor">
+  MATHBenchmark()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MATHBenchmark()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_BenchmarkName_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.BenchmarkName*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_BenchmarkName" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.BenchmarkName">
+  BenchmarkName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string BenchmarkName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_Description_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.Description*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_Description" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a description of what this benchmark measures.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Description { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_TotalProblems_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.TotalProblems*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_TotalProblems" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.TotalProblems">
+  TotalProblems
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of problems in this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalProblems { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_EvaluateAsync_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.EvaluateAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_EvaluateAsync_System_Func_System_String_System_Threading_Tasks_Task_System_String___System_Nullable_System_Int32__System_Threading_CancellationToken_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.EvaluateAsync(System.Func{System.String,System.Threading.Tasks.Task{System.String}},System.Nullable{System.Int32},System.Threading.CancellationToken)">
+  EvaluateAsync(Func&lt;string, Task&lt;string&gt;&gt;, int?, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates a reasoning strategy on this benchmark.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;BenchmarkResult&lt;T&gt;&gt; EvaluateAsync(Func&lt;string, Task&lt;string&gt;&gt; evaluateFunction, int? sampleSize = null, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluateFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;&gt;</dt>
+    <dd><p>Function that takes a problem and returns an answer.</p>
+</dd>
+    <dt><code>sampleSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of problems to evaluate (null for all).</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Cancellation token.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkResult-1.html">BenchmarkResult</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Benchmark results with accuracy and detailed metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_EvaluateAsync_System_Func_System_String_System_Threading_Tasks_Task_System_String___System_Nullable_System_Int32__System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This runs the benchmark by:
+1. Selecting problems (either all or a random sample)
+2. Asking the reasoning system to solve each one
+3. Comparing answers to the correct solutions
+4. Calculating accuracy and other metrics
+<p>The evaluateFunction is your reasoning system - it takes a problem string and returns
+an answer string.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_LoadProblemsAsync_" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.LoadProblemsAsync*"></a>
+
+  <h3 id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_LoadProblemsAsync_System_Nullable_System_Int32__" data-uid="AiDotNet.Reasoning.Benchmarks.MATHBenchmark`1.LoadProblemsAsync(System.Nullable{System.Int32})">
+  LoadProblemsAsync(int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L183"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads benchmark problems (for inspection or custom evaluation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;List&lt;BenchmarkProblem&gt;&gt; LoadProblemsAsync(int? count = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Number of problems to load (null for all).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Reasoning.Benchmarks.Models.BenchmarkProblem.html">BenchmarkProblem</a>&gt;&gt;</dt>
+    <dd><p>List of benchmark problems.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Reasoning_Benchmarks_MATHBenchmark_1_LoadProblemsAsync_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Returns the actual problems and their correct answers
+so you can inspect them or run custom evaluations.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Reasoning/Benchmarks/MATHBenchmark.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

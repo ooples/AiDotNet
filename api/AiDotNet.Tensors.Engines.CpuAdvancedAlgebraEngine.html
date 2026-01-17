@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CpuAdvancedAlgebraEngine | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CpuAdvancedAlgebraEngine | AiDotNet Documentation ">
+      
+      <meta name="description" content="CPU implementation of advanced algebraic operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine" class="text-break">
+Class CpuAdvancedAlgebraEngine  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>CPU implementation of advanced algebraic operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class CpuAdvancedAlgebraEngine : IAdvancedAlgebraEngine</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CpuAdvancedAlgebraEngine</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Engines.IAdvancedAlgebraEngine.html">IAdvancedAlgebraEngine</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+CpuAdvancedAlgebraEngine provides batch operations for octonions, multivectors,
+and Lie groups on the CPU. It delegates to the existing algebraic type methods
+while providing efficient batch processing.
+</p>
+<p><b>For Beginners:</b> This class handles the actual computation for advanced
+mathematical operations like octonion multiplication and Lie group exponentials.
+It runs on your CPU - a GPU version would run the same operations faster on graphics hardware.
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Instance_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Instance*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Instance" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Instance">
+  Instance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Singleton instance for convenience.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static CpuAdvancedAlgebraEngine Instance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.html">CpuAdvancedAlgebraEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_GeometricProductBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.GeometricProductBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_GeometricProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.GeometricProductBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[],AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[])">
+  GeometricProductBatch&lt;T&gt;(Multivector&lt;T&gt;[], Multivector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch geometric product of multivectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] GeometricProductBatch&lt;T&gt;(Multivector&lt;T&gt;[] left, Multivector&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand multivectors.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of geometric products.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_GeometricProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The geometric product is the fundamental multiplication
+in geometric algebra. It combines the inner product (like dot product) and outer
+product (like cross product) into one operation.
+</p>
+<p>
+AB = A·B + A∧B (inner product + outer product)
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_GradeProjectBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.GradeProjectBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_GradeProjectBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____System_Int32_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.GradeProjectBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[],System.Int32)">
+  GradeProjectBatch&lt;T&gt;(Multivector&lt;T&gt;[], int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch grade projection - extracts components of a specific grade.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] GradeProjectBatch&lt;T&gt;(Multivector&lt;T&gt;[] multivectors, int grade)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>multivectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of multivectors.</p>
+</dd>
+    <dt><code>grade</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The grade to project onto (0=scalar, 1=vector, 2=bivector, etc.).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of projected multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_InnerProductBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.InnerProductBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_InnerProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.InnerProductBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[],AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[])">
+  InnerProductBatch&lt;T&gt;(Multivector&lt;T&gt;[], Multivector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch inner product of multivectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] InnerProductBatch&lt;T&gt;(Multivector&lt;T&gt;[] left, Multivector&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand multivectors.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of inner products.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_InnerProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The inner product (contraction) reduces grades:
+- Vector · Vector = Scalar (like dot product)
+- Bivector · Vector = Vector
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_MultivectorAddBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.MultivectorAddBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_MultivectorAddBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.MultivectorAddBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[],AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[])">
+  MultivectorAddBatch&lt;T&gt;(Multivector&lt;T&gt;[], Multivector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch multivector addition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] MultivectorAddBatch&lt;T&gt;(Multivector&lt;T&gt;[] left, Multivector&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand multivectors.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of multivector sums.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_MultivectorReverseBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.MultivectorReverseBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_MultivectorReverseBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.MultivectorReverseBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[])">
+  MultivectorReverseBatch&lt;T&gt;(Multivector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch multivector reverse operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] MultivectorReverseBatch&lt;T&gt;(Multivector&lt;T&gt;[] multivectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>multivectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of reversed multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_MultivectorReverseBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The reverse operation flips the order of basis vectors in each blade.
+For a blade of grade k, this multiplies by (-1)^(k(k-1)/2).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionAddBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionAddBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionAddBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0____AiDotNet_Tensors_LinearAlgebra_Octonion___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionAddBatch``1(AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[],AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[])">
+  OctonionAddBatch&lt;T&gt;(Octonion&lt;T&gt;[], Octonion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch octonion addition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt;[] OctonionAddBatch&lt;T&gt;(Octonion&lt;T&gt;[] left, Octonion&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand octonions.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand octonions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of octonion sums.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionConjugateBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionConjugateBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionConjugateBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionConjugateBatch``1(AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[])">
+  OctonionConjugateBatch&lt;T&gt;(Octonion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch octonion conjugation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt;[] OctonionConjugateBatch&lt;T&gt;(Octonion&lt;T&gt;[] octonions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>octonions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of octonions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of conjugate octonions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionConjugateBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The conjugate of an octonion flips the sign of all
+imaginary parts (e1 through e7), keeping the scalar part unchanged.
+It's similar to the conjugate of complex numbers.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMatMul_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionMatMul*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMatMul__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0__0__0___AiDotNet_Tensors_LinearAlgebra_Octonion___0__0__0___" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionMatMul``1(AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[0:,0:],AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[0:,0:])">
+  OctonionMatMul&lt;T&gt;(Octonion&lt;T&gt;[,], Octonion&lt;T&gt;[,])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Octonion-matrix multiplication for neural network layers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt;[,] OctonionMatMul&lt;T&gt;(Octonion&lt;T&gt;[,] input, Octonion&lt;T&gt;[,] weight)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[,]</dt>
+    <dd><p>Input octonion tensor (batch x features).</p>
+</dd>
+    <dt><code>weight</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[,]</dt>
+    <dd><p>Weight octonion matrix (output x input features).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[,]</dt>
+    <dd><p>Output octonion tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMatMul__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0__0__0___AiDotNet_Tensors_LinearAlgebra_Octonion___0__0__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This is the core operation for OctonionLinear layers. Each output element is
+computed as the sum of input elements multiplied by corresponding weight octonions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMultiplyBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionMultiplyBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMultiplyBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0____AiDotNet_Tensors_LinearAlgebra_Octonion___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionMultiplyBatch``1(AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[],AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[])">
+  OctonionMultiplyBatch&lt;T&gt;(Octonion&lt;T&gt;[], Octonion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch octonion-octonion multiplication (non-associative).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Octonion&lt;T&gt;[] OctonionMultiplyBatch&lt;T&gt;(Octonion&lt;T&gt;[] left, Octonion&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand octonions.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand octonions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of octonion products.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionMultiplyBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0____AiDotNet_Tensors_LinearAlgebra_Octonion___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Octonion multiplication is more complex than regular
+multiplication - the order matters AND grouping matters (non-associative).
+</p>
+<p>
+Warning: Octonion multiplication is non-associative: (a*b)*c != a*(b*c).
+Implementations should use left-to-right evaluation order for consistency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionNormBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionNormBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_OctonionNormBatch__1_AiDotNet_Tensors_LinearAlgebra_Octonion___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.OctonionNormBatch``1(AiDotNet.Tensors.LinearAlgebra.Octonion{``0}[])">
+  OctonionNormBatch&lt;T&gt;(Octonion&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes batch octonion norms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] OctonionNormBatch&lt;T&gt;(Octonion&lt;T&gt;[] octonions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>octonions</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Octonion-1.html">Octonion</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of octonions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Array of norm values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3ComposeBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3ComposeBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3ComposeBatch__1_AiDotNet_Tensors_Groups_Se3Group___0__AiDotNet_Tensors_Groups_Se3___0____AiDotNet_Tensors_Groups_Se3___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3ComposeBatch``1(AiDotNet.Tensors.Groups.Se3Group{``0},AiDotNet.Tensors.Groups.Se3{``0}[],AiDotNet.Tensors.Groups.Se3{``0}[])">
+  Se3ComposeBatch&lt;T&gt;(Se3Group&lt;T&gt;, Se3&lt;T&gt;[], Se3&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L355"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch group composition for SE(3).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Se3&lt;T&gt;[] Se3ComposeBatch&lt;T&gt;(Se3Group&lt;T&gt; group, Se3&lt;T&gt;[] left, Se3&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3Group-1.html">Se3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SE(3) group implementation.</p>
+</dd>
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3-1.html">Se3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left SE(3) transformations.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3-1.html">Se3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right SE(3) transformations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Groups.Se3-1.html">Se3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of composed transformations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3ExpBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3ExpBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3ExpBatch__1_AiDotNet_Tensors_Groups_Se3Group___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3ExpBatch``1(AiDotNet.Tensors.Groups.Se3Group{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0}[])">
+  Se3ExpBatch&lt;T&gt;(Se3Group&lt;T&gt;, Vector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L325"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch exponential map for SE(3) (rigid transformation group).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Se3&lt;T&gt;[] Se3ExpBatch&lt;T&gt;(Se3Group&lt;T&gt; group, Vector&lt;T&gt;[] tangentVectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3Group-1.html">Se3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SE(3) group implementation.</p>
+</dd>
+    <dt><code>tangentVectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of 6D twist vectors in the Lie algebra.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Groups.Se3-1.html">Se3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of SE(3) transformation elements (rotation + translation).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3ExpBatch__1_AiDotNet_Tensors_Groups_Se3Group___0__AiDotNet_Tensors_LinearAlgebra_Vector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SE(3) represents rigid body transformations (rotation + translation)
+in 3D space. The 6D tangent vector contains both the rotation axis-angle (first 3) and
+translation direction (last 3).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3LogBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3LogBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_Se3LogBatch__1_AiDotNet_Tensors_Groups_Se3Group___0__AiDotNet_Tensors_Groups_Se3___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.Se3LogBatch``1(AiDotNet.Tensors.Groups.Se3Group{``0},AiDotNet.Tensors.Groups.Se3{``0}[])">
+  Se3LogBatch&lt;T&gt;(Se3Group&lt;T&gt;, Se3&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch logarithm map for SE(3).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt;[] Se3LogBatch&lt;T&gt;(Se3Group&lt;T&gt; group, Se3&lt;T&gt;[] transforms)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3Group-1.html">Se3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SE(3) group implementation.</p>
+</dd>
+    <dt><code>transforms</code> <a class="xref" href="AiDotNet.Tensors.Groups.Se3-1.html">Se3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of SE(3) transformations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of 6D twist vectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3AdjointBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3AdjointBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3AdjointBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_Groups_So3___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3AdjointBatch``1(AiDotNet.Tensors.Groups.So3Group{``0},AiDotNet.Tensors.Groups.So3{``0}[])">
+  So3AdjointBatch&lt;T&gt;(So3Group&lt;T&gt;, So3&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L375"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch adjoint representation for SO(3).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt;[] So3AdjointBatch&lt;T&gt;(So3Group&lt;T&gt; group, So3&lt;T&gt;[] rotations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3Group-1.html">So3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SO(3) group implementation.</p>
+</dd>
+    <dt><code>rotations</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of SO(3) rotation elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of 3x3 adjoint matrices.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3AdjointBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_Groups_So3___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The adjoint representation maps Lie algebra elements to Lie algebra elements.
+For SO(3), Ad_R(v) = R * v (rotation of the tangent vector).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3ComposeBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3ComposeBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3ComposeBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_Groups_So3___0____AiDotNet_Tensors_Groups_So3___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3ComposeBatch``1(AiDotNet.Tensors.Groups.So3Group{``0},AiDotNet.Tensors.Groups.So3{``0}[],AiDotNet.Tensors.Groups.So3{``0}[])">
+  So3ComposeBatch&lt;T&gt;(So3Group&lt;T&gt;, So3&lt;T&gt;[], So3&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L305"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch group composition for SO(3).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public So3&lt;T&gt;[] So3ComposeBatch&lt;T&gt;(So3Group&lt;T&gt; group, So3&lt;T&gt;[] left, So3&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3Group-1.html">So3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SO(3) group implementation.</p>
+</dd>
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left SO(3) rotations.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right SO(3) rotations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of composed rotations (left * right).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3ExpBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3ExpBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3ExpBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_LinearAlgebra_Vector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3ExpBatch``1(AiDotNet.Tensors.Groups.So3Group{``0},AiDotNet.Tensors.LinearAlgebra.Vector{``0}[])">
+  So3ExpBatch&lt;T&gt;(So3Group&lt;T&gt;, Vector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch exponential map for SO(3) (rotation group).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public So3&lt;T&gt;[] So3ExpBatch&lt;T&gt;(So3Group&lt;T&gt; group, Vector&lt;T&gt;[] tangentVectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3Group-1.html">So3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SO(3) group implementation.</p>
+</dd>
+    <dt><code>tangentVectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of axis-angle vectors (3D) in the Lie algebra.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of SO(3) rotation elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3ExpBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_LinearAlgebra_Vector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The exponential map converts a rotation axis and angle
+(represented as a 3D vector whose direction is the axis and magnitude is the angle)
+into an actual 3x3 rotation matrix. This uses the Rodrigues formula.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3LogBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3LogBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_So3LogBatch__1_AiDotNet_Tensors_Groups_So3Group___0__AiDotNet_Tensors_Groups_So3___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.So3LogBatch``1(AiDotNet.Tensors.Groups.So3Group{``0},AiDotNet.Tensors.Groups.So3{``0}[])">
+  So3LogBatch&lt;T&gt;(So3Group&lt;T&gt;, So3&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch logarithm map for SO(3).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt;[] So3LogBatch&lt;T&gt;(So3Group&lt;T&gt; group, So3&lt;T&gt;[] rotations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>group</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3Group-1.html">So3Group</a>&lt;T&gt;</dt>
+    <dd><p>The SO(3) group implementation.</p>
+</dd>
+    <dt><code>rotations</code> <a class="xref" href="AiDotNet.Tensors.Groups.So3-1.html">So3</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of SO(3) rotation elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of axis-angle vectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_WedgeProductBatch_" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.WedgeProductBatch*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_WedgeProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0____" data-uid="AiDotNet.Tensors.Engines.CpuAdvancedAlgebraEngine.WedgeProductBatch``1(AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[],AiDotNet.Tensors.LinearAlgebra.Multivector{``0}[])">
+  WedgeProductBatch&lt;T&gt;(Multivector&lt;T&gt;[], Multivector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batch wedge (outer) product of multivectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt;[] WedgeProductBatch&lt;T&gt;(Multivector&lt;T&gt;[] left, Multivector&lt;T&gt;[] right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of left operand multivectors.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of right operand multivectors.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;[]</dt>
+    <dd><p>Array of wedge products.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CpuAdvancedAlgebraEngine_WedgeProductBatch__1_AiDotNet_Tensors_LinearAlgebra_Multivector___0____AiDotNet_Tensors_LinearAlgebra_Multivector___0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The wedge product creates higher-dimensional objects:
+- Two vectors wedged together make a bivector (like an oriented area)
+- A vector wedged with a bivector makes a trivector (like an oriented volume)
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CpuAdvancedAlgebraEngine.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,2127 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class CuBlasNative | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class CuBlasNative | AiDotNet Documentation ">
+      
+      <meta name="description" content="Direct P/Invoke bindings for CUDA Driver API and cuBLAS. Provides an explicit cuBLAS path for peak GPU performance (~30,000 GFLOPS).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_CuBlasNative.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.CuBlasNative%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.CuBlasNative">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_CuBlasNative" data-uid="AiDotNet.Tensors.Engines.CuBlasNative" class="text-break">
+Class CuBlasNative  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Direct P/Invoke bindings for CUDA Driver API and cuBLAS.
+Provides an explicit cuBLAS path for peak GPU performance (~30,000 GFLOPS).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class CuBlasNative</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">CuBlasNative</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_CuBlasNative_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Why Direct P/Invoke?</b></p>
+<p>
+cuBLAS achieves ~30,000 GFLOPS through:
+- Hand-tuned PTX/SASS assembly for each GPU architecture
+- Tensor core utilization (WMMA instructions)
+- Multi-level tiling (register, shared memory, L2 cache)
+- Software pipelining and double-buffering
+</p>
+<p><b>Usage Pattern:</b></p>
+<pre><code class="lang-csharp">using var context = new CudaContext();
+using var blas = new CuBlasHandle(context);
+
+var d_A = context.Allocate&lt;float&gt;(m * k);
+var d_B = context.Allocate&lt;float&gt;(k * n);
+var d_C = context.Allocate&lt;float&gt;(m * n);
+
+context.CopyToDevice(d_A, hostA);
+context.CopyToDevice(d_B, hostB);
+
+blas.Sgemm(CublasOperation.None, CublasOperation.None,
+           m, n, k, 1.0f, d_A, m, d_B, k, 0.0f, d_C, m);
+
+context.CopyToHost(hostC, d_C);</code></pre>
+</div>
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_COMPUTE_16F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_COMPUTE_16F">
+  CUBLAS_COMPUTE_16F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L427"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_COMPUTE_16F = 64</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_COMPUTE_32F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_COMPUTE_32F">
+  CUBLAS_COMPUTE_32F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_COMPUTE_32F = 68</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_COMPUTE_32F_FAST_16F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_COMPUTE_32F_FAST_16F">
+  CUBLAS_COMPUTE_32F_FAST_16F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L429"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_COMPUTE_32F_FAST_16F = 74</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_COMPUTE_32F_FAST_TF32" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_COMPUTE_32F_FAST_TF32">
+  CUBLAS_COMPUTE_32F_FAST_TF32
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L430"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_COMPUTE_32F_FAST_TF32 = 77</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_DEFAULT_MATH" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_DEFAULT_MATH">
+  CUBLAS_DEFAULT_MATH
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_DEFAULT_MATH = 0</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_TENSOR_OP_MATH" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_TENSOR_OP_MATH">
+  CUBLAS_TENSOR_OP_MATH
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L384"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_TENSOR_OP_MATH = 1</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUBLAS_TF32_TENSOR_OP_MATH" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUBLAS_TF32_TENSOR_OP_MATH">
+  CUBLAS_TF32_TENSOR_OP_MATH
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L385"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUBLAS_TF32_TENSOR_OP_MATH = 3</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUDA_R_16BF" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUDA_R_16BF">
+  CUDA_R_16BF
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L424"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUDA_R_16BF = 14</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUDA_R_16F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUDA_R_16F">
+  CUDA_R_16F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L421"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUDA_R_16F = 2</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUDA_R_32F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUDA_R_32F">
+  CUDA_R_32F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUDA_R_32F = 0</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CUDA_R_64F" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CUDA_R_64F">
+  CUDA_R_64F
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public const int CUDA_R_64F = 1</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_CheckCublasStatus_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CheckCublasStatus*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CheckCublasStatus_AiDotNet_Tensors_Engines_CublasStatus_System_String_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CheckCublasStatus(AiDotNet.Tensors.Engines.CublasStatus,System.String)">
+  CheckCublasStatus(CublasStatus, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L513"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Throws an exception if the cuBLAS status is not success.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void CheckCublasStatus(CublasStatus status, string operation = &quot;cuBLAS operation&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>status</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_CheckCudaResult_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CheckCudaResult*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_CheckCudaResult_AiDotNet_Tensors_Engines_CudaResult_System_String_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.CheckCudaResult(AiDotNet.Tensors.Engines.CudaResult,System.String)">
+  CheckCudaResult(CudaResult, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L504"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Throws an exception if the CUDA result is not success.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static void CheckCudaResult(CudaResult result, string operation = &quot;CUDA operation&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_GetCublasErrorString_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.GetCublasErrorString*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_GetCublasErrorString_AiDotNet_Tensors_Engines_CublasStatus_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.GetCublasErrorString(AiDotNet.Tensors.Engines.CublasStatus)">
+  GetCublasErrorString(CublasStatus)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L484"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a descriptive error message for a cuBLAS status.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string GetCublasErrorString(CublasStatus status)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>status</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_GetCudaErrorString_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.GetCudaErrorString*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_GetCudaErrorString_AiDotNet_Tensors_Engines_CudaResult_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.GetCudaErrorString(AiDotNet.Tensors.Engines.CudaResult)">
+  GetCudaErrorString(CudaResult)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a descriptive error message for a CUDA result.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static string GetCudaErrorString(CudaResult result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>result</code> <a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_IsCudaAvailable_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.IsCudaAvailable*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_IsCudaAvailable" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.IsCudaAvailable">
+  IsCudaAvailable()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L439"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if CUDA is available on this system.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsCudaAvailable()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxCreate_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxCreate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxCreate_System_IntPtr__System_UInt32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxCreate(System.IntPtr@,System.UInt32,System.Int32)">
+  cuCtxCreate(out nint, uint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a CUDA context on the specified device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuCtxCreate(out nint context, uint flags, int device)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>flags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxDestroy_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxDestroy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxDestroy_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxDestroy(System.IntPtr)">
+  cuCtxDestroy(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a CUDA context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuCtxDestroy(nint context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxPopCurrent_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxPopCurrent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxPopCurrent_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxPopCurrent(System.IntPtr@)">
+  cuCtxPopCurrent(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pops the current context from the CPU thread's stack.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuCtxPopCurrent(out nint context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxPushCurrent_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxPushCurrent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxPushCurrent_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxPushCurrent(System.IntPtr)">
+  cuCtxPushCurrent(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pushes a context on the current CPU thread's stack.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuCtxPushCurrent(nint context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxSynchronize_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxSynchronize*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuCtxSynchronize" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuCtxSynchronize">
+  cuCtxSynchronize()
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes the current context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuCtxSynchronize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGet_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGet*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGet_System_Int32__System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGet(System.Int32@,System.Int32)">
+  cuDeviceGet(out int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns a handle to the specified device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuDeviceGet(out int device, int ordinal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>ordinal</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetAttribute_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetAttribute*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetAttribute_System_Int32__System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetAttribute(System.Int32@,System.Int32,System.Int32)">
+  cuDeviceGetAttribute(out int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the compute capability of the device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuDeviceGetAttribute(out int value, int attribute, int device)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>attribute</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetCount_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetCount_System_Int32__" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetCount(System.Int32@)">
+  cuDeviceGetCount(out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the number of CUDA-capable devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuDeviceGetCount(out int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetName_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetName*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuDeviceGetName_System_Text_StringBuilder_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuDeviceGetName(System.Text.StringBuilder,System.Int32,System.Int32)">
+  cuDeviceGetName(StringBuilder, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the name of the device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuDeviceGetName(StringBuilder name, int len, int device)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.text.stringbuilder">StringBuilder</a></dt>
+    <dd></dd>
+    <dt><code>len</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuInit_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuInit*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuInit_System_UInt32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuInit(System.UInt32)">
+  cuInit(uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initialize the CUDA driver API. Must be called before any other CUDA function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuInit(uint flags)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>flags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemAlloc_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemAlloc*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemAlloc_System_IntPtr__System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemAlloc(System.IntPtr@,System.UInt64)">
+  cuMemAlloc(out nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Allocates device memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemAlloc(out nint devicePtr, ulong byteSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>devicePtr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>byteSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemFree_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemFree*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemFree_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemFree(System.IntPtr)">
+  cuMemFree(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Frees device memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemFree(nint devicePtr)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>devicePtr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyDtoD_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyDtoD*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyDtoD_System_IntPtr_System_IntPtr_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyDtoD(System.IntPtr,System.IntPtr,System.UInt64)">
+  cuMemcpyDtoD(nint, nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies memory from device to device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemcpyDtoD(nint dstDevice, nint srcDevice, ulong byteCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dstDevice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>srcDevice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>byteCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyDtoH_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyDtoH*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyDtoH_System_IntPtr_System_IntPtr_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyDtoH(System.IntPtr,System.IntPtr,System.UInt64)">
+  cuMemcpyDtoH(nint, nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies memory from device to host.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemcpyDtoH(nint dstHost, nint srcDevice, ulong byteCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dstHost</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>srcDevice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>byteCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyHtoD_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyHtoD*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemcpyHtoD_System_IntPtr_System_IntPtr_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemcpyHtoD(System.IntPtr,System.IntPtr,System.UInt64)">
+  cuMemcpyHtoD(nint, nint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies memory from host to device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemcpyHtoD(nint dstDevice, nint srcHost, ulong byteCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dstDevice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>srcHost</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>byteCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemsetD32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemsetD32*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cuMemsetD32_System_IntPtr_System_UInt32_System_UInt64_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cuMemsetD32(System.IntPtr,System.UInt32,System.UInt64)">
+  cuMemsetD32(nint, uint, ulong)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets device memory to a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CudaResult cuMemsetD32(nint dstDevice, uint value, ulong count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dstDevice</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CudaResult.html">CudaResult</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasCreate_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasCreate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasCreate_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasCreate(System.IntPtr@)">
+  cublasCreate(out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a cuBLAS handle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasCreate(out nint handle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasDestroy_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasDestroy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasDestroy_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasDestroy(System.IntPtr)">
+  cublasDestroy(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Destroys a cuBLAS handle.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasDestroy(nint handle)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasDgemm_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasDgemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasDgemm_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Double__System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_Double__System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasDgemm(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Double@,System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.Double@,System.IntPtr,System.Int32)">
+  cublasDgemm(nint, CublasOperation, CublasOperation, int, int, int, ref double, nint, int, nint, int, ref double, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Double-precision General Matrix Multiply (DGEMM).
+C = alpha * op(A) * op(B) + beta * C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasDgemm(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, ref double alpha, nint A, int lda, nint B, int ldb, ref double beta, nint C, int ldc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasGemmEx_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasGemmEx*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasGemmEx_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_IntPtr_System_IntPtr_System_Int32_System_Int32_System_IntPtr_System_Int32_System_Int32_System_IntPtr_System_IntPtr_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasGemmEx(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.IntPtr,System.IntPtr,System.Int32,System.Int32,System.IntPtr,System.Int32,System.Int32,System.IntPtr,System.IntPtr,System.Int32,System.Int32,System.Int32,System.Int32)">
+  cublasGemmEx(nint, CublasOperation, CublasOperation, int, int, int, nint, nint, int, int, nint, int, int, nint, nint, int, int, int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mixed-precision GEMM with tensor cores.
+Computes in FP16, accumulates in FP32.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasGemmEx(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, nint alpha, nint A, int Atype, int lda, nint B, int Btype, int ldb, nint beta, nint C, int Ctype, int ldc, int computeType, int algo)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>Atype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>Btype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>Ctype</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>computeType</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>algo</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasGetVersion_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasGetVersion*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasGetVersion_System_IntPtr_System_Int32__" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasGetVersion(System.IntPtr,System.Int32@)">
+  cublasGetVersion(nint, out int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the cuBLAS version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasGetVersion(nint handle, out int version)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>version</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasHgemm_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasHgemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasHgemm_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_UInt16__System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_UInt16__System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasHgemm(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.UInt16@,System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.UInt16@,System.IntPtr,System.Int32)">
+  cublasHgemm(nint, CublasOperation, CublasOperation, int, int, int, ref ushort, nint, int, nint, int, ref ushort, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Half-precision GEMM (uses tensor cores on Volta+).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasHgemm(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, ref ushort alpha, nint A, int lda, nint B, int ldb, ref ushort beta, nint C, int ldc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint16">ushort</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSaxpy_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSaxpy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSaxpy_System_IntPtr_System_Int32_System_Single__System_IntPtr_System_Int32_System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSaxpy(System.IntPtr,System.Int32,System.Single@,System.IntPtr,System.Int32,System.IntPtr,System.Int32)">
+  cublasSaxpy(nint, int, ref float, nint, int, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Single-precision scalar-vector multiply and add: y = alpha * x + y</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSaxpy(nint handle, int n, ref float alpha, nint x, int incx, nint y, int incy)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasScopy_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasScopy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasScopy_System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasScopy(System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.IntPtr,System.Int32)">
+  cublasScopy(nint, int, nint, int, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Single-precision vector copy: y = x</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasScopy(nint handle, int n, nint x, int incx, nint y, int incy)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSdot_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSdot*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSdot_System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_Single__" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSdot(System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.Single@)">
+  cublasSdot(nint, int, nint, int, nint, int, out float)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Single-precision dot product: result = x · y</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSdot(nint handle, int n, nint x, int incx, nint y, int incy, out float result)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incy</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>result</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSetMathMode_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSetMathMode*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSetMathMode_System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSetMathMode(System.IntPtr,System.Int32)">
+  cublasSetMathMode(nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the math mode for cuBLAS (enables tensor cores).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSetMathMode(nint handle, int mode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>mode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSetStream_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSetStream*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSetStream_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSetStream(System.IntPtr,System.IntPtr)">
+  cublasSetStream(nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the cuBLAS stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSetStream(nint handle, nint stream)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>stream</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemm_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemm_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single__System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_Single__System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemm(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Single@,System.IntPtr,System.Int32,System.IntPtr,System.Int32,System.Single@,System.IntPtr,System.Int32)">
+  cublasSgemm(nint, CublasOperation, CublasOperation, int, int, int, ref float, nint, int, nint, int, ref float, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Single-precision General Matrix Multiply (SGEMM).
+C = alpha * op(A) * op(B) + beta * C</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSgemm(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, ref float alpha, nint A, int lda, nint B, int ldb, ref float beta, nint C, int ldc)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemm_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single__System_IntPtr_System_Int32_System_IntPtr_System_Int32_System_Single__System_IntPtr_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is the core operation for DenseLayer forward pass.
+Peak performance: ~30,000 GFLOPS on modern GPUs.</p>
+<p>Note: cuBLAS uses column-major order. For row-major matrices:</p>
+<ul>
+<li>Swap A and B</li>
+<li>Swap m and n</li>
+<li>Swap lda and ldb</li>
+<li>Use transpose operations accordingly</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemmBatched_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemmBatched*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemmBatched_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single__System_IntPtr___System_Int32_System_IntPtr___System_Int32_System_Single__System_IntPtr___System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemmBatched(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Single@,System.IntPtr[],System.Int32,System.IntPtr[],System.Int32,System.Single@,System.IntPtr[],System.Int32,System.Int32)">
+  cublasSgemmBatched(nint, CublasOperation, CublasOperation, int, int, int, ref float, nint[], int, nint[], int, ref float, nint[], int, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Batched single-precision GEMM for processing multiple matrices at once.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSgemmBatched(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, ref float alpha, nint[] Aarray, int lda, nint[] Barray, int ldb, ref float beta, nint[] Carray, int ldc, int batchCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>Aarray</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>Barray</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>Carray</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>batchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemmStridedBatched_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemmStridedBatched*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSgemmStridedBatched_System_IntPtr_AiDotNet_Tensors_Engines_CublasOperation_AiDotNet_Tensors_Engines_CublasOperation_System_Int32_System_Int32_System_Int32_System_Single__System_IntPtr_System_Int32_System_Int64_System_IntPtr_System_Int32_System_Int64_System_Single__System_IntPtr_System_Int32_System_Int64_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSgemmStridedBatched(System.IntPtr,AiDotNet.Tensors.Engines.CublasOperation,AiDotNet.Tensors.Engines.CublasOperation,System.Int32,System.Int32,System.Int32,System.Single@,System.IntPtr,System.Int32,System.Int64,System.IntPtr,System.Int32,System.Int64,System.Single@,System.IntPtr,System.Int32,System.Int64,System.Int32)">
+  cublasSgemmStridedBatched(nint, CublasOperation, CublasOperation, int, int, int, ref float, nint, int, long, nint, int, long, ref float, nint, int, long, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Strided batched single-precision GEMM (more efficient for contiguous batches).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSgemmStridedBatched(nint handle, CublasOperation transa, CublasOperation transb, int m, int n, int k, ref float alpha, nint A, int lda, long strideA, nint B, int ldb, long strideB, ref float beta, nint C, int ldc, long strideC, int batchCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>transa</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>transb</code> <a class="xref" href="AiDotNet.Tensors.Engines.CublasOperation.html">CublasOperation</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>A</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>lda</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>strideA</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+    <dt><code>B</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldb</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>strideB</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>C</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>ldc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>strideC</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int64">long</a></dt>
+    <dd></dd>
+    <dt><code>batchCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSscal_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSscal*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_CuBlasNative_cublasSscal_System_IntPtr_System_Int32_System_Single__System_IntPtr_System_Int32_" data-uid="AiDotNet.Tensors.Engines.CuBlasNative.cublasSscal(System.IntPtr,System.Int32,System.Single@,System.IntPtr,System.Int32)">
+  cublasSscal(nint, int, ref float, nint, int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Single-precision vector scaling: x = alpha * x</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern CublasStatus cublasSscal(nint handle, int n, ref float alpha, nint x, int incx)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>handle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>incx</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.CublasStatus.html">CublasStatus</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/CuBlasNative.cs/#L93" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SACOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SACOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Soft Actor-Critic (SAC) agents.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SACOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SACOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SACOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SACOptions_1" data-uid="AiDotNet.Models.Options.SACOptions`1" class="text-break">
+Class SACOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Soft Actor-Critic (SAC) agents.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SACOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SACOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SACOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+SAC is a state-of-the-art off-policy actor-critic algorithm that combines maximum
+entropy RL with stable off-policy learning. It's particularly effective for
+continuous control tasks and is known for excellent sample efficiency and robustness.
+</p>
+<p><b>For Beginners:</b>
+SAC is one of the best algorithms for continuous control (like robot movement).
+<p>Key innovations:</p>
+<ul>
+<li><strong>Maximum Entropy</strong>: Encourages exploration by being &quot;random on purpose&quot;</li>
+<li><strong>Off-Policy</strong>: Learns from old experiences (sample efficient)</li>
+<li><strong>Twin Q-Networks</strong>: Uses two Q-functions to prevent overestimation</li>
+<li><strong>Automatic Tuning</strong>: Adjusts exploration automatically</li>
+</ul>
+<p>Think of it like learning to drive while staying diverse in your driving style -
+you don't just learn one way to drive, you stay flexible and adaptable.</p>
+<p>Used by: Robotic manipulation, dexterous control, autonomous systems</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1__ctor_" data-uid="AiDotNet.Models.Options.SACOptions`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1__ctor" data-uid="AiDotNet.Models.Options.SACOptions`1.#ctor">
+  SACOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SACOptions()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_ActionSize_" data-uid="AiDotNet.Models.Options.SACOptions`1.ActionSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_ActionSize" data-uid="AiDotNet.Models.Options.SACOptions`1.ActionSize">
+  ActionSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Size of the continuous action space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ActionSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_AlphaLearningRate_" data-uid="AiDotNet.Models.Options.SACOptions`1.AlphaLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_AlphaLearningRate" data-uid="AiDotNet.Models.Options.SACOptions`1.AlphaLearningRate">
+  AlphaLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for temperature parameter (alpha).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AlphaLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_AutoTuneTemperature_" data-uid="AiDotNet.Models.Options.SACOptions`1.AutoTuneTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_AutoTuneTemperature" data-uid="AiDotNet.Models.Options.SACOptions`1.AutoTuneTemperature">
+  AutoTuneTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether to automatically tune the temperature parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool AutoTuneTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_AutoTuneTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Recommended: true.
+Automatically adjusts exploration based on entropy target.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_BatchSize_" data-uid="AiDotNet.Models.Options.SACOptions`1.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_BatchSize" data-uid="AiDotNet.Models.Options.SACOptions`1.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Mini-batch size for training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 256-512.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_DiscountFactor_" data-uid="AiDotNet.Models.Options.SACOptions`1.DiscountFactor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_DiscountFactor" data-uid="AiDotNet.Models.Options.SACOptions`1.DiscountFactor">
+  DiscountFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Discount factor (gamma) for future rewards.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DiscountFactor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_DiscountFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.95-0.99.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_GradientSteps_" data-uid="AiDotNet.Models.Options.SACOptions`1.GradientSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_GradientSteps" data-uid="AiDotNet.Models.Options.SACOptions`1.GradientSteps">
+  GradientSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of gradient steps per environment step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GradientSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_GradientSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical value: 1.
+Can be &gt; 1 for faster learning from collected experiences.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_InitialTemperature_" data-uid="AiDotNet.Models.Options.SACOptions`1.InitialTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_InitialTemperature" data-uid="AiDotNet.Models.Options.SACOptions`1.InitialTemperature">
+  InitialTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initial temperature (alpha) for entropy regularization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T InitialTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_InitialTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.2-1.0.
+Higher = more exploration.
+Can be automatically tuned if AutoTuneTemperature is true.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_PolicyHiddenLayers_" data-uid="AiDotNet.Models.Options.SACOptions`1.PolicyHiddenLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_PolicyHiddenLayers" data-uid="AiDotNet.Models.Options.SACOptions`1.PolicyHiddenLayers">
+  PolicyHiddenLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Hidden layer sizes for policy network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; PolicyHiddenLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_PolicyLearningRate_" data-uid="AiDotNet.Models.Options.SACOptions`1.PolicyLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_PolicyLearningRate" data-uid="AiDotNet.Models.Options.SACOptions`1.PolicyLearningRate">
+  PolicyLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for policy network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PolicyLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_QHiddenLayers_" data-uid="AiDotNet.Models.Options.SACOptions`1.QHiddenLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_QHiddenLayers" data-uid="AiDotNet.Models.Options.SACOptions`1.QHiddenLayers">
+  QHiddenLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Hidden layer sizes for Q-networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;int&gt; QHiddenLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_QLearningRate_" data-uid="AiDotNet.Models.Options.SACOptions`1.QLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_QLearningRate" data-uid="AiDotNet.Models.Options.SACOptions`1.QLearningRate">
+  QLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Learning rate for Q-networks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T QLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_QLossFunction_" data-uid="AiDotNet.Models.Options.SACOptions`1.QLossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_QLossFunction" data-uid="AiDotNet.Models.Options.SACOptions`1.QLossFunction">
+  QLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L144"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loss function for Q-networks (typically MSE).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt; QLossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_QLossFunction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>MSE (Mean Squared Error) is the standard loss for SAC Q-networks as it minimizes
+the Bellman error: L = E[(Q(s,a) - (r + γ * Q_target(s',a')))^2].
+This is the correct loss function for value-based RL algorithms.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_ReplayBufferSize_" data-uid="AiDotNet.Models.Options.SACOptions`1.ReplayBufferSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_ReplayBufferSize" data-uid="AiDotNet.Models.Options.SACOptions`1.ReplayBufferSize">
+  ReplayBufferSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Capacity of the experience replay buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ReplayBufferSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_ReplayBufferSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 100,000-1,000,000.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_Seed_" data-uid="AiDotNet.Models.Options.SACOptions`1.Seed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_Seed" data-uid="AiDotNet.Models.Options.SACOptions`1.Seed">
+  Seed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Random seed for reproducibility (optional).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? Seed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_StateSize_" data-uid="AiDotNet.Models.Options.SACOptions`1.StateSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_StateSize" data-uid="AiDotNet.Models.Options.SACOptions`1.StateSize">
+  StateSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Size of the state observation space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int StateSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_TargetEntropy_" data-uid="AiDotNet.Models.Options.SACOptions`1.TargetEntropy*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_TargetEntropy" data-uid="AiDotNet.Models.Options.SACOptions`1.TargetEntropy">
+  TargetEntropy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Target entropy for automatic temperature tuning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T? TargetEntropy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_TargetEntropy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical: -ActionSize (for continuous actions).
+If null, uses -ActionSize as default.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_TargetUpdateTau_" data-uid="AiDotNet.Models.Options.SACOptions`1.TargetUpdateTau*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_TargetUpdateTau" data-uid="AiDotNet.Models.Options.SACOptions`1.TargetUpdateTau">
+  TargetUpdateTau
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Soft target update coefficient (tau).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TargetUpdateTau { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_TargetUpdateTau_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.005-0.01.
+Controls how quickly target networks track main networks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SACOptions_1_WarmupSteps_" data-uid="AiDotNet.Models.Options.SACOptions`1.WarmupSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SACOptions_1_WarmupSteps" data-uid="AiDotNet.Models.Options.SACOptions`1.WarmupSteps">
+  WarmupSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of warmup steps before starting training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WarmupSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SACOptions_1_WarmupSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 1,000-10,000.
+Collects random experiences before training begins.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SACOptions.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

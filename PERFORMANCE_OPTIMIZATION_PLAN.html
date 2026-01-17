@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Performance Optimization Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Performance Optimization Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PERFORMANCE_OPTIMIZATION_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="performance-optimization-plan">Performance Optimization Plan</h1>
+
+<h2 id="executive-summary">Executive Summary</h2>
+<p>This document outlines a comprehensive plan to address performance bottlenecks identified in the AiDotNet codebase. The bottlenecks affect both CI test execution time and production inference performance.</p>
+<h3 id="target-metrics">Target Metrics</h3>
+<ul>
+<li><strong>Test class runtime</strong>: Under 2 minutes per test class</li>
+<li><strong>Network construction</strong>: 50-70% reduction in initialization time</li>
+<li><strong>Forward pass</strong>: 2-5x improvement with SIMD/vectorization</li>
+<li><strong>Memory</strong>: 30% reduction in peak memory usage during tests</li>
+</ul>
+<hr>
+<h2 id="root-cause-analysis">Root Cause Analysis</h2>
+<h3 id="1-network-construction-bottlenecks">1. Network Construction Bottlenecks</h3>
+<table>
+<thead>
+<tr>
+<th>Network</th>
+<th>Layers</th>
+<th>Block Config</th>
+<th>Construction Issue</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DenseNet-121</td>
+<td>121</td>
+<td>[6, 12, 24, 16]</td>
+<td>Creates 58 internal layers + transitions</td>
+</tr>
+<tr>
+<td>DenseNet-264</td>
+<td>264</td>
+<td>[6, 12, 64, 48]</td>
+<td>Creates 130 internal layers</td>
+</tr>
+<tr>
+<td>EfficientNet-B7</td>
+<td>~800</td>
+<td>3.1x depth</td>
+<td>Very deep with compound scaling</td>
+</tr>
+<tr>
+<td>ResNet-50</td>
+<td>50</td>
+<td>4 stages</td>
+<td>16 bottleneck blocks</td>
+</tr>
+<tr>
+<td>VGG-19</td>
+<td>19</td>
+<td>5 stages</td>
+<td>16 conv layers + 3 FC</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Root Causes:</strong></p>
+<ol>
+<li><strong>Eager weight allocation</strong>: Every layer allocates weight tensors at construction time</li>
+<li><strong>Random initialization</strong>: Weight initialization uses RNG for every parameter</li>
+<li><strong>Object graph complexity</strong>: Each layer creates multiple sub-objects</li>
+</ol>
+<h3 id="2-forward-pass-bottlenecks">2. Forward Pass Bottlenecks</h3>
+<p><strong>Root Causes:</strong></p>
+<ol>
+<li><strong>Incomplete layer refactoring</strong>: ~85 layers still use manual loops instead of IEngine operations</li>
+<li><strong>Memory access patterns</strong>: Non-contiguous access hurts cache performance</li>
+<li><strong>Large input tensors</strong>: 224x224x3 = 150,528 floats per image</li>
+<li><strong>Dense connectivity</strong>: DenseNet concatenates ALL previous feature maps</li>
+</ol>
+<blockquote>
+<p><strong>Note:</strong> SIMD operations already exist via <code>TensorPrimitivesHelper&lt;T&gt;</code> (5-15x speedup for float/double).
+GPU acceleration exists via <code>IEngine</code> with cuBLAS/cuDNN bindings. See <code>GPU_ENGINE_OPTIMIZATION_PLAN.md</code>.</p>
+</blockquote>
+<h3 id="3-test-specific-issues">3. Test-Specific Issues</h3>
+<p><strong>Tests Creating Multiple Networks:</strong></p>
+<ul>
+<li><code>DenseNet_LargerVariants_HaveMoreLayers</code>: Creates D121 + D169</li>
+<li><code>EfficientNet_LargerVariants_HaveMoreLayers</code>: Creates B0 + B3</li>
+<li><code>EfficientNet_Variants_HaveCorrectResolution</code>: Creates B0, B1, B2, B3 (4 networks)</li>
+</ul>
+<p><strong>Tests with Large Inputs:</strong></p>
+<ul>
+<li><code>EfficientNetB0_Forward_ProducesCorrectOutputShape</code>: 224x224 input</li>
+<li><code>MobileNet_Forward_*</code>: 224x224 input</li>
+</ul>
+<hr>
+<h2 id="epic-0-critical-gpu-backend-fixes-blockers">Epic 0: Critical GPU Backend Fixes (BLOCKERS)</h2>
+<blockquote>
+<p><strong>CRITICAL:</strong> These issues prevent GPU acceleration from working entirely. Users report that
+all GPU backends fail and fall back to CPU. These must be fixed before any other GPU-related
+work can be validated.</p>
+</blockquote>
+<h3 id="user-story-01-fix-opencl-attention-kernel-compilation-errors">User Story 0.1: Fix OpenCL Attention Kernel Compilation Errors</h3>
+<p><strong>As a</strong> user with an OpenCL-capable GPU,
+<strong>I want</strong> the OpenCL backend to compile and run correctly,
+<strong>So that</strong> I can use GPU acceleration on my hardware.</p>
+<p><strong>Current Issues:</strong></p>
+<ol>
+<li><code>atomic_add</code> is ambiguous - float atomics not supported on many OpenCL drivers</li>
+<li><code>-INFINITY</code> macro usage causes undefined behavior with current floating-point options</li>
+<li>Result: OpenCL backend marked as unavailable</li>
+</ol>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>OpenCL attention kernels compile without errors on common drivers (Intel, AMD, NVIDIA)</li>
+<li>Replace <code>atomic_add</code> with compatible atomic operations or algorithmic alternatives</li>
+<li>Replace <code>-INFINITY</code> with <code>FLT_MIN</code> or explicit float constant <code>-3.402823466e+38f</code></li>
+<li>Add fallback paths for hardware without float atomics support</li>
+</ul>
+<p><strong>Files to Modify:</strong></p>
+<ul>
+<li><code>src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/AttentionKernels.cs</code></li>
+<li><code>src/AiDotNet.Tensors/Engines/DirectGpu/OpenCL/NormalizationKernels.cs</code></li>
+</ul>
+<p><strong>Priority:</strong> P0 - Blocker</p>
+<hr>
+<h3 id="user-story-02-fix-hip-backend-header-dependencies">User Story 0.2: Fix HIP Backend Header Dependencies</h3>
+<p><strong>As a</strong> user with an AMD GPU,
+<strong>I want</strong> the HIP backend to compile correctly,
+<strong>So that</strong> I can use GPU acceleration on AMD hardware.</p>
+<p><strong>Current Issues:</strong></p>
+<ol>
+<li><code>hip/hip_runtime.h</code> header not found (AMD HIP SDK not installed on build machine)</li>
+<li>HIP backend fails to initialize</li>
+</ol>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>HIP backend gracefully handles missing HIP SDK at runtime (not compile time)</li>
+<li>Clear error message when HIP SDK is not installed</li>
+<li>Conditional compilation or runtime detection to avoid hard dependency</li>
+<li>Documentation on how to install AMD HIP SDK for HIP support</li>
+</ul>
+<p><strong>Files to Modify:</strong></p>
+<ul>
+<li><code>src/AiDotNet.Tensors/Engines/DirectGpu/HIP/HipBackend.cs</code></li>
+<li>Build configuration to make HIP optional</li>
+</ul>
+<p><strong>Priority:</strong> P0 - Blocker</p>
+<hr>
+<h3 id="user-story-03-ensure-at-least-one-gpu-backend-works">User Story 0.3: Ensure At Least One GPU Backend Works</h3>
+<p><strong>As a</strong> user with any GPU,
+<strong>I want</strong> at least one GPU backend to work out of the box,
+<strong>So that</strong> GPU acceleration is functional without special setup.</p>
+<p><strong>Current Issues:</strong></p>
+<ul>
+<li>OpenCL fails (kernel compilation errors)</li>
+<li>HIP fails (missing headers)</li>
+<li>CUDA may fail if CUDA toolkit not installed</li>
+<li>Result: All GPU backends fail, system falls back to CPU silently</li>
+</ul>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>CUDA backend works when NVIDIA GPU and CUDA toolkit present</li>
+<li>OpenCL backend works on any OpenCL 1.2+ capable GPU</li>
+<li>Clear diagnostic output showing which backends are available/unavailable and why</li>
+<li><code>IEngine.SupportsGPU</code> returns true when at least one backend works</li>
+<li>Add <code>IEngine.GetAvailableBackends()</code> or similar diagnostic method</li>
+</ul>
+<p><strong>Files to Modify:</strong></p>
+<ul>
+<li><code>src/AiDotNet.Tensors/Engines/DirectGpuTensorEngine.cs</code></li>
+<li><code>src/AiDotNet.Tensors/Engines/GpuEngine.cs</code></li>
+</ul>
+<p><strong>Priority:</strong> P0 - Blocker</p>
+<hr>
+<h2 id="epic-1-lazy-layer-initialization">Epic 1: Lazy Layer Initialization</h2>
+<h3 id="user-story-11-implement-lazy-weight-initialization">User Story 1.1: Implement Lazy Weight Initialization</h3>
+<p><strong>As a</strong> developer running tests,
+<strong>I want</strong> network construction to be fast,
+<strong>So that</strong> my test feedback loop is under 2 minutes.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>Weight tensors are not allocated until first <code>Forward()</code> call</li>
+<li>Network construction time reduced by 50-70%</li>
+<li>API remains unchanged (no breaking changes)</li>
+<li>Thread-safe lazy initialization</li>
+</ul>
+<p><strong>Implementation Details:</strong></p>
+<pre><code class="lang-csharp">// Before (current)
+public DenseLayer(int inputSize, int outputSize, ...)
+{
+    _weights = new Tensor&lt;T&gt;(inputSize, outputSize); // EXPENSIVE
+    InitializeWeights(); // EXPENSIVE
+}
+
+// After (lazy)
+public DenseLayer(int inputSize, int outputSize, ...)
+{
+    _inputSize = inputSize;
+    _outputSize = outputSize;
+    _weights = null; // Deferred
+}
+
+public override Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)
+{
+    EnsureInitialized(); // Lazy init on first use
+    // ... actual forward pass
+}
+</code></pre>
+<p><strong>Files to Modify:</strong></p>
+<ul>
+<li><code>src/NeuralNetworks/Layers/DenseLayer.cs</code></li>
+<li><code>src/NeuralNetworks/Layers/ConvolutionalLayer.cs</code></li>
+<li><code>src/NeuralNetworks/Layers/BatchNormalizationLayer.cs</code></li>
+<li><code>src/NeuralNetworks/Layers/LayerBase.cs</code> (add <code>EnsureInitialized</code> pattern)</li>
+</ul>
+<p><strong>Estimated Impact:</strong> 50-70% faster network construction</p>
+<hr>
+<h3 id="user-story-12-add-initialization-strategy-interface">User Story 1.2: Add Initialization Strategy Interface</h3>
+<p><strong>As a</strong> library developer,
+<strong>I want</strong> to control when and how weights are initialized,
+<strong>So that</strong> I can optimize for different use cases.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>New <code>IInitializationStrategy</code> interface</li>
+<li>Support for: Lazy, Eager, FromFile, Zero, Custom</li>
+<li>Networks can be configured with strategy at construction</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">public interface IInitializationStrategy&lt;T&gt;
+{
+    void Initialize(ILayer&lt;T&gt; layer);
+    bool IsLazy { get; }
+}
+
+public class LazyInitialization&lt;T&gt; : IInitializationStrategy&lt;T&gt;
+{
+    public bool IsLazy =&gt; true;
+    public void Initialize(ILayer&lt;T&gt; layer) { /* no-op until Forward */ }
+}
+</code></pre>
+<hr>
+<h2 id="epic-2-object-pooling-and-tensor-reuse">Epic 2: Object Pooling and Tensor Reuse</h2>
+<h3 id="user-story-21-implement-tensor-pool">User Story 2.1: Implement Tensor Pool</h3>
+<p><strong>As a</strong> production user,
+<strong>I want</strong> reduced GC pressure during inference,
+<strong>So that</strong> my application has consistent latency.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li><code>TensorPool&lt;T&gt;</code> class for renting/returning tensors</li>
+<li>Tensors are cleared before reuse (security)</li>
+<li>Thread-safe implementation</li>
+<li>Configurable pool size limits</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">public class TensorPool&lt;T&gt;
+{
+    private readonly ConcurrentBag&lt;Tensor&lt;T&gt;&gt;[] _pools;
+
+    public Tensor&lt;T&gt; Rent(int[] shape)
+    {
+        // Find pool by size class, return existing or create new
+    }
+
+    public void Return(Tensor&lt;T&gt; tensor)
+    {
+        tensor.Clear();
+        _pools[GetSizeClass(tensor.Length)].Add(tensor);
+    }
+}
+</code></pre>
+<p><strong>Files to Create:</strong></p>
+<ul>
+<li><code>src/Memory/TensorPool.cs</code></li>
+<li><code>src/Memory/PooledTensor.cs</code> (IDisposable wrapper)</li>
+</ul>
+<p><strong>Estimated Impact:</strong> 30% reduction in GC pause time</p>
+<hr>
+<h3 id="user-story-22-add-pooling-to-forward-pass">User Story 2.2: Add Pooling to Forward Pass</h3>
+<p><strong>As a</strong> production user running batch inference,
+<strong>I want</strong> intermediate tensors to be pooled,
+<strong>So that</strong> I avoid allocations per batch.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>Forward pass uses pooled tensors for intermediates</li>
+<li><code>InferenceContext</code> manages pooled resources</li>
+<li>Opt-in via API (not breaking change)</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">using var context = new InferenceContext&lt;T&gt;(pool);
+var output = network.Forward(input, context);
+// All intermediate tensors returned to pool automatically
+</code></pre>
+<hr>
+<h2 id="epic-3-test-specific-mini-networks">Epic 3: Test-Specific Mini Networks</h2>
+<h3 id="user-story-31-create-lightweight-test-variants">User Story 3.1: Create Lightweight Test Variants</h3>
+<p><strong>As a</strong> developer writing unit tests,
+<strong>I want</strong> lightweight network variants,
+<strong>So that</strong> tests run fast without sacrificing coverage.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li><code>DenseNet-Tiny</code>: [2, 2, 2, 2] block config (8 layers vs 58)</li>
+<li><code>EfficientNet-Test</code>: 1.0 depth/width, 32x32 input</li>
+<li><code>ResNet-Micro</code>: 2 blocks per stage (8 vs 16)</li>
+<li>Factory methods: <code>DenseNetNetwork.ForTesting()</code></li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">public static class TestNetworkFactory
+{
+    public static DenseNetNetwork&lt;T&gt; CreateMiniDenseNet&lt;T&gt;(int numClasses)
+    {
+        var config = new DenseNetConfiguration(
+            variant: DenseNetVariant.Custom,
+            blockLayers: [2, 2, 2, 2], // Minimal
+            growthRate: 8, // Small
+            inputHeight: 32, // CIFAR-size
+            inputWidth: 32);
+        return new DenseNetNetwork&lt;T&gt;(CreateArch(config), config);
+    }
+}
+</code></pre>
+<p><strong>Test Updates Required:</strong></p>
+<ul>
+<li><code>DenseNetTests.cs</code>: Use mini variants for non-variant-specific tests</li>
+<li><code>EfficientNetTests.cs</code>: Use test variants for forward pass tests</li>
+<li><code>ResNetNetworkTests.cs</code>: Use micro variants</li>
+</ul>
+<p><strong>Estimated Impact:</strong> 80% faster test execution for affected tests</p>
+<hr>
+<h3 id="user-story-32-optimize-multi-network-tests">User Story 3.2: Optimize Multi-Network Tests</h3>
+<p><strong>As a</strong> developer,
+<strong>I want</strong> tests that compare network variants to share base construction,
+<strong>So that</strong> comparison tests don't double construction time.</p>
+<p><strong>Current Problem:</strong></p>
+<pre><code class="lang-csharp">[Fact]
+public void DenseNet_LargerVariants_HaveMoreLayers()
+{
+    var d121 = DenseNetNetwork&lt;float&gt;.DenseNet121(numClasses: 10); // SLOW
+    var d169 = DenseNetNetwork&lt;float&gt;.DenseNet169(numClasses: 10); // SLOW x2
+    Assert.True(d169.Layers.Count &gt;= d121.Layers.Count);
+}
+</code></pre>
+<p><strong>Solution:</strong></p>
+<pre><code class="lang-csharp">[Fact]
+public void DenseNet_LargerVariants_HaveMoreLayers()
+{
+    // Use configuration to get expected layer counts without constructing
+    var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121);
+    var config169 = new DenseNetConfiguration(DenseNetVariant.DenseNet169);
+
+    int expectedLayers121 = config121.GetExpectedLayerCount();
+    int expectedLayers169 = config169.GetExpectedLayerCount();
+
+    Assert.True(expectedLayers169 &gt;= expectedLayers121);
+}
+</code></pre>
+<hr>
+<h2 id="epic-4-complete-layer-refactoring-to-use-iengine">Epic 4: Complete Layer Refactoring to Use IEngine</h2>
+<blockquote>
+<p><strong>Important:</strong> This epic continues the work defined in <code>GPU_ENGINE_OPTIMIZATION_PLAN.md</code> (Phase 4-5).
+The IEngine abstraction already provides SIMD (via TensorPrimitivesHelper), cuBLAS (~30K GFLOPS),
+cuDNN (Winograd, FFT convolution), and fused operations. The work here is to refactor remaining
+layers to use these existing optimized operations instead of manual loops.</p>
+</blockquote>
+<h3 id="user-story-41-refactor-high-priority-attention-layers">User Story 4.1: Refactor High-Priority Attention Layers</h3>
+<p><strong>As a</strong> production user running transformers,
+<strong>I want</strong> attention layers to use IEngine operations,
+<strong>So that</strong> I get automatic CPU SIMD and GPU acceleration.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>CrossAttentionLayer uses <code>Engine.BatchMatMul</code> and <code>Engine.Softmax</code> (currently 20+ manual loops)</li>
+<li>GraphAttentionLayer uses <code>Engine.ScaledDotProductAttention</code> (currently 85 manual loops)</li>
+<li>All attention layers use <code>Engine.FlashAttention</code> for long sequences (O(N) memory)</li>
+<li>No manual nested loops for attention computation</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Current Issue</th>
+<th>Target IEngine Operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CrossAttentionLayer</td>
+<td>Manual 4-nested matmul</td>
+<td><code>Engine.BatchMatMul</code>, <code>Engine.Softmax</code></td>
+</tr>
+<tr>
+<td>GraphAttentionLayer</td>
+<td>85 manual loops</td>
+<td><code>Engine.ScaledDotProductAttention</code></td>
+</tr>
+<tr>
+<td>MultiHeadAttentionLayer</td>
+<td>Needs update</td>
+<td><code>Engine.FlashAttention</code> for seq &gt; 256</td>
+</tr>
+<tr>
+<td>SelfAttentionLayer</td>
+<td>Needs update</td>
+<td><code>Engine.ScaledDotProductAttention</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated Impact:</strong> 2-5x faster attention computation</p>
+<hr>
+<h3 id="user-story-42-refactor-graph-neural-network-layers">User Story 4.2: Refactor Graph Neural Network Layers</h3>
+<p><strong>As a</strong> production user running GNNs,
+<strong>I want</strong> graph layers to use IEngine scatter/gather operations,
+<strong>So that</strong> message passing is GPU-accelerated.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>MessagePassingLayer uses <code>Engine.ScatterAdd/Mean/Max</code> (currently 73+ NumOps calls)</li>
+<li>GraphTransformerLayer uses existing IEngine operations (currently 75+ NumOps calls)</li>
+<li>DiffusionConvLayer uses <code>Engine.Conv</code> operations (currently 43+ NumOps calls)</li>
+<li>HeterogeneousGraphLayer refactored (30+ NumOps calls)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Manual Loop Count</th>
+<th>Target IEngine Operations</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MessagePassingLayer</td>
+<td>73+ NumOps</td>
+<td><code>Engine.ScatterAdd/Mean/Max</code></td>
+</tr>
+<tr>
+<td>GraphTransformerLayer</td>
+<td>75+ NumOps</td>
+<td><code>Engine.BatchMatMul</code>, <code>Engine.Softmax</code></td>
+</tr>
+<tr>
+<td>DiffusionConvLayer</td>
+<td>43+ NumOps</td>
+<td><code>Engine.Conv2D</code>, <code>Engine.MatMul</code></td>
+</tr>
+<tr>
+<td>HeterogeneousGraphLayer</td>
+<td>30+ NumOps</td>
+<td><code>Engine.Scatter*</code>, <code>Engine.Gather</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Estimated Impact:</strong> 3-10x faster GNN inference</p>
+<hr>
+<h3 id="user-story-43-complete-normalization-and-pooling-layer-refactoring">User Story 4.3: Complete Normalization and Pooling Layer Refactoring</h3>
+<p><strong>As a</strong> production user,
+<strong>I want</strong> all normalization layers to use fused IEngine operations,
+<strong>So that</strong> batch/layer/group norm are GPU-accelerated.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>BatchNormalizationLayer uses <code>Engine.FusedBatchNorm</code></li>
+<li>LayerNormalizationLayer uses <code>Engine.LayerNorm</code></li>
+<li>GroupNormalizationLayer uses <code>Engine.GroupNorm</code></li>
+<li>All layers call <code>RegisterTrainableParameter</code> for GPU tensor caching</li>
+</ul>
+<p><strong>Layers to Refactor (Priority 4 from GPU plan):</strong></p>
+<ul>
+<li>BatchNormalizationLayer</li>
+<li>LayerNormalizationLayer</li>
+<li>GroupNormalizationLayer</li>
+<li>InstanceNormalizationLayer</li>
+<li>SpectralNormalizationLayer</li>
+</ul>
+<p><strong>Estimated Impact:</strong> 20-30% faster normalization operations</p>
+<hr>
+<h3 id="user-story-44-expand-cpuengine-simd-coverage">User Story 4.4: Expand CpuEngine SIMD Coverage</h3>
+<p><strong>As a</strong> developer,
+<strong>I want</strong> remaining scalar operations in CpuEngine to use SIMD,
+<strong>So that</strong> CPU inference is consistently fast.</p>
+<p><strong>Current Scalar Operations to Vectorize:</strong></p>
+<pre><code class="lang-csharp">// These operations in CpuEngine still use scalar loops:
+- Sqrt (uses NumOps.Sqrt in loop)
+- Power operations
+- Some activation functions (LeakyReLU, GELU, Mish, Swish, ELU)
+</code></pre>
+<p><strong>Implementation:</strong></p>
+<ul>
+<li>Add vectorized versions to <code>INumericOperations&lt;T&gt;</code> interface</li>
+<li>Implement using <code>System.Numerics.Tensors.TensorPrimitives</code> for float/double</li>
+<li>Fallback to scalar for other numeric types</li>
+</ul>
+<p><strong>Files to Modify:</strong></p>
+<ul>
+<li><code>src/AiDotNet.Tensors/Helpers/TensorPrimitivesHelper.cs</code></li>
+<li><code>src/AiDotNet.Tensors/NumericOperations/*.cs</code></li>
+</ul>
+<p><strong>Estimated Impact:</strong> 2-5x faster for affected operations</p>
+<hr>
+<h2 id="epic-5-test-infrastructure-improvements">Epic 5: Test Infrastructure Improvements</h2>
+<h3 id="user-story-51-add-shared-test-fixtures">User Story 5.1: Add Shared Test Fixtures</h3>
+<p><strong>As a</strong> test author,
+<strong>I want</strong> shared network fixtures across tests,
+<strong>So that</strong> network construction happens once per class.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li><code>IClassFixture&lt;NetworkFixture&lt;T&gt;&gt;</code> for xUnit</li>
+<li>Networks constructed once, reused across tests</li>
+<li>Thread-safe for parallel test execution</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">public class NetworkFixture&lt;T&gt; : IDisposable
+{
+    public DenseNetNetwork&lt;T&gt; DenseNet121 { get; }
+    public EfficientNetNetwork&lt;T&gt; EfficientNetB0 { get; }
+
+    public NetworkFixture()
+    {
+        DenseNet121 = DenseNetNetwork&lt;T&gt;.DenseNet121(numClasses: 10);
+        EfficientNetB0 = EfficientNetNetwork&lt;T&gt;.EfficientNetB0(numClasses: 10);
+    }
+}
+
+public class DenseNetTests : IClassFixture&lt;NetworkFixture&lt;float&gt;&gt;
+{
+    private readonly NetworkFixture&lt;float&gt; _fixture;
+
+    public DenseNetTests(NetworkFixture&lt;float&gt; fixture)
+    {
+        _fixture = fixture;
+    }
+
+    [Fact]
+    public void Test_Something()
+    {
+        var network = _fixture.DenseNet121; // Already constructed
+    }
+}
+</code></pre>
+<hr>
+<h3 id="user-story-52-add-performance-regression-tests">User Story 5.2: Add Performance Regression Tests</h3>
+<p><strong>As a</strong> maintainer,
+<strong>I want</strong> automated performance regression detection,
+<strong>So that</strong> we don't accidentally slow down the codebase.</p>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>Benchmark tests using BenchmarkDotNet</li>
+<li>CI integration to detect regressions (&gt;10% slowdown)</li>
+<li>Historical performance tracking</li>
+</ul>
+<p><strong>Implementation:</strong></p>
+<pre><code class="lang-csharp">[MemoryDiagnoser]
+public class NetworkConstructionBenchmarks
+{
+    [Benchmark(Baseline = true)]
+    public void DenseNet121_Construction()
+    {
+        var network = DenseNetNetwork&lt;float&gt;.DenseNet121(numClasses: 10);
+    }
+
+    [Benchmark]
+    public void DenseNet121_WithLazyInit()
+    {
+        var network = DenseNetNetwork&lt;float&gt;.DenseNet121(
+            numClasses: 10,
+            initStrategy: InitializationStrategy.Lazy);
+    }
+}
+</code></pre>
+<hr>
+<h2 id="implementation-roadmap">Implementation Roadmap</h2>
+<blockquote>
+<p><strong>Gate Requirements:</strong> Each phase MUST pass all integration tests before proceeding to the next phase.
+Run: <code>dotnet test --filter &quot;Category=Phase{N}Gate&quot;</code> to validate phase completion.</p>
+</blockquote>
+<hr>
+<h3 id="phase-0-critical-gpu-backend-fixes-immediate">Phase 0: Critical GPU Backend Fixes (IMMEDIATE)</h3>
+<p><strong>User Stories:</strong></p>
+<ul>
+<li>[x] 0.1: Fix OpenCL attention kernel compilation errors (fixed atomic_add ambiguity, -INFINITY macro)</li>
+<li>[x] 0.2: Fix HIP backend header dependencies (removed hip/hip_runtime.h includes from HIPRTC kernels)</li>
+<li>[x] 0.3: Ensure at least one GPU backend works (added GpuEngine.GetAvailableBackends() and GetDiagnosticReport())</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Requirement</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenCL compiles</td>
+<td>No kernel compilation errors on Intel/AMD/NVIDIA OpenCL</td>
+<td>CI build log</td>
+</tr>
+<tr>
+<td>HIP graceful fallback</td>
+<td>HIP backend doesn't crash when SDK missing</td>
+<td>Runtime test</td>
+</tr>
+<tr>
+<td>GPU detection</td>
+<td><code>GpuEngine.IsAvailable</code> returns true on GPU systems</td>
+<td>Unit test</td>
+</tr>
+<tr>
+<td>Backend diagnostics</td>
+<td><code>GetAvailableBackends()</code> reports status of each backend</td>
+<td>Unit test</td>
+</tr>
+<tr>
+<td>No silent fallback</td>
+<td>Log warning when falling back to CPU</td>
+<td>Log inspection</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Requirement</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GPU backend init</td>
+<td>&lt; 500ms</td>
+<td>Stopwatch in test</td>
+</tr>
+<tr>
+<td>First GPU operation</td>
+<td>&lt; 100ms overhead vs subsequent</td>
+<td>Benchmark</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Tests (Phase 0 Gate):</strong></p>
+<pre><code class="lang-csharp">[Trait(&quot;Category&quot;, &quot;Phase0Gate&quot;)]
+public class Phase0GateTests
+{
+    [Fact]
+    public void OpenCL_Backend_Handles_Gracefully()
+    {
+        var backends = GpuEngine.GetAvailableBackends();
+        var openCl = backends.FirstOrDefault(b =&gt; b.BackendType == GpuBackendType.OpenCl);
+        // OpenCL should either be available or have clear error message (not crash)
+        Assert.NotNull(openCl);
+        Assert.True(openCl.IsAvailable || !string.IsNullOrEmpty(openCl.ErrorMessage));
+    }
+
+    [Fact]
+    public void HIP_Backend_Graceful_When_SDK_Missing()
+    {
+        // Should not throw, should report appropriate error if unavailable
+        var backends = GpuEngine.GetAvailableBackends();
+        var hip = backends.FirstOrDefault(b =&gt; b.BackendType == GpuBackendType.Hip);
+        Assert.NotNull(hip);
+        // HIP should be available or have descriptive error message
+        Assert.True(hip.IsAvailable || !string.IsNullOrEmpty(hip.ErrorMessage));
+    }
+
+    [Fact]
+    public void AtLeastOneGpuBackend_IsAvailable_OnGpuSystem()
+    {
+        // On CI with GPU, at least one backend should work
+        // On CPU-only systems, this test is skipped
+        if (Environment.GetEnvironmentVariable(&quot;HAS_GPU&quot;) == &quot;true&quot;)
+        {
+            var backends = GpuEngine.GetAvailableBackends();
+            var anyAvailable = backends.Any(b =&gt; b.IsAvailable);
+            Assert.True(anyAvailable, GpuEngine.GetDiagnosticReport());
+        }
+    }
+
+    [Fact]
+    public void GpuEngine_Reports_Fallback_Reason()
+    {
+        var report = GpuEngine.GetDiagnosticReport();
+        Assert.False(string.IsNullOrEmpty(report));
+        // Report should explain why each backend is/isn't available
+    }
+}
+</code></pre>
+<p><strong>Exit Criteria:</strong> All Phase0Gate tests pass. GPU acceleration works on at least CUDA or OpenCL.</p>
+<hr>
+<h3 id="phase-1-quick-wins-1-2-weeks">Phase 1: Quick Wins (1-2 weeks)</h3>
+<p><strong>User Stories:</strong></p>
+<ul>
+<li>[x] 3.1: Create lightweight test variants (DenseNet.ForTesting(), EfficientNet.ForTesting(), ResNet.ForTesting())</li>
+<li>[x] 3.2: Optimize multi-network tests (fixed KNearestNeighborsRegression.CalculateDistance dimension mismatch)</li>
+<li>[x] 5.1: Add shared test fixtures (NetworkFixture<t> with IClassFixture support)</t></li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Requirement</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Mini networks exist</td>
+<td><code>DenseNet.ForTesting()</code>, <code>EfficientNet.ForTesting()</code></td>
+<td>API exists</td>
+</tr>
+<tr>
+<td>Config-only tests</td>
+<td>Variant comparison tests don't construct networks</td>
+<td>Code review</td>
+</tr>
+<tr>
+<td>Shared fixtures</td>
+<td><code>NetworkFixture&lt;T&gt;</code> implements <code>IClassFixture</code></td>
+<td>Compilation</td>
+</tr>
+<tr>
+<td>Test isolation</td>
+<td>Fixtures are thread-safe for parallel execution</td>
+<td>Concurrent test run</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Current</th>
+<th>Target</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DenseNetTests class</td>
+<td>~5 min</td>
+<td>&lt; 2 min</td>
+<td>CI timing</td>
+</tr>
+<tr>
+<td>EfficientNetTests class</td>
+<td>~8 min</td>
+<td>&lt; 2 min</td>
+<td>CI timing</td>
+</tr>
+<tr>
+<td>Mini network construction</td>
+<td>N/A</td>
+<td>&lt; 50ms</td>
+<td>Benchmark</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Tests (Phase 1 Gate):</strong></p>
+<pre><code class="lang-csharp">[Trait(&quot;Category&quot;, &quot;Phase1Gate&quot;)]
+public class Phase1GateTests
+{
+    [Fact]
+    public void MiniDenseNet_Constructs_Under50ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = DenseNetNetwork&lt;float&gt;.ForTesting(numClasses: 10);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds &lt; 50, $&quot;Took {sw.ElapsedMilliseconds}ms&quot;);
+        Assert.True(network.Layers.Count &lt; 20); // Much smaller than full D121
+    }
+
+    [Fact]
+    public void MiniEfficientNet_Constructs_Under50ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = EfficientNetNetwork&lt;float&gt;.ForTesting(numClasses: 10);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds &lt; 50, $&quot;Took {sw.ElapsedMilliseconds}ms&quot;);
+    }
+
+    [Fact]
+    public void DenseNetConfig_GetExpectedLayerCount_NoConstruction()
+    {
+        var sw = Stopwatch.StartNew();
+        var config121 = new DenseNetConfiguration(DenseNetVariant.DenseNet121);
+        var count = config121.GetExpectedLayerCount();
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds &lt; 5); // Config-only, no network construction
+        Assert.True(count &gt; 100);
+    }
+
+    [Fact]
+    public void NetworkFixture_IsThreadSafe()
+    {
+        var fixture = new NetworkFixture&lt;float&gt;();
+        Parallel.For(0, 10, i =&gt;
+        {
+            var network = fixture.MiniDenseNet;
+            Assert.NotNull(network);
+        });
+    }
+}
+</code></pre>
+<p><strong>Exit Criteria:</strong> All Phase1Gate tests pass. CI test time for DenseNet/EfficientNet &lt; 2 min each.</p>
+<hr>
+<h3 id="phase-2-core-optimization-2-3-weeks">Phase 2: Core Optimization (2-3 weeks)</h3>
+<p><strong>User Stories:</strong></p>
+<ul>
+<li>[x] 1.1: Implement lazy weight initialization (LayerBase.EnsureInitialized(), integrated into DenseLayer and ConvolutionalLayer)</li>
+<li>[x] 1.2: Add initialization strategy interface (IInitializationStrategy<t> with Lazy/Eager/FromFile modes)</t></li>
+<li>[x] 2.1: Implement tensor pool (TensorPool<t> with Rent/Return, CAS-based thread safety, configurable size limits)</t></li>
+<li>[x] 2.2: Add pooling to forward pass (InferenceContext for pooled tensor allocation during inference)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Requirement</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lazy init pattern</td>
+<td><code>EnsureInitialized()</code> in LayerBase</td>
+<td>Code exists</td>
+</tr>
+<tr>
+<td>Strategy interface</td>
+<td><code>IInitializationStrategy&lt;T&gt;</code> with Lazy/Eager/FromFile</td>
+<td>API exists</td>
+</tr>
+<tr>
+<td>Tensor pool</td>
+<td><code>TensorPool&lt;T&gt;.Rent/Return</code> thread-safe</td>
+<td>Unit test</td>
+</tr>
+<tr>
+<td>Pool size limits</td>
+<td>Configurable max pool size</td>
+<td>Constructor param</td>
+</tr>
+<tr>
+<td>No breaking changes</td>
+<td>Existing API works unchanged</td>
+<td>Regression tests</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Current</th>
+<th>Target</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DenseNet-121 construction (lazy)</td>
+<td>~500ms</td>
+<td>&lt; 150ms</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>DenseNet-264 construction (lazy)</td>
+<td>~1500ms</td>
+<td>&lt; 300ms</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>Tensor pool rent/return</td>
+<td>N/A</td>
+<td>&lt; 1μs</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>GC allocations (pooled)</td>
+<td>100%</td>
+<td>&lt; 30%</td>
+<td>MemoryDiagnoser</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Tests (Phase 2 Gate):</strong></p>
+<pre><code class="lang-csharp">[Trait(&quot;Category&quot;, &quot;Phase2Gate&quot;)]
+public class Phase2GateTests
+{
+    [Fact]
+    public void LazyInit_DenseNet121_Under150ms()
+    {
+        var sw = Stopwatch.StartNew();
+        var network = DenseNetNetwork&lt;float&gt;.DenseNet121(
+            numClasses: 10,
+            initStrategy: InitializationStrategy.Lazy);
+        sw.Stop();
+        Assert.True(sw.ElapsedMilliseconds &lt; 150, $&quot;Took {sw.ElapsedMilliseconds}ms&quot;);
+    }
+
+    [Fact]
+    public void LazyInit_WeightsNotAllocated_UntilForward()
+    {
+        var network = DenseNetNetwork&lt;float&gt;.DenseNet121(
+            numClasses: 10,
+            initStrategy: InitializationStrategy.Lazy);
+
+        // Weights should be null before first forward
+        var denseLayer = network.Layers.OfType&lt;DenseLayer&lt;float&gt;&gt;().First();
+        Assert.False(denseLayer.IsInitialized);
+
+        // After forward, weights should exist
+        var input = Tensor&lt;float&gt;.Random(1, 3, 224, 224);
+        network.Forward(input);
+        Assert.True(denseLayer.IsInitialized);
+    }
+
+    [Fact]
+    public void TensorPool_ReducesAllocations()
+    {
+        var pool = new TensorPool&lt;float&gt;(maxPoolSize: 100);
+        var allocsBefore = GC.GetTotalMemory(true);
+
+        for (int i = 0; i &lt; 1000; i++)
+        {
+            var tensor = pool.Rent(new[] { 64, 64 });
+            pool.Return(tensor);
+        }
+
+        var allocsAfter = GC.GetTotalMemory(true);
+        // Should reuse tensors, minimal new allocations
+        Assert.True(allocsAfter - allocsBefore &lt; 1_000_000); // &lt; 1MB for 1000 iterations
+    }
+
+    [Fact]
+    public void TensorPool_IsThreadSafe()
+    {
+        var pool = new TensorPool&lt;float&gt;();
+        var exceptions = new ConcurrentBag&lt;Exception&gt;();
+
+        Parallel.For(0, 100, i =&gt;
+        {
+            try
+            {
+                var tensor = pool.Rent(new[] { 32, 32 });
+                Thread.Sleep(1); // Simulate work
+                pool.Return(tensor);
+            }
+            catch (Exception ex) { exceptions.Add(ex); }
+        });
+
+        Assert.Empty(exceptions);
+    }
+}
+</code></pre>
+<p><strong>Exit Criteria:</strong> All Phase2Gate tests pass. Network construction 50-70% faster with lazy init.</p>
+<hr>
+<h3 id="phase-3-layer-refactoring-3-4-weeks">Phase 3: Layer Refactoring (3-4 weeks)</h3>
+<p><strong>User Stories:</strong></p>
+<ul>
+<li>[x] 4.1: Refactor high-priority attention layers (CrossAttentionLayer converted to IEngine.BatchMatMul operations)</li>
+<li>[x] 4.2: Refactor graph neural network layers (GraphConvolutionalLayer, GraphAttentionLayer forward pass refactored with Engine.Gather, Engine.ScatterAdd, Engine.TensorTile, Engine.ReduceSum, helper methods for 4D tensor slicing)</li>
+<li>[x] 4.3: Complete normalization layer refactoring (BatchNormalizationLayer already uses Engine.BatchNorm, LayerNormalizationLayer uses Engine.LayerNorm)</li>
+<li>[x] 2.2: Add pooling to forward pass (completed in Phase 2 with InferenceContext)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Requirement</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No manual attention loops</td>
+<td>CrossAttention uses <code>Engine.BatchMatMul</code></td>
+<td>Code review</td>
+</tr>
+<tr>
+<td>FlashAttention for long seq</td>
+<td>Sequences &gt; 256 use <code>Engine.FlashAttention</code></td>
+<td>Unit test</td>
+</tr>
+<tr>
+<td>GNN uses Scatter ops</td>
+<td>MessagePassing uses <code>Engine.ScatterAdd</code></td>
+<td>Code review</td>
+</tr>
+<tr>
+<td>Normalization fused</td>
+<td>BatchNorm uses <code>Engine.FusedBatchNorm</code></td>
+<td>Code review</td>
+</tr>
+<tr>
+<td>InferenceContext</td>
+<td>Pooled forward pass via context</td>
+<td>API exists</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Current</th>
+<th>Target</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Attention (seq=1024)</td>
+<td>Baseline</td>
+<td>2-5x faster</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>GNN message passing</td>
+<td>Baseline</td>
+<td>3-10x faster</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>BatchNorm forward</td>
+<td>Baseline</td>
+<td>20-30% faster</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>Forward pass allocations</td>
+<td>100%</td>
+<td>&lt; 30% with pooling</td>
+<td>MemoryDiagnoser</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Tests (Phase 3 Gate):</strong></p>
+<pre><code class="lang-csharp">[Trait(&quot;Category&quot;, &quot;Phase3Gate&quot;)]
+public class Phase3GateTests
+{
+    [Fact]
+    public void CrossAttention_UsesEngineOperations()
+    {
+        var layer = new CrossAttentionLayer&lt;float&gt;(512, 8);
+        var engineCallCount = 0;
+        var mockEngine = new InstrumentedEngine(onCall: () =&gt; engineCallCount++);
+        layer.Engine = mockEngine;
+
+        var q = Tensor&lt;float&gt;.Random(1, 64, 512);
+        var kv = Tensor&lt;float&gt;.Random(1, 64, 512);
+        layer.Forward(q, kv);
+
+        // Should use Engine.BatchMatMul, not manual loops
+        Assert.True(engineCallCount &gt;= 2, &quot;Should call Engine for matmul operations&quot;);
+    }
+
+    [Fact]
+    public void FlashAttention_UsedForLongSequences()
+    {
+        var layer = new SelfAttentionLayer&lt;float&gt;(512, 8);
+        var input = Tensor&lt;float&gt;.Random(1, 1024, 512); // Long sequence
+
+        // Should use FlashAttention path (O(N) memory)
+        var memBefore = GC.GetTotalMemory(true);
+        layer.Forward(input);
+        var memAfter = GC.GetTotalMemory(true);
+
+        // Flash attention should use O(N) not O(N^2) memory
+        var memUsed = memAfter - memBefore;
+        var maxExpected = 1024 * 512 * 8 * 4; // O(N * d * heads) not O(N^2)
+        Assert.True(memUsed &lt; maxExpected, $&quot;Memory {memUsed} exceeds O(N) expectation&quot;);
+    }
+
+    [Fact]
+    public void InferenceContext_ReducesAllocations()
+    {
+        var network = DenseNetNetwork&lt;float&gt;.ForTesting(numClasses: 10);
+        var pool = new TensorPool&lt;float&gt;();
+        var input = Tensor&lt;float&gt;.Random(1, 3, 32, 32);
+
+        // Warmup
+        network.Forward(input);
+
+        var allocsBefore = GC.GetTotalMemory(true);
+        using (var context = new InferenceContext&lt;float&gt;(pool))
+        {
+            for (int i = 0; i &lt; 100; i++)
+            {
+                network.Forward(input, context);
+            }
+        }
+        var allocsAfter = GC.GetTotalMemory(true);
+
+        // Pooled inference should have minimal allocations
+        Assert.True(allocsAfter - allocsBefore &lt; 10_000_000); // &lt; 10MB for 100 inferences
+    }
+
+    [Fact]
+    public void Attention_Is2xFasterWithEngine()
+    {
+        var layer = new SelfAttentionLayer&lt;float&gt;(256, 8);
+        var input = Tensor&lt;float&gt;.Random(1, 512, 256);
+
+        // Warmup
+        layer.Forward(input);
+
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i &lt; 10; i++)
+            layer.Forward(input);
+        sw.Stop();
+
+        // Baseline expectation: should be significantly faster than manual loops
+        // This test documents the performance, actual threshold TBD after baseline
+        Assert.True(sw.ElapsedMilliseconds &lt; 5000, $&quot;10 forwards took {sw.ElapsedMilliseconds}ms&quot;);
+    }
+}
+</code></pre>
+<p><strong>Exit Criteria:</strong> All Phase3Gate tests pass. Attention/GNN layers use IEngine operations.</p>
+<hr>
+<h3 id="phase-4-polish-and-maintenance-ongoing">Phase 4: Polish and Maintenance (ongoing)</h3>
+<p><strong>User Stories:</strong></p>
+<ul>
+<li>[x] 4.4: Expand CpuEngine SIMD coverage (ReLU, LeakyReLU, GELU, Mish, Swish, ELU across all numeric types)</li>
+<li>[x] 5.2: Add performance regression tests (SimdActivationFunctionBenchmarks.cs, Phase4GateTests.cs)</li>
+<li>[x] Continue layer refactoring per GPU plan Phase 5 (GNN layer refactoring complete)</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>Criterion</th>
+<th>Requirement</th>
+<th>Validation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sqrt vectorized</td>
+<td><code>TensorPrimitivesHelper.Sqrt</code> uses SIMD</td>
+<td>Benchmark shows speedup</td>
+</tr>
+<tr>
+<td>Regression CI</td>
+<td>BenchmarkDotNet runs in CI</td>
+<td>GitHub Action</td>
+</tr>
+<tr>
+<td>Baseline tracked</td>
+<td>Performance history stored</td>
+<td>CI artifacts</td>
+</tr>
+<tr>
+<td>Alerts on regression</td>
+<td>&gt;10% slowdown fails build</td>
+<td>CI config</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Requirement</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>No regressions</td>
+<td>&lt; 10% slowdown vs baseline</td>
+<td>BenchmarkDotNet comparison</td>
+</tr>
+<tr>
+<td>Sqrt vectorized</td>
+<td>3-5x faster than scalar</td>
+<td>Benchmark</td>
+</tr>
+<tr>
+<td>CI benchmark time</td>
+<td>&lt; 10 min</td>
+<td>CI timing</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Integration Tests (Phase 4 Gate):</strong></p>
+<pre><code class="lang-csharp">[Trait(&quot;Category&quot;, &quot;Phase4Gate&quot;)]
+public class Phase4GateTests
+{
+    [Fact]
+    public void Sqrt_IsVectorized()
+    {
+        var input = Vector&lt;float&gt;.Random(10000);
+
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i &lt; 1000; i++)
+            TensorPrimitivesHelper&lt;float&gt;.Sqrt(input);
+        var vectorizedTime = sw.ElapsedMilliseconds;
+
+        // Compare to scalar baseline (should be 3-5x faster)
+        // Actual threshold set after measuring scalar baseline
+        Assert.True(vectorizedTime &lt; 100, $&quot;Sqrt took {vectorizedTime}ms, expected vectorized speedup&quot;);
+    }
+
+    [Fact]
+    public void PerformanceBaseline_Exists()
+    {
+        var baselinePath = &quot;benchmarks/baseline.json&quot;;
+        Assert.True(File.Exists(baselinePath), &quot;Performance baseline file should exist&quot;);
+    }
+}
+</code></pre>
+<p><strong>Exit Criteria:</strong> Regression tests in CI. No performance degradation from baseline.</p>
+<hr>
+<h2 id="success-metrics">Success Metrics</h2>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Current</th>
+<th>Target</th>
+<th>Measurement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DenseNet test class runtime</td>
+<td>~5 min</td>
+<td>&lt;2 min</td>
+<td>CI test timing report</td>
+</tr>
+<tr>
+<td>EfficientNet test class runtime</td>
+<td>~8 min</td>
+<td>&lt;2 min</td>
+<td>CI test timing report</td>
+</tr>
+<tr>
+<td>DenseNet-121 construction</td>
+<td>~500ms</td>
+<td>&lt;150ms</td>
+<td>BenchmarkDotNet</td>
+</tr>
+<tr>
+<td>Forward pass (224x224, DenseNet-121)</td>
+<td>~2s</td>
+<td>&lt;500ms</td>
+<td>BenchmarkDotNet</td>
+</tr>
+<tr>
+<td>Peak memory during tests</td>
+<td>TBD</td>
+<td>-30%</td>
+<td>CI memory profiling</td>
+</tr>
+<tr>
+<td>GC pauses during inference</td>
+<td>TBD</td>
+<td>-50%</td>
+<td>BenchmarkDotNet</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="dependencies-and-risks">Dependencies and Risks</h2>
+<h3 id="dependencies">Dependencies</h3>
+<ul>
+<li>.NET 8.0 or .NET Framework 4.7.1 (multi-targeting supported with SIMD fallbacks)</li>
+<li>BenchmarkDotNet for performance testing</li>
+<li>Existing IEngine infrastructure (see <code>GPU_ENGINE_OPTIMIZATION_PLAN.md</code>)</li>
+</ul>
+<h3 id="known-issues-critical">Known Issues (CRITICAL)</h3>
+<blockquote>
+<p><strong>⚠️ GPU acceleration is currently non-functional due to these issues:</strong></p>
+</blockquote>
+<ol>
+<li><p><strong>OpenCL Kernel Compilation Failures</strong> (Epic 0, Story 0.1)</p>
+<ul>
+<li><code>atomic_add</code> ambiguous - float atomics not supported on many OpenCL drivers</li>
+<li><code>-INFINITY</code> macro undefined behavior</li>
+<li>Status: OpenCL backend marked as unavailable</li>
+</ul>
+</li>
+<li><p><strong>HIP Backend Missing Dependencies</strong> (Epic 0, Story 0.2)</p>
+<ul>
+<li><code>hip/hip_runtime.h</code> header not found</li>
+<li>AMD HIP SDK required but not documented</li>
+<li>Status: HIP backend fails to initialize</li>
+</ul>
+</li>
+<li><p><strong>No Working GPU Backend</strong> (Epic 0, Story 0.3)</p>
+<ul>
+<li>All GPU backends fail, silent fallback to CPU</li>
+<li>Users unaware GPU acceleration is not working</li>
+</ul>
+</li>
+</ol>
+<h3 id="risks">Risks</h3>
+<ol>
+<li><strong>API Breaking Changes</strong>: Lazy initialization changes constructor semantics
+<ul>
+<li>Mitigation: Make lazy opt-in via strategy parameter</li>
+</ul>
+</li>
+<li><strong>Thread Safety</strong>: Lazy initialization must be thread-safe
+<ul>
+<li>Mitigation: Use <code>LazyInitializer.EnsureInitialized</code> pattern</li>
+</ul>
+</li>
+<li><strong>Layer Refactoring Scope</strong>: 85+ layers need updates to use IEngine
+<ul>
+<li>Mitigation: Prioritize by usage frequency and performance impact</li>
+</ul>
+</li>
+<li><strong>GPU Backend Portability</strong>: Different GPU vendors have different capabilities
+<ul>
+<li>Mitigation: Runtime capability detection, graceful fallbacks</li>
+<li>Mitigation: Follow patterns established in Phase 3 of GPU plan</li>
+</ul>
+</li>
+</ol>
+<h3 id="related-documentation">Related Documentation</h3>
+<ul>
+<li><code>GPU_ENGINE_OPTIMIZATION_PLAN.md</code> - Comprehensive GPU optimization plan (Phase 1-3 complete)</li>
+<li><code>src/AiDotNet.Tensors/Engines/IEngine.cs</code> - Core compute abstraction interface</li>
+<li><code>src/AiDotNet.Tensors/Helpers/TensorPrimitivesHelper.cs</code> - SIMD operations for float/double</li>
+</ul>
+<hr>
+<h2 id="appendix-affected-test-classes">Appendix: Affected Test Classes</h2>
+<table>
+<thead>
+<tr>
+<th>Test Class</th>
+<th>Issue</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>DenseNetTests</code></td>
+<td>Creates D121, D169, D201, D264</td>
+<td>High</td>
+</tr>
+<tr>
+<td><code>EfficientNetTests</code></td>
+<td>Creates B0-B7, forward with 224x224</td>
+<td>High</td>
+</tr>
+<tr>
+<td><code>ResNetNetworkTests</code></td>
+<td>Creates ResNet-18/34/50, forward</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>VGGNetworkTests</code></td>
+<td>Creates VGG-11/13/16/19, forward</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>MobileNetTests</code></td>
+<td>Forward with 224x224</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td><code>BlipNeuralNetworkTests</code></td>
+<td>Constructor validation only</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>Blip2NeuralNetworkTests</code></td>
+<td>Constructor validation only</td>
+<td>Low</td>
+</tr>
+<tr>
+<td><code>ClipNeuralNetworkTests</code></td>
+<td>Constructor validation only</td>
+<td>Low</td>
+</tr>
+</tbody>
+</table>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PERFORMANCE_OPTIMIZATION_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

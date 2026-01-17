@@ -1,0 +1,3561 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Matrix&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Matrix&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a mathematical matrix of elements of type T, providing various matrix operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Matrix_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Matrix%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1" class="text-break">
+Class Matrix&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a mathematical matrix of elements of type T, providing various matrix operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Matrix&lt;T&gt; : MatrixBase&lt;T&gt;, IEnumerable&lt;T&gt;, IEnumerable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type of the matrix elements (e.g., double, float, int).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</div>
+      <div><span class="xref">Matrix&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__memory">MatrixBase&lt;T&gt;._memory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__rows">MatrixBase&lt;T&gt;._rows</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__cols">MatrixBase&lt;T&gt;._cols</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__numOps">MatrixBase&lt;T&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Engine">MatrixBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Rows">MatrixBase&lt;T&gt;.Rows</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Columns">MatrixBase&lt;T&gt;.Columns</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_IsEmpty">MatrixBase&lt;T&gt;.IsEmpty</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Item_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.this[int, int]</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SetColumn_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MatrixBase&lt;T&gt;.SetColumn(int, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SetRow_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MatrixBase&lt;T&gt;.SetRow(int, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_GetRow_System_Int32_">MatrixBase&lt;T&gt;.GetRow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Diagonal">MatrixBase&lt;T&gt;.Diagonal()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubMatrix_System_Int32_System_Int32_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.SubMatrix(int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubMatrix_System_Int32_System_Int32_System_Collections_Generic_List_System_Int32__">MatrixBase&lt;T&gt;.SubMatrix(int, int, List&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ElementWiseMultiplyAndSum_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.ElementWiseMultiplyAndSum(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AddInPlace_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.AddInPlace(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Add_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__System_Span__0__">MatrixBase&lt;T&gt;.Add(MatrixBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubtractInPlace_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.SubtractInPlace(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Subtract_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__System_Span__0__">MatrixBase&lt;T&gt;.Subtract(MatrixBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_MultiplyInPlace__0_">MatrixBase&lt;T&gt;.MultiplyInPlace(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Multiply__0_System_Span__0__">MatrixBase&lt;T&gt;.Multiply(T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_TransposeInPlace">MatrixBase&lt;T&gt;.TransposeInPlace()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ValidateIndices_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.ValidateIndices(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AsSpan">MatrixBase&lt;T&gt;.AsSpan()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AsMemory">MatrixBase&lt;T&gt;.AsMemory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ToString">MatrixBase&lt;T&gt;.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_AddColumn__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.AddColumn&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_AddConstantColumn__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.AddConstantColumn&lt;T&gt;(Matrix&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_AddVectorToEachRow__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.AddVectorToEachRow&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_BackwardSubstitution__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.BackwardSubstitution&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Determinant__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.Determinant&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Eigenvalues__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.Eigenvalues&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Extract__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.Extract&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Flatten__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.Flatten&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_ForwardSubstitution__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.ForwardSubstitution&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_FrobeniusNorm__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.FrobeniusNorm&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetBlock__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_System_Int32_System_Int32_">MatrixExtensions.GetBlock&lt;T&gt;(Matrix&lt;T&gt;, int, int, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetColumnVectors__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32___">MatrixExtensions.GetColumnVectors&lt;T&gt;(Matrix&lt;T&gt;, int[])</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetColumn__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_">MatrixExtensions.GetColumn&lt;T&gt;(Matrix&lt;T&gt;, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetColumns__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Collections_Generic_IEnumerable_System_Int32__">MatrixExtensions.GetColumns&lt;T&gt;(Matrix&lt;T&gt;, IEnumerable&lt;int&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetDeterminant__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.GetDeterminant&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetMatrixTypes__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Interfaces_IMatrixDecomposition___0____0_System_Int32_System_Int32___0___0_System_Int32_System_Int32_">MatrixExtensions.GetMatrixTypes&lt;T&gt;(Matrix&lt;T&gt;, IMatrixDecomposition&lt;T&gt;, T?, int, int, T?, T?, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetNullity__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.GetNullity&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetRange__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.GetRange&lt;T&gt;(Matrix&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetRank__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.GetRank&lt;T&gt;(Matrix&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetRowRange__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.GetRowRange&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetRow__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_">MatrixExtensions.GetRow&lt;T&gt;(Matrix&lt;T&gt;, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_GetSubColumn__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_System_Int32_">MatrixExtensions.GetSubColumn&lt;T&gt;(Matrix&lt;T&gt;, int, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InverseGaussianJordanElimination__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.InverseGaussianJordanElimination&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InverseNewton__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32___0_">MatrixExtensions.InverseNewton&lt;T&gt;(Matrix&lt;T&gt;, int, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InverseStrassen__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.InverseStrassen&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Inverse__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Enums_InverseType_System_Int32___0_">MatrixExtensions.Inverse&lt;T&gt;(Matrix&lt;T&gt;, InverseType, int, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InvertDiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.InvertDiagonalMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InvertLowerTriangularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.InvertLowerTriangularMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_InvertUpperTriangularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.InvertUpperTriangularMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsAdjacencyMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsAdjacencyMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsBandMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.IsBandMatrix&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsBlockMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.IsBlockMatrix&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsCauchyMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsCauchyMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsCirculantMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsCirculantMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsCompanionMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsCompanionMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsConsistentBlock__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsConsistentBlock&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsDenseMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.IsDenseMatrix&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsDiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsDiagonalMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsDoublyStochasticMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsDoublyStochasticMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsHankelMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsHankelMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsHilbertMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsHilbertMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsIdempotentMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsIdempotentMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsIdentityMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsIdentityMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsIncidenceMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsIncidenceMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsInvertible__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsInvertible&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsInvolutoryMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsInvolutoryMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsLaplacianMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsLaplacianMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsLowerBidiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsLowerBidiagonalMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsLowerTriangularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.IsLowerTriangularMatrix&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsNonSingularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsNonSingularMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsOrthogonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Interfaces_IMatrixDecomposition___0__">MatrixExtensions.IsOrthogonalMatrix&lt;T&gt;(Matrix&lt;T&gt;, IMatrixDecomposition&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsOrthogonalProjectionMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsOrthogonalProjectionMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsPartitionedMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsPartitionedMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsPermutationMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsPermutationMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsPositiveDefiniteMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.IsPositiveDefiniteMatrix&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsPositiveSemiDefiniteMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsPositiveSemiDefiniteMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsRectangularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsRectangularMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsScalarMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsScalarMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsSingularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsSingularMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsSkewSymmetricMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsSkewSymmetricMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsSparseMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.IsSparseMatrix&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsSquareMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsSquareMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsStochasticMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsStochasticMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsSymmetricMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsSymmetricMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsToeplitzMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsToeplitzMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsTridiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsTridiagonalMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsUpperBidiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsUpperBidiagonalMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsUpperTriangularMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.IsUpperTriangularMatrix&lt;T&gt;(Matrix&lt;T&gt;, T?)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsVandermondeMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsVandermondeMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_IsZeroMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.IsZeroMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_KroneckerProduct__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.KroneckerProduct&lt;T&gt;(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_LogDeterminant__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.LogDeterminant&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Max__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Func___0___0__">MatrixExtensions.Max&lt;T&gt;(Matrix&lt;T&gt;, Func&lt;T, T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Negate__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.Negate&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Nullspace__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0____0_">MatrixExtensions.Nullspace&lt;T&gt;(Matrix&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_PointwiseMultiply__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.PointwiseMultiply&lt;T&gt;(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_PointwiseMultiply__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.PointwiseMultiply&lt;T&gt;(Matrix&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Reshape__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.Reshape&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_RowWiseArgmax__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.RowWiseArgmax&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_SetSubmatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.SetSubmatrix&lt;T&gt;(Matrix&lt;T&gt;, int, int, Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Submatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_System_Int32_System_Int32_">MatrixExtensions.Submatrix&lt;T&gt;(Matrix&lt;T&gt;, int, int, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Submatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32___">MatrixExtensions.Submatrix&lt;T&gt;(Matrix&lt;T&gt;, int[])</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_SumColumns__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.SumColumns&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_SwapRows__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__System_Int32_System_Int32_">MatrixExtensions.SwapRows&lt;T&gt;(Matrix&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_ToComplexMatrix__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.ToComplexMatrix&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_ToVector__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.ToVector&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_Transpose__1_AiDotNet_Tensors_LinearAlgebra_Matrix___0__">MatrixExtensions.Transpose&lt;T&gt;(Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_System_Collections_Generic_IEnumerable___0__">DataPipelineExtensions.ToPipeline&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.EnumerableExtensions.html#AiDotNet_Extensions_EnumerableExtensions_RandomElement__1_System_Collections_Generic_IEnumerable___0__">EnumerableExtensions.RandomElement&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A matrix is like a table or grid of numbers arranged in rows and columns.
+You can perform various mathematical operations on matrices such as addition, subtraction, and multiplication.
+Matrices are commonly used in AI for storing and manipulating data, like representing weights in neural networks.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor(System.Collections.Generic.IEnumerable{System.Collections.Generic.IEnumerable{`0}})">
+  Matrix(IEnumerable&lt;IEnumerable&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new matrix from a collection of collections, where each inner collection represents a row.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix(IEnumerable&lt;IEnumerable&lt;T&gt;&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A collection of collections, where each inner collection represents a row of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This lets you create a matrix from lists of values.
+Each inner list becomes one row in the matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor(System.Int32,System.Int32)">
+  Matrix(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new matrix with the specified number of rows and columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix(int rows, int columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows in the matrix.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns in the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an empty matrix with the specified size.
+For example, Matrix(3, 4) creates a matrix with 3 rows and 4 columns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor__0_0__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.#ctor(`0[0:,0:])">
+  Matrix(T[,])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new matrix from a 2D array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix(T[,] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> T[,]</dt>
+    <dd><p>A 2D array containing the matrix data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1__ctor__0_0__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a matrix directly from a 2D array (a grid of values).</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Add(AiDotNet.Tensors.LinearAlgebra.MatrixBase{`0})">
+  Add(MatrixBase&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds another matrix to this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Add(MatrixBase&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to add to this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the sum of this matrix and the other matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This adds corresponding elements of two matrices together.
+For example, the element at row 1, column 2 in the result will be the sum of the elements
+at row 1, column 2 in both input matrices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Add(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Add(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L814"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a tensor to this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Add(Tensor&lt;T&gt; tensor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>tensor</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The tensor to add to this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix containing the sum of this matrix and the tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Add_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method combines two mathematical objects (a matrix and a tensor) by adding
+their corresponding values together. A tensor is a mathematical object that can represent multi-dimensional data.
+For this operation to work, the tensor must have the same shape as the matrix.</p>
+<p><b>Performance:</b> Uses vectorized Add operation for SIMD acceleration (5-15x faster with AVX2).</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when tensor dimensions don't match matrix dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_BlockDiagonal_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.BlockDiagonal*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_BlockDiagonal_AiDotNet_Tensors_LinearAlgebra_Matrix__0____" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.BlockDiagonal(AiDotNet.Tensors.LinearAlgebra.Matrix{`0}[])">
+  BlockDiagonal(params Matrix&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L561"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a block diagonal matrix from multiple matrices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; BlockDiagonal(params Matrix&lt;T&gt;[] matrices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrices</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;[]</dt>
+    <dd><p>The matrices to place on the diagonal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new block diagonal matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_BlockDiagonal_AiDotNet_Tensors_LinearAlgebra_Matrix__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A block diagonal matrix is a special matrix where smaller matrices are placed
+along the diagonal, with zeros everywhere else. It's like placing each input matrix in its own
+section of a larger matrix, with no overlap between them.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration when copying blocks.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when matrices is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when matrices is empty or contains null elements.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Clone_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Clone" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is a copy of this matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an exact duplicate of the matrix that can be modified
+independently without affecting the original.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDefault_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateDefault*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDefault_System_Int32_System_Int32__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateDefault(System.Int32,System.Int32,`0)">
+  CreateDefault(int, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L506"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix filled with a specified default value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateDefault(int rows, int columns, T defaultValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+    <dt><code>defaultValue</code> <span class="xref">T</span></dt>
+    <dd><p>The value to fill the matrix with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of the specified size filled with the default value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDefault_System_Int32_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a matrix where every element has the same specified value.
+It's useful when you need a matrix with a specific starting value other than 0 or 1.</p>
+<p><b>Performance:</b> Uses vectorized Fill operation for SIMD acceleration (5-15x faster with AVX2).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDiagonal_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateDiagonal*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDiagonal_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateDiagonal(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CreateDiagonal(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L424"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a diagonal matrix from a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateDiagonal(Vector&lt;T&gt; diagonal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>diagonal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector containing values for the diagonal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A square matrix with the vector values on the diagonal and zeros elsewhere.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateDiagonal_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A diagonal matrix has values only along its main diagonal (top-left to bottom-right),
+with zeros everywhere else. This method creates such a matrix using the values from the provided vector.
+Diagonal matrices have special properties that make certain calculations simpler.</p>
+<p><b>Performance:</b> Uses vectorized Fill operation to initialize with zeros, then sets diagonal elements (5-10x faster than loops).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateFromVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateFromVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateFromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateFromVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CreateFromVector(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L346"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a single vector (as a row).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateFromVector(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to convert to a matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix with a single row containing the vector's elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateFromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a one-dimensional array of numbers (vector) 
+into a matrix with just one row. It's useful when you need to apply matrix operations 
+to vector data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentity_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateIdentity*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentity_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateIdentity(System.Int32)">
+  CreateIdentity(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L451"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an identity matrix of the specified size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateIdentity(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the square matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>An identity matrix of the specified size.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentity_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An identity matrix is a special diagonal matrix with 1s on the diagonal and 0s elsewhere.
+It works like the number 1 in multiplication - multiplying any matrix by the identity matrix gives you the original matrix.
+It's often used in linear algebra and machine learning algorithms.</p>
+<p><b>Performance:</b> Uses vectorized Fill operation to initialize with zeros, then sets diagonal elements (5-10x faster than loops).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentityMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateIdentityMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentityMatrix_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateIdentityMatrix(System.Int32)">
+  CreateIdentityMatrix(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an identity matrix of the specified size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateIdentityMatrix(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the square identity matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>An identity matrix of the specified size.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateIdentityMatrix_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An identity matrix is a special square matrix where all elements are 0 except
+for the main diagonal (top-left to bottom-right), which contains 1s. It's similar to the number 1 in
+multiplication - multiplying any matrix by an identity matrix gives you the original matrix.</p>
+<p><b>Performance:</b> Uses vectorized Fill operation to initialize with zeros, then sets diagonal elements (5-10x faster than loops).</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when size is less than 1.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateInstance_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateInstance(System.Int32,System.Int32)">
+  CreateInstance(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the matrix with the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override MatrixBase&lt;T&gt; CreateInstance(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix instance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateMatrix__1_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateMatrix``1(System.Int32,System.Int32)">
+  CreateMatrix&lt;T2&gt;(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix with the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateMatrix&lt;T2&gt;(int rows, int columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with the specified dimensions.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T2</code></dt>
+    <dd><p>Unused type parameter (maintained for compatibility).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateMatrix__1_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is a helper method to create a new matrix with a specific size.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateOnes_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateOnes*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateOnes_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateOnes(System.Int32,System.Int32)">
+  CreateOnes(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix filled with ones.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateOnes(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix of the specified size filled with ones.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateOnes_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This static method creates a new matrix where every element has the value 1.
+It's a convenient way to create a ones matrix without first creating an empty matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateRandom(System.Int32,System.Int32)">
+  CreateRandom(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L478"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix filled with random values between 0 and 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateRandom(int rows, int columns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of the specified size filled with random values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a matrix where each element is a random number between 0 and 1.
+Random matrices are often used as starting points in machine learning algorithms, especially for initializing
+weights in neural networks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_System_Int32_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateRandom(System.Int32,System.Int32,System.Double,System.Double)">
+  CreateRandom(int, int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L527"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix with random values within a specified range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateRandom(int rows, int columns, double min = -1, double max = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows in the matrix.</p>
+</dd>
+    <dt><code>columns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns in the matrix.</p>
+</dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum value for random elements (default is -1.0).</p>
+</dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum value for random elements (default is 1.0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix filled with random values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateRandom_System_Int32_System_Int32_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a matrix filled with random numbers. 
+Each number will be between the min and max values you specify. Random matrices are often 
+used as starting points in machine learning algorithms.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when minimum value is greater than or equal to maximum value.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateZeros_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateZeros*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateZeros_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.CreateZeros(System.Int32,System.Int32)">
+  CreateZeros(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix filled with zeros.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; CreateZeros(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix of the specified size filled with zeros.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_CreateZeros_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This static method creates a new matrix where every element has the value 0.
+It's a convenient way to create a zeros matrix without first creating an empty matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Deserialize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Deserialize_System_Byte___" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1159"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a previously serialized byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized matrix data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix reconstructed from the serialized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method reconstructs a matrix from a byte array that was previously created
+using the Serialize method. It's like unpacking a compressed file to get back the original content.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Divide(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Divide(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1071"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of this matrix by the corresponding element in another matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Divide(Matrix&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix containing the result of the division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method performs element-by-element division between two matrices.
+Each element in this matrix is divided by the corresponding element in the other matrix at the same position.
+Both matrices must have the same number of rows and columns for this operation to work.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when matrices have different dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Divide(`0)">
+  Divide(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1041"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of the matrix by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Divide(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each element divided by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Divide__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method divides every value in the matrix by the same number (scalar).
+For example, dividing a matrix by 2 would halve all values in the matrix.</p>
+<p><b>Performance:</b> Uses SIMD-accelerated operations (5-15x faster with AVX2).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_DivideInPlace_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.DivideInPlace*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_DivideInPlace__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.DivideInPlace(`0)">
+  DivideInPlace(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1055"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of the matrix by a scalar value in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideInPlace(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_DivideInPlace__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Performance:</b> Zero-allocation SIMD-accelerated division.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Empty_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Empty" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L605"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty matrix with zero rows and columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new empty matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> An empty matrix has no elements at all. It's useful as a starting point
+when you need to build a matrix from scratch or represent the absence of data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumnVectors_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromColumnVectors*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumnVectors_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromColumnVectors(System.Collections.Generic.IEnumerable{System.Collections.Generic.IEnumerable{`0}})">
+  FromColumnVectors(IEnumerable&lt;IEnumerable&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L622"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a collection of column vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; FromColumnVectors(IEnumerable&lt;IEnumerable&lt;T&gt;&gt; vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The collection of vectors to use as columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with the given vectors as columns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumnVectors_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes a collection of vectors and arranges them side by side
+to form a matrix. Each vector becomes one column in the resulting matrix. All vectors must have
+the same length to create a valid matrix.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when vectors is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the vector list is empty or vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumns_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromColumns*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumns_System_Collections_Generic_IEnumerable__0____" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromColumns(System.Collections.Generic.IEnumerable{`0}[])">
+  FromColumns(params IEnumerable&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L881"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a collection of column vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; FromColumns(params IEnumerable&lt;T&gt;[] vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;[]</dt>
+    <dd><p>The column vectors to form the matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each vector as a column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromColumns_System_Collections_Generic_IEnumerable__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a matrix by placing multiple vectors side by side.
+Each vector becomes one column in the resulting matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRowVectors_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromRowVectors*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRowVectors_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromRowVectors(System.Collections.Generic.IEnumerable{System.Collections.Generic.IEnumerable{`0}})">
+  FromRowVectors(IEnumerable&lt;IEnumerable&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L915"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a collection of row vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; FromRowVectors(IEnumerable&lt;IEnumerable&lt;T&gt;&gt; vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The collection of vectors to form the rows of the matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each vector as a row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRowVectors_System_Collections_Generic_IEnumerable_System_Collections_Generic_IEnumerable__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a matrix by stacking multiple vectors on top of each other.
+Each vector becomes one row in the resulting matrix. All vectors must have the same length to form a valid matrix.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when vectors is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the vector list is empty or vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRows_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromRows*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRows_System_Collections_Generic_IEnumerable__0____" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromRows(System.Collections.Generic.IEnumerable{`0}[])">
+  FromRows(params IEnumerable&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L867"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a collection of row vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; FromRows(params IEnumerable&lt;T&gt;[] vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;[]</dt>
+    <dd><p>The row vectors to form the matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each vector as a row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromRows_System_Collections_Generic_IEnumerable__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a matrix by stacking multiple vectors on top of each other.
+Each vector becomes one row in the resulting matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.FromVector(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  FromVector(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L896"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix from a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; FromVector(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to convert to a matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with a single column containing the vector's values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_FromVector_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method converts a vector (a one-dimensional array of numbers) into a matrix
+with a single column. Each element of the vector becomes a row in the matrix.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation for SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumn_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumn*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumn_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumn(System.Int32)">
+  GetColumn(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a column from the matrix as a Vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetColumn(int col)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>col</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the column to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A Vector containing the values from the specified column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumn_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This extracts a single column from the matrix as a vector.
+For example, in a 3ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½3 matrix, getting column 1 would give you the middle column as a vector.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnAsArray_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumnAsArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnAsArray_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumnAsArray(System.Int32)">
+  GetColumnAsArray(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1427"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a column from the matrix as an array for use with Span operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T[] GetColumnAsArray(int columnIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the column.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>An array containing the column data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnAsArray_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Unlike rows, columns are not stored contiguously in memory
+(due to row-major storage). This method copies the column data into a new array to enable Span access.
+For performance-critical code, prefer GetRowSpan when possible.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when columnIndex is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnSegment_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumnSegment*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnSegment_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumnSegment(System.Int32,System.Int32,System.Int32)">
+  GetColumnSegment(int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L691"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a segment of a column as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetColumnSegment(int columnIndex, int startRow, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the column.</p>
+</dd>
+    <dt><code>startRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting row index.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to include.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the specified segment of the column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumnSegment_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a portion of a column from the matrix.
+It's like taking a slice from a specific column, starting at a particular row and
+continuing for a specified number of elements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumns_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumns*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumns" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetColumns">
+  GetColumns()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all columns of the matrix as a sequence of vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Vector&lt;T&gt;&gt; GetColumns()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An enumerable collection of vectors, each representing a column of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetColumns_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method provides a way to access each column of the matrix as a separate vector.
+A vector is essentially a one-dimensional array of numbers. This is useful when you need to process each column
+individually, such as in feature extraction or statistical analysis.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetEnumerator_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetEnumerator*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetEnumerator" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetEnumerator">
+  GetEnumerator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1354"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an enumerator that iterates through the matrix elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerator&lt;T&gt; GetEnumerator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerator-1">IEnumerator</a>&lt;T&gt;</dt>
+    <dd><p>An enumerator that can be used to iterate through the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetEnumerator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to iterate through all elements of the matrix
+in a row-by-row manner. It's useful when you need to process each element of the matrix sequentially,
+regardless of its position in rows or columns.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowReadOnlySpan_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowReadOnlySpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowReadOnlySpan_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowReadOnlySpan(System.Int32)">
+  GetRowReadOnlySpan(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1408"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a read-only span over a specific row of the matrix for efficient SIMD operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ReadOnlySpan&lt;T&gt; GetRowReadOnlySpan(int rowIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;T&gt;</dt>
+    <dd><p>A ReadOnlySpan representing the row's data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowReadOnlySpan_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A ReadOnlySpan provides a high-performance, zero-allocation view over a matrix row
+that prevents modifications. This is efficient for reading row data without copying.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when rowIndex is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSegment_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowSegment*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSegment_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowSegment(System.Int32,System.Int32,System.Int32)">
+  GetRowSegment(int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L716"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a segment of a row as a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetRowSegment(int rowIndex, int startColumn, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row.</p>
+</dd>
+    <dt><code>startColumn</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting column index.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to include.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the specified segment of the row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSegment_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a portion of a row from the matrix.
+It's like taking a slice from a specific row, starting at a particular column and
+continuing for a specified number of elements.</p>
+<p><b>Performance:</b> Uses SIMD-accelerated Copy since row segments are contiguous.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSpan_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSpan_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRowSpan(System.Int32)">
+  GetRowSpan(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1390"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a span over a specific row of the matrix for efficient SIMD operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Span&lt;T&gt; GetRowSpan(int rowIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;T&gt;</dt>
+    <dd><p>A Span representing the row's data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRowSpan_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A Span provides a high-performance, zero-allocation view over a matrix row.
+This is efficient because matrix data is stored in row-major order (rows are contiguous in memory).
+Use this for SIMD vectorization with TensorPrimitives.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when rowIndex is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRows*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRows">
+  GetRows()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1237"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all rows of the matrix as a sequence of vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;Vector&lt;T&gt;&gt; GetRows()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An enumerable collection of vectors, each representing a row of the matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method provides a way to access each row of the matrix as a separate vector.
+This is useful when you need to process each row individually, such as when each row represents a different
+data sample or observation in your dataset.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRows*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetRows(System.Collections.Generic.IEnumerable{System.Int32})">
+  GetRows(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1321"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix containing only the specified rows from this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; GetRows(IEnumerable&lt;int&gt; indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices of the rows to include in the new matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix containing only the specified rows.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetRows_System_Collections_Generic_IEnumerable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to select specific rows from the matrix and create a new matrix
+containing only those rows. This is useful for data sampling or when you need to extract a subset of your data
+based on certain criteria. For example, you might use this to select only the data points that belong to a
+particular category.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when indices is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when any index is negative or greater than or equal to the number of rows.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetSubMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetSubMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetSubMatrix_System_Int32_System_Int32_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.GetSubMatrix(System.Int32,System.Int32,System.Int32,System.Int32)">
+  GetSubMatrix(int, int, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L738"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a sub-matrix from this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; GetSubMatrix(int startRow, int startColumn, int rowCount, int columnCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting row index.</p>
+</dd>
+    <dt><code>startColumn</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting column index.</p>
+</dd>
+    <dt><code>rowCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows to include.</p>
+</dd>
+    <dt><code>columnCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns to include.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is a subset of this matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_GetSubMatrix_System_Int32_System_Int32_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a smaller matrix from within the larger one.
+Think of it like cutting out a rectangular section from the original matrix, starting at the
+specified row and column, and including the specified number of rows and columns.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row when extracting full-width submatrices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply(AiDotNet.Tensors.LinearAlgebra.MatrixBase{`0})">
+  Multiply(MatrixBase&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this matrix by another matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Multiply(MatrixBase&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to multiply with this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the product of this matrix and the other matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Matrix multiplication is different from regular multiplication.
+Each element in the result is calculated by taking a row from the first matrix and a column from the second matrix,
+multiplying corresponding elements, and summing them up. This operation is fundamental in many AI algorithms,
+especially in neural networks where it's used to apply weights to inputs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  Multiply(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this matrix by a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Multiply(Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply with this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the product of this matrix and the vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This applies the matrix transformation to a vector.
+It's commonly used in AI to transform data or apply learned weights to input features.
+The result is calculated by taking each row of the matrix, multiplying it element-wise with the vector,
+and summing the products.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Multiply(`0)">
+  Multiply(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this matrix by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Multiply(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply with this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix where each element is multiplied by the scalar value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Multiply__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This multiplies every element in the matrix by the same number (scalar).
+For example, multiplying a matrix by 2 would double every value in the matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Ones_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Ones*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Ones_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Ones(System.Int32,System.Int32)">
+  Ones(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix filled with ones.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Ones(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of the specified size filled with ones.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Ones_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a matrix where every element has the value 1.
+Such matrices are often used as starting points in various algorithms or for masking operations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_OuterProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.OuterProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.OuterProduct(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OuterProduct(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1099"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the outer product of two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; OuterProduct(Vector&lt;T&gt; a, Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix representing the outer product of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The outer product is a way to multiply two vectors to create a matrix.
+If vector a has length m and vector b has length n, the result will be an m x n matrix.
+Each element (i,j) in the resulting matrix is calculated by multiplying the i-th element of vector a
+by the j-th element of vector b. This operation is useful in many machine learning algorithms.</p>
+<p><b>Performance:</b> Uses vectorized MultiplyScalar operation per row for SIMD acceleration (5-15x faster with AVX2).</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when either vector is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_PointwiseDivide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.PointwiseDivide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_PointwiseDivide_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.PointwiseDivide(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  PointwiseDivide(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1026"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of this matrix by the corresponding element in another matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; PointwiseDivide(Matrix&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix containing the result of the division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_PointwiseDivide_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method performs element-by-element division between two matrices.
+Each element in this matrix is divided by the corresponding element in the other matrix.
+Both matrices must have the same number of rows and columns.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when matrices have different dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveColumn_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RemoveColumn*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveColumn_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RemoveColumn(System.Int32)">
+  RemoveColumn(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix with a specified column removed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; RemoveColumn(int columnIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the column to remove.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with the specified column removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveColumn_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a copy of the matrix but leaves out one specific column.
+The resulting matrix will have one fewer column than the original. This is useful in feature selection
+when you want to exclude a particular feature (column) from your dataset.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when columnIndex is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveRow_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RemoveRow*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveRow_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RemoveRow(System.Int32)">
+  RemoveRow(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix with a specified row removed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; RemoveRow(int rowIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rowIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the row to remove.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with the specified row removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RemoveRow_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a copy of the matrix but leaves out one specific row.
+The resulting matrix will have one fewer row than the original. This is useful in data preprocessing
+when you need to exclude certain observations from your dataset.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when rowIndex is outside the valid range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseMax_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RowWiseMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseMax" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RowWiseMax">
+  RowWiseMax()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L954"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in each row of the matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RowWiseMax()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the maximum value from each row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseMax_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method examines each row of the matrix and finds the largest number in that row.
+It then returns a vector (a one-dimensional array) where each element is the maximum value from the corresponding row.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseSum_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RowWiseSum*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseSum" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.RowWiseSum">
+  RowWiseSum()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1002"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the sum of values in each row of the matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RowWiseSum()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the sum of each row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_RowWiseSum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adds up all the numbers in each row of the matrix.
+It returns a vector (a one-dimensional array) where each element is the sum of the corresponding row in the matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Serialize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Serialize" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts this matrix to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Serialization is the process of converting an object (in this case, a matrix)
+into a format that can be easily stored or transmitted. This method converts the matrix into a sequence of bytes
+that can be saved to a file or sent over a network. You can later reconstruct the original matrix using the
+Deserialize method.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_SetSubMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.SetSubMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_SetSubMatrix_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.SetSubMatrix(System.Int32,System.Int32,AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  SetSubMatrix(int, int, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L837"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a portion of this matrix to the values from another matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetSubMatrix(int startRow, int startColumn, Matrix&lt;T&gt; subMatrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting row index where the submatrix will be placed.</p>
+</dd>
+    <dt><code>startColumn</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting column index where the submatrix will be placed.</p>
+</dd>
+    <dt><code>subMatrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix containing values to insert.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_SetSubMatrix_System_Int32_System_Int32_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to insert a smaller matrix into a specific position
+within this larger matrix. Think of it like pasting a small image into a specific location of a larger image.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration when possible.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Slice_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Slice*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Slice_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Slice(System.Int32,System.Int32)">
+  Slice(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L1195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new matrix containing a subset of consecutive rows from this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Slice(int startRow, int rowCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startRow</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the first row to include.</p>
+</dd>
+    <dt><code>rowCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows to include.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix containing the specified rows.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Slice_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method extracts a portion of the matrix by selecting a specific range of rows.
+Think of it like cutting out a horizontal strip from the matrix. The new matrix will have the same number of columns
+as the original, but only include the rows you specified.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation per row for SIMD acceleration.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when startRow or rowCount are invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Subtract(AiDotNet.Tensors.LinearAlgebra.MatrixBase{`0})">
+  Subtract(MatrixBase&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another matrix from this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Subtract(MatrixBase&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to subtract from this matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the difference of this matrix and the other matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This subtracts corresponding elements of the second matrix from the first.
+For example, the element at row 1, column 2 in the result will be the element at row 1, column 2 in the
+first matrix minus the element at row 1, column 2 in the second matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Subtract(AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  Subtract(Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L665"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another matrix from this matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Subtract(Matrix&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the result of the subtraction.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Subtract_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operation subtracts each element of the second matrix from the 
+corresponding element in this matrix. Both matrices must have the same number of rows and columns.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when matrices have different dimensions.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToColumnVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.ToColumnVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToColumnVector" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.ToColumnVector">
+  ToColumnVector()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L771"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the matrix to a column vector by stacking columns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ToColumnVector()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all elements of the matrix, arranged column by column.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToColumnVector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes all the values in the matrix and puts them into a single vector.
+It goes down each column one by one, taking all values from the first column, then the second column, and so on.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToRowVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.ToRowVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToRowVector" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.ToRowVector">
+  ToRowVector()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L795"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the matrix to a row vector by stacking rows.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ToRowVector()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all elements of the matrix, arranged row by row.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_ToRowVector_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method takes all the values in the matrix and puts them into a single vector.
+It goes across each row one by one, taking all values from the first row, then the second row, and so on.</p>
+<p><b>Performance:</b> Uses vectorized Copy operation since matrix data is stored in row-major order (contiguous).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transform_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Transform*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transform_System_Func__0_System_Int32_System_Int32__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Transform(System.Func{`0,System.Int32,System.Int32,`0})">
+  Transform(Func&lt;T, int, int, T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L979"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a transformation function to each element of the matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Transform(Func&lt;T, int, int, T&gt; transformer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>transformer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-4">Func</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd><p>A function that takes the current value, row index, and column index and returns a new value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with transformed values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transform_System_Func__0_System_Int32_System_Int32__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method allows you to change every value in the matrix using a custom function.
+The function receives the current value and its position (row and column) and returns the new value to use.
+This is useful for operations like scaling all values, applying mathematical functions, or conditional transformations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transpose_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Transpose*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transpose" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Transpose">
+  Transpose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transposes this matrix (swaps rows and columns).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Transpose()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the transpose of this matrix.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Transpose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Transposing a matrix means flipping it over its diagonal - rows become columns
+and columns become rows. For example, the element at row 2, column 3 in the original matrix
+will be at row 3, column 2 in the transposed matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Zeros_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Zeros*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Zeros_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.Zeros(System.Int32,System.Int32)">
+  Zeros(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a matrix filled with zeros.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Zeros(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix of the specified size filled with zeros.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_Zeros_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a matrix where every element has the value 0.
+Zero matrices are commonly used as initial values before accumulating results.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  operator +(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L238"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two matrices together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator +(Matrix&lt;T&gt; left, Matrix&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The first matrix.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The second matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the sum of the two matrices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator allows you to use the + symbol to add matrices together,
+just like you would with regular numbers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  operator /(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of the left matrix by the corresponding element in the right matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator /(Matrix&lt;T&gt; left, Matrix&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The left matrix (numerator).</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The right matrix (denominator).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with the results of element-wise division.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This performs division between corresponding elements in two matrices.
+Both matrices must have the same dimensions (same number of rows and columns).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`0)">
+  operator /(Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of a matrix by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator /(Matrix&lt;T&gt; matrix, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to divide.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each element divided by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This divides every number in the matrix by the same value.
+For example, dividing a matrix by 2 halves every value in the matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  operator *(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two matrices together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator *(Matrix&lt;T&gt; left, Matrix&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The left matrix in the multiplication.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The right matrix in the multiplication.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the result of multiplying the left and right matrices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Matrix multiplication combines two matrices to create a new one. 
+Unlike regular multiplication, the order matters (A*B is not the same as B*A). 
+For this operation to work, the number of columns in the left matrix must equal 
+the number of rows in the right matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  operator *(Matrix&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies a matrix by a vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator *(Matrix&lt;T&gt; matrix, Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to multiply.</p>
+</dd>
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the result of the multiplication.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operation transforms a vector using a matrix.
+It's commonly used in AI to apply transformations to data points.
+The number of columns in the matrix must equal the length of the vector.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},`0)">
+  operator *(Matrix&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element of a matrix by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator *(Matrix&lt;T&gt; matrix, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>matrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to multiply.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix with each element multiplied by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Matrix__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This simply multiplies every number in the matrix by the same value.
+For example, multiplying a matrix by 2 doubles every value in the matrix.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Matrix`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  operator -(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L253"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts the right matrix from the left matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Matrix&lt;T&gt; operator -(Matrix&lt;T&gt; left, Matrix&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to subtract from.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The matrix to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix that is the difference of the two matrices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Matrix_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator allows you to use the - symbol to subtract one matrix from another,
+similar to how you would subtract regular numbers.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Matrix.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

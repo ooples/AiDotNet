@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GraphClassificationTask&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GraphClassificationTask&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a graph classification task where the goal is to classify entire graphs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Data_Structures_GraphClassificationTask_1.md&amp;value=---%0Auid%3A%20AiDotNet.Data.Structures.GraphClassificationTask%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1">
+
+
+
+  <h1 id="AiDotNet_Data_Structures_GraphClassificationTask_1" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1" class="text-break">
+Class GraphClassificationTask&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Data.html">Data</a>.<a class="xref" href="AiDotNet.Data.Structures.html">Structures</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a graph classification task where the goal is to classify entire graphs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class GraphClassificationTask&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GraphClassificationTask&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Data_Structures_GraphClassificationTask_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Graph classification assigns a label to an entire graph based on its structure and node/edge features.
+Unlike node classification (classify individual nodes) or link prediction (predict edges),
+graph classification treats the whole graph as a single data point.
+</p>
+<p><b>For Beginners:</b> Graph classification is like determining the category of a complex object.
+<p><strong>Real-world examples:</strong></p>
+<p><strong>Molecular Property Prediction:</strong></p>
+<ul>
+<li>Input: Molecular graph (atoms as nodes, bonds as edges)</li>
+<li>Task: Predict molecular properties</li>
+<li>Examples:
+<ul>
+<li>Is this molecule toxic?</li>
+<li>What is the solubility?</li>
+<li>Will this be a good drug candidate?</li>
+</ul>
+</li>
+<li>Dataset: ZINC, QM9, BACE</li>
+</ul>
+<p><strong>Protein Function Prediction:</strong></p>
+<ul>
+<li>Input: Protein structure graph</li>
+<li>Task: Predict protein function or family</li>
+<li>How: Analyze amino acid sequences and 3D structure</li>
+</ul>
+<p><strong>Chemical Reaction Prediction:</strong></p>
+<ul>
+<li>Input: Reaction graph showing reactants and products</li>
+<li>Task: Predict reaction type or outcome</li>
+</ul>
+<p><strong>Social Network Analysis:</strong></p>
+<ul>
+<li>Input: Community subgraphs</li>
+<li>Task: Classify community type or behavior</li>
+<li>Example: Identify bot networks vs organic communities</li>
+</ul>
+<p><strong>Code Analysis:</strong></p>
+<ul>
+<li>Input: Abstract syntax tree (AST) or control flow graph</li>
+<li>Task: Detect bugs, classify code functionality</li>
+<li>Example: &quot;Is this code snippet vulnerable to SQL injection?&quot;</li>
+</ul>
+<p><strong>Key Challenge:</strong> Graph-level representation</p>
+<ul>
+<li>Must aggregate information from all nodes and edges</li>
+<li>Common approaches: Global pooling, hierarchical pooling, set2set</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_AvgNumEdges_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.AvgNumEdges*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_AvgNumEdges" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.AvgNumEdges">
+  AvgNumEdges
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Average number of edges per graph (for informational purposes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AvgNumEdges { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_AvgNumNodes_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.AvgNumNodes*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_AvgNumNodes" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.AvgNumNodes">
+  AvgNumNodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Average number of nodes per graph (for informational purposes).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AvgNumNodes { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsMultiLabel_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.IsMultiLabel*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsMultiLabel" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.IsMultiLabel">
+  IsMultiLabel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L102"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether this is a multi-label classification task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsMultiLabel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsMultiLabel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><ul>
+<li>False: Each graph has exactly one label (e.g., molecule is toxic or not)</li>
+<li>True: Each graph can have multiple labels (e.g., molecule has multiple properties)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsRegression_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.IsRegression*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsRegression" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.IsRegression">
+  IsRegression
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Whether this is a regression task instead of classification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsRegression { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphClassificationTask_1_IsRegression_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For regression tasks (e.g., predicting molecular energy), labels are continuous values
+rather than discrete classes.
+</p>
+<p><b>For Beginners:</b> The difference between classification and regression:
+- **Classification**: Predict categories (e.g., "toxic" vs "non-toxic")
+- **Regression**: Predict continuous values (e.g., "solubility = 2.3 mg/L")
+<p>Examples:</p>
+<ul>
+<li>Classification: Is this molecule a good drug? (Yes/No)</li>
+<li>Regression: What is this molecule's binding affinity? (0.0 to 10.0)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_NumClasses_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.NumClasses*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_NumClasses" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.NumClasses">
+  NumClasses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Number of classes in the classification task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumClasses { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_TestGraphs_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TestGraphs*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_TestGraphs" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TestGraphs">
+  TestGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>List of test graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;GraphData&lt;T&gt;&gt; TestGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_TestLabels_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TestLabels*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_TestLabels" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TestLabels">
+  TestLabels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Labels for test graphs.
+Shape: [num_test_graphs] or [num_test_graphs, num_classes].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TestLabels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_TrainGraphs_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TrainGraphs*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_TrainGraphs" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TrainGraphs">
+  TrainGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>List of training graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;GraphData&lt;T&gt;&gt; TrainGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Data_Structures_GraphClassificationTask_1_TrainGraphs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Each graph in the list is an independent sample with its own structure and features.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_TrainLabels_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TrainLabels*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_TrainLabels" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.TrainLabels">
+  TrainLabels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Labels for training graphs.
+Shape: [num_train_graphs] or [num_train_graphs, num_classes] for multi-label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; TrainLabels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_ValGraphs_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.ValGraphs*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_ValGraphs" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.ValGraphs">
+  ValGraphs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>List of validation graphs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;GraphData&lt;T&gt;&gt; ValGraphs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Data.Structures.GraphData-1.html">GraphData</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Data_Structures_GraphClassificationTask_1_ValLabels_" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.ValLabels*"></a>
+
+  <h3 id="AiDotNet_Data_Structures_GraphClassificationTask_1_ValLabels" data-uid="AiDotNet.Data.Structures.GraphClassificationTask`1.ValLabels">
+  ValLabels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Labels for validation graphs.
+Shape: [num_val_graphs] or [num_val_graphs, num_classes].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ValLabels { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Data/Structures/GraphClassificationTask.cs/#L52" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

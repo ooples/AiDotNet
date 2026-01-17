@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FitnessCalculatorBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FitnessCalculatorBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for all fitness calculators that evaluate how well a model performs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitnessCalculators_FitnessCalculatorBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitnessCalculators.FitnessCalculatorBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3">
+
+
+
+  <h1 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3" class="text-break">
+Class FitnessCalculatorBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitnessCalculators.html">FitnessCalculators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for all fitness calculators that evaluate how well a model performs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class FitnessCalculatorBase&lt;T, TInput, TOutput&gt; : IFitnessCalculator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.AdjustedRSquaredFitnessCalculator-3.html">AdjustedRSquaredFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.BinaryCrossEntropyLossFitnessCalculator-3.html">BinaryCrossEntropyLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.CategoricalCrossEntropyLossFitnessCalculator-3.html">CategoricalCrossEntropyLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.ContrastiveLossFitnessCalculator-3.html">ContrastiveLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.CosineSimilarityLossFitnessCalculator-3.html">CosineSimilarityLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.CrossEntropyLossFitnessCalculator-3.html">CrossEntropyLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.DiceLossFitnessCalculator-3.html">DiceLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.ElasticNetLossFitnessCalculator-3.html">ElasticNetLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.ExponentialLossFitnessCalculator-3.html">ExponentialLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.FocalLossFitnessCalculator-3.html">FocalLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.HingeLossFitnessCalculator-3.html">HingeLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.HuberLossFitnessCalculator-3.html">HuberLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.JaccardLossFitnessCalculator-3.html">JaccardLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.KullbackLeiblerDivergenceFitnessCalculator-3.html">KullbackLeiblerDivergenceFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.LogCoshLossFitnessCalculator-3.html">LogCoshLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.MeanAbsoluteErrorFitnessCalculator-3.html">MeanAbsoluteErrorFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.MeanSquaredErrorFitnessCalculator-3.html">MeanSquaredErrorFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.ModifiedHuberLossFitnessCalculator-3.html">ModifiedHuberLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.OrdinalRegressionLossFitnessCalculator-3.html">OrdinalRegressionLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.PoissonLossFitnessCalculator-3.html">PoissonLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.QuantileLossFitnessCalculator-3.html">QuantileLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator-3.html">RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.RootMeanSquaredErrorFitnessCalculator-3.html">RootMeanSquaredErrorFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.SquaredHingeLossFitnessCalculator-3.html">SquaredHingeLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.TripletLossFitnessCalculator-3.html">TripletLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.WeightedCrossEntropyLossFitnessCalculator-3.html">WeightedCrossEntropyLossFitnessCalculator&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This is a foundation class that all fitness calculators build upon.
+<p>Think of a fitness calculator like a judge in a competition:</p>
+<ul>
+<li>It looks at how your AI model performed (its predictions vs. the actual answers)</li>
+<li>It gives a score based on specific criteria (like accuracy, error rate, etc.)</li>
+<li>It helps you determine if one model is better than another</li>
+</ul>
+<p>Different fitness calculators judge models in different ways, just like different
+sports have different scoring systems. Some calculators consider higher scores better
+(like accuracy), while others consider lower scores better (like error rates).</p>
+<p>This base class provides the common functionality that all these different &quot;judges&quot; share.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__ctor_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__ctor_System_Boolean_AiDotNet_Enums_DataSetType_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.#ctor(System.Boolean,AiDotNet.Enums.DataSetType)">
+  FitnessCalculatorBase(bool, DataSetType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the FitnessCalculatorBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected FitnessCalculatorBase(bool isHigherScoreBetter, DataSetType dataSetType = DataSetType.Validation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isHigherScoreBetter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Indicates whether higher scores represent better performance.</p>
+</dd>
+    <dt><code>dataSetType</code> <a class="xref" href="AiDotNet.Enums.DataSetType.html">DataSetType</a></dt>
+    <dd><p>The type of dataset to use for fitness calculation (default is Validation).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__ctor_System_Boolean_AiDotNet_Enums_DataSetType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This sets up the basic properties of the fitness calculator.
+<p>Parameters:</p>
+<ul>
+<li><p>isHigherScoreBetter: Tells the system whether bigger numbers mean better performance
+(true for metrics like accuracy, false for metrics like error rates)</p>
+</li>
+<li><p>dataSetType: Specifies which data to use when evaluating the model:</p>
+<ul>
+<li>Training: The data used to teach the model (not usually recommended for evaluation)</li>
+<li>Validation: A separate set of data used to tune the model (default and recommended)</li>
+<li>Testing: A completely separate set of data used for final evaluation</li>
+</ul>
+</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__dataSetType" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3._dataSetType">
+  _dataSetType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Specifies which dataset (training, validation, or testing) to use for fitness calculation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly DataSetType _dataSetType</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.DataSetType.html">DataSetType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__dataSetType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This tells the calculator which set of data to use when evaluating your model.
+<p>There are typically three types of data:</p>
+<ul>
+<li>Training data: Used to teach the model (like study materials)</li>
+<li>Validation data: Used to fine-tune the model (like practice tests)</li>
+<li>Testing data: Used for final evaluation (like the actual exam)</li>
+</ul>
+<p>Usually, we use validation data to evaluate fitness during training.</p>
+
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__isHigherScoreBetter" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3._isHigherScoreBetter">
+  _isHigherScoreBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether higher fitness scores represent better performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected bool _isHigherScoreBetter</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__isHigherScoreBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This tells us whether bigger numbers mean better performance.
+<p>For example:</p>
+<ul>
+<li>For accuracy: Higher is better (100% accuracy is perfect)</li>
+<li>For error rates: Lower is better (0% error is perfect)</li>
+</ul>
+<p>This helps the system know how to compare different models.</p>
+
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__numOps" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3._numOps">
+  _numOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides mathematical operations for the specific numeric type being used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; _numOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__numOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a toolkit that helps perform math operations 
+regardless of whether we're using integers, decimals, doubles, etc.
+<p>It allows the calculator to work with different numeric types without
+having to rewrite the math operations for each type.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.IsHigherScoreBetter*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.IsHigherScoreBetter">
+  IsHigherScoreBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether higher fitness scores represent better performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsHigherScoreBetter { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This property tells you whether bigger numbers mean better performance for this calculator.
+<p>For example:</p>
+<ul>
+<li>For accuracy: IsHigherScoreBetter is true (100% accuracy is better than 90%)</li>
+<li>For error rates: IsHigherScoreBetter is false (1% error is better than 10%)</li>
+</ul>
+<p>This helps you interpret the scores correctly when comparing different models.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.CalculateFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.CalculateFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the fitness score using a specific dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset containing predicted and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated fitness score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is an alternative way to calculate your model's performance
+when you already have a specific dataset you want to use.
+<p>Instead of providing all the evaluation data and letting the calculator choose
+which dataset to use, you directly provide the exact dataset you want to evaluate.</p>
+<p>This is useful when you want to:</p>
+<ul>
+<li>Calculate fitness on a custom dataset</li>
+<li>Compare performance across different datasets</li>
+<li>Evaluate a model on data that wasn't part of the original training/validation/testing split</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when dataSet is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.CalculateFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.CalculateFitnessScore(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the fitness score for a model using the specified evaluation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The data containing model predictions and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated fitness score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how well your model is performing based on its predictions.
+<p>It works by:</p>
+<ol>
+<li>Taking the evaluation data that contains both predictions and actual values</li>
+<li>Selecting the appropriate dataset (training, validation, or testing)</li>
+<li>Calculating a score that represents how well the model performed</li>
+</ol>
+<p>The score's meaning depends on which specific fitness calculator you're using:</p>
+<ul>
+<li>It might be accuracy (higher is better)</li>
+<li>It might be an error rate (lower is better)</li>
+<li>It might be some other measure of performance</li>
+</ul>
+<p>This method handles the common logic, while the specific scoring method is defined
+in each calculator that extends this base class.</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when evaluationData is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the requested dataset is not available.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when an unsupported DataSetType is specified.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.GetFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.GetFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Abstract method that must be implemented by derived classes to calculate the specific fitness score.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract T GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset containing predicted and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated fitness score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is a placeholder method that each specific calculator must fill in.
+<p>Think of it like a template that says &quot;here's where you put your specific scoring logic.&quot;
+Each calculator that extends this base class will provide its own implementation of this method,
+defining exactly how it calculates the fitness score.</p>
+<p>For example:</p>
+<ul>
+<li>An accuracy calculator would implement this to calculate the percentage of correct predictions</li>
+<li>A mean squared error calculator would implement this to calculate the average squared difference
+between predictions and actual values</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.IsBetterFitness*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness__0__0_" data-uid="AiDotNet.FitnessCalculators.FitnessCalculatorBase`3.IsBetterFitness(`0,`0)">
+  IsBetterFitness(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether a new fitness score is better than the current best score.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsBetterFitness(T newScore, T currentBestScore)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>newScore</code> <span class="xref">T</span></dt>
+    <dd><p>The new fitness score to evaluate.</p>
+</dd>
+    <dt><code>currentBestScore</code> <span class="xref">T</span></dt>
+    <dd><p>The current best fitness score.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the new score is better than the current best score; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method compares two scores and tells you which one is better.
+<p>It takes into account whether higher scores are better or lower scores are better:</p>
+<ul>
+<li>If higher scores are better (like accuracy), it returns true when the new score is higher</li>
+<li>If lower scores are better (like error rates), it returns true when the new score is lower</li>
+</ul>
+<p>This is particularly useful when:</p>
+<ul>
+<li>Selecting the best model from multiple options</li>
+<li>Deciding whether to keep training or stop (if the model isn't improving)</li>
+<li>Saving the best model during training</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/FitnessCalculatorBase.cs/#L23" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

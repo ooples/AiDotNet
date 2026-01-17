@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OptimizationResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OptimizationResult&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the comprehensive results of an optimization process for a symbolic model, including the best solution found, performance metrics, feature selection results, and detailed statistics for different datasets.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_OptimizationResult_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.OptimizationResult%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.OptimizationResult`3">
+
+
+
+  <h1 id="AiDotNet_Models_Results_OptimizationResult_3" data-uid="AiDotNet.Models.Results.OptimizationResult`3" class="text-break">
+Class OptimizationResult&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the comprehensive results of an optimization process for a symbolic model, including the best solution found,
+performance metrics, feature selection results, and detailed statistics for different datasets.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class OptimizationResult&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OptimizationResult&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_OptimizationResult_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class encapsulates all the information produced during the optimization of a symbolic model. It includes the best 
+model found, its fitness score, the number of iterations performed, the history of fitness scores during optimization, 
+the features selected for the model, detailed results for training, validation, and test datasets, fit detection 
+analysis, and coefficient bounds. This comprehensive collection of information allows for thorough analysis of the 
+optimization process and the resulting model.
+</p>
+<p><b>For Beginners:</b> This class stores everything about an optimization process and its results.
+<p>When optimizing a model:</p>
+<ul>
+<li>You start with an initial model and try to improve it</li>
+<li>You track how the model performs as it evolves</li>
+<li>You need to know which features were important</li>
+<li>You want to see how well it performs on different datasets</li>
+</ul>
+<p>This class stores all that information, including:</p>
+<ul>
+<li>The best model found during optimization</li>
+<li>How good that model is (fitness score)</li>
+<li>How many iterations the optimization process ran</li>
+<li>How the model improved over time</li>
+<li>Which input features were selected</li>
+<li>Detailed performance metrics on training, validation, and test data</li>
+<li>Analysis of potential issues like overfitting</li>
+</ul>
+<p>Having all this information in one place makes it easier to understand,
+evaluate, and document your optimization results.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3__ctor_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3__ctor" data-uid="AiDotNet.Models.Results.OptimizationResult`3.#ctor">
+  OptimizationResult()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L445"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the OptimizationResult class with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new OptimizationResult instance and initializes all properties to their default values. 
+It obtains the appropriate numeric operations for the generic type T, creates a default symbolic model, and initializes 
+all vectors, lists, and nested objects. This provides a clean starting point for storing optimization results. The 
+default symbolic model is a vector model, which is a simple linear model that can be used as a safe fallback until a 
+better model is found during optimization.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with default values.
+<p>When a new OptimizationResult is created:</p>
+<ul>
+<li>All numeric values are set to zero</li>
+<li>All collections (vectors, lists) are initialized as empty</li>
+<li>A simple default model is created as a safe fallback</li>
+<li>All nested result objects are initialized with their own default values</li>
+</ul>
+<p>This initialization is important because:</p>
+<ul>
+<li>It ensures consistent behavior regardless of how the object is created</li>
+<li>It prevents potential issues with uninitialized values</li>
+<li>It provides a clean slate for storing optimization results</li>
+</ul>
+<p>You typically won't need to call this constructor directly, as it will be
+used internally by the optimization process.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_BestFitnessScore_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestFitnessScore*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_BestFitnessScore" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestFitnessScore">
+  BestFitnessScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fitness score of the best solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BestFitnessScore { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A numeric value representing the best fitness score, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_BestFitnessScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the fitness or performance score of the best solution found during optimization. The 
+fitness score is a single numeric value that quantifies how well the model performs, typically on the training 
+data. Higher values usually indicate better performance, though the exact interpretation depends on the specific 
+fitness function used. Common fitness metrics include R-squared (coefficient of determination), negative mean 
+squared error, or accuracy. The fitness score is often used as the primary criterion for comparing and selecting 
+models during the optimization process.
+</p>
+<p><b>For Beginners:</b> This value tells you how well the best model performs.
+<p>The fitness score:</p>
+<ul>
+<li>Measures how well the model fits the data</li>
+<li>Is typically a single number that summarizes performance</li>
+<li>Higher values usually indicate better performance</li>
+</ul>
+<p>Common fitness metrics include:</p>
+<ul>
+<li>R² (R-squared): Measures the proportion of variance explained (higher is better)</li>
+<li>Negative MSE (Mean Squared Error): Measures prediction error (closer to zero is better)</li>
+<li>Accuracy: For classification problems, the percentage of correct predictions</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It tells you how good your best model is</li>
+<li>It can be compared with other models' fitness scores</li>
+<li>It's often the main criterion used during optimization</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_BestIntercept_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestIntercept*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_BestIntercept" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestIntercept">
+  BestIntercept
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the intercept term of the best solution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BestIntercept { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A numeric value representing the intercept term, initialized to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_BestIntercept_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the intercept term (also known as the bias or constant term) of the best solution. In 
+many mathematical models, particularly linear and polynomial models, the intercept is the value of the dependent 
+variable when all independent variables are zero. It represents the baseline value of the target variable before 
+considering the effects of the input features. The intercept is an important parameter of the model and is often 
+optimized along with the coefficients of the input features.
+</p>
+<p><b>For Beginners:</b> This is the constant term in your model equation.
+<p>The intercept:</p>
+<ul>
+<li>Is the value your model predicts when all input variables are zero</li>
+<li>Represents the baseline or starting point for predictions</li>
+<li>Is often written as the constant term in an equation</li>
+</ul>
+<p>For example, in the equation y = 3x + 2, the intercept is 2.</p>
+<p>This value is important because:</p>
+<ul>
+<li>It establishes the baseline prediction</li>
+<li>It can have meaningful interpretation in some domains</li>
+<li>It's often optimized along with other model parameters</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_BestSolution_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestSolution*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_BestSolution" data-uid="AiDotNet.Models.Results.OptimizationResult`3.BestSolution">
+  BestSolution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the best model found during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? BestSolution { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>An implementation of IFullModel&lt;T, TInput, TOutput&gt; representing the best solution.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_BestSolution_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the best model found during the optimization process. The model can be either a symbolic 
+model (such as a mathematical expression) or a more complex structure like a neural network, depending on the 
+optimization approach used. For symbolic models, it encapsulates a mathematical expression or algorithm that can 
+be evaluated with different inputs to produce predictions. For neural networks or other complex models, it 
+represents the optimized network structure and parameters. The model captures the relationship discovered between 
+the input features and the target variable during the optimization process.
+</p>
+<p><b>For Beginners:</b> This is the best model found during optimization.
+<p>The best solution:</p>
+<ul>
+<li>Contains the actual model structure, whether it's a mathematical formula, a neural network, or another type of model</li>
+<li>Represents the best model found during the optimization process</li>
+<li>Can be used to make predictions with new data</li>
+<li>May be human-readable (for symbolic models) or more complex (for neural networks)</li>
+</ul>
+<p>For example:</p>
+<ul>
+<li>In symbolic regression, this might be an equation like: y = 3.2x1² + 1.7x2 - 0.5</li>
+<li>For a neural network, it would contain the optimized network structure and weights</li>
+</ul>
+<p>This property is important because:</p>
+<ul>
+<li>It's the primary output of the optimization process</li>
+<li>It can be used to understand the relationships in your data (especially for symbolic models)</li>
+<li>It can be deployed to make predictions on new data</li>
+<li>It allows for flexibility in the types of models that can be optimized</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientLowerBounds_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.CoefficientLowerBounds*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientLowerBounds" data-uid="AiDotNet.Models.Results.OptimizationResult`3.CoefficientLowerBounds">
+  CoefficientLowerBounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L375"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lower bounds for model coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; CoefficientLowerBounds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of lower bound values, initialized as an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientLowerBounds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the lower bounds for the coefficients in the model. Coefficient bounds are constraints that 
+limit the range of values that the model coefficients can take during optimization. Lower bounds specify the minimum 
+allowed values for each coefficient. These bounds can be used to incorporate domain knowledge into the model, ensure 
+physical or logical constraints are respected, or improve the stability of the optimization process. For example, in 
+some applications, coefficients might need to be non-negative or above a certain threshold to be physically meaningful.
+</p>
+<p><b>For Beginners:</b> This specifies the minimum allowed values for each coefficient in your model.
+<p>The coefficient lower bounds:</p>
+<ul>
+<li>Set the minimum values that each coefficient can have</li>
+<li>Help constrain the model to realistic or meaningful solutions</li>
+<li>Can incorporate domain knowledge into the optimization process</li>
+</ul>
+<p>These bounds are useful because:</p>
+<ul>
+<li>They can prevent the model from finding mathematically valid but physically impossible solutions</li>
+<li>They can improve optimization stability</li>
+<li>They allow you to enforce known constraints (like non-negativity)</li>
+</ul>
+<p>For example, if you know a certain effect cannot be negative in your domain,
+you might set the lower bound for that coefficient to zero.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientUpperBounds_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.CoefficientUpperBounds*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientUpperBounds" data-uid="AiDotNet.Models.Results.OptimizationResult`3.CoefficientUpperBounds">
+  CoefficientUpperBounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L406"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the upper bounds for model coefficients.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; CoefficientUpperBounds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of upper bound values, initialized as an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_CoefficientUpperBounds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the upper bounds for the coefficients in the model. Coefficient bounds are constraints that 
+limit the range of values that the model coefficients can take during optimization. Upper bounds specify the maximum 
+allowed values for each coefficient. These bounds can be used to incorporate domain knowledge into the model, ensure 
+physical or logical constraints are respected, or improve the stability of the optimization process. For example, in 
+some applications, coefficients might need to be below a certain threshold to be physically meaningful or to prevent 
+numerical issues.
+</p>
+<p><b>For Beginners:</b> This specifies the maximum allowed values for each coefficient in your model.
+<p>The coefficient upper bounds:</p>
+<ul>
+<li>Set the maximum values that each coefficient can have</li>
+<li>Help constrain the model to realistic or meaningful solutions</li>
+<li>Can incorporate domain knowledge into the optimization process</li>
+</ul>
+<p>These bounds are useful because:</p>
+<ul>
+<li>They can prevent the model from finding mathematically valid but physically impossible solutions</li>
+<li>They can improve optimization stability</li>
+<li>They allow you to enforce known constraints</li>
+</ul>
+<p>For example, if you know a certain effect cannot exceed a specific value in your domain,
+you might set the upper bound for that coefficient accordingly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_FitDetectionResult_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.FitDetectionResult*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_FitDetectionResult" data-uid="AiDotNet.Models.Results.OptimizationResult`3.FitDetectionResult">
+  FitDetectionResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results of fit detection analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FitDetectorResult&lt;T&gt; FitDetectionResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A FitDetectorResult&lt;T&gt; object containing detailed fit analysis.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_FitDetectionResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the results of fit detection analysis, which evaluates how well the model fits the data and 
+identifies potential issues such as underfitting or overfitting. Underfitting occurs when the model is too simple to 
+capture the underlying patterns in the data, resulting in poor performance on both training and test data. Overfitting 
+occurs when the model is too complex and captures noise in the training data, resulting in good performance on training 
+data but poor performance on test data. The FitDetectorResult includes the type of fit detected, a confidence level for 
+that assessment, and recommendations for improving the model.
+</p>
+<p><b>For Beginners:</b> This contains an analysis of how well your model fits the data.
+<p>The fit detection result:</p>
+<ul>
+<li>Identifies if your model is underfitting, overfitting, or has a good fit</li>
+<li>Provides a confidence level for this assessment</li>
+<li>Offers specific recommendations to improve your model</li>
+</ul>
+<p>This analysis helps you understand:</p>
+<ul>
+<li>If your model is too simple (underfitting)</li>
+<li>If your model is too complex (overfitting)</li>
+<li>What steps you should take to improve it</li>
+</ul>
+<p>For example, if your model is overfitting, the fit detection might recommend
+adding regularization or reducing model complexity.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_FitnessHistory_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.FitnessHistory*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_FitnessHistory" data-uid="AiDotNet.Models.Results.OptimizationResult`3.FitnessHistory">
+  FitnessHistory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the history of fitness scores during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; FitnessHistory { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector of fitness scores, initialized as an empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_FitnessHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the history of fitness scores recorded during the optimization process. Each element in 
+the vector represents the fitness score of the best model at a particular iteration or checkpoint. This history 
+can be used to analyze the convergence behavior of the optimization algorithm, identify plateaus or jumps in 
+performance, and visualize the improvement of the model over time. It can also help in diagnosing issues such 
+as premature convergence or oscillation.
+</p>
+<p><b>For Beginners:</b> This tracks how the model's performance improved over time.
+<p>The fitness history:</p>
+<ul>
+<li>Contains the fitness score at each iteration or checkpoint</li>
+<li>Shows how the model improved during optimization</li>
+<li>Can be plotted to visualize the optimization progress</li>
+</ul>
+<p>This information is valuable because:</p>
+<ul>
+<li>It helps you understand how quickly the model improved</li>
+<li>It can show if the optimization got stuck or plateaued</li>
+<li>It can reveal if more iterations might have helped</li>
+</ul>
+<p>For example, a steadily increasing fitness history suggests the optimization
+was effective, while a flat line might indicate the algorithm got stuck.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_Iterations_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.Iterations*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_Iterations" data-uid="AiDotNet.Models.Results.OptimizationResult`3.Iterations">
+  Iterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of iterations performed during optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Iterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the number of iterations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_Iterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the number of iterations or generations performed during the optimization process. Each 
+iteration typically involves evaluating and potentially modifying the model to improve its performance. The number 
+of iterations can provide insight into the computational effort expended during optimization and can be useful for 
+comparing different optimization runs. It may also indicate whether the optimization process converged naturally 
+or was terminated due to reaching a maximum iteration limit.
+</p>
+<p><b>For Beginners:</b> This tells you how many steps the optimization process took.
+<p>The iterations count:</p>
+<ul>
+<li>Represents how many times the optimization algorithm tried to improve the model</li>
+<li>Each iteration typically evaluates and potentially modifies the model</li>
+<li>Higher values usually mean more computational effort was expended</li>
+</ul>
+<p>This value is useful because:</p>
+<ul>
+<li>It helps you understand how long the optimization process ran</li>
+<li>It can indicate whether the process converged naturally or hit a limit</li>
+<li>It allows you to compare the computational effort of different optimization runs</li>
+</ul>
+<p>For example, an iterations value of 1000 means the optimization algorithm
+performed 1000 steps trying to find the best model.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_SelectedFeatures_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.SelectedFeatures*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_SelectedFeatures" data-uid="AiDotNet.Models.Results.OptimizationResult`3.SelectedFeatures">
+  SelectedFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the list of feature vectors selected for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;Vector&lt;T&gt;&gt; SelectedFeatures { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A list of Vector&lt;T&gt; objects representing the selected features, initialized as an empty list.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_SelectedFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the list of feature vectors that were selected for use in the best model. Feature selection 
+is the process of identifying and selecting the most relevant features (input variables) for the model, which can 
+improve model performance, reduce overfitting, and enhance interpretability. The selected features are represented 
+as vectors, where each vector corresponds to a feature and contains the values of that feature across all 
+observations in the dataset. This information is useful for understanding which input variables the model considers 
+important and for reproducing the model with new data.
+</p>
+<p><b>For Beginners:</b> This list shows which input variables were used in the best model.
+<p>The selected features:</p>
+<ul>
+<li>Represent the input variables that were chosen for the model</li>
+<li>Are stored as vectors (arrays) of values</li>
+<li>May be a subset of all available features if feature selection was performed</li>
+</ul>
+<p>Feature selection is important because:</p>
+<ul>
+<li>Using too many features can lead to overfitting</li>
+<li>Some features may be irrelevant or redundant</li>
+<li>Models with fewer features are often more interpretable</li>
+</ul>
+<p>For example, if you started with 20 potential input variables but the model
+only uses 5 of them, this list would contain those 5 selected features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_TestResult_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.TestResult*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_TestResult" data-uid="AiDotNet.Models.Results.OptimizationResult`3.TestResult">
+  TestResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the detailed results for the test dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult TestResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;.<a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.DatasetResult.html">DatasetResult</a></dt>
+    <dd><p>A DatasetResult object containing detailed statistics for the test dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_TestResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed results and statistics for the test dataset, which is the portion of data set aside 
+and not used during model training or validation. The test result includes the input features (X), target values (Y), 
+model predictions, error statistics, prediction statistics, and basic statistics for both actual and predicted values. 
+This information provides the most realistic estimate of how well the model will perform on completely new, unseen data 
+and is the final evaluation metric used to assess the model's generalization ability.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on completely new data.
+<p>The test result:</p>
+<ul>
+<li>Shows how well the model performs on data it has never seen before</li>
+<li>Provides the most realistic estimate of real-world performance</li>
+<li>Is the final evaluation metric for your model</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It represents how your model will likely perform in production</li>
+<li>It's the most honest assessment of your model's capabilities</li>
+<li>It helps determine if your model is ready for deployment</li>
+</ul>
+<p>For example, good performance on test data suggests your model will
+generalize well to new, unseen data in real-world applications.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_TrainingResult_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.TrainingResult*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_TrainingResult" data-uid="AiDotNet.Models.Results.OptimizationResult`3.TrainingResult">
+  TrainingResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the detailed results for the training dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult TrainingResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;.<a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.DatasetResult.html">DatasetResult</a></dt>
+    <dd><p>A DatasetResult object containing detailed statistics for the training dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_TrainingResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed results and statistics for the training dataset, which is the portion of data used 
+to fit or train the model. The training result includes the input features (X), target values (Y), model predictions, 
+error statistics, prediction statistics, and basic statistics for both actual and predicted values. This information 
+is crucial for understanding how well the model fits the training data and for diagnosing potential issues such as 
+underfitting or overfitting.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on the training data.
+<p>The training result:</p>
+<ul>
+<li>Shows how well the model fits the data it was trained on</li>
+<li>Contains the actual data, predictions, and various statistics</li>
+<li>Helps you understand the model's basic performance</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It's the baseline for evaluating your model</li>
+<li>It helps identify if the model is learning the patterns in the data</li>
+<li>It can be compared with validation and test results to detect overfitting</li>
+</ul>
+<p>For example, good performance on training data but poor performance on test data
+would suggest the model is overfitting to the training data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_ValidationResult_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.ValidationResult*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_ValidationResult" data-uid="AiDotNet.Models.Results.OptimizationResult`3.ValidationResult">
+  ValidationResult
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L284"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the detailed results for the validation dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt;.DatasetResult ValidationResult { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;.<a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.DatasetResult.html">DatasetResult</a></dt>
+    <dd><p>A DatasetResult object containing detailed statistics for the validation dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_OptimizationResult_3_ValidationResult_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains detailed results and statistics for the validation dataset, which is the portion of data used 
+to tune hyperparameters and evaluate the model during training. The validation result includes the input features (X), 
+target values (Y), model predictions, error statistics, prediction statistics, and basic statistics for both actual 
+and predicted values. This information is crucial for understanding how well the model generalizes to unseen data and 
+for making decisions about model selection and hyperparameter tuning.
+</p>
+<p><b>For Beginners:</b> This contains detailed information about how the model performs on the validation data.
+<p>The validation result:</p>
+<ul>
+<li>Shows how well the model performs on data not used in training</li>
+<li>Helps detect overfitting (when a model performs well on training data but poorly on new data)</li>
+<li>Is used to guide model selection and hyperparameter tuning</li>
+</ul>
+<p>This information is important because:</p>
+<ul>
+<li>It provides feedback during the model development process</li>
+<li>It helps you choose between different model configurations</li>
+<li>It gives an early indication of how well the model might perform in production</li>
+</ul>
+<p>For example, if performance is significantly worse on validation data than training data,
+you might need to simplify your model to reduce overfitting.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_DeepCopy_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_DeepCopy" data-uid="AiDotNet.Models.Results.OptimizationResult`3.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this OptimizationResult instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new OptimizationResult with copied values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Results_OptimizationResult_3_WithParameters_" data-uid="AiDotNet.Models.Results.OptimizationResult`3.WithParameters*"></a>
+
+  <h3 id="AiDotNet_Models_Results_OptimizationResult_3_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Models.Results.OptimizationResult`3.WithParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  WithParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L488"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new OptimizationResult instance with the best solution updated to use the specified parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizationResult&lt;T, TInput, TOutput&gt; WithParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameters to apply to the best solution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.OptimizationResult-3.html">OptimizationResult</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A new OptimizationResult with the updated model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/OptimizationResult.cs/#L37" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

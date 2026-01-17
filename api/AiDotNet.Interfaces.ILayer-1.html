@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ILayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ILayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for neural network layers in the AiDotNet framework.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ILayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ILayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ILayer`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ILayer_1" data-uid="AiDotNet.Interfaces.ILayer`1" class="text-break">
+Interface ILayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for neural network layers in the AiDotNet framework.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ILayer&lt;T&gt; : IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations (typically float or double).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html#AiDotNet_Interfaces_IDiagnosticsProvider_GetDiagnostics">IDiagnosticsProvider.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_GetParameterNames">IWeightLoadable&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">IWeightLoadable&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">IWeightLoadable&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_GetParameterShape_System_String_">IWeightLoadable&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_NamedParameterCount">IWeightLoadable&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">IWeightLoadable&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">IWeightLoadable&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ILayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A neural network is made up of layers, similar to how a sandwich has layers.
+Each layer processes data in some way and passes it to the next layer.</p>
+<p>This interface defines what all layers must be able to do, regardless of their specific type.
+Think of it as a checklist of abilities that every layer must have to work within our neural network.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_CanExecuteOnGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.CanExecuteOnGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_CanExecuteOnGpu" data-uid="AiDotNet.Interfaces.ILayer`1.CanExecuteOnGpu">
+  CanExecuteOnGpu
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer can execute on GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool CanExecuteOnGpu { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_CanExecuteOnGpu_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Not all layers support GPU acceleration yet. This property tells you
+if this particular layer can run on the GPU.</p>
+<p>If this returns true, you can use <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____">ForwardGpu(params IGpuTensor&lt;T&gt;[])</a> for faster execution.
+If this returns false, the layer will fall back to CPU execution.</p>
+<p>Common layers like Dense, Convolutional, and Attention layers typically support GPU.
+Specialized layers may only support CPU execution.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_ParameterCount_" data-uid="AiDotNet.Interfaces.ILayer`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_ParameterCount" data-uid="AiDotNet.Interfaces.ILayer`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the total number of trainable parameters in this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many adjustable values this layer has.</p>
+<p>For example:</p>
+<ul>
+<li>A dense layer with 10 inputs and 5 outputs has 10×5=50 weights plus 5 biases = 55 parameters</li>
+<li>A convolutional layer with 16 3×3 filters has 16×3×3=144 weights plus 16 biases = 160 parameters</li>
+<li>A pooling layer has 0 parameters (it just selects values, no weights to adjust)</li>
+</ul>
+<p>More parameters means the layer can learn more complex patterns, but also requires more data to train effectively.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_SupportsGpuTraining_" data-uid="AiDotNet.Interfaces.ILayer`1.SupportsGpuTraining*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_SupportsGpuTraining" data-uid="AiDotNet.Interfaces.ILayer`1.SupportsGpuTraining">
+  SupportsGpuTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L337"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this layer supports GPU-resident training (forward, backward, and parameter updates on GPU).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsGpuTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_SupportsGpuTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you if the layer can be trained entirely on the GPU.
+GPU training is much faster because:</p>
+<ul>
+<li>Data stays on GPU between forward and backward passes</li>
+<li>No expensive CPU-GPU transfers during each training step</li>
+<li>GPU kernels handle all computation in parallel</li>
+</ul>
+<p>If this returns true, you can use the GPU training methods (BackwardGpu, UpdateParametersGpu).
+If false, training will fall back to the CPU implementation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_SupportsTraining_" data-uid="AiDotNet.Interfaces.ILayer`1.SupportsTraining*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_SupportsTraining" data-uid="AiDotNet.Interfaces.ILayer`1.SupportsTraining">
+  SupportsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this layer supports training operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_SupportsTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This property tells you whether this layer can be trained (adjusted) during learning.</p>
+<p>Most layers (like convolutional or dense layers) return true because they have weights that need to be learned.
+Some layers (like input layers or certain normalization layers) might return false because they
+don't have parameters that need training or they should remain fixed during training.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_Backward_" data-uid="AiDotNet.Interfaces.ILayer`1.Backward*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ILayer`1.Backward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Backward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates gradients during the backward pass of backpropagation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Backward(Tensor&lt;T&gt; outputGradient)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the next layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient to pass to the previous layer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> During training, neural networks learn by adjusting their parameters.
+To know how to adjust them, we need to calculate how much each parameter affects the error.</p>
+<p>This method handles the &quot;backward pass&quot; where error information flows backward through the network.
+It takes the gradient (direction of error) from the next layer and calculates:</p>
+<ol>
+<li>How to update this layer's parameters</li>
+<li>What gradient to pass to the previous layer</li>
+</ol>
+<p>Think of it like tracing back through a series of decisions to figure out which ones led to a mistake.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_ClearGradients_" data-uid="AiDotNet.Interfaces.ILayer`1.ClearGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_ClearGradients" data-uid="AiDotNet.Interfaces.ILayer`1.ClearGradients">
+  ClearGradients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L286"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all accumulated gradients in the layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ClearGradients()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_ClearGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> During training, gradients are calculated and accumulated.</p>
+<p>This method resets those accumulated gradients to zero, which is typically done:</p>
+<ol>
+<li>At the start of each training batch</li>
+<li>After parameters have been updated</li>
+<li>When switching to a new training example</li>
+</ol>
+<p>It's like wiping a whiteboard clean before starting a new calculation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_Deserialize_" data-uid="AiDotNet.Interfaces.ILayer`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_Deserialize_System_IO_BinaryReader_" data-uid="AiDotNet.Interfaces.ILayer`1.Deserialize(System.IO.BinaryReader)">
+  Deserialize(BinaryReader)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads the layer's configuration and parameters from a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Deserialize(BinaryReader reader)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>reader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binaryreader">BinaryReader</a></dt>
+    <dd><p>The binary reader to read the data from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_Deserialize_System_IO_BinaryReader__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method loads previously saved information about the layer.</p>
+<p>It's the counterpart to Serialize - if Serialize is like saving your game progress,
+Deserialize is like loading that saved game. It restores all the layer's settings and
+learned parameters from a file.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_DownloadWeightsFromGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.DownloadWeightsFromGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_DownloadWeightsFromGpu" data-uid="AiDotNet.Interfaces.ILayer`1.DownloadWeightsFromGpu">
+  DownloadWeightsFromGpu()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L388"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads the layer's weights and biases from GPU memory back to CPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void DownloadWeightsFromGpu()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_DownloadWeightsFromGpu_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this after GPU training to sync the learned values back to CPU.</p>
+<p>During GPU training, only the GPU copies of weights are updated.
+Call this to:</p>
+<ul>
+<li>Save the model to disk</li>
+<li>Switch to CPU inference</li>
+<li>Inspect the trained weights</li>
+</ul>
+<p>This is relatively expensive, so only call it when necessary (not every batch).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_Forward_" data-uid="AiDotNet.Interfaces.ILayer`1.Forward*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ILayer`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Processes input data through the layer during the forward pass.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Forward(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to be processed.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The output tensor after processing.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is where the actual work happens when data flows through the network.
+Each layer takes some input, applies its specific operation, and produces an output.</p>
+<p>For example:</p>
+<ul>
+<li>A convolutional layer detects patterns in images</li>
+<li>A pooling layer reduces the size of data</li>
+<li>A dense layer combines all inputs with weights to produce outputs</li>
+</ul>
+<p>This is called the &quot;forward pass&quot; because data is moving forward through the network.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_ForwardGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.ForwardGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____" data-uid="AiDotNet.Interfaces.ILayer`1.ForwardGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0}[])">
+  ForwardGpu(params IGpuTensor&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs a GPU-resident forward pass, keeping the result on the GPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuTensor&lt;T&gt; ForwardGpu(params IGpuTensor&lt;T&gt;[] inputs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;[]</dt>
+    <dd><p>GPU-resident input tensor(s). Most layers use only the first input,
+but some layers like cross-attention require multiple inputs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>GPU-resident output tensor. Caller is responsible for disposal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like the regular Forward method, but optimized for GPU execution.</p>
+<p>Instead of copying data back and forth between CPU and GPU after each layer,
+this method keeps everything on the GPU until you're done processing. This can be
+10-50x faster for deep networks with many layers!</p>
+<p>Use this method when:</p>
+<ul>
+<li>You have a GPU available and want maximum performance</li>
+<li>You're running inference (predictions) on batches of data</li>
+<li>You have multiple layers that all support GPU execution</li>
+</ul>
+<p>The result stays on the GPU until you call ToTensor() to download it to CPU memory.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_CanExecuteOnGpu">CanExecuteOnGpu</a> is false or no GPU backend is available.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetActivationTypes_" data-uid="AiDotNet.Interfaces.ILayer`1.GetActivationTypes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetActivationTypes" data-uid="AiDotNet.Interfaces.ILayer`1.GetActivationTypes">
+  GetActivationTypes()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the activation functions used by this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;ActivationFunction&gt; GetActivationTypes()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Enums.ActivationFunction.html">ActivationFunction</a>&gt;</dt>
+    <dd><p>A collection of activation functions used by this layer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_GetActivationTypes_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Activation functions determine how a neuron responds to its input.</p>
+<p>They introduce non-linearity, which is crucial for neural networks to learn complex patterns.
+Common activation functions include:</p>
+<ul>
+<li>ReLU: Returns 0 for negative inputs, or the input value for positive inputs</li>
+<li>Sigmoid: Squashes values between 0 and 1 (useful for probabilities)</li>
+<li>Tanh: Squashes values between -1 and 1</li>
+</ul>
+<p>This method tells you which activation functions this layer uses.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetBiases_" data-uid="AiDotNet.Interfaces.ILayer`1.GetBiases*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetBiases" data-uid="AiDotNet.Interfaces.ILayer`1.GetBiases">
+  GetBiases()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the bias tensor for layers that have trainable biases.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt;? GetBiases()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The bias tensor, or null if the layer has no biases.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetInputShape_" data-uid="AiDotNet.Interfaces.ILayer`1.GetInputShape*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetInputShape" data-uid="AiDotNet.Interfaces.ILayer`1.GetInputShape">
+  GetInputShape()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape (dimensions) of the input data expected by this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int[] GetInputShape()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array of integers representing the input dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_GetInputShape_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells us what size and shape of data this layer expects to receive.
+For example, if processing images, this might be [3, 28, 28] for 28×28 pixel images with 3 color channels.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetOutputShape_" data-uid="AiDotNet.Interfaces.ILayer`1.GetOutputShape*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetOutputShape" data-uid="AiDotNet.Interfaces.ILayer`1.GetOutputShape">
+  GetOutputShape()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape (dimensions) of the output data produced by this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int[] GetOutputShape()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>An array of integers representing the output dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_GetOutputShape_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells us what size and shape of data this layer will produce.
+The output shape often differs from the input shape because the layer may transform the data.
+For example, a pooling layer might reduce the dimensions from [3, 28, 28] to [3, 14, 14].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetParameterGradients_" data-uid="AiDotNet.Interfaces.ILayer`1.GetParameterGradients*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetParameterGradients" data-uid="AiDotNet.Interfaces.ILayer`1.GetParameterGradients">
+  GetParameterGradients()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L271"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the gradients of all trainable parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetParameterGradients()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing the gradients for all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_GetParameterGradients_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> During training, we calculate how much each parameter affects the error (the gradient).</p>
+<p>This method returns those gradients, which show:</p>
+<ol>
+<li>Which direction to adjust each parameter (increase or decrease)</li>
+<li>How strongly each parameter affects the error</li>
+</ol>
+<p>These gradients are used to update the parameters during training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetParameters_" data-uid="AiDotNet.Interfaces.ILayer`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetParameters" data-uid="AiDotNet.Interfaces.ILayer`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all trainable parameters of the layer as a single vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all trainable parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_GetParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method returns all the values that can be adjusted during training
+(weights and biases) as a single list.</p>
+<p>This is useful for:</p>
+<ol>
+<li>Saving and loading models</li>
+<li>Advanced optimization techniques</li>
+<li>Analyzing or visualizing the learned parameters</li>
+</ol>
+<p>Some layers (like pooling layers) might return an empty vector because they have no trainable parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_GetWeights_" data-uid="AiDotNet.Interfaces.ILayer`1.GetWeights*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_GetWeights" data-uid="AiDotNet.Interfaces.ILayer`1.GetWeights">
+  GetWeights()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the weight tensor for layers that have trainable weights.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt;? GetWeights()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The weight tensor, or null if the layer has no weights.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_ResetState_" data-uid="AiDotNet.Interfaces.ILayer`1.ResetState*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_ResetState" data-uid="AiDotNet.Interfaces.ILayer`1.ResetState">
+  ResetState()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the internal state of the layer to its initial condition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ResetState()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_ResetState_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some layers (like recurrent layers) keep track of information from previous inputs.
+This is called the layer's &quot;state&quot; - it's like the layer's memory of what it has seen before.</p>
+<p>This method clears that memory, making the layer forget all previous inputs. It's useful when:</p>
+<ol>
+<li>Starting to process a new sequence of data</li>
+<li>You want predictions to be independent of previous inputs</li>
+<li>Testing the layer with different inputs and want to start fresh each time</li>
+</ol>
+<p>For example, if you're processing sentences one at a time, you might want to reset
+the state between different sentences so information from one sentence doesn't
+affect how the next sentence is processed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_Serialize_" data-uid="AiDotNet.Interfaces.ILayer`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_Serialize_System_IO_BinaryWriter_" data-uid="AiDotNet.Interfaces.ILayer`1.Serialize(System.IO.BinaryWriter)">
+  Serialize(BinaryWriter)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the layer's configuration and parameters to a binary stream.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Serialize(BinaryWriter writer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>writer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.io.binarywriter">BinaryWriter</a></dt>
+    <dd><p>The binary writer to write the data to.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_Serialize_System_IO_BinaryWriter__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method saves all the information about the layer so it can be loaded later.</p>
+<p>It's like saving your progress in a video game - all the important information about the layer
+(its type, shape, and learned parameters) gets written to a file so you can continue using
+the same trained layer later without having to train it again.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_SetParameters_" data-uid="AiDotNet.Interfaces.ILayer`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ILayer`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets all trainable parameters of the layer to the specified values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you directly set all the weights and biases of the layer.</p>
+<p>This is useful when:</p>
+<ol>
+<li>Loading a pre-trained model</li>
+<li>Initializing parameters in a specific way</li>
+<li>Testing how different parameter values affect performance</li>
+</ol>
+<p>It's like replacing all the settings in the layer at once.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_SetTrainingMode_" data-uid="AiDotNet.Interfaces.ILayer`1.SetTrainingMode*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_SetTrainingMode_System_Boolean_" data-uid="AiDotNet.Interfaces.ILayer`1.SetTrainingMode(System.Boolean)">
+  SetTrainingMode(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the layer to training or evaluation mode.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetTrainingMode(bool isTraining)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>isTraining</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to set the layer to training mode, false for evaluation mode.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_SetTrainingMode_System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some layers behave differently during training versus when making predictions.</p>
+<p>For example:</p>
+<ul>
+<li>Dropout layers randomly disable neurons during training but use all neurons during evaluation</li>
+<li>Batch normalization layers collect statistics during training but use fixed statistics during evaluation</li>
+</ul>
+<p>This method switches the layer between these two modes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_UpdateParameters_" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the layer's parameters using the provided parameter values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The new parameter values to apply.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> While the other UpdateParameters method calculates new values based on gradients,
+this method lets you directly specify what the new parameter values should be.</p>
+<p>This is useful for advanced optimization techniques where parameters are calculated externally,
+or when loading pre-trained parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_UpdateParameters_" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParameters*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_UpdateParameters__0_" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParameters(`0)">
+  UpdateParameters(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L141"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the layer's parameters using the specified learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateParameters(T learningRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>learningRate</code> <span class="xref">T</span></dt>
+    <dd><p>The learning rate that controls how much parameters change.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_UpdateParameters__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adjusts the layer's internal values (weights and biases) during training.</p>
+<p>The learning rate is like the size of the steps you take when adjusting parameters:</p>
+<ul>
+<li>A large learning rate means big changes (faster learning but might overshoot)</li>
+<li>A small learning rate means small changes (more precise but slower learning)</li>
+</ul>
+<p>This method uses the gradients calculated during the backward pass to update parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_UpdateParametersGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParametersGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_" data-uid="AiDotNet.Interfaces.ILayer`1.UpdateParametersGpu(AiDotNet.Interfaces.IGpuOptimizerConfig)">
+  UpdateParametersGpu(IGpuOptimizerConfig)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the layer's parameters on GPU using the specified optimizer configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UpdateParametersGpu(IGpuOptimizerConfig config)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>config</code> <a class="xref" href="AiDotNet.Interfaces.IGpuOptimizerConfig.html">IGpuOptimizerConfig</a></dt>
+    <dd><p>The GPU optimizer configuration specifying the update algorithm and hyperparameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method updates the layer's weights and biases entirely on the GPU.</p>
+<p>The optimizer config determines how the update is done:</p>
+<ul>
+<li>SGD: Simple gradient descent with optional momentum</li>
+<li>Adam: Adaptive learning rates with moment estimates</li>
+<li>AdamW: Adam with decoupled weight decay</li>
+<li>And more...</li>
+</ul>
+<p>Using this method keeps all training computation on the GPU, which is much faster
+than downloading gradients to CPU, computing updates, and uploading back.</p>
+<p>Call BackwardGpu first to compute gradients, then call this to update weights.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_UploadWeightsToGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.UploadWeightsToGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_UploadWeightsToGpu" data-uid="AiDotNet.Interfaces.ILayer`1.UploadWeightsToGpu">
+  UploadWeightsToGpu()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L372"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Uploads the layer's weights and biases to GPU memory for GPU-resident training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void UploadWeightsToGpu()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_UploadWeightsToGpu_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this once before starting GPU training.</p>
+<p>It copies the layer's learned values (weights and biases) from CPU memory to GPU memory.
+After this, training can happen entirely on the GPU without CPU involvement.</p>
+<p>Also allocates GPU buffers for:</p>
+<ul>
+<li>Gradients (computed during BackwardGpu)</li>
+<li>Optimizer state (momentum, Adam moments, etc.)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILayer_1_ZeroGradientsGpu_" data-uid="AiDotNet.Interfaces.ILayer`1.ZeroGradientsGpu*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILayer_1_ZeroGradientsGpu" data-uid="AiDotNet.Interfaces.ILayer`1.ZeroGradientsGpu">
+  ZeroGradientsGpu()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L404"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the GPU gradient accumulators to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void ZeroGradientsGpu()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILayer_1_ZeroGradientsGpu_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this at the start of each training batch.</p>
+<p>Each batch computes new gradients. Before processing a new batch:</p>
+<ol>
+<li>Call this to clear old gradients</li>
+<li>Run ForwardGpu on the batch</li>
+<li>Run BackwardGpu to compute new gradients</li>
+<li>Call UpdateParametersGpu to apply the updates</li>
+</ol>
+<p>If you forget to zero gradients, they accumulate and training goes wrong!</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILayer.cs/#L16" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

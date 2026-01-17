@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ExecutionGraphBuilder | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ExecutionGraphBuilder | AiDotNet Documentation ">
+      
+      <meta name="description" content="Builder for constructing execution graphs from recorded operations. Tracks dependencies and provides fluent API for building graphs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder" class="text-break">
+Class ExecutionGraphBuilder  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L9"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.html">Gpu</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.html">Graph</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Builder for constructing execution graphs from recorded operations.
+Tracks dependencies and provides fluent API for building graphs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class ExecutionGraphBuilder : IDisposable</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ExecutionGraphBuilder</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilderExtensions.html#AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilderExtensions_AddLinearLayer_AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_System_Int32_System_Int32_System_Int32_System_Nullable_AiDotNet_Tensors_Engines_FusedActivationType__AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_">ExecutionGraphBuilderExtensions.AddLinearLayer(ExecutionGraphBuilder, IGpuTensor, IGpuTensor, IGpuTensor, IGpuTensor, int, int, int, FusedActivationType?, IDirectGpuBackend)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilderExtensions.html#AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilderExtensions_AddParallelBatch_AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_System_Action_AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder____">ExecutionGraphBuilderExtensions.AddParallelBatch(ExecutionGraphBuilder, Action&lt;ExecutionGraphBuilder&gt;[])</a>
+  </div>
+  </dd></dl>
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_IsBuilt_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.IsBuilt*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_IsBuilt" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.IsBuilt">
+  IsBuilt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the graph has been built.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsBuilt { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_NodeCount_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.NodeCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_NodeCount" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.NodeCount">
+  NodeCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current number of nodes in the graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NodeCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Nodes_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Nodes*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Nodes" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Nodes">
+  Nodes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all nodes added to the builder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;ExecutionNode&gt; Nodes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_ValidationWarnings_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.ValidationWarnings*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_ValidationWarnings" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.ValidationWarnings">
+  ValidationWarnings
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L23"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets any validation warnings generated during the last Build() call.
+These indicate potential issues that don't prevent execution but may
+indicate unintended graph structure (e.g., orphaned nodes with no dependencies).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; ValidationWarnings { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddActivation_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddActivation*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddActivation_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_FusedActivationType_System_Action_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_Gpu_IGpuStream__" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddActivation(AiDotNet.Tensors.Engines.Gpu.IGpuTensor,AiDotNet.Tensors.Engines.Gpu.IGpuTensor,AiDotNet.Tensors.Engines.FusedActivationType,System.Action{AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.Gpu.IGpuStream})">
+  AddActivation(IGpuTensor, IGpuTensor, FusedActivationType, Action&lt;IDirectGpuBackend, IGpuStream?&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a kernel node for activation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddActivation(IGpuTensor input, IGpuTensor output, FusedActivationType activation, Action&lt;IDirectGpuBackend, IGpuStream?&gt; action)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>activation</code> <a class="xref" href="AiDotNet.Tensors.Engines.FusedActivationType.html">FusedActivationType</a></dt>
+    <dd></dd>
+    <dt><code>action</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddAllocate_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddAllocate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddAllocate_System_Int32_AiDotNet_Tensors_Engines_Gpu_GpuTensorRole_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddAllocate(System.Int32,AiDotNet.Tensors.Engines.Gpu.GpuTensorRole)">
+  AddAllocate(int, GpuTensorRole)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a buffer allocation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddAllocate(int size, GpuTensorRole role = GpuTensorRole.Intermediate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>role</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuTensorRole.html">GpuTensorRole</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddBarrier_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddBarrier*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddBarrier" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddBarrier">
+  AddBarrier()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a barrier that synchronizes all preceding operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddBarrier()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddBarrier_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddBarrier*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddBarrier_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_Engines_Gpu_IGpuStream__" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddBarrier(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.Engines.Gpu.IGpuStream})">
+  AddBarrier(IEnumerable&lt;IGpuStream&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L192"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a barrier for specific streams.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddBarrier(IEnumerable&lt;IGpuStream&gt; streams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>streams</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddCopy_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddCopy*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddCopy_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddCopy(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32)">
+  AddCopy(IGpuBuffer, IGpuBuffer, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a device-to-device copy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddCopy(IGpuBuffer source, IGpuBuffer destination, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>destination</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDeallocate_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDeallocate*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDeallocate_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDeallocate(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer)">
+  AddDeallocate(IGpuBuffer)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L164"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a buffer deallocation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddDeallocate(IGpuBuffer buffer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>buffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDependency_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDependency*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDependency_AiDotNet_Tensors_Engines_Gpu_ExecutionNode_AiDotNet_Tensors_Engines_Gpu_ExecutionNode_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDependency(AiDotNet.Tensors.Engines.Gpu.ExecutionNode,AiDotNet.Tensors.Engines.Gpu.ExecutionNode)">
+  AddDependency(ExecutionNode, ExecutionNode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an explicit dependency between two nodes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddDependency(ExecutionNode from, ExecutionNode to)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>from</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a></dt>
+    <dd></dd>
+    <dt><code>to</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDownload_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDownload*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDownload_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDownload(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32)">
+  AddDownload(IGpuBuffer, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a device-to-host transfer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddDownload(IGpuBuffer sourceBuffer, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceBuffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDownloadWithHandle_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDownloadWithHandle*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddDownloadWithHandle_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_System_Int32_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddDownloadWithHandle(AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer,System.Int32)">
+  AddDownloadWithHandle(IGpuBuffer, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a device-to-host transfer and returns the transfer node for deferred access.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TransferNode AddDownloadWithHandle(IGpuBuffer sourceBuffer, int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceBuffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd><p>The source GPU buffer to download.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to download.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.TransferNode.html">TransferNode</a></dt>
+    <dd><p>The transfer node that will contain the downloaded data after execution.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddElementWise_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddElementWise*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddElementWise_AiDotNet_Tensors_Engines_Gpu_IGpuTensor___AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_Graph_ElementWiseOp_System_Action_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_Gpu_IGpuStream__" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddElementWise(AiDotNet.Tensors.Engines.Gpu.IGpuTensor[],AiDotNet.Tensors.Engines.Gpu.IGpuTensor,AiDotNet.Tensors.Engines.Gpu.Graph.ElementWiseOp,System.Action{AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.Gpu.IGpuStream})">
+  AddElementWise(IGpuTensor[], IGpuTensor, ElementWiseOp, Action&lt;IDirectGpuBackend, IGpuStream?&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L88"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an element-wise operation kernel node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddElementWise(IGpuTensor[] inputs, IGpuTensor output, ElementWiseOp operation, Action&lt;IDirectGpuBackend, IGpuStream?&gt; action)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a>[]</dt>
+    <dd></dd>
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>operation</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ElementWiseOp.html">ElementWiseOp</a></dt>
+    <dd></dd>
+    <dt><code>action</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddGemm_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddGemm*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddGemm_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_AiDotNet_Tensors_Engines_Gpu_IGpuTensor_System_Int32_System_Int32_System_Int32_System_Single_System_Single_System_Action_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_Gpu_IGpuStream__" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddGemm(AiDotNet.Tensors.Engines.Gpu.IGpuTensor,AiDotNet.Tensors.Engines.Gpu.IGpuTensor,AiDotNet.Tensors.Engines.Gpu.IGpuTensor,System.Int32,System.Int32,System.Int32,System.Single,System.Single,System.Action{AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.Gpu.IGpuStream})">
+  AddGemm(IGpuTensor, IGpuTensor, IGpuTensor, int, int, int, float, float, Action&lt;IDirectGpuBackend, IGpuStream?&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a kernel node for GEMM operation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddGemm(IGpuTensor a, IGpuTensor b, IGpuTensor c, int m, int n, int k, float alpha, float beta, Action&lt;IDirectGpuBackend, IGpuStream?&gt; action)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>c</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a></dt>
+    <dd></dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>k</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>beta</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+    <dt><code>action</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddKernel_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddKernel*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddKernel_AiDotNet_Tensors_Engines_Gpu_Graph_KernelType_AiDotNet_Tensors_Engines_Gpu_IGpuTensor___AiDotNet_Tensors_Engines_Gpu_IGpuTensor___System_Action_AiDotNet_Tensors_Engines_DirectGpu_IDirectGpuBackend_AiDotNet_Tensors_Engines_Gpu_IGpuStream__System_Collections_Generic_Dictionary_System_String_System_Object__" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddKernel(AiDotNet.Tensors.Engines.Gpu.Graph.KernelType,AiDotNet.Tensors.Engines.Gpu.IGpuTensor[],AiDotNet.Tensors.Engines.Gpu.IGpuTensor[],System.Action{AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend,AiDotNet.Tensors.Engines.Gpu.IGpuStream},System.Collections.Generic.Dictionary{System.String,System.Object})">
+  AddKernel(KernelType, IGpuTensor[], IGpuTensor[], Action&lt;IDirectGpuBackend, IGpuStream?&gt;, Dictionary&lt;string, object&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom kernel node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddKernel(KernelType kernelType, IGpuTensor[] inputs, IGpuTensor[] outputs, Action&lt;IDirectGpuBackend, IGpuStream?&gt; action, Dictionary&lt;string, object&gt;? parameters = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernelType</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.KernelType.html">KernelType</a></dt>
+    <dd></dd>
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a>[]</dt>
+    <dd></dd>
+    <dt><code>outputs</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor.html">IGpuTensor</a>[]</dt>
+    <dd></dd>
+    <dt><code>action</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend.html">IDirectGpuBackend</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuStream.html">IGpuStream</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>parameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddNode_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddNode*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddNode_AiDotNet_Tensors_Engines_Gpu_ExecutionNode_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddNode(AiDotNet.Tensors.Engines.Gpu.ExecutionNode)">
+  AddNode(ExecutionNode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a node to the graph with automatic dependency tracking.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddNode(ExecutionNode node)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a></dt>
+    <dd><p>The node to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd><p>The builder for chaining.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddUpload_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddUpload*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_AddUpload_System_Single___AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.AddUpload(System.Single[],AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer)">
+  AddUpload(float[], IGpuBuffer)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a host-to-device transfer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder AddUpload(float[] sourceData, IGpuBuffer destinationBuffer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>sourceData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>[]</dt>
+    <dd></dd>
+    <dt><code>destinationBuffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Build_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Build*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Build" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Build">
+  Build()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds the execution graph.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraph Build()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraph.html">ExecutionGraph</a></dt>
+    <dd><p>The built execution graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_BuildOptimized_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.BuildOptimized*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_BuildOptimized_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.BuildOptimized(AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions,AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend)">
+  BuildOptimized(GpuExecutionOptions, IAsyncGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds and optimizes the execution graph with the specified options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraph BuildOptimized(GpuExecutionOptions options, IAsyncGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+    <dd><p>Optimization options.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.html">IAsyncGpuBackend</a></dt>
+    <dd><p>Backend for optimization passes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraph.html">ExecutionGraph</a></dt>
+    <dd><p>The optimized execution graph.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_BuildOptimizedWithStatistics_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.BuildOptimizedWithStatistics*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_BuildOptimizedWithStatistics_AiDotNet_Tensors_Engines_Gpu_GpuExecutionOptions_AiDotNet_Tensors_Engines_Gpu_IAsyncGpuBackend_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.BuildOptimizedWithStatistics(AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions,AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend)">
+  BuildOptimizedWithStatistics(GpuExecutionOptions, IAsyncGpuBackend)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L256"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds and optimizes the execution graph, returning both the graph and optimization statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (ExecutionGraph Graph, OptimizationStatistics Statistics) BuildOptimizedWithStatistics(GpuExecutionOptions options, IAsyncGpuBackend backend)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.GpuExecutionOptions.html">GpuExecutionOptions</a></dt>
+    <dd><p>Optimization options.</p>
+</dd>
+    <dt><code>backend</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IAsyncGpuBackend.html">IAsyncGpuBackend</a></dt>
+    <dd><p>Backend for optimization passes.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraph.html">ExecutionGraph</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.engines.gpu.graph.executiongraph,aidotnet.tensors.engines.gpu.graph.optimization.optimizationstatistics-.graph">Graph</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.Optimization.OptimizationStatistics.html">OptimizationStatistics</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.engines.gpu.graph.executiongraph,aidotnet.tensors.engines.gpu.graph.optimization.optimizationstatistics-.statistics">Statistics</a>)</dt>
+    <dd><p>A tuple containing the optimized execution graph and optimization statistics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Clear_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Clear*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Clear" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears the builder for reuse.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_DependOnBuffer_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.DependOnBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_DependOnBuffer_AiDotNet_Tensors_Engines_Gpu_ExecutionNode_AiDotNet_Tensors_Engines_DirectGpu_IGpuBuffer_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.DependOnBuffer(AiDotNet.Tensors.Engines.Gpu.ExecutionNode,AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer)">
+  DependOnBuffer(ExecutionNode, IGpuBuffer)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a node depend on the last write to a buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ExecutionGraphBuilder DependOnBuffer(ExecutionNode node, IGpuBuffer buffer)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>node</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.ExecutionNode.html">ExecutionNode</a></dt>
+    <dd></dd>
+    <dt><code>buffer</code> <a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.html">ExecutionGraphBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Dispose_" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Dispose*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_Graph_ExecutionGraphBuilder_Dispose" data-uid="AiDotNet.Tensors.Engines.Gpu.Graph.ExecutionGraphBuilder.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/Graph/ExecutionGraphBuilder.cs/#L9" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

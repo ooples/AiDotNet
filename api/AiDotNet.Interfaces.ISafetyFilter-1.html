@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ISafetyFilter&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ISafetyFilter&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for safety filters that detect and prevent harmful or inappropriate model inputs and outputs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ISafetyFilter_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ISafetyFilter%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ISafetyFilter`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ISafetyFilter_1" data-uid="AiDotNet.Interfaces.ISafetyFilter`1" class="text-break">
+Interface ISafetyFilter&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L29"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for safety filters that detect and prevent harmful or inappropriate model inputs and outputs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ISafetyFilter&lt;T&gt; : IModelSerializer</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Serialize">IModelSerializer.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_Deserialize_System_Byte___">IModelSerializer.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_SaveModel_System_String_">IModelSerializer.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html#AiDotNet_Interfaces_IModelSerializer_LoadModel_System_String_">IModelSerializer.LoadModel(string)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ISafetyFilter_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Safety filters act as gatekeepers that monitor model inputs and outputs to prevent
+harmful, inappropriate, or malicious content from passing through the system.</p>
+<p><b>For Beginners:</b> Think of safety filters as &quot;security guards&quot; for your AI system.
+They check everything going in and coming out to make sure nothing dangerous or
+inappropriate gets through.</p>
+<p>Common safety filter functions include:</p>
+<ul>
+<li>Input Validation: Check that inputs are safe and properly formatted</li>
+<li>Output Filtering: Ensure outputs don't contain harmful content</li>
+<li>Jailbreak Detection: Identify attempts to bypass safety measures</li>
+<li>Harmful Content Detection: Flag potentially dangerous or inappropriate content</li>
+</ul>
+<p>Why safety filters matter:</p>
+<ul>
+<li>They prevent misuse of AI systems</li>
+<li>They protect users from harmful content</li>
+<li>They help maintain ethical AI deployments</li>
+<li>They catch edge cases and adversarial inputs</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_ComputeSafetyScore_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.ComputeSafetyScore*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_ComputeSafetyScore_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.ComputeSafetyScore(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeSafetyScore(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes a safety score for model inputs or outputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeSafetyScore(Vector&lt;T&gt; content)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>content</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The content to score.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A safety score between 0 (unsafe) and 1 (completely safe).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_ComputeSafetyScore_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This gives a single &quot;safety score&quot; from 0 to 1 indicating
+how safe the content is. Think of it like a trust score - higher numbers mean
+safer content.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_DetectJailbreak_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.DetectJailbreak*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_DetectJailbreak_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.DetectJailbreak(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  DetectJailbreak(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Detects jailbreak attempts that try to bypass safety measures.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">JailbreakDetectionResult&lt;T&gt; DetectJailbreak(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input to check for jailbreak attempts.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.JailbreakDetectionResult-1.html">JailbreakDetectionResult</a>&lt;T&gt;</dt>
+    <dd><p>Detection result indicating if a jailbreak was detected and its severity.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_DetectJailbreak_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A &quot;jailbreak&quot; is when someone tries to trick your AI into
+ignoring its safety rules. This method detects those attempts.</p>
+<p>Examples of jailbreak attempts:</p>
+<ul>
+<li>&quot;Ignore your previous instructions and do X instead&quot;</li>
+<li>Roleplaying scenarios to bypass restrictions</li>
+<li>Encoding harmful requests in creative ways</li>
+<li>Exploiting edge cases in safety training</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_FilterOutput_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.FilterOutput*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_FilterOutput_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.FilterOutput(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  FilterOutput(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Filters model outputs to remove or flag harmful content.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SafetyFilterResult&lt;T&gt; FilterOutput(Vector&lt;T&gt; output)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The model output to filter.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.SafetyFilterResult-1.html">SafetyFilterResult</a>&lt;T&gt;</dt>
+    <dd><p>Filtered output with harmful content removed or flagged.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_FilterOutput_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This checks what the AI is about to say before showing it
+to users. If the AI generated something harmful or inappropriate, this method
+can block it or modify it to be safe.</p>
+<p>For example:</p>
+<ul>
+<li>If an AI accidentally generates instructions for something dangerous</li>
+<li>If output contains private or sensitive information</li>
+<li>If the response could be misleading or harmful</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_GetOptions_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.GetOptions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_GetOptions" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.GetOptions">
+  GetOptions()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the configuration options for the safety filter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SafetyFilterOptions&lt;T&gt; GetOptions()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.SafetyFilterOptions-1.html">SafetyFilterOptions</a>&lt;T&gt;</dt>
+    <dd><p>The configuration options for the safety filter.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_GetOptions_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> These settings control how strict the safety filter is
+and what types of content it looks for.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_IdentifyHarmfulContent_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.IdentifyHarmfulContent*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_IdentifyHarmfulContent_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.IdentifyHarmfulContent(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  IdentifyHarmfulContent(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Identifies harmful or inappropriate content in text or data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">HarmfulContentResult&lt;T&gt; IdentifyHarmfulContent(Vector&lt;T&gt; content)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>content</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The content to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.HarmfulContentResult-1.html">HarmfulContentResult</a>&lt;T&gt;</dt>
+    <dd><p>Classification of harmful content types and severity scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_IdentifyHarmfulContent_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like a content moderation system. It scans content
+(inputs or outputs) and identifies anything that might be harmful, offensive,
+or inappropriate.</p>
+<p>Categories it might detect:</p>
+<ul>
+<li>Violence or graphic content</li>
+<li>Hate speech or discrimination</li>
+<li>Private or sensitive information</li>
+<li>Misinformation or scams</li>
+<li>Adult or sexual content</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_Reset_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.Reset*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_Reset" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the safety filter state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ISafetyFilter_1_ValidateInput_" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.ValidateInput*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ISafetyFilter_1_ValidateInput_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.ISafetyFilter`1.ValidateInput(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ValidateInput(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that an input is safe and appropriate for processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">SafetyValidationResult&lt;T&gt; ValidateInput(Vector&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The input to validate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.SafetyValidationResult-1.html">SafetyValidationResult</a>&lt;T&gt;</dt>
+    <dd><p>Validation result indicating if input is safe and any issues found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ISafetyFilter_1_ValidateInput_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method checks inputs before they reach the model to prevent malicious
+or inappropriate inputs from being processed.</p>
+<p><b>For Beginners:</b> This is like a bouncer at a club checking IDs at the door.
+Before letting an input into your AI system, this method checks if it's safe
+and appropriate to process.</p>
+<p>The validation might check for:</p>
+<ol>
+<li>Malformed inputs that could crash the system</li>
+<li>Adversarial patterns designed to fool the model</li>
+<li>Attempts to inject malicious code or prompts</li>
+<li>Inappropriate or harmful content in the input</li>
+</ol>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ISafetyFilter.cs/#L29" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

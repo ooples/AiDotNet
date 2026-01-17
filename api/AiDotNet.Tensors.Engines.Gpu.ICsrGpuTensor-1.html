@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ICsrGpuTensor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ICsrGpuTensor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for GPU-resident sparse tensors in CSR (Compressed Sparse Row) format. CSR format is efficient for sparse matrix-dense matrix multiplication (SpMM) operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1" class="text-break">
+Interface ICsrGpuTensor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a>.<a class="xref" href="AiDotNet.Tensors.Engines.Gpu.html">Gpu</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for GPU-resident sparse tensors in CSR (Compressed Sparse Row) format.
+CSR format is efficient for sparse matrix-dense matrix multiplication (SpMM) operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ICsrGpuTensor&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The element type of the tensor values.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable.dispose">IDisposable.Dispose()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>CSR Format:</b></p>
+<p>
+A sparse matrix of shape [M, K] is stored as three arrays:
+- Values: Non-zero values in row-major order [nnz elements]
+- ColumnIndices: Column index for each value [nnz elements]
+- RowPointers: Start of each row in values array [M+1 elements]
+</p>
+<p><b>Example:</b></p>
+<pre><code class="lang-csharp">Matrix:        Values:   ColIndices:  RowPointers:
+[1 0 2]        [1,2,3]   [0,2,1]      [0,2,3]
+[0 3 0]
+
+Row 0: values at indices 0..1 (positions 0,2 with values 1,2)
+Row 1: values at indices 2..2 (position 1 with value 3)</code></pre>
+<p>
+This format enables O(nnz) SpMM operations instead of O(M*K) for dense matrices,
+providing significant speedup for sparse graphs (typically 90%+ sparse).
+</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Cols_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Cols*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Cols" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Cols">
+  Cols
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of columns (K dimension).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Cols { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ColumnIndices_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ColumnIndices*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ColumnIndices" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ColumnIndices">
+  ColumnIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the GPU buffer containing column indices for each non-zero value (int32).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuBuffer ColumnIndices { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Nnz_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Nnz*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Nnz" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Nnz">
+  Nnz
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of non-zero elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Nnz { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_RowPointers_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.RowPointers*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_RowPointers" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.RowPointers">
+  RowPointers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the GPU buffer containing row pointers (int32).
+RowPointers[i] is the index in Values where row i starts.
+RowPointers[Rows] equals Nnz.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuBuffer RowPointers { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Rows_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Rows*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Rows" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Rows">
+  Rows
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of rows (M dimension).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Rows { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Shape_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Shape*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Shape" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Shape">
+  Shape
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the shape as an array [Rows, Cols].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int[] Shape { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Values_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Values*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_Values" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.Values">
+  Values
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the GPU buffer containing the non-zero values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IGpuBuffer Values { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer.html">IGpuBuffer</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ToCsr_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ToCsr*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ToCsr" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ToCsr">
+  ToCsr()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads the CSR components to CPU.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(T[] Values, int[] ColumnIndices, int[] RowPointers) ToCsr()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0[],system.int32[],system.int32[]-.values">Values</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0[],system.int32[],system.int32[]-.columnindices">ColumnIndices</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[] <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0[],system.int32[],system.int32[]-.rowpointers">RowPointers</a>)</dt>
+    <dd><p>Tuple of (values, columnIndices, rowPointers).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ToDenseTensor_" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ToDenseTensor*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_Gpu_ICsrGpuTensor_1_ToDenseTensor" data-uid="AiDotNet.Tensors.Engines.Gpu.ICsrGpuTensor`1.ToDenseTensor">
+  ToDenseTensor()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Downloads the sparse tensor to CPU as a dense tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ToDenseTensor()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Dense tensor with the sparse values filled in.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/Gpu/ICsrGpuTensor.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

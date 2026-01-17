@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum TransformerTaskType | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum TransformerTaskType | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the different types of tasks that transformer-based AI models can perform.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_TransformerTaskType.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.TransformerTaskType%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.TransformerTaskType">
+
+
+
+
+  <h1 id="AiDotNet_Enums_TransformerTaskType" data-uid="AiDotNet.Enums.TransformerTaskType" class="text-break">
+Enum TransformerTaskType  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TransformerTaskType.cs/#L13"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the different types of tasks that transformer-based AI models can perform.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum TransformerTaskType</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_TransformerTaskType_Classification"><code>Classification = 0</code></dt>
+  <dd><p>Task of categorizing input data into predefined classes or categories.</p>
+<p><b>For Beginners:</b> Classification is about sorting things into categories.</p>
+<p>Imagine you have a bunch of emails and you want the AI to sort them into &quot;Spam&quot; or &quot;Not Spam&quot; -
+that's classification. The AI looks at the content and decides which category it belongs to.</p>
+<p>Other examples include:</p>
+<ul>
+<li>Sentiment analysis (Is this review positive, negative, or neutral?)</li>
+<li>Topic categorization (Is this news article about sports, politics, or entertainment?)</li>
+<li>Intent detection (Is the user asking a question, making a request, or giving feedback?)</li>
+</ul>
+<p>Classification models output the probability of the input belonging to each possible category.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TransformerTaskType_Regression"><code>Regression = 1</code></dt>
+  <dd><p>Task of predicting continuous numerical values based on input features.</p>
+<p><b>For Beginners:</b> Regression is about predicting numbers rather than categories.</p>
+<p>While classification predicts categories (like &quot;Spam&quot; or &quot;Not Spam&quot;), regression predicts
+numerical values. For example:</p>
+<ul>
+<li>Predicting the price of a house based on its features</li>
+<li>Estimating how many views a video will get</li>
+<li>Forecasting temperature for tomorrow</li>
+</ul>
+<p>Regression models look at the input and output a specific number (or set of numbers) as a prediction.</p>
+<p>In transformer models, regression tasks might involve analyzing text to predict associated
+numerical values, like predicting a movie's box office earnings based on its synopsis.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TransformerTaskType_SequenceTagging"><code>SequenceTagging = 3</code></dt>
+  <dd><p>Task of labeling each element in a sequence with a specific tag or category.</p>
+<p><b>For Beginners:</b> Sequence Tagging is about labeling each word or piece in a text with a specific tag.</p>
+<p>Unlike classification which assigns one label to an entire input, sequence tagging assigns
+a label to each element in the sequence. It's like going through a sentence with a highlighter
+and marking each word according to its role.</p>
+<p>Common examples include:</p>
+<ul>
+<li>Named Entity Recognition: Identifying names of people, organizations, locations, etc. in text</li>
+<li>Part-of-Speech Tagging: Labeling words as nouns, verbs, adjectives, etc.</li>
+<li>Chunking: Identifying phrases like noun phrases or verb phrases</li>
+</ul>
+<p>For instance, in the sentence &quot;Apple is launching a new iPhone in September&quot;:</p>
+<ul>
+<li>&quot;Apple&quot; might be tagged as ORGANIZATION</li>
+<li>&quot;iPhone&quot; as PRODUCT</li>
+<li>&quot;September&quot; as DATE</li>
+</ul>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TransformerTaskType_TextGeneration"><code>TextGeneration = 2</code></dt>
+  <dd><p>Task of generating coherent and contextually relevant text based on a prompt or input.</p>
+<p><b>For Beginners:</b> Text Generation is about creating new text that continues or responds to some input.</p>
+<p>This is what models like ChatGPT do - you provide some text (a prompt), and the model generates
+new text that follows naturally from what you provided. The model predicts what words should
+come next, one token at a time.</p>
+<p>Examples include:</p>
+<ul>
+<li>Chatbots that respond to user messages</li>
+<li>Story generators that continue a narrative</li>
+<li>Content creation tools that help write articles or emails</li>
+<li>Code completion systems that suggest the next lines of code</li>
+</ul>
+<p>Text generation models are trained to understand context and produce coherent, relevant content
+that matches the style and intent of the prompt.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_TransformerTaskType_Translation"><code>Translation = 4</code></dt>
+  <dd><p>Task of converting text from one language to another while preserving meaning.</p>
+<p><b>For Beginners:</b> Translation is about converting text from one language to another.</p>
+<p>This task involves understanding the meaning of text in a source language and expressing
+that same meaning in a target language. Modern transformer-based translation systems don't
+just replace words one-by-one; they understand context and cultural nuances.</p>
+<p>Translation models need to:</p>
+<ul>
+<li>Understand the source language's grammar, idioms, and context</li>
+<li>Generate fluent, natural-sounding text in the target language</li>
+<li>Preserve the original meaning, tone, and intent</li>
+</ul>
+<p>Examples include translating:</p>
+<ul>
+<li>Website content for international audiences</li>
+<li>Documents and books into different languages</li>
+<li>Real-time conversation in multilingual settings</li>
+</ul>
+<p>Modern translation models can often handle dozens or even hundreds of language pairs.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_TransformerTaskType_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Transformers are a type of neural network architecture that has revolutionized AI,
+especially in natural language processing. They're the technology behind models like GPT, BERT, and T5.</p>
+<p>This enum lists the common tasks these models can perform. Think of these as different &quot;jobs&quot;
+you can assign to an AI model based on what you want it to accomplish.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/TransformerTaskType.cs/#L13" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

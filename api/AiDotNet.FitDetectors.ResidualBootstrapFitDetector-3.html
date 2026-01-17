@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ResidualBootstrapFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ResidualBootstrapFitDetector&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A detector that evaluates model fit quality using residual bootstrap resampling techniques.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitDetectors.ResidualBootstrapFitDetector%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3">
+
+
+
+  <h1 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3" class="text-break">
+Class ResidualBootstrapFitDetector&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L15"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitDetectors.html">FitDetectors</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A detector that evaluates model fit quality using residual bootstrap resampling techniques.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ResidualBootstrapFitDetector&lt;T, TInput, TOutput&gt; : FitDetectorBase&lt;T, TInput, TOutput&gt;, IFitDetector&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html">FitDetectorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">ResidualBootstrapFitDetector&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitDetector-3.html">IFitDetector</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_NumOps">FitDetectorBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_Random">FitDetectorBase&lt;T, TInput, TOutput&gt;.Random</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitDetectors.FitDetectorBase-3.html#AiDotNet_FitDetectors_FitDetectorBase_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitDetectorBase&lt;T, TInput, TOutput&gt;.GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This class helps determine if your machine learning model is a good fit for your data.
+It uses a technique called "bootstrap resampling" which creates many simulated datasets by
+randomly reusing the errors (residuals) from your original model. This helps understand if your
+model is too complex (overfit), too simple (underfit), or just right (good fit).
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3__ctor_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3__ctor_AiDotNet_Models_ResidualBootstrapFitDetectorOptions_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.#ctor(AiDotNet.Models.ResidualBootstrapFitDetectorOptions)">
+  ResidualBootstrapFitDetector(ResidualBootstrapFitDetectorOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ResidualBootstrapFitDetector class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ResidualBootstrapFitDetector(ResidualBootstrapFitDetectorOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Models.ResidualBootstrapFitDetectorOptions.html">ResidualBootstrapFitDetectorOptions</a></dt>
+    <dd><p>Optional configuration settings for the detector. If null, default settings are used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3__ctor_AiDotNet_Models_ResidualBootstrapFitDetectorOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This creates a new detector that will analyze your model's performance.
+You can customize how it works by providing options, or just use the default settings.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_CalculateConfidenceLevel_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.CalculateConfidenceLevel*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.CalculateConfidenceLevel(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates how confident the detector is in its assessment of the model's fit type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T CalculateConfidenceLevel(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A confidence value between 0 and 1, where higher values indicate greater confidence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_CalculateConfidenceLevel_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how sure the detector is about its assessment of your model.
+Think of it like a percentage of certainty.
+<p>The confidence is calculated by comparing your model's error to the errors from many simulated datasets.
+If your model's error is very similar to what we'd expect by chance, the detector is more confident
+that your model has a good fit. If the error is unusual (much higher or lower than expected),
+the detector is less confident in its assessment.</p>
+<p>The final score is between 0 and 1, where 1 means completely confident and 0 means not confident at all.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetectFit_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.DetectFit*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.DetectFit(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes model evaluation data to determine the fit type and provide recommendations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override FitDetectorResult&lt;T&gt; DetectFit(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Results.FitDetectorResult-1.html">FitDetectorResult</a>&lt;T&gt;</dt>
+    <dd><p>A result object containing the fit type, confidence level, and recommendations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetectFit_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This is the main method that examines your model and tells you:
+1. Whether your model is a good fit, overfit, or underfit
+2. How confident the detector is in this assessment
+3. What steps you might take to improve your model
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetermineFitType_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.DetermineFitType*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.DetermineFitType(AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L89"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines the type of fit (overfit, underfit, or good fit) based on bootstrap analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override FitType DetermineFitType(ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The determined fit type (Overfit, Underfit, or GoodFit).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_DetermineFitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method decides if your model is:
+- Overfit: Too complex, memorizing training data rather than learning patterns
+- Underfit: Too simple, missing important patterns in the data
+- Good fit: Just right, capturing the important patterns without memorizing noise
+<p>It makes this decision by comparing your model's error to errors from many simulated datasets.
+If your model's error is significantly different from what we'd expect by chance,
+it suggests there might be a problem with how well your model fits the data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_GenerateRecommendations_" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.GenerateRecommendations*"></a>
+
+  <h3 id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2__" data-uid="AiDotNet.FitDetectors.ResidualBootstrapFitDetector`3.GenerateRecommendations(AiDotNet.Enums.FitType,AiDotNet.Models.ModelEvaluationData{`0,`1,`2})">
+  GenerateRecommendations(FitType, ModelEvaluationData&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates practical recommendations for improving the model based on the detected fit type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override List&lt;string&gt; GenerateRecommendations(FitType fitType, ModelEvaluationData&lt;T, TInput, TOutput&gt; evaluationData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitType</code> <a class="xref" href="AiDotNet.Enums.FitType.html">FitType</a></dt>
+    <dd><p>The detected fit type (Overfit, Underfit, or GoodFit).</p>
+</dd>
+    <dt><code>evaluationData</code> <a class="xref" href="AiDotNet.Models.ModelEvaluationData-3.html">ModelEvaluationData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Data containing model performance metrics across training, validation, and test sets.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A list of recommendations as strings.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitDetectors_ResidualBootstrapFitDetector_3_GenerateRecommendations_AiDotNet_Enums_FitType_AiDotNet_Models_ModelEvaluationData__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method provides practical advice on how to improve your model based on
+whether it's overfit, underfit, or a good fit.
+<ul>
+<li>For overfit models: Suggestions to make the model simpler or add more training data</li>
+<li>For underfit models: Suggestions to make the model more complex or improve features</li>
+<li>For good fit models: Suggestions to maintain performance and possibly enhance it further</li>
+</ul>
+<p>These recommendations are starting points that you can try to improve your model's performance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitDetectors/ResidualBootstrapFitDetector.cs/#L15" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

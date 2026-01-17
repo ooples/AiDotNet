@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BOILOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BOILOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Body Only Inner Loop (BOIL) algorithm.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Options_BOILOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Options.BOILOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Options_BOILOptions_3" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3" class="text-break">
+Class BOILOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Body Only Inner Loop (BOIL) algorithm.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BOILOptions&lt;T, TInput, TOutput&gt; : IMetaLearnerOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BOILOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Options_BOILOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+BOIL is the opposite of ANIL - it only adapts the feature extractor (body) during
+inner-loop adaptation while keeping the classification head frozen. This explores
+the hypothesis that task-specific features are more important than task-specific classifiers.
+</p>
+<p><b>For Beginners:</b> BOIL splits a neural network into two parts:
+</p>
+<ol><li><b>Body (Feature Extractor):</b> ADAPTED for each new task</li><li><b>Head (Classifier):</b> FROZEN during adaptation (uses meta-learned weights)</li></ol>
+<p>
+This is the opposite of ANIL (which freezes body, adapts head). BOIL tests whether
+it's better to adapt HOW we see things rather than HOW we decide.
+</p>
+<p>
+<b>When to use BOIL:</b>
+- When tasks differ more in their visual/input patterns than their decision boundaries
+- When you have a good meta-learned classifier that works across tasks
+- When you want to experiment with different adaptation strategies
+</p>
+<p>
+Reference: Oh, J., Yoo, H., Kim, C., &amp; Yun, S. Y. (2021).
+BOIL: Towards Representation Change for Few-shot Learning.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3__ctor_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2})">
+  BOILOptions(IFullModel&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the BOILOptions class with the required meta-model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public BOILOptions(IFullModel&lt;T, TInput, TOutput&gt; metaModel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metaModel</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The neural network to be trained (required).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when metaModel is null.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_AdaptationSteps_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.AdaptationSteps*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_AdaptationSteps" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.AdaptationSteps">
+  AdaptationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of adaptation steps (gradient steps on support set).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int AdaptationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default is 5.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_BodyAdaptationFraction_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.BodyAdaptationFraction*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_BodyAdaptationFraction" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.BodyAdaptationFraction">
+  BodyAdaptationFraction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fraction of body parameters to adapt (for efficiency).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BodyAdaptationFraction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default is 1.0 (adapt all body parameters).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_BOILOptions_3_BodyAdaptationFraction_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> If your body has millions of parameters, adapting
+all of them might be slow. This setting lets you adapt only a fraction
+(e.g., 0.5 = adapt only half the body parameters).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_BodyL2Regularization_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.BodyL2Regularization*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_BodyL2Regularization" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.BodyL2Regularization">
+  BodyL2Regularization
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the L2 regularization strength for the body.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double BodyL2Regularization { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default is 0.0 (no regularization).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_CheckpointFrequency_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.CheckpointFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_CheckpointFrequency" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.CheckpointFrequency">
+  CheckpointFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to save checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_DataLoader_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.DataLoader*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_DataLoader" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.DataLoader">
+  DataLoader
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the episodic data loader for sampling tasks.
+Default: null (tasks must be provided manually to MetaTrain).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEpisodicDataLoader&lt;T, TInput, TOutput&gt;? DataLoader { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IEpisodicDataLoader-3.html">IEpisodicDataLoader</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_EarlyLayerLrMultiplier_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EarlyLayerLrMultiplier*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_EarlyLayerLrMultiplier" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EarlyLayerLrMultiplier">
+  EarlyLayerLrMultiplier
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate multiplier for earlier layers (if using layerwise rates).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EarlyLayerLrMultiplier { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default is 0.1 (earlier layers update 10x slower).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_EnableCheckpointing_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EnableCheckpointing*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_EnableCheckpointing" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EnableCheckpointing">
+  EnableCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save model checkpoints.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_EvaluationFrequency_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EvaluationFrequency*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_EvaluationFrequency" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EvaluationFrequency">
+  EvaluationFrequency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L130"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets how often to evaluate the meta-learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationFrequency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_EvaluationTasks_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EvaluationTasks*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_EvaluationTasks" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.EvaluationTasks">
+  EvaluationTasks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L125"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to use for evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationTasks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_FeatureDimension_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.FeatureDimension*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_FeatureDimension" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.FeatureDimension">
+  FeatureDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L162"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dimension of the final feature representation (before head).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int FeatureDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default is 512.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_GradientClipThreshold_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.GradientClipThreshold*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_GradientClipThreshold" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.GradientClipThreshold">
+  GradientClipThreshold
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double? GradientClipThreshold { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Default is 10.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_InnerLearningRate_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.InnerLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_InnerLearningRate" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.InnerLearningRate">
+  InnerLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the inner loop (body adaptation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InnerLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default is 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_InnerOptimizer_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.InnerOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_InnerOptimizer" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.InnerOptimizer">
+  InnerOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for inner loop updates (body only).
+Default: null (uses SGD with InnerLearningRate).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? InnerOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_LossFunction_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.LossFunction*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_LossFunction" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.LossFunction">
+  LossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss function for training.
+Default: null (uses cross-entropy loss internally).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? LossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaBatchSize_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaBatchSize*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaBatchSize" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaBatchSize">
+  MetaBatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of tasks to sample per meta-training iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MetaBatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default is 4.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaModel_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaModel*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaModel" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaModel">
+  MetaModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the meta-model to be trained. This is the only required property.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt; MetaModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The meta-model should be a neural network with a separable body (feature extractor)
+and head (classifier). Only the body will be adapted during the inner loop.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaOptimizer_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaOptimizer*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_MetaOptimizer" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.MetaOptimizer">
+  MetaOptimizer
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer for meta-parameter (outer loop) updates.
+Default: null (uses built-in Adam optimizer with OuterLearningRate).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IGradientBasedOptimizer&lt;T, TInput, TOutput&gt;? MetaOptimizer { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IGradientBasedOptimizer-3.html">IGradientBasedOptimizer</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_NumClasses_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.NumClasses*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_NumClasses" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.NumClasses">
+  NumClasses
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of output classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumClasses { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default is 5.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_NumMetaIterations_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.NumMetaIterations*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_NumMetaIterations" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.NumMetaIterations">
+  NumMetaIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of meta-training iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumMetaIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Default is 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_OuterLearningRate_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.OuterLearningRate*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_OuterLearningRate" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.OuterLearningRate">
+  OuterLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L91"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the outer loop (meta-update).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double OuterLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Default is 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_RandomSeed_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_RandomSeed" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for reproducibility.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_ReinitializeBody_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.ReinitializeBody*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_ReinitializeBody" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.ReinitializeBody">
+  ReinitializeBody
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to reinitialize the body for each task.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ReinitializeBody { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default is false (use meta-learned initialization).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_UseFirstOrder_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.UseFirstOrder*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_UseFirstOrder" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.UseFirstOrder">
+  UseFirstOrder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use first-order approximation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseFirstOrder { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default is true (BOIL typically uses first-order for efficiency).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_UseLayerwiseLearningRates_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.UseLayerwiseLearningRates*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_UseLayerwiseLearningRates" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.UseLayerwiseLearningRates">
+  UseLayerwiseLearningRates
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use layer-wise learning rates for the body.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLayerwiseLearningRates { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Default is false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Options_BOILOptions_3_UseLayerwiseLearningRates_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Different layers might need different learning rates.
+Earlier layers (close to input) might need smaller updates than later layers.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_Clone_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.Clone*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_Clone" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L244"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the BOIL options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IMetaLearnerOptions&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IMetaLearnerOptions-1.html">IMetaLearnerOptions</a>&lt;T&gt;</dt>
+    <dd><p>A new BOILOptions instance with the same configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_MetaLearning_Options_BOILOptions_3_IsValid_" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.IsValid*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Options_BOILOptions_3_IsValid" data-uid="AiDotNet.MetaLearning.Options.BOILOptions`3.IsValid">
+  IsValid()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L227"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that all BOIL configuration options are properly set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsValid()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the configuration is valid; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Options/BOILOptions.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

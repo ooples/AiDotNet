@@ -1,0 +1,1448 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DataVersionControlBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DataVersionControlBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for data version control implementations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_DataVersionControl_DataVersionControlBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.DataVersionControl.DataVersionControlBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1">
+
+
+
+  <h1 id="AiDotNet_DataVersionControl_DataVersionControlBase_1" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1" class="text-break">
+Class DataVersionControlBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.DataVersionControl.html">DataVersionControl</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for data version control implementations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class DataVersionControlBase&lt;T&gt; : IDataVersionControl&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DataVersionControlBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataVersionControl-1.html">IDataVersionControl</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.DataVersionControl.DataVersionControl-1.html">DataVersionControl&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This abstract base class provides common functionality for data
+version control systems. It handles storage path management, hash computation for
+integrity verification, and data lineage tracking.</p>
+<p>Key features:</p>
+<ul>
+<li>Path security validation</li>
+<li>SHA-256 hash computation for data integrity</li>
+<li>Dataset versioning support</li>
+<li>Lineage tracking for reproducibility</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1__ctor_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1__ctor_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.#ctor(System.String,System.String)">
+  DataVersionControlBase(string?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L60"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the DataVersionControlBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DataVersionControlBase(string? storageDirectory = null, string? baseDirectory = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>storageDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Directory to store version control data.</p>
+</dd>
+    <dt><code>baseDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Base directory for path validation. Defaults to current directory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataVersionControl_DataVersionControlBase_1__ctor_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>When a custom storageDirectory is provided without a baseDirectory, the storage directory
+itself becomes the base for path validation. This allows users to store version control data in
+any location they choose (like temp directories for tests) while still preventing
+path traversal attacks within that chosen directory.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_JsonSettings" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.JsonSettings">
+  JsonSettings
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>JSON serialization settings for consistent serialization.
+Uses TypeNameHandling.None for security - no type metadata in JSON output.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly JsonSerializerSettings JsonSettings</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">JsonSerializerSettings</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_StorageDirectory" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.StorageDirectory">
+  StorageDirectory
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The directory where version control data is stored.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly string StorageDirectory</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_SyncLock" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.SyncLock">
+  SyncLock
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lock object for thread-safe operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly object SyncLock</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CompareDatasetVersions_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CompareDatasetVersions*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CompareDatasetVersions_System_String_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CompareDatasetVersions(System.String,System.String,System.String)">
+  CompareDatasetVersions(string, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two dataset versions to see what changed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetComparison&lt;T&gt; CompareDatasetVersions(string datasetName, string version1Hash, string version2Hash)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version1Hash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>version2Hash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetComparison-1.html">DatasetComparison</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ComputeDatasetHash_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ComputeDatasetHash*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ComputeDatasetHash_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ComputeDatasetHash(System.String)">
+  ComputeDatasetHash(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes and stores a hash of the dataset for integrity verification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual string ComputeDatasetHash(string dataPath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ComputeDatasetHash_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Uses streaming/incremental hashing for memory efficiency when processing
+directories with many or large files. Files are processed one at a time
+rather than loading all content into memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetSnapshot_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CreateDatasetSnapshot*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetSnapshot_System_String_System_Collections_Generic_Dictionary_System_String_System_String__System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CreateDatasetSnapshot(System.String,System.Collections.Generic.Dictionary{System.String,System.String},System.String)">
+  CreateDatasetSnapshot(string, Dictionary&lt;string, string&gt;, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L235"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a snapshot of multiple related datasets together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string CreateDatasetSnapshot(string snapshotName, Dictionary&lt;string, string&gt; datasets, string? description = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>snapshotName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>datasets</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetVersion_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CreateDatasetVersion*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetVersion_System_String_System_String_System_String_System_Collections_Generic_Dictionary_System_String_System_Object__System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.CreateDatasetVersion(System.String,System.String,System.String,System.Collections.Generic.Dictionary{System.String,System.Object},System.Collections.Generic.Dictionary{System.String,System.String})">
+  CreateDatasetVersion(string, string, string?, Dictionary&lt;string, object&gt;?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new dataset version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract string CreateDatasetVersion(string datasetName, string dataPath, string? description = null, Dictionary&lt;string, object&gt;? metadata = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>dataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>metadata</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_DeleteDatasetVersion_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.DeleteDatasetVersion*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_DeleteDatasetVersion_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.DeleteDatasetVersion(System.String,System.String)">
+  DeleteDatasetVersion(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deletes a specific dataset version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void DeleteDatasetVersion(string datasetName, string versionHash)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_DeserializeFromJson_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.DeserializeFromJson*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_DeserializeFromJson__1_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.DeserializeFromJson``1(System.String)">
+  DeserializeFromJson&lt;TResult&gt;(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a JSON string to an object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual TResult? DeserializeFromJson&lt;TResult&gt;(string json) where TResult : class</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>json</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TResult</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_EnsureStorageDirectoryExists_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.EnsureStorageDirectoryExists*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_EnsureStorageDirectoryExists" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.EnsureStorageDirectoryExists">
+  EnsureStorageDirectoryExists()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ensures the storage directory exists.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void EnsureStorageDirectoryExists()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetAllDatasetsInSnapshot_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetAllDatasetsInSnapshot*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetAllDatasetsInSnapshot_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetAllDatasetsInSnapshot(System.String)">
+  GetAllDatasetsInSnapshot(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L269"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves all datasets in a multi-dataset snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract (string SnapshotId, Dictionary&lt;string, string&gt; Datasets, string? Description, DateTime CreatedAt) GetAllDatasetsInSnapshot(string snapshotName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>snapshotName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the snapshot to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.string-,system.string,system.datetime-.snapshotid">SnapshotId</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.string-,system.string,system.datetime-.datasets">Datasets</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.string-,system.string,system.datetime-.description">Description</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.collections.generic.dictionary-system.string,system.string-,system.string,system.datetime-.createdat">CreatedAt</a>)</dt>
+    <dd><p>A tuple containing:</p>
+<ul>
+<li>SnapshotId: The unique identifier of the snapshot</li>
+<li>Datasets: A dictionary mapping dataset names to their version hashes</li>
+<li>Description: The optional description of the snapshot</li>
+<li>CreatedAt: When the snapshot was created</li>
+</ul>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetAllDatasetsInSnapshot_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> When you create a snapshot with multiple datasets using
+<a class="xref" href="AiDotNet.DataVersionControl.DataVersionControlBase-1.html#AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetSnapshot_System_String_System_Collections_Generic_Dictionary_System_String_System_String__System_String_">CreateDatasetSnapshot(string, Dictionary&lt;string, string&gt;, string?)</a>, use this method to retrieve all of them.
+Each entry in the returned dictionary maps a dataset name to its version hash.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetByTag_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetByTag*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetByTag_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetByTag(System.String,System.String)">
+  GetDatasetByTag(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a dataset version by its tag.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetVersion&lt;T&gt; GetDatasetByTag(string datasetName, string tag)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetVersion-1.html">DatasetVersion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetDirectoryPath_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetDirectoryPath*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetDirectoryPath_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetDirectoryPath(System.String)">
+  GetDatasetDirectoryPath(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L289"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the directory path for a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual string GetDatasetDirectoryPath(string datasetName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The dataset name.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The sanitized directory path for the dataset.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetForRun_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetForRun*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetForRun_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetForRun(System.String)">
+  GetDatasetForRun(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the dataset version used by a specific training run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetVersion&lt;T&gt; GetDatasetForRun(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetVersion-1.html">DatasetVersion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetLineage_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetLineage*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetLineage_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetLineage(System.String,System.String)">
+  GetDatasetLineage(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the lineage information for a dataset version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetLineage GetDatasetLineage(string datasetName, string versionHash)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetLineage.html">DatasetLineage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetSnapshot_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetSnapshot*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetSnapshot_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetSnapshot(System.String)">
+  GetDatasetSnapshot(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a dataset snapshot, returning only the first dataset in the snapshot.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetSnapshot GetDatasetSnapshot(string snapshotName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>snapshotName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the snapshot to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetSnapshot.html">DatasetSnapshot</a></dt>
+    <dd><p>A DatasetSnapshot containing information about the first dataset in the snapshot.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetSnapshot_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>Important:</b> This method is designed for single-dataset snapshots or when you only
+need information about one dataset. For multi-dataset snapshots created with
+<a class="xref" href="AiDotNet.DataVersionControl.DataVersionControlBase-1.html#AiDotNet_DataVersionControl_DataVersionControlBase_1_CreateDatasetSnapshot_System_String_System_Collections_Generic_Dictionary_System_String_System_String__System_String_">CreateDatasetSnapshot(string, Dictionary&lt;string, string&gt;, string?)</a>, this method returns only the first dataset's information.
+Use <a class="xref" href="AiDotNet.DataVersionControl.DataVersionControlBase-1.html#AiDotNet_DataVersionControl_DataVersionControlBase_1_GetAllDatasetsInSnapshot_System_String_">GetAllDatasetsInSnapshot(string)</a> to retrieve all datasets in a multi-dataset snapshot.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetStatistics_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetStatistics*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetStatistics_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetStatistics(System.String,System.String)">
+  GetDatasetStatistics(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about a dataset version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetStatistics&lt;T&gt; GetDatasetStatistics(string datasetName, string versionHash)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetStatistics-1.html">DatasetStatistics</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetVersion_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetVersion*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetDatasetVersion_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetDatasetVersion(System.String,System.String)">
+  GetDatasetVersion(string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retrieves a specific version of a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetVersion&lt;T&gt; GetDatasetVersion(string datasetName, string? versionHash = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetVersion-1.html">DatasetVersion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetLatestDatasetVersion_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetLatestDatasetVersion*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetLatestDatasetVersion_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetLatestDatasetVersion(System.String)">
+  GetLatestDatasetVersion(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the latest version of a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract DatasetVersion&lt;T&gt; GetLatestDatasetVersion(string datasetName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.DatasetVersion-1.html">DatasetVersion</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetRunsUsingDataset_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetRunsUsingDataset*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetRunsUsingDataset_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetRunsUsingDataset(System.String,System.String)">
+  GetRunsUsingDataset(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all training runs that used a specific dataset version.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract List&lt;string&gt; GetRunsUsingDataset(string datasetName, string versionHash)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetSanitizedFileName_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetSanitizedFileName*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetSanitizedFileName_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetSanitizedFileName(System.String)">
+  GetSanitizedFileName(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sanitizes a file name to prevent path traversal attacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static string GetSanitizedFileName(string fileName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fileName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetSanitizedPath_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetSanitizedPath*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetSanitizedPath_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.GetSanitizedPath(System.String,System.String)">
+  GetSanitizedPath(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a sanitized path, ensuring it doesn't escape the base directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static string GetSanitizedPath(string path, string baseDirectory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>baseDirectory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_DataVersionControl_DataVersionControlBase_1_GetSanitizedPath_System_String_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method enforces strict path containment. All paths must resolve to within
+the base directory or match it exactly. Rooted paths that point outside the
+base directory are rejected to prevent directory traversal attacks.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_LinkDatasetToRun_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.LinkDatasetToRun*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_LinkDatasetToRun_System_String_System_String_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.LinkDatasetToRun(System.String,System.String,System.String,System.String)">
+  LinkDatasetToRun(string, string, string, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Links a dataset version to a model training run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void LinkDatasetToRun(string datasetName, string versionHash, string runId, string? modelId = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>modelId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ListDatasetVersions_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ListDatasetVersions*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ListDatasetVersions_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ListDatasetVersions(System.String)">
+  ListDatasetVersions(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all versions of a dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract List&lt;DatasetVersionInfo&lt;T&gt;&gt; ListDatasetVersions(string datasetName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Models.DatasetVersionInfo-1.html">DatasetVersionInfo</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ListDatasets_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ListDatasets*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ListDatasets_System_String_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ListDatasets(System.String,System.Collections.Generic.Dictionary{System.String,System.String})">
+  ListDatasets(string?, Dictionary&lt;string, string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L109"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Lists all tracked datasets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract List&lt;string&gt; ListDatasets(string? filter = null, Dictionary&lt;string, string&gt;? tags = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filter</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>tags</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_RecordDatasetLineage_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.RecordDatasetLineage*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_RecordDatasetLineage_System_String_System_String_AiDotNet_Models_DatasetLineage_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.RecordDatasetLineage(System.String,System.String,AiDotNet.Models.DatasetLineage)">
+  RecordDatasetLineage(string, string, DatasetLineage)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L215"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records metadata about how a dataset was created or transformed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void RecordDatasetLineage(string datasetName, string versionHash, DatasetLineage lineage)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>lineage</code> <a class="xref" href="AiDotNet.Models.DatasetLineage.html">DatasetLineage</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_SerializeToJson_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.SerializeToJson*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_SerializeToJson_System_Object_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.SerializeToJson(System.Object)">
+  SerializeToJson(object)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes an object to JSON.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual string SerializeToJson(object obj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>obj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_TagDatasetVersion_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.TagDatasetVersion*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_TagDatasetVersion_System_String_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.TagDatasetVersion(System.String,System.String,System.String)">
+  TagDatasetVersion(string, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Tags a dataset version for easy reference.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract void TagDatasetVersion(string datasetName, string versionHash, string tag)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>tag</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ValidateDatasetName_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ValidateDatasetName*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ValidateDatasetName_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ValidateDatasetName(System.String)">
+  ValidateDatasetName(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L302"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a dataset name is valid.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateDatasetName(string datasetName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The dataset name to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the dataset name is invalid.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ValidatePathWithinDirectory_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ValidatePathWithinDirectory*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_ValidatePathWithinDirectory_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.ValidatePathWithinDirectory(System.String,System.String)">
+  ValidatePathWithinDirectory(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L376"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that a path is within the specified directory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static void ValidatePathWithinDirectory(string path, string directory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>path</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>directory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_DataVersionControl_DataVersionControlBase_1_VerifyDatasetIntegrity_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.VerifyDatasetIntegrity*"></a>
+
+  <h3 id="AiDotNet_DataVersionControl_DataVersionControlBase_1_VerifyDatasetIntegrity_System_String_System_String_System_String_" data-uid="AiDotNet.DataVersionControl.DataVersionControlBase`1.VerifyDatasetIntegrity(System.String,System.String,System.String)">
+  VerifyDatasetIntegrity(string, string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Verifies that a dataset hasn't been modified by comparing its hash.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual bool VerifyDatasetIntegrity(string datasetName, string versionHash, string currentDataPath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>datasetName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>versionHash</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>currentDataPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/DataVersionControl/DataVersionControlBase.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

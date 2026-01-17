@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ARIMAOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ARIMAOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the ARIMA (AutoRegressive Integrated Moving Average) time series forecasting model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_ARIMAOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.ARIMAOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.ARIMAOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_ARIMAOptions_1" data-uid="AiDotNet.Models.Options.ARIMAOptions`1" class="text-break">
+Class ARIMAOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L18"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the ARIMA (AutoRegressive Integrated Moving Average) time series forecasting model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ARIMAOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The data type of the time series values.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">ARIMAOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_ARIMAOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+ARIMA is a statistical model used for analyzing and forecasting time series data. It combines three components:
+AutoRegressive (AR), Integrated (I), and Moving Average (MA) to model time series data that exhibits non-stationarity.
+</p>
+<p><b>For Beginners:</b> ARIMA is a popular method for predicting future values in a time series (data collected 
+over time, like daily temperatures or monthly sales). It works by combining three techniques: looking at how past values 
+influence future ones (AutoRegressive), removing trends by taking differences between consecutive values (Integrated), 
+and accounting for the impact of past prediction errors (Moving Average). Think of it like predicting tomorrow's weather 
+by considering today's weather, the recent trend of warming or cooling, and how accurate previous forecasts have been.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_AnomalyThresholdSigma_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.AnomalyThresholdSigma*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_AnomalyThresholdSigma" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.AnomalyThresholdSigma">
+  AnomalyThresholdSigma
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of standard deviations from the mean residual to use as the anomaly threshold.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AnomalyThresholdSigma { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The anomaly threshold in standard deviations, defaulting to 3.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_AnomalyThresholdSigma_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter controls how sensitive the anomaly detection is. A value of 3.0 means that
+data points with residuals more than 3 standard deviations from the mean are flagged as anomalies.
+Lower values (like 2.0) will flag more points as anomalies, while higher values (like 4.0) will
+only flag the most extreme deviations.
+</p>
+<p><b>For Beginners:</b> This controls how unusual a value needs to be before it's flagged as an anomaly.
+Think of it like a "weirdness threshold":
+- A value of 2.0 is lenient - flags anything moderately unusual (about 5% of normal values might be flagged)
+- A value of 3.0 (default) is standard - flags clearly unusual values (about 0.3% of normal values)
+- A value of 4.0 is strict - only flags extreme outliers (about 0.01% of normal values)
+<p>If you're seeing too many false positives (normal values flagged as anomalies), increase this value.
+If you're missing real anomalies, decrease this value.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_D_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.D*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_D" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.D">
+  D
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of differencing (Integration).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int D { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The differencing order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_D_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The differencing order (D) specifies how many times the data is differenced to achieve stationarity.
+Differencing helps remove trends and seasonal patterns from the data.
+</p>
+<p><b>For Beginners:</b> This determines how many times the model subtracts consecutive values to remove trends.
+With the default value of 1, the model works with the changes between consecutive values rather than the raw values themselves.
+For example, instead of using temperatures like [70°F, 72°F, 75°F], it would use the differences [2°F, 3°F].
+This helps the model focus on how values are changing rather than their absolute values, which is useful when data has
+an upward or downward trend. Think of it like focusing on how much warmer or cooler it gets each day rather than the
+actual temperature.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_EnableAnomalyDetection_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.EnableAnomalyDetection*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_EnableAnomalyDetection" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.EnableAnomalyDetection">
+  EnableAnomalyDetection
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether to enable anomaly detection during and after training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool EnableAnomalyDetection { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to enable anomaly detection, defaulting to false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_EnableAnomalyDetection_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, the model will compute prediction residuals during training and use them
+to establish an anomaly threshold based on statistical properties of the residuals.
+</p>
+<p><b>For Beginners:</b> Setting this to true tells the model to not just predict values,
+but also identify unusual data points (anomalies). An anomaly is a value that deviates
+significantly from what the model would expect based on the historical patterns it has learned.
+For example, a sudden spike or drop that doesn't fit the usual pattern would be flagged as an anomaly.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_FitIntercept_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.FitIntercept*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_FitIntercept" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.FitIntercept">
+  FitIntercept
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to include an intercept (constant term) in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool FitIntercept { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True to include an intercept, defaulting to true.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_FitIntercept_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When true, the model includes a constant term that represents the base level of the time series
+when all other factors are zero.
+</p>
+<p><b>For Beginners:</b> This determines whether the model includes a "starting point" or baseline value.
+With the default value of true, the model can adjust this baseline up or down to better fit the data.
+Think of it like setting a thermostat - the intercept is like the base temperature setting, and the other
+parameters make adjustments from there. Having an intercept usually improves predictions, especially when
+your data doesn't naturally center around zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate controls how quickly the model parameters are updated during training.
+A smaller value leads to slower but potentially more precise convergence.
+</p>
+<p><b>For Beginners:</b> This controls how quickly the model adjusts its predictions based on errors.
+The default value of 0.01 means the model makes small, cautious adjustments. Think of it like turning a steering
+wheel - a small learning rate makes tiny adjustments (good for fine-tuning), while a larger value makes bigger
+adjustments (which might help learn faster but could overshoot the optimal solution). For most cases, the default
+small value works well because it helps the model find more accurate predictions, even if it takes a bit longer.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter limits how long the model will train before stopping, preventing excessive computation time.
+The algorithm will stop either when it converges or when it reaches this number of iterations.
+</p>
+<p><b>For Beginners:</b> This is simply a safety limit on how long the model will try to improve itself.
+The default value of 1000 means the model will make at most 1000 attempts to refine its predictions before stopping.
+Think of it like telling someone they can have up to 1000 tries to solve a puzzle - they might solve it sooner,
+but they won't keep trying forever if they're struggling to make progress.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_P_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.P*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_P" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.P">
+  P
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the AutoRegressive (AR) component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int P { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The AR order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_P_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The AR order (P) specifies how many previous time steps are used to predict the current value.
+For example, P=1 means the model uses only the immediately preceding value.
+</p>
+<p><b>For Beginners:</b> This controls how many past data points the model looks at to make predictions.
+With the default value of 1, the model only considers what happened in the previous time period. If you set it to 2,
+it would look at the last two time periods, and so on. Think of it like predicting tomorrow's temperature based on
+today's temperature (P=1) versus considering both today and yesterday (P=2). Higher values can capture more complex
+patterns but might make the model unnecessarily complicated for simple data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_Q_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.Q*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_Q" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.Q">
+  Q
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the order of the Moving Average (MA) component.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Q { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The MA order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_Q_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The MA order (Q) specifies how many previous forecast errors are used in the model.
+For example, Q=1 means the model incorporates the error from the previous prediction.
+</p>
+<p><b>For Beginners:</b> This controls how many past prediction errors the model considers.
+With the default value of 1, the model adjusts based on how wrong its most recent prediction was.
+Think of it like a weather forecaster who not only looks at yesterday's weather but also considers how wrong
+their previous forecast was, learning from their mistakes. If yesterday's prediction was too high, they might
+adjust today's prediction downward a bit to compensate.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalD_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalD*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalD" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalD">
+  SeasonalD
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal differencing order for seasonal ARIMA models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalD { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The seasonal differencing order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalD_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal differencing order specifies how many times the data is differenced at the seasonal level
+to remove seasonal trends.
+</p>
+<p><b>For Beginners:</b> This is like the regular D value, but for seasonal differences.
+With the default value of 1, the model compares each value to the same period in the previous season.
+For example, it might look at the difference between this December's sales and last December's sales.
+This helps remove predictable seasonal patterns, allowing the model to focus on other factors affecting the data.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalP_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalP*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalP" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalP">
+  SeasonalP
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal AutoRegressive order for seasonal ARIMA models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalP { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The seasonal AR order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalP_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal AR order specifies how many previous seasonal time steps are used to predict the current value.
+This captures patterns that repeat at regular intervals (e.g., yearly, monthly).
+</p>
+<p><b>For Beginners:</b> This is similar to the regular P value, but for seasonal patterns.
+It determines how many past seasons influence the current prediction. With the default value of 1,
+the model considers what happened in the same period last season. For example, when predicting December sales,
+it would consider last December's sales. This helps capture yearly patterns like holiday shopping spikes or
+seasonal temperature changes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalQ_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalQ*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalQ" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.SeasonalQ">
+  SeasonalQ
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L119"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the seasonal Moving Average order for seasonal ARIMA models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SeasonalQ { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The seasonal MA order, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_SeasonalQ_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The seasonal MA order specifies how many previous seasonal forecast errors are used in the model.
+This helps account for errors that follow seasonal patterns.
+</p>
+<p><b>For Beginners:</b> This is similar to the regular Q value, but for seasonal prediction errors.
+With the default value of 1, the model considers how wrong its prediction was for the same period last season.
+For example, if last December's sales forecast was too high, the model might adjust this December's forecast downward.
+This helps the model learn from seasonal forecasting mistakes.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_ARIMAOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_ARIMAOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.ARIMAOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.00001 (1e-5).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_ARIMAOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The algorithm stops when the improvement between iterations is smaller than this tolerance value,
+indicating that the model has converged to a solution.
+</p>
+<p><b>For Beginners:</b> This determines when the model decides it's "good enough" and stops trying to improve.
+The default value of 0.00001 means the model will stop when additional training produces very tiny improvements
+(less than one hundred-thousandth). Think of it like painting a wall - at some point, adding another coat of paint
+makes such a small difference that it's not worth the effort. This parameter defines that "barely noticeable difference"
+threshold.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/ARIMAOptions.cs/#L18" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

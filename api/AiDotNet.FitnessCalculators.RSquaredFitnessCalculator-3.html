@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="A fitness calculator that uses R-Squared (R&#178;) to evaluate model performance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3.md&amp;value=---%0Auid%3A%20AiDotNet.FitnessCalculators.RSquaredFitnessCalculator%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3">
+
+
+
+  <h1 id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3" data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3" class="text-break">
+Class RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/RSquaredFitnessCalculator.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FitnessCalculators.html">FitnessCalculators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>A fitness calculator that uses R-Squared (R²) to evaluate model performance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt; : FitnessCalculatorBase&lt;T, TInput, TOutput&gt;, IFitnessCalculator&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html">FitnessCalculatorBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">RSquaredFitnessCalculator&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__isHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._isHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__numOps">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3__dataSetType">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;._dataSetType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_ModelEvaluationData__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(ModelEvaluationData&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_CalculateFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.CalculateFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsHigherScoreBetter">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsHigherScoreBetter</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FitnessCalculators.FitnessCalculatorBase-3.html#AiDotNet_FitnessCalculators_FitnessCalculatorBase_3_IsBetterFitness__0__0_">FitnessCalculatorBase&lt;T, TInput, TOutput&gt;.IsBetterFitness(T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> This calculator helps evaluate how well your model is performing by measuring
+the proportion of variance in your target variable that is explained by your model.
+<p>R-Squared (R²), also called the coefficient of determination, is:</p>
+<ul>
+<li>A measure of how well your model explains the variation in your data</li>
+<li>Expressed as a value typically between 0 and 1 (or 0% to 100%)</li>
+<li>A higher value means your model explains more of the variation in your data</li>
+</ul>
+<p>How R-Squared works:</p>
+<ul>
+<li>R² = 1 means your model perfectly explains all the variation in your data</li>
+<li>R² = 0 means your model doesn't explain any of the variation (it's no better than just predicting the average)</li>
+<li>R² can sometimes be negative if your model performs worse than just predicting the average</li>
+</ul>
+<p>Think of it like this:
+Imagine you're predicting house prices:</p>
+<ul>
+<li>If R² = 0.7, it means 70% of the variation in house prices is explained by your model</li>
+<li>The remaining 30% is due to factors your model doesn't capture</li>
+</ul>
+<p>A simple way to understand R²:</p>
+<ul>
+<li>If you always predicted the average house price, you'd have an R² of 0</li>
+<li>If you could predict every house price exactly right, you'd have an R² of 1</li>
+<li>Your model's R² tells you how much better it is than just predicting the average</li>
+</ul>
+<p>Key characteristics of R²:</p>
+<ul>
+<li>Higher values are better (1 would be perfect)</li>
+<li>It's scale-independent (it doesn't matter if you're predicting dollars or millions of dollars)</li>
+<li>It helps you understand how much of the variation your model captures</li>
+<li>It can be misleading if you have a small sample size or too many features</li>
+</ul>
+<p>When to use R²:</p>
+<ul>
+<li>When you want to know how much of the variation your model explains</li>
+<li>When you want a metric that's easy to interpret (0% to 100% explained)</li>
+<li>When comparing different models for the same problem</li>
+<li>For regression problems (predicting continuous values)</li>
+</ul>
+<p>R² is one of the most popular metrics for regression tasks because it provides an
+intuitive measure of how well your model captures the patterns in your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3__ctor_" data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3__ctor_AiDotNet_Enums_DataSetType_" data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3.#ctor(AiDotNet.Enums.DataSetType)">
+  RSquaredFitnessCalculator(DataSetType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/RSquaredFitnessCalculator.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the RSquaredFitnessCalculator class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RSquaredFitnessCalculator(DataSetType dataSetType = DataSetType.Validation)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSetType</code> <a class="xref" href="AiDotNet.Enums.DataSetType.html">DataSetType</a></dt>
+    <dd><p>The type of dataset to use for fitness calculation (default is Validation).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3__ctor_AiDotNet_Enums_DataSetType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This constructor creates a new calculator that will use R-Squared (R²)
+to evaluate your model's performance.
+<p>Parameter:</p>
+<ul>
+<li>dataSetType: Which data to evaluate (default is Validation)
+<ul>
+<li>Training: The data used to train the model (not recommended for evaluation)</li>
+<li>Validation: A separate set of data used to tune the model (recommended)</li>
+<li>Test: A completely separate set of data used for final evaluation</li>
+</ul>
+</li>
+</ul>
+<p>Note: We set &quot;isHigherScoreBetter&quot; to &quot;false&quot; in the base constructor, which might seem
+counterintuitive since higher R² values are actually better. This is because some optimization
+algorithms in the library are designed to minimize values. The calculator handles this internally
+so that optimization works correctly while still interpreting R² in the standard way (higher is better).</p>
+<p>When to use this calculator:</p>
+<ul>
+<li>When you want to know how much of the variation in your data your model explains</li>
+<li>When you want an easy-to-interpret metric (0% to 100% of variation explained)</li>
+<li>When comparing different models for the same prediction task</li>
+<li>For regression problems (predicting continuous values)</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3_GetFitnessScore_" data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3.GetFitnessScore*"></a>
+
+  <h3 id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2__" data-uid="AiDotNet.FitnessCalculators.RSquaredFitnessCalculator`3.GetFitnessScore(AiDotNet.Models.DataSetStats{`0,`1,`2})">
+  GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/RSquaredFitnessCalculator.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the R-Squared (R²) fitness score for the given dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override T GetFitnessScore(DataSetStats&lt;T, TInput, TOutput&gt; dataSet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataSet</code> <a class="xref" href="AiDotNet.Models.DataSetStats-3.html">DataSetStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The dataset containing predicted and actual values.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated R² score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_FitnessCalculators_RSquaredFitnessCalculator_3_GetFitnessScore_AiDotNet_Models_DataSetStats__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method calculates how well your model is performing using R-Squared (R²).
+<p>R² measures how much of the variation in your data is explained by your model:</p>
+<ul>
+<li>R² = 1 means your model perfectly explains all the variation (100%)</li>
+<li>R² = 0 means your model doesn't explain any variation (0%)</li>
+<li>R² can sometimes be negative if your model performs worse than just predicting the average</li>
+</ul>
+<p>For example, if you're predicting house prices and get an R² of 0.7, it means
+your model explains 70% of the variation in house prices, while 30% remains unexplained.</p>
+<p>This method simply retrieves the pre-calculated R² value from the dataset's prediction statistics.</p>
+<p>Note: While higher R² values are better, some optimization algorithms in the library are designed
+to minimize values. The calculator handles this internally so that optimization works correctly
+while still interpreting R² in the standard way (higher is better).</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FitnessCalculators/RSquaredFitnessCalculator.cs/#L48" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

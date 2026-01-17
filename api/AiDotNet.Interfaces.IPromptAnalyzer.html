@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IPromptAnalyzer | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IPromptAnalyzer | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for analyzing prompts before sending them to language models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IPromptAnalyzer.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IPromptAnalyzer%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IPromptAnalyzer">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IPromptAnalyzer" data-uid="AiDotNet.Interfaces.IPromptAnalyzer" class="text-break">
+Interface IPromptAnalyzer  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for analyzing prompts before sending them to language models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IPromptAnalyzer</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IPromptAnalyzer_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A prompt analyzer computes metrics and validates prompts to help developers understand
+and optimize their prompts before incurring API costs. Analysis includes token counting,
+cost estimation, complexity measurement, and issue detection.
+</p>
+<p><b>For Beginners:</b> A prompt analyzer is like a spell-checker and cost calculator for your prompts.
+<p>Before sending a prompt to an AI model (which costs money), the analyzer tells you:</p>
+<ul>
+<li>How many tokens it uses (tokens = cost)</li>
+<li>Estimated API cost in dollars</li>
+<li>How complex the prompt is</li>
+<li>Any potential problems (missing variables, too long, etc.)</li>
+</ul>
+<p>Example workflow:</p>
+<pre><code class="lang-csharp">var analyzer = new TokenCountAnalyzer();
+var metrics = analyzer.Analyze("Translate this text...");
+
+Console.WriteLine($"Tokens: {metrics.TokenCount}");
+Console.WriteLine($"Cost: ${metrics.EstimatedCost}");
+
+if (metrics.TokenCount &gt; 4000)
+{
+    Console.WriteLine("Warning: Prompt is very long, consider compression");
+}</code></pre>
+<p>Benefits:</p>
+<ul>
+<li>Cost control: Know costs before making API calls</li>
+<li>Optimization: Find prompts that are too long or complex</li>
+<li>Debugging: Catch issues before they cause errors</li>
+<li>Budgeting: Track and forecast API spending</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptAnalyzer_Name_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.Name*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptAnalyzer_Name" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this analyzer implementation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptAnalyzer_Name_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A human-readable identifier for this analyzer, useful for logging
+and debugging which analyzer is being used.
+</p>
+<p><b>For Beginners:</b> The name of this specific analyzer.
+Examples: "TokenCountAnalyzer", "GPT4CostEstimator", "ClaudeAnalyzer"
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IPromptAnalyzer_Analyze_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.Analyze*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptAnalyzer_Analyze_System_String_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.Analyze(System.String)">
+  Analyze(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a prompt and returns detailed metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">PromptMetrics Analyze(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to analyze.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptMetrics.html">PromptMetrics</a></dt>
+    <dd><p>A PromptMetrics object containing analysis results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptAnalyzer_Analyze_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Performs comprehensive analysis of the prompt including token counting,
+cost estimation, complexity scoring, and pattern detection.
+</p>
+<p><b>For Beginners:</b> This examines your prompt and tells you everything about it.
+<p>Example:</p>
+<pre><code class="lang-csharp">var metrics = analyzer.Analyze("Summarize this article about climate change...");
+
+// metrics.TokenCount: 150 (how many tokens)
+// metrics.EstimatedCost: $0.003 (cost at current rates)
+// metrics.ComplexityScore: 0.4 (0-1, higher = more complex)
+// metrics.VariableCount: 0 (number of {variables})
+// metrics.DetectedPatterns: ["summarization", "instruction"]</code></pre>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptAnalyzer_AnalyzeAsync_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.AnalyzeAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptAnalyzer_AnalyzeAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.AnalyzeAsync(System.String,System.Threading.CancellationToken)">
+  AnalyzeAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Analyzes a prompt asynchronously for use in async workflows.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;PromptMetrics&gt; AnalyzeAsync(string prompt, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to analyze.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptMetrics.html">PromptMetrics</a>&gt;</dt>
+    <dd><p>A task that resolves to PromptMetrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptAnalyzer_AnalyzeAsync_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Async version of Analyze for non-blocking analysis, useful when analyzing
+many prompts or when analysis involves external calls (e.g., to a tokenizer API).
+</p>
+<p><b>For Beginners:</b> Same as Analyze, but doesn't block your program.
+Use this when analyzing many prompts at once or in web applications.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IPromptAnalyzer_ValidatePrompt_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.ValidatePrompt*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IPromptAnalyzer_ValidatePrompt_System_String_AiDotNet_PromptEngineering_Analysis_ValidationOptions_" data-uid="AiDotNet.Interfaces.IPromptAnalyzer.ValidatePrompt(System.String,AiDotNet.PromptEngineering.Analysis.ValidationOptions)">
+  ValidatePrompt(string, ValidationOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates a prompt for potential issues.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;PromptIssue&gt; ValidatePrompt(string prompt, ValidationOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt string to validate.</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.PromptEngineering.Analysis.ValidationOptions.html">ValidationOptions</a></dt>
+    <dd><p>Options controlling validation behavior.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.PromptEngineering.Analysis.PromptIssue.html">PromptIssue</a>&gt;</dt>
+    <dd><p>A collection of detected issues, empty if no issues found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IPromptAnalyzer_ValidatePrompt_System_String_AiDotNet_PromptEngineering_Analysis_ValidationOptions__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Checks the prompt for common problems such as missing placeholders,
+excessive length, potential injection vulnerabilities, and format issues.
+</p>
+<p><b>For Beginners:</b> This looks for problems in your prompt.
+<p>Example issues it might find:</p>
+<ul>
+<li>&quot;Prompt exceeds maximum length for GPT-4 (8192 tokens)&quot;</li>
+<li>&quot;Variable {user_input} contains potential prompt injection&quot;</li>
+<li>&quot;Missing closing brace for variable {name&quot;</li>
+<li>&quot;Prompt is empty or whitespace-only&quot;</li>
+</ul>
+<p>Use this before sending prompts to catch problems early:</p>
+<pre><code class="lang-csharp">var issues = analyzer.ValidatePrompt(prompt, ValidationOptions.Strict);
+if (issues.Any())
+{
+    foreach (var issue in issues)
+    {
+        Console.WriteLine($"[{issue.Severity}] {issue.Message}");
+    }
+}</code></pre>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IPromptAnalyzer.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

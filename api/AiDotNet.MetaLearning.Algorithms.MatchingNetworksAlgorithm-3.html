@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implementation of Matching Networks for few-shot learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3.md&amp;value=---%0Auid%3A%20AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3">
+
+
+
+  <h1 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3" class="text-break">
+Class MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.MetaLearning.html">MetaLearning</a>.<a class="xref" href="AiDotNet.MetaLearning.Algorithms.html">Algorithms</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implementation of Matching Networks for few-shot learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt; : MetaLearnerBase&lt;T, TInput, TOutput&gt;, IMetaLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type (e.g., Matrix&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html">MetaLearnerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MatchingNetworksAlgorithm&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IMetaLearner-3.html">IMetaLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_LossFunction">MetaLearnerBase&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__options">MetaLearnerBase&lt;T, TInput, TOutput&gt;._options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_DataLoader">MetaLearnerBase&lt;T, TInput, TOutput&gt;.DataLoader</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_NumOps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_RandomGenerator">MetaLearnerBase&lt;T, TInput, TOutput&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerOptimizer">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerOptimizer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3__currentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;._currentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Engine">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_BaseModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.BaseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Options">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Options</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CurrentIteration">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CurrentIteration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AlgorithmType">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AlgorithmType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptationSteps">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptationSteps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_InnerLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.InnerLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_OuterLearningRate">MetaLearnerBase&lt;T, TInput, TOutput&gt;.OuterLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(TaskBatch&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_MetaTrainStep_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.MetaTrainStep(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Train">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Train()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Evaluate_System_Int32_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Evaluate(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_AdaptAndEvaluate_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.AdaptAndEvaluate(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_GetMetaModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.GetMetaModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_SetMetaModel_AiDotNet_Interfaces_IFullModel__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.SetMetaModel(IFullModel&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Save_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Save(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Load_System_String_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Load(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_Reset">MetaLearnerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeGradients_AiDotNet_Interfaces_IFullModel__0__1__2___1__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeGradients(IFullModel&lt;T, TInput, TOutput&gt;, TInput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeSecondOrderGradients_AiDotNet_Interfaces_IFullModel__0__1__2__System_Collections_Generic_List_System_ValueTuple__1__2____1__2__0_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeSecondOrderGradients(IFullModel&lt;T, TInput, TOutput&gt;, List&lt;(TInput input, TOutput target)&gt;, TInput, TOutput, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ApplyGradients(Vector&lt;T&gt;, Vector&lt;T&gt;, double)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ClipGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Nullable_System_Double__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ClipGradients(Vector&lt;T&gt;, double?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CreateTaskBatch_System_Collections_Generic_IReadOnlyList_AiDotNet_Data_Structures_MetaLearningTask__0__1__2___">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CreateTaskBatch(IReadOnlyList&lt;MetaLearningTask&lt;T, TInput, TOutput&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ToMetaLearningTask_AiDotNet_Data_Structures_MetaLearningTask__0__1__2__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ToMetaLearningTask(MetaLearningTask&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeAccuracy__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeAccuracy(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeLossFromOutput__2__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeLossFromOutput(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ConvertToVector__2_">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ConvertToVector(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_ComputeMean_System_Collections_Generic_List__0__">MetaLearnerBase&lt;T, TInput, TOutput&gt;.ComputeMean(List&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.MetaLearning.MetaLearnerBase-3.html#AiDotNet_MetaLearning_MetaLearnerBase_3_CloneModel">MetaLearnerBase&lt;T, TInput, TOutput&gt;.CloneModel()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Matching Networks use attention mechanisms over the support set to classify
+query examples. It computes a weighted sum of support labels where weights are
+determined by an attention function that measures similarity between examples.
+</p>
+<p><b>For Beginners:</b> Matching Networks learn to pay attention to similar examples:
+<p><strong>How it works:</strong></p>
+<ol>
+<li>Encode all examples (support and query) with a shared encoder</li>
+<li>For each query, compute attention weights with all support examples</li>
+<li>Use cosine similarity or learned attention for weights</li>
+<li>Predict weighted sum of support labels (soft nearest neighbor)</li>
+</ol>
+<p><strong>Key insight:</strong> The network learns how to compare examples during encoding,
+making the similarity measure task-aware.</p>
+
+<p><b>Algorithm - Matching Networks:</b>
+<pre><code class="lang-csharp"># Shared encoder that learns to produce comparable embeddings
+encoder = NeuralNetwork()  # Maps x -&gt; embedding(x)
+attention_function = cosine_similarity or learned_attention
+
+# Episode training
+for each episode:
+    # Sample N-way K-shot task
+    support_set = {examples_from_N_classes, K_examples_each}
+    query_set = {examples_from_same_N_classes}
+
+    # Encode all examples
+    support_embeddings = encoder(support_set)
+    query_embeddings = encoder(query_set)
+
+    # For each query:
+    for each query q:
+        # Compute attention with all support examples
+        scores = [attention(embedding(q), embedding(s)) for s in support]
+        weights = softmax(scores)
+        prediction = sum(weight_i * label_i for support examples)
+
+    # Train with cross-entropy loss</code></pre>
+
+<p><b>Key Insights:</b>
+<ol>
+<li><p><strong>Task-Aware Embeddings</strong>: The encoder learns to produce embeddings that
+are meaningful for the specific classification task at hand.</p>
+</li>
+<li><p><strong>Differentiable Attention</strong>: The attention mechanism is fully differentiable,
+allowing end-to-end training of the encoder.</p>
+</li>
+<li><p><strong>No Adaptation Needed</strong>: At test time, simply encode new examples and
+apply the same attention mechanism - no gradient updates required.</p>
+</li>
+</ol>
+
+<p>
+Reference: Vinyals, O., Blundell, C., Lillicrap, T., Kavukcuoglu, K., &amp; Wierstra, D. (2016).
+Matching Networks for One Shot Learning. NeurIPS.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3__ctor_" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_MatchingNetworksOptions__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.#ctor(AiDotNet.MetaLearning.Options.MatchingNetworksOptions{`0,`1,`2})">
+  MatchingNetworksAlgorithm(MatchingNetworksOptions&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MatchingNetworksAlgorithm class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatchingNetworksAlgorithm(MatchingNetworksOptions&lt;T, TInput, TOutput&gt; options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>options</code> <a class="xref" href="AiDotNet.MetaLearning.Options.MatchingNetworksOptions-3.html">MatchingNetworksOptions</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The configuration options for Matching Networks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3__ctor_AiDotNet_MetaLearning_Options_MatchingNetworksOptions__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a Matching Network ready for few-shot learning.
+<p><b>What Matching Networks need:</b></p>
+<ul>
+<li><b>encoder:</b> Neural network that embeds examples into comparable space</li>
+<li><b>attentionFunction:</b> How to measure similarity (cosine, learned)</li>
+<li><b>useFullContext:</b> Whether to use all examples when encoding each example</li>
+</ul>
+<p><b>What makes it different from ProtoNets:</b></p>
+<ul>
+<li>ProtoNets: Uses fixed distance (Euclidean) to class prototypes (mean)</li>
+<li>Matching Nets: Uses learnable attention to individual support examples</li>
+<li>No explicit class representatives - each example votes</li>
+</ul>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when options or required components are null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when configuration validation fails.</p>
+</dd>
+  </dl>
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_AlgorithmType_" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.AlgorithmType*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_AlgorithmType" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.AlgorithmType">
+  AlgorithmType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the algorithm type identifier for this meta-learner.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override MetaLearningAlgorithmType AlgorithmType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html">MetaLearningAlgorithmType</a></dt>
+    <dd><p>Returns <a class="xref" href="AiDotNet.MetaLearning.MetaLearningAlgorithmType.html#AiDotNet_MetaLearning_MetaLearningAlgorithmType_MatchingNetworks">MatchingNetworks</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_Adapt_" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.Adapt*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.Adapt(AiDotNet.Interfaces.IMetaLearningTask{`0,`1,`2})">
+  Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L225"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adapts to a new task by caching support embeddings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IModel&lt;TInput, TOutput, ModelMetadata&lt;T&gt;&gt; Adapt(IMetaLearningTask&lt;T, TInput, TOutput&gt; task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="AiDotNet.Interfaces.IMetaLearningTask-3.html">IMetaLearningTask</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The new task containing support set examples.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;TInput, TOutput, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A MatchingNetworksModel that classifies using attention over support examples.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_Adapt_AiDotNet_Interfaces_IMetaLearningTask__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Matching Networks adaptation is very fast - just encode support examples and cache them.
+</p>
+<p>
+<b>For Beginners:</b> After meta-training, when you have a new task with labeled
+examples, call this method. The returned model can classify new examples by
+comparing them to all support examples using learned attention.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when task is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_MetaTrain_" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.MetaTrain*"></a>
+
+  <h3 id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2__" data-uid="AiDotNet.MetaLearning.Algorithms.MatchingNetworksAlgorithm`3.MetaTrain(AiDotNet.MetaLearning.Data.TaskBatch{`0,`1,`2})">
+  MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs one meta-training step using Matching Networks' episodic training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T MetaTrain(TaskBatch&lt;T, TInput, TOutput&gt; taskBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskBatch</code> <a class="xref" href="AiDotNet.MetaLearning.Data.TaskBatch-3.html">TaskBatch</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A batch of tasks to meta-train on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The average meta-loss across all tasks in the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_MetaLearning_Algorithms_MatchingNetworksAlgorithm_3_MetaTrain_AiDotNet_MetaLearning_Data_TaskBatch__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Matching Networks training computes attention-based predictions:
+</p>
+<p>
+<b>For each task in the batch:</b>
+1. Encode all support and query examples
+2. For each query, compute attention weights with all support examples
+3. Predict weighted sum of support labels
+4. Compute cross-entropy loss
+5. Update encoder with averaged gradients
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the task batch is null or empty.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs/#L76" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Getting Started with AiDotNet Reasoning Framework | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Getting Started with AiDotNet Reasoning Framework | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="../toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/GettingStarted.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="getting-started-with-aidotnet-reasoning-framework">Getting Started with AiDotNet Reasoning Framework</h1>
+
+<p>Welcome to the AiDotNet Reasoning Framework - a comprehensive system for advanced AI reasoning implementing state-of-the-art techniques from recent research papers.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ul>
+<li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#basic-concepts">Basic Concepts</a></li>
+<li><a href="#first-example">First Example</a></li>
+<li><a href="#next-steps">Next Steps</a></li>
+</ul>
+<h2 id="quick-start">Quick Start</h2>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.Strategies;
+using AiDotNet.Reasoning.Models;
+
+// Initialize with your chat model
+var chatModel = /* your IChatModel implementation */;
+var strategy = new ChainOfThoughtStrategy&lt;double&gt;(chatModel);
+
+// Solve a problem
+var result = await strategy.ReasonAsync(&quot;What is 15 × 12?&quot;);
+
+Console.WriteLine($&quot;Answer: {result.FinalAnswer}&quot;);
+Console.WriteLine($&quot;Steps: {result.Chain.Steps.Count}&quot;);
+</code></pre>
+<h2 id="installation">Installation</h2>
+<h3 id="prerequisites">Prerequisites</h3>
+<ul>
+<li>.NET 6.0 or higher</li>
+<li>A chat model implementation (OpenAI, Anthropic, etc.)</li>
+</ul>
+<h3 id="nuget-package">NuGet Package</h3>
+<pre><code class="lang-bash">dotnet add package AiDotNet
+</code></pre>
+<h3 id="from-source">From Source</h3>
+<pre><code class="lang-bash">git clone https://github.com/ooples/AiDotNet.git
+cd AiDotNet
+dotnet build
+</code></pre>
+<h2 id="basic-concepts">Basic Concepts</h2>
+<h3 id="1-reasoning-strategies">1. Reasoning Strategies</h3>
+<p>The framework provides three main reasoning strategies:</p>
+<h4 id="chain-of-thought-cot"><strong>Chain-of-Thought (CoT)</strong></h4>
+<p>Linear step-by-step reasoning - best for straightforward problems.</p>
+<pre><code class="lang-csharp">var cotStrategy = new ChainOfThoughtStrategy&lt;double&gt;(chatModel);
+var result = await cotStrategy.ReasonAsync(&quot;Calculate the area of a circle with radius 5&quot;);
+</code></pre>
+<h4 id="self-consistency"><strong>Self-Consistency</strong></h4>
+<p>Generates multiple reasoning paths and aggregates results - best for problems with multiple valid approaches.</p>
+<pre><code class="lang-csharp">var scStrategy = new SelfConsistencyStrategy&lt;double&gt;(chatModel);
+var config = new ReasoningConfig { NumSamples = 5 };
+var result = await scStrategy.ReasonAsync(&quot;What is the capital of France?&quot;, config);
+</code></pre>
+<h4 id="tree-of-thoughts-tot"><strong>Tree-of-Thoughts (ToT)</strong></h4>
+<p>Explores multiple paths with backtracking - best for complex problems requiring exploration.</p>
+<pre><code class="lang-csharp">var totStrategy = new TreeOfThoughtsStrategy&lt;double&gt;(chatModel);
+var config = new ReasoningConfig { ExplorationDepth = 4, BranchingFactor = 3 };
+var result = await totStrategy.ReasonAsync(&quot;Solve this logic puzzle: ...&quot;, config);
+</code></pre>
+<h3 id="2-configuration-presets">2. Configuration Presets</h3>
+<p>Choose the right preset for your use case:</p>
+<pre><code class="lang-csharp">// Fast: Quick answers for simple problems
+var fastConfig = ReasoningConfig.Fast;  // 3 steps, depth 2
+
+// Default: Balanced for most problems
+var defaultConfig = ReasoningConfig.Default;  // 10 steps, depth 3
+
+// Thorough: Deep exploration for hard problems
+var thoroughConfig = ReasoningConfig.Thorough;  // 20 steps, depth 5
+</code></pre>
+<h3 id="3-domain-specific-reasoners">3. Domain-Specific Reasoners</h3>
+<p>Use specialized reasoners for specific domains:</p>
+<pre><code class="lang-csharp">// Mathematics
+var mathReasoner = new MathematicalReasoner&lt;double&gt;(chatModel);
+var result = await mathReasoner.SolveAsync(&quot;What is 347 + 892?&quot;);
+
+// Code Generation
+var codeReasoner = new CodeReasoner&lt;double&gt;(chatModel);
+var result = await codeReasoner.GenerateCodeAsync(
+    &quot;Write a function to find the factorial of n&quot;,
+    language: &quot;python&quot;
+);
+
+// Science
+var scienceReasoner = new ScientificReasoner&lt;double&gt;(chatModel);
+var result = await scienceReasoner.SolveAsync(
+    &quot;Calculate kinetic energy of 5kg object at 10m/s&quot;,
+    domain: &quot;physics&quot;
+);
+
+// Logic
+var logicReasoner = new LogicalReasoner&lt;double&gt;(chatModel);
+var result = await logicReasoner.SolveAsync(
+    &quot;All A are B. All B are C. Therefore?&quot;,
+    logicType: &quot;deductive&quot;
+);
+</code></pre>
+<h2 id="first-example">First Example</h2>
+<p>Let's build a complete example that solves a math problem with verification:</p>
+<pre><code class="lang-csharp">using AiDotNet.Reasoning.DomainSpecific;
+using AiDotNet.Reasoning.Models;
+using AiDotNet.Reasoning.Verification;
+
+public class MathProblemSolver
+{
+    private readonly IChatModel _chatModel;
+    private readonly MathematicalReasoner&lt;double&gt; _reasoner;
+    private readonly CalculatorVerifier&lt;double&gt; _verifier;
+
+    public MathProblemSolver(IChatModel chatModel)
+    {
+        _chatModel = chatModel;
+        _reasoner = new MathematicalReasoner&lt;double&gt;(chatModel);
+        _verifier = new CalculatorVerifier&lt;double&gt;();
+    }
+
+    public async Task&lt;string&gt; SolveWithVerificationAsync(string problem)
+    {
+        // Step 1: Solve the problem
+        var result = await _reasoner.SolveAsync(
+            problem,
+            useVerification: true,
+            useSelfConsistency: false  // Try setting to true for harder problems!
+        );
+
+        if (!result.Success)
+        {
+            return $&quot;Failed to solve: {result.ErrorMessage}&quot;;
+        }
+
+        // Step 2: Verify the calculation
+        var verification = await _verifier.VerifyAsync(result.Chain);
+
+        // Step 3: Return results
+        var output = new StringBuilder();
+        output.AppendLine($&quot;Problem: {problem}&quot;);
+        output.AppendLine($&quot;\nReasoning Steps:&quot;);
+
+        foreach (var step in result.Chain.Steps)
+        {
+            output.AppendLine($&quot;  {step.StepNumber}. {step.Content}&quot;);
+        }
+
+        output.AppendLine($&quot;\nFinal Answer: {result.FinalAnswer}&quot;);
+        output.AppendLine($&quot;Verification: {(verification.IsValid ? &quot;✓ Correct&quot; : &quot;✗ Incorrect&quot;)}&quot;);
+        output.AppendLine($&quot;Confidence: {result.ConfidenceScore:P0}&quot;);
+
+        return output.ToString();
+    }
+}
+
+// Usage
+var chatModel = /* your chat model */;
+var solver = new MathProblemSolver(chatModel);
+
+var result = await solver.SolveWithVerificationAsync(
+    &quot;A store has 347 apples. They sell 129 in the morning and 85 in the afternoon. How many apples are left?&quot;
+);
+
+Console.WriteLine(result);
+</code></pre>
+<p><strong>Output:</strong></p>
+<pre><code class="lang-text">Problem: A store has 347 apples...
+
+Reasoning Steps:
+  1. Start with initial amount: 347 apples
+  2. Calculate morning sales: 347 - 129 = 218
+  3. Calculate afternoon sales: 218 - 85 = 133
+
+Final Answer: 133 apples
+Verification: ✓ Correct
+Confidence: 95%
+</code></pre>
+<h2 id="next-steps">Next Steps</h2>
+<h3 id="learn-more">Learn More</h3>
+<ul>
+<li><a href="./ApiReference.md">API Documentation</a> - Complete API reference</li>
+<li><a href="Tutorials.html">Tutorials</a> - Step-by-step guides</li>
+<li><a href="BestPractices.html">Best Practices</a> - Tips and patterns</li>
+<li><a href="./Benchmarks.md">Benchmarks</a> - Evaluation guide</li>
+</ul>
+<h3 id="try-these-examples">Try These Examples</h3>
+<ol>
+<li><strong>Solve GSM8K Math Problems</strong>: See <code>examples/GSM8KExample.cs</code></li>
+<li><strong>Generate Code with HumanEval</strong>: See <code>examples/CodeGenerationExample.cs</code></li>
+<li><strong>Train with Reinforcement Learning</strong>: See <code>examples/RLTrainingExample.cs</code></li>
+<li><strong>Build a Custom Reasoner</strong>: See <code>examples/CustomReasonerExample.cs</code></li>
+</ol>
+<h3 id="key-features-to-explore">Key Features to Explore</h3>
+<h4 id="1-verification-system">1. Verification System</h4>
+<pre><code class="lang-csharp">// Critic-based verification
+var criticModel = new CriticModel&lt;double&gt;(chatModel);
+var critique = await criticModel.CritiqueStepAsync(step, context);
+
+// Self-refinement
+var refinementEngine = new SelfRefinementEngine&lt;double&gt;(chatModel);
+var refined = await refinementEngine.RefineStepAsync(step, critique, context);
+</code></pre>
+<h4 id="2-reward-models-for-rl">2. Reward Models for RL</h4>
+<pre><code class="lang-csharp">// Process Reward Model (step-by-step scoring)
+var prm = new ProcessRewardModel&lt;double&gt;(chatModel);
+
+// Outcome Reward Model (final answer scoring)
+var orm = new OutcomeRewardModel&lt;double&gt;(chatModel);
+
+// Hybrid (best of both)
+var hybrid = new HybridRewardModel&lt;double&gt;(prm, orm, 0.5, 0.5);
+</code></pre>
+<h4 id="3-search-algorithms">3. Search Algorithms</h4>
+<pre><code class="lang-csharp">// Monte Carlo Tree Search
+var mcts = new MonteCarloTreeSearch&lt;double&gt;(
+    explorationConstant: 1.414,
+    simulationCount: 100
+);
+
+// Best-First Search
+var bestFirst = new BestFirstSearch&lt;double&gt;();
+
+// Depth-First Search
+var dfs = new DepthFirstSearch&lt;double&gt;();
+</code></pre>
+<h4 id="4-benchmarking">4. Benchmarking</h4>
+<pre><code class="lang-csharp">// Evaluate on GSM8K
+var benchmark = new GSM8KBenchmark&lt;double&gt;();
+var results = await benchmark.EvaluateAsync(
+    async (problem) =&gt; {
+        var result = await reasoner.SolveAsync(problem);
+        return result.FinalAnswer;
+    },
+    sampleSize: 100
+);
+
+Console.WriteLine($&quot;Accuracy: {results.Accuracy:P2}&quot;);
+</code></pre>
+<h4 id="5-training-with-rl">5. Training with RL</h4>
+<pre><code class="lang-csharp">var rewardModel = new HybridRewardModel&lt;double&gt;(prm, orm);
+var learner = new ReinforcementLearner&lt;double&gt;(chatModel, rewardModel);
+
+var trainingData = await LoadTrainingDataAsync();
+var validationData = await LoadValidationDataAsync();
+
+var results = await learner.TrainAsync(trainingData, validationData);
+Console.WriteLine($&quot;Best Accuracy: {results.BestAccuracy:P2}&quot;);
+</code></pre>
+<h2 id="common-patterns">Common Patterns</h2>
+<h3 id="pattern-1-progressive-refinement">Pattern 1: Progressive Refinement</h3>
+<pre><code class="lang-csharp">var result = await strategy.ReasonAsync(problem);
+
+while (result.ConfidenceScore &lt; 0.9 &amp;&amp; iterations &lt; maxIterations)
+{
+    var critique = await critic.CritiqueChainAsync(result.Chain);
+    result = await refinement.RefineAsync(result, critique);
+    iterations++;
+}
+</code></pre>
+<h3 id="pattern-2-ensemble-reasoning">Pattern 2: Ensemble Reasoning</h3>
+<pre><code class="lang-csharp">var strategies = new IReasoningStrategy&lt;double&gt;[]
+{
+    new ChainOfThoughtStrategy&lt;double&gt;(chatModel),
+    new SelfConsistencyStrategy&lt;double&gt;(chatModel),
+    new TreeOfThoughtsStrategy&lt;double&gt;(chatModel)
+};
+
+var results = await Task.WhenAll(
+    strategies.Select(s =&gt; s.ReasonAsync(problem))
+);
+
+var bestResult = results.OrderByDescending(r =&gt; r.ConfidenceScore).First();
+</code></pre>
+<h3 id="pattern-3-adaptive-compute">Pattern 3: Adaptive Compute</h3>
+<pre><code class="lang-csharp">var scaler = new AdaptiveComputeScaler&lt;double&gt;();
+var difficulty = scaler.EstimateDifficulty(problem);
+var config = scaler.ScaleConfig(problem, difficulty);
+
+var result = await strategy.ReasonAsync(problem, config);
+</code></pre>
+<h2 id="troubleshooting">Troubleshooting</h2>
+<h3 id="issue-low-confidence-scores">Issue: Low Confidence Scores</h3>
+<p><strong>Solution</strong>: Use Self-Consistency or enable verification:</p>
+<pre><code class="lang-csharp">var config = new ReasoningConfig { NumSamples = 5 };
+var result = await scStrategy.ReasonAsync(problem, config);
+</code></pre>
+<h3 id="issue-incomplete-reasoning">Issue: Incomplete Reasoning</h3>
+<p><strong>Solution</strong>: Increase max steps or use thorough config:</p>
+<pre><code class="lang-csharp">var config = ReasoningConfig.Thorough;  // 20 steps instead of 10
+var result = await strategy.ReasonAsync(problem, config);
+</code></pre>
+<h3 id="issue-wrong-answers">Issue: Wrong Answers</h3>
+<p><strong>Solution</strong>: Add verification and refinement:</p>
+<pre><code class="lang-csharp">var result = await mathReasoner.SolveAsync(problem, useVerification: true);
+</code></pre>
+<h2 id="community--support">Community &amp; Support</h2>
+<ul>
+<li><strong>Documentation</strong>: <a href="https://docs.aidotnet.com">AiDotNet Docs</a></li>
+<li><strong>GitHub</strong>: <a href="https://github.com/ooples/AiDotNet">AiDotNet Repository</a></li>
+<li><strong>Issues</strong>: <a href="https://github.com/ooples/AiDotNet/issues">Report Issues</a></li>
+<li><strong>Discussions</strong>: <a href="https://github.com/ooples/AiDotNet/discussions">Community Discussions</a></li>
+</ul>
+<h2 id="whats-next">What's Next?</h2>
+<p>You're now ready to build advanced reasoning systems! Here are some ideas:</p>
+<ol>
+<li><strong>Build a Math Tutor</strong>: Use MathematicalReasoner with step-by-step explanations</li>
+<li><strong>Create a Code Assistant</strong>: Use CodeReasoner for code generation and debugging</li>
+<li><strong>Build a Logic Puzzle Solver</strong>: Use LogicalReasoner with ToT strategy</li>
+<li><strong>Train Your Own Model</strong>: Use the RL infrastructure to improve reasoning</li>
+</ol>
+<p>Happy reasoning! 🚀</p>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/reasoning/GettingStarted.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

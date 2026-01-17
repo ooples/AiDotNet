@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IRadialBasisFunction&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IRadialBasisFunction&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines a radial basis function (RBF) that measures similarity based on distance.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IRadialBasisFunction_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IRadialBasisFunction%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IRadialBasisFunction_1" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1" class="text-break">
+Interface IRadialBasisFunction&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRadialBasisFunction.cs/#L24"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines a radial basis function (RBF) that measures similarity based on distance.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IRadialBasisFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IRadialBasisFunction_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>Radial basis functions are mathematical functions whose value depends only on the distance
+from a central point. They are commonly used in machine learning for creating complex models
+from simpler building blocks.</p>
+<p><b>For Beginners:</b> Think of a radial basis function as a &quot;similarity detector&quot; that works like this:</p>
+<ul>
+<li>It measures how similar or close two points are to each other</li>
+<li>The closer two points are, the higher the output value</li>
+<li>The function creates a smooth &quot;hill&quot; or &quot;bump&quot; shape centered at a specific point</li>
+<li>As you move away from the center, the function's value decreases</li>
+</ul>
+<p>Common examples include the Gaussian (bell curve) function and the multiquadric function.
+These are used in many AI applications like:</p>
+<ul>
+<li>Function approximation (finding patterns in data)</li>
+<li>Classification (sorting data into categories)</li>
+<li>Time series prediction (forecasting future values)</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IRadialBasisFunction_1_Compute_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.Compute*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRadialBasisFunction_1_Compute__0_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.Compute(`0)">
+  Compute(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRadialBasisFunction.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the value of the radial basis function at a given distance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T Compute(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The function value at the given distance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRadialBasisFunction_1_Compute__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is the core function that determines the &quot;shape&quot; of the radial basis function.</p>
+<p><b>For Beginners:</b> This method takes a distance value and returns how strong the similarity is.
+Think of it like asking: &quot;If I'm this far away from the center, how strong is the connection?&quot;</p>
+<p>For example, with a Gaussian RBF:</p>
+<ul>
+<li>When r = 0 (directly at the center), the function returns its maximum value (typically 1)</li>
+<li>As r increases (moving away from center), the value smoothly decreases toward 0</li>
+<li>The width parameter (often called sigma or epsilon) controls how quickly the value falls off</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeDerivative_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.ComputeDerivative*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeDerivative__0_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.ComputeDerivative(`0)">
+  ComputeDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRadialBasisFunction.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative (rate of change) of the radial basis function with respect to distance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative value at the given distance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>The derivative tells us how quickly the function value changes as the distance changes.
+This is important for optimization algorithms that need to adjust the function parameters.</p>
+<p><b>For Beginners:</b> This method calculates how quickly the similarity changes as you move
+farther from or closer to the center. It's like measuring the steepness of the &quot;hill&quot;
+at a particular distance.</p>
+<p>This is mainly used during the training process when the model needs to adjust itself
+to better fit the data. You typically won't need to call this directly unless you're
+implementing a custom learning algorithm.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeWidthDerivative_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.ComputeWidthDerivative*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeWidthDerivative__0_" data-uid="AiDotNet.Interfaces.IRadialBasisFunction`1.ComputeWidthDerivative(`0)">
+  ComputeWidthDerivative(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRadialBasisFunction.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the derivative of the radial basis function with respect to its width parameter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">T ComputeWidthDerivative(T r)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>r</code> <span class="xref">T</span></dt>
+    <dd><p>The distance from the center point.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The derivative with respect to the width parameter at the given distance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IRadialBasisFunction_1_ComputeWidthDerivative__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This derivative is used when optimizing the width parameter of the radial basis function.
+The width parameter controls how quickly the function value decreases as distance increases.</p>
+<p><b>For Beginners:</b> The width of an RBF determines how far its influence reaches. This method
+helps the learning algorithm figure out whether to make the &quot;hill&quot; wider or narrower.</p>
+<ul>
+<li>A wider RBF (larger width) affects points farther away from its center</li>
+<li>A narrower RBF (smaller width) has a more localized effect</li>
+</ul>
+<p>Like the regular derivative, this is mainly used during the training process and you
+typically won't need to call it directly unless implementing custom algorithms.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IRadialBasisFunction.cs/#L24" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

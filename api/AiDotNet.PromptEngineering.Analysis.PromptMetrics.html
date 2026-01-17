@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PromptMetrics | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PromptMetrics | AiDotNet Documentation ">
+      
+      <meta name="description" content="Contains metrics and analysis results for a prompt.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Analysis_PromptMetrics.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Analysis.PromptMetrics%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics" class="text-break">
+Class PromptMetrics  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Analysis.html">Analysis</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Contains metrics and analysis results for a prompt.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class PromptMetrics</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PromptMetrics</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class encapsulates all the measurements and analysis data produced when
+analyzing a prompt. It includes token counts, cost estimates, complexity scores,
+and detected patterns that help developers understand and optimize their prompts.
+</p>
+<p><b>For Beginners:</b> This is a report card for your prompt.
+<p>When you analyze a prompt, you get back this object with all the measurements:</p>
+<ul>
+<li>Token count: How many &quot;words&quot; the AI sees (affects cost)</li>
+<li>Estimated cost: How much this prompt will cost in API fees</li>
+<li>Complexity score: How complicated the prompt is (0-1)</li>
+<li>Variable count: How many {placeholders} are in the prompt</li>
+<li>Detected patterns: What type of prompt this is (question, instruction, etc.)</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var metrics = analyzer.Analyze("Translate {text} from English to Spanish");
+
+Console.WriteLine($"Tokens: {metrics.TokenCount}");        // e.g., 8
+Console.WriteLine($"Cost: ${metrics.EstimatedCost}");      // e.g., $0.0001
+Console.WriteLine($"Variables: {metrics.VariableCount}");  // e.g., 1
+Console.WriteLine($"Patterns: {string.Join(", ", metrics.DetectedPatterns)}");
+// e.g., "translation, instruction"</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_AnalyzedAt_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.AnalyzedAt*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_AnalyzedAt" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.AnalyzedAt">
+  AnalyzedAt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L219"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the timestamp when this analysis was performed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DateTime AnalyzedAt { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.datetime">DateTime</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_AnalyzedAt_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The UTC timestamp of when the analysis was performed. Useful for caching
+and tracking when metrics might be stale.
+</p>
+<p><b>For Beginners:</b> When this analysis was done.
+Useful if you cache metrics and need to know if they're outdated.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_CharacterCount_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.CharacterCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_CharacterCount" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.CharacterCount">
+  CharacterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L190"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the character count of the prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CharacterCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_CharacterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The raw character count of the prompt string. Useful as a quick metric
+and for character-limited contexts.
+</p>
+<p><b>For Beginners:</b> How many letters/characters in the prompt.
+Similar to what you see when you check length in a text editor.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ComplexityScore_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ComplexityScore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ComplexityScore" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ComplexityScore">
+  ComplexityScore
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L104"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the complexity score of the prompt (0.0 to 1.0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ComplexityScore { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ComplexityScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A normalized score indicating how complex the prompt is, considering factors
+like sentence structure, vocabulary diversity, nesting depth, and instruction count.
+</p>
+<p><b>For Beginners:</b> How complicated your prompt is (0 = simple, 1 = complex).
+<p>Low complexity (0.0-0.3):</p>
+<ul>
+<li>&quot;What is 2+2?&quot; (simple question)</li>
+<li>&quot;Say hello&quot; (simple instruction)</li>
+</ul>
+<p>Medium complexity (0.3-0.7):</p>
+<ul>
+<li>&quot;Summarize this article focusing on key points&quot;</li>
+<li>&quot;Translate and then explain the translation&quot;</li>
+</ul>
+<p>High complexity (0.7-1.0):</p>
+<ul>
+<li>&quot;Analyze this code, identify bugs, suggest fixes, and explain your reasoning&quot;</li>
+<li>Multi-step instructions with conditions</li>
+</ul>
+<p>Complex prompts may need more capable models or clearer structure.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_DetectedPatterns_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.DetectedPatterns*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_DetectedPatterns" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.DetectedPatterns">
+  DetectedPatterns
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the detected prompt patterns or types.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;string&gt; DetectedPatterns { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_DetectedPatterns_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A list of patterns or prompt types detected in the prompt, such as
+"instruction", "question", "translation", "summarization", "chain-of-thought", etc.
+</p>
+<p><b>For Beginners:</b> What kind of prompt this is.
+<p>Examples of detected patterns:</p>
+<ul>
+<li>&quot;instruction&quot;: Tells the AI to do something</li>
+<li>&quot;question&quot;: Asks the AI something</li>
+<li>&quot;translation&quot;: Asks for language translation</li>
+<li>&quot;summarization&quot;: Asks for a summary</li>
+<li>&quot;chain-of-thought&quot;: Asks AI to think step-by-step</li>
+<li>&quot;few-shot&quot;: Contains examples</li>
+<li>&quot;system-prompt&quot;: Sets AI behavior/role</li>
+</ul>
+<p>Knowing the pattern helps:</p>
+<ul>
+<li>Choose the right model</li>
+<li>Optimize the prompt structure</li>
+<li>Apply appropriate preprocessing</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_EstimatedCost_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.EstimatedCost*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_EstimatedCost" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.EstimatedCost">
+  EstimatedCost
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the estimated API cost for this prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public decimal EstimatedCost { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.decimal">decimal</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_EstimatedCost_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The estimated cost in USD for processing this prompt with the target model.
+Based on current API pricing and the token count.
+</p>
+<p><b>For Beginners:</b> How much money this prompt will cost.
+<p>Example rates (as of 2024):</p>
+<ul>
+<li>GPT-4: ~$0.03 per 1K tokens input</li>
+<li>GPT-3.5: ~$0.001 per 1K tokens input</li>
+<li>Claude: ~$0.008 per 1K tokens input</li>
+</ul>
+<p>A 500-token prompt on GPT-4 ≈ $0.015
+This helps you budget and optimize costs.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ExampleCount_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ExampleCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ExampleCount" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ExampleCount">
+  ExampleCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the count of examples included in the prompt (for few-shot prompts).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ExampleCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ExampleCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of few-shot examples detected in the prompt. Higher example counts
+generally improve quality but increase token usage.
+</p>
+<p><b>For Beginners:</b> How many examples are included in your prompt.
+<p>Few-shot prompts include examples to teach the AI what you want:
+&quot;Translate English to Spanish:</p>
+<ul>
+<li>Hello -&gt; Hola</li>
+<li>Goodbye -&gt; Adios
+Now translate: Good morning&quot;</li>
+</ul>
+<p>ExampleCount = 2 (the Hello and Goodbye examples)</p>
+<p>More examples = better quality but more tokens (cost).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ModelName_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ModelName*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ModelName" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.ModelName">
+  ModelName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the name of the model used for token counting.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string ModelName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_ModelName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Different models use different tokenizers, so token counts can vary.
+This property records which model's tokenizer was used for this analysis.
+</p>
+<p><b>For Beginners:</b> Which AI model's counting method was used.
+GPT-4 and Claude count tokens differently, so this tells you which was used.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_TokenCount_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.TokenCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_TokenCount" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.TokenCount">
+  TokenCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total token count of the prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TokenCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_TokenCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of tokens in the prompt as counted by the relevant tokenizer.
+Token count directly affects API costs and context window limits.
+</p>
+<p><b>For Beginners:</b> Tokens are like "word pieces" that AI models understand.
+<p>Examples:</p>
+<ul>
+<li>&quot;Hello&quot; = 1 token</li>
+<li>&quot;Hello, world!&quot; = 3 tokens</li>
+<li>&quot;antidisestablishmentarianism&quot; = 4+ tokens (long words split up)</li>
+</ul>
+<p>Why it matters:</p>
+<ul>
+<li>API pricing is per-token</li>
+<li>Models have maximum token limits (e.g., 4K, 8K, 128K)</li>
+<li>More tokens = more cost and slower processing</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_VariableCount_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.VariableCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_VariableCount" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.VariableCount">
+  VariableCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L126"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of template variables in the prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int VariableCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_VariableCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The count of variable placeholders (e.g., {variable}) found in the prompt.
+Useful for validating that all expected variables are present.
+</p>
+<p><b>For Beginners:</b> How many {blanks} need to be filled in.
+<p>Example:
+&quot;Translate {text} from {source_language} to {target_language}&quot;
+VariableCount = 3</p>
+<p>This helps you:</p>
+<ul>
+<li>Verify your template has the right number of variables</li>
+<li>Catch typos in variable names</li>
+<li>Document template requirements</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_WordCount_" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.WordCount*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_WordCount" data-uid="AiDotNet.PromptEngineering.Analysis.PromptMetrics.WordCount">
+  WordCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the word count of the prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WordCount { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Analysis_PromptMetrics_WordCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The approximate word count of the prompt. Note that token count is more
+relevant for API costs, but word count is useful for human understanding.
+</p>
+<p><b>For Beginners:</b> How many words in the prompt.
+A rough estimate - tokens are what actually matters for AI.
+Typically, 1 word ≈ 1.3 tokens on average.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Analysis/PromptMetrics.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

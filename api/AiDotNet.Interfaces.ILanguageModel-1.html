@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ILanguageModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ILanguageModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the base contract for language models that can generate text responses. This interface unifies both synchronous and asynchronous text generation capabilities.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ILanguageModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ILanguageModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ILanguageModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ILanguageModel_1" data-uid="AiDotNet.Interfaces.ILanguageModel`1" class="text-break">
+Interface ILanguageModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the base contract for language models that can generate text responses.
+This interface unifies both synchronous and asynchronous text generation capabilities.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ILanguageModel&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and operations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ILanguageModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>For Beginners:
+A language model is an AI that understands and generates human-like text. Think of it as
+a very sophisticated autocomplete that can:</p>
+<ul>
+<li>Answer questions</li>
+<li>Write essays or code</li>
+<li>Translate languages</li>
+<li>Summarize documents</li>
+<li>Have conversations</li>
+</ul>
+<p>This interface is the foundation for all language models in AiDotNet, whether they:</p>
+<ul>
+<li>Run in the cloud (OpenAI, Anthropic, Azure)</li>
+<li>Run locally on your machine (Ollama, ONNX)</li>
+<li>Are used for chat applications (IChatModel)</li>
+<li>Are used for RAG systems (IGenerator)</li>
+</ul>
+<p>The interface provides both synchronous and asynchronous methods:</p>
+<ul>
+<li>Async methods (GenerateAsync): Better for web apps, don't block the UI</li>
+<li>Sync methods (Generate): Simpler for scripts and batch processing</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">ILanguageModel&lt;double&gt; model = new OpenAIChatModel&lt;double&gt;("your-api-key");
+
+// Async usage (recommended for most applications)
+string response = await model.GenerateAsync("Explain quantum computing");
+
+// Sync usage (for simple scripts)
+string response = model.Generate("Explain quantum computing");</code></pre>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILanguageModel_1_MaxContextTokens_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.MaxContextTokens*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILanguageModel_1_MaxContextTokens" data-uid="AiDotNet.Interfaces.ILanguageModel`1.MaxContextTokens">
+  MaxContextTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this model can process in a single request (context window).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxContextTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The context window size in tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILanguageModel_1_MaxContextTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is how much text the model can &quot;remember&quot; or process at once. Think of it as
+the model's working memory.</p>
+<p>Token counts (approximate):</p>
+<ul>
+<li>1 token ≈ 0.75 words</li>
+<li>100 tokens ≈ 75 words ≈ 1 paragraph</li>
+<li>1000 tokens ≈ 750 words ≈ 1 page</li>
+<li>8000 tokens ≈ 6000 words ≈ 8-10 pages</li>
+</ul>
+<p>Common context window sizes:</p>
+<ul>
+<li>GPT-3.5-turbo: 4,096 tokens (3 pages)</li>
+<li>GPT-4: 8,192 tokens (6 pages) or 32,768 tokens (24 pages)</li>
+<li>Claude 3: 200,000 tokens (150 pages)</li>
+<li>Gemini 1.5: 1,000,000 tokens (750 pages!)</li>
+</ul>
+<p>Why it matters:</p>
+<ul>
+<li>If your prompt + desired response exceeds this, the request will fail</li>
+<li>Larger contexts let you provide more information but may be slower/costlier</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILanguageModel_1_MaxGenerationTokens_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.MaxGenerationTokens*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILanguageModel_1_MaxGenerationTokens" data-uid="AiDotNet.Interfaces.ILanguageModel`1.MaxGenerationTokens">
+  MaxGenerationTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of tokens this model can generate in a single response.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxGenerationTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum generation length in tokens.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILanguageModel_1_MaxGenerationTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This limits how long the model's response can be. It's usually smaller than
+MaxContextTokens because you need room for your input prompt too.</p>
+<p>Typical values:</p>
+<ul>
+<li>512 tokens ≈ 384 words ≈ short answer (1-2 paragraphs)</li>
+<li>2048 tokens ≈ 1536 words ≈ medium answer (1 page)</li>
+<li>4096 tokens ≈ 3072 words ≈ long answer (2-3 pages)</li>
+</ul>
+<p>You can usually configure this when creating the model to balance:</p>
+<ul>
+<li>Shorter responses: Faster and cheaper</li>
+<li>Longer responses: More detailed but slower and more expensive</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILanguageModel_1_ModelName_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.ModelName*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILanguageModel_1_ModelName" data-uid="AiDotNet.Interfaces.ILanguageModel`1.ModelName">
+  ModelName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name or identifier of the language model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string ModelName { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A string representing the model's name (e.g., &quot;gpt-4&quot;, &quot;claude-3-opus&quot;, &quot;llama-2-7b&quot;).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILanguageModel_1_ModelName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This identifies which specific model you're using. Different models have different:</p>
+<ul>
+<li>Capabilities (some are better at code, others at creative writing)</li>
+<li>Costs (GPT-4 is more expensive than GPT-3.5)</li>
+<li>Speed (smaller models are faster)</li>
+<li>Context windows (how much text they can process at once)</li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>&quot;gpt-4&quot; or &quot;gpt-3.5-turbo&quot; (OpenAI)</li>
+<li>&quot;claude-3-opus-20240229&quot; or &quot;claude-3-sonnet-20240229&quot; (Anthropic)</li>
+<li>&quot;llama-2-7b&quot; or &quot;mixtral-8x7b&quot; (Open source models)</li>
+</ul>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILanguageModel_1_Generate_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILanguageModel_1_Generate_System_String_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.Generate(System.String)">
+  Generate(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt synchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Generate(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILanguageModel_1_Generate_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is a synchronous version of GenerateAsync - it blocks until the response is ready.</p>
+<p>When to use this:</p>
+<ul>
+<li>Simple command-line scripts</li>
+<li>Batch processing where you process one request at a time</li>
+<li>When you can't use async/await for some reason</li>
+</ul>
+<p>When NOT to use this:</p>
+<ul>
+<li>Web applications (will block request threads)</li>
+<li>UI applications (will freeze the interface)</li>
+<li>When processing multiple requests (use GenerateAsync and Task.WhenAll)</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">// Simple script usage
+string response = model.Generate("What is 2 + 2?");
+Console.WriteLine(response); // "2 + 2 equals 4."</code></pre>
+<p>Note: Many implementations just call GenerateAsync().GetAwaiter().GetResult()
+internally, so the async version is usually the &quot;real&quot; implementation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILanguageModel_1_GenerateAsync_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.GenerateAsync*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILanguageModel_1_GenerateAsync_System_String_System_Threading_CancellationToken_" data-uid="AiDotNet.Interfaces.ILanguageModel`1.GenerateAsync(System.String,System.Threading.CancellationToken)">
+  GenerateAsync(string, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a text response to the given prompt asynchronously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Task&lt;string&gt; GenerateAsync(string prompt, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The input text prompt to send to the language model.
+This can be a question, instruction, or any text that requires a response.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Optional cancellation token to cancel the generation operation.
+Use this to implement timeouts or allow users to cancel long-running requests.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A task that represents the asynchronous operation. The task result contains
+the model's generated response as a string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILanguageModel_1_GenerateAsync_System_String_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This is the main method for getting responses from the language model. It's asynchronous
+(uses async/await) which means your application won't freeze while waiting for the response.</p>
+<p>The method is asynchronous because:</p>
+<ul>
+<li>API calls to cloud models can take 1-10 seconds</li>
+<li>Local models might need time to process</li>
+<li>Your UI stays responsive while waiting</li>
+</ul>
+<p>Example:</p>
+<pre><code class="lang-csharp">string prompt = "Write a haiku about programming";
+string response = await model.GenerateAsync(prompt);
+Console.WriteLine(response);
+// Output: "Code flows like water
+//          Bugs emerge then disappear
+//          Peace in the logic"</code></pre>
+<p>Best practices:</p>
+<ul>
+<li>Always use try-catch to handle errors (API failures, rate limits, etc.)</li>
+<li>Consider retry logic for transient failures</li>
+<li>Monitor token usage to control costs</li>
+<li>Use CancellationToken to implement timeouts and allow cancellation
+(e.g., var cts = new CancellationTokenSource(TimeSpan.FromSeconds(30)))</li>
+</ul>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILanguageModel.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

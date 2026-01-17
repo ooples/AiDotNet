@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IDallE3Model&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IDallE3Model&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for DALL-E 3-style text-to-image generation models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IDallE3Model_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IDallE3Model%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IDallE3Model`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IDallE3Model_1" data-uid="AiDotNet.Interfaces.IDallE3Model`1" class="text-break">
+Interface IDallE3Model&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L66"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for DALL-E 3-style text-to-image generation models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IDallE3Model&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IDallE3Model_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DALL-E 3 represents a significant advancement in text-to-image generation,
+with improved prompt following, text rendering, and overall image quality.
+It uses a combination of diffusion models and language understanding.
+</p>
+<p><b>For Beginners:</b> DALL-E 3 creates images from text descriptions!
+<p>Key capabilities:</p>
+<ul>
+<li>High-fidelity image generation from text prompts</li>
+<li>Accurate text rendering within images</li>
+<li>Complex scene composition with multiple objects</li>
+<li>Style control (vivid vs natural)</li>
+<li>Multiple aspect ratios and sizes</li>
+</ul>
+<p>Architecture concepts:</p>
+<ol>
+<li>Text Encoder: Understands and expands prompts</li>
+<li>Diffusion Model: Generates images through iterative denoising</li>
+<li>Safety Systems: Filters inappropriate content</li>
+<li>Quality Enhancement: Upscaling and refinement</li>
+</ol>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_MaxPromptLength_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.MaxPromptLength*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_MaxPromptLength" data-uid="AiDotNet.Interfaces.IDallE3Model`1.MaxPromptLength">
+  MaxPromptLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L76"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum prompt length in characters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int MaxPromptLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_SupportedSizes_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportedSizes*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_SupportedSizes" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportedSizes">
+  SupportedSizes
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the supported image sizes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IReadOnlyList&lt;DallE3ImageSize&gt; SupportedSizes { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_SupportsEditing_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportsEditing*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_SupportsEditing" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportsEditing">
+  SupportsEditing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the model supports image editing (inpainting).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsEditing { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_SupportsVariations_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportsVariations*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_SupportsVariations" data-uid="AiDotNet.Interfaces.IDallE3Model`1.SupportsVariations">
+  SupportsVariations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L86"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether the model supports image variations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool SupportsVariations { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_CheckPromptSafety_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.CheckPromptSafety*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_CheckPromptSafety_System_String_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.CheckPromptSafety(System.String)">
+  CheckPromptSafety(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a prompt is likely to be rejected for safety reasons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(bool IsSafe, IEnumerable&lt;string&gt; FlaggedCategories) CheckPromptSafety(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.issafe">IsSafe</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.boolean,system.collections.generic.ienumerable-system.string--.flaggedcategories">FlaggedCategories</a>)</dt>
+    <dd><p>Whether the prompt is safe and any flagged categories.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_CreateVariations_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.CreateVariations*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_CreateVariations_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Double_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.CreateVariations(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Double,AiDotNet.Interfaces.DallE3ImageSize)">
+  CreateVariations(Tensor&lt;T&gt;, int, double, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L182"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates variations of an existing image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Tensor&lt;T&gt;&gt; CreateVariations(Tensor&lt;T&gt; image, int count = 4, double variationStrength = 0.5, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Source image to create variations of.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of variations to generate.</p>
+</dd>
+    <dt><code>variationStrength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>How different from original (0-1).</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of image variations.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_Edit_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Edit*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_Edit_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Edit(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  Edit(Tensor&lt;T&gt;, Tensor&lt;T&gt;, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L168"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Edits an existing image based on a prompt and mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Edit(Tensor&lt;T&gt; image, Tensor&lt;T&gt; mask, string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Original image to edit.</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Mask indicating areas to edit (white = edit, black = keep).</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of what to generate in masked areas.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Edited image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_Edit_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Change specific parts of an image!
+<p>The mask tells the model where to make changes:</p>
+<ul>
+<li>White (255) areas will be regenerated based on prompt</li>
+<li>Black (0) areas will be preserved from the original</li>
+<li>Gray areas blend between original and generated</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_EstimateQuality_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.EstimateQuality*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_EstimateQuality_System_String_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.EstimateQuality(System.String)">
+  EstimateQuality(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Estimates the generation quality before actually generating.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(T PredictedQuality, IEnumerable&lt;string&gt; Suggestions) EstimateQuality(string prompt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Prompt to evaluate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.ienumerable-system.string--.predictedquality">PredictedQuality</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,system.collections.generic.ienumerable-system.string--.suggestions">Suggestions</a>)</dt>
+    <dd><p>Predicted quality score and improvement suggestions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_ExpandPrompt_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.ExpandPrompt*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_ExpandPrompt_System_String_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.ExpandPrompt(System.String,AiDotNet.Interfaces.DallE3Style)">
+  ExpandPrompt(string, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Expands a simple prompt into a more detailed description.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string ExpandPrompt(string simplePrompt, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>simplePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Brief description.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Desired style for expansion.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Expanded, detailed prompt.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_Generate_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_Generate_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_System_Nullable_System_Int32__" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Generate(System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style,System.Nullable{System.Int32})">
+  Generate(string, DallE3ImageSize, DallE3Quality, DallE3Style, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image from a text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Generate(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired image.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional seed for reproducibility.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image tensor [channels, height, width].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_Generate_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The main function - describe what you want!
+<p>Tips for good prompts:</p>
+<ul>
+<li>Be specific about subject, style, and composition</li>
+<li>Include lighting and mood descriptions</li>
+<li>Mention artistic style if desired (e.g., &quot;oil painting&quot;, &quot;digital art&quot;)</li>
+<li>Describe spatial relationships clearly</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateConsistentSet_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateConsistentSet*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateConsistentSet_System_String_System_Collections_Generic_IEnumerable_System_String__System_Int32_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateConsistentSet(System.String,System.Collections.Generic.IEnumerable{System.String},System.Int32,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateConsistentSet(string, IEnumerable&lt;string&gt;, int, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a consistent set of images (same character/scene, different poses/angles).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Tensor&lt;T&gt;&gt; GenerateConsistentSet(string basePrompt, IEnumerable&lt;string&gt; variations, int consistencySeed, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>basePrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Base description of the subject.</p>
+</dd>
+    <dt><code>variations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>List of variation descriptions (poses, angles, etc.).</p>
+</dd>
+    <dt><code>consistencySeed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Seed for maintaining consistency.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of consistent images.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateForUseCase_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateForUseCase*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateForUseCase_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateForUseCase(System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateForUseCase(string, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image optimized for a specific use case.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateForUseCase(string prompt, string useCase, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Image description.</p>
+</dd>
+    <dt><code>useCase</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Use case: &quot;social_media&quot;, &quot;product_photo&quot;, &quot;illustration&quot;, &quot;concept_art&quot;, &quot;stock_photo&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image optimized for use case.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateMultiple_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateMultiple*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateMultiple_System_String_System_Int32_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateMultiple(System.String,System.Int32,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style)">
+  GenerateMultiple(string, int, DallE3ImageSize, DallE3Quality, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates multiple images from a text prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Tensor&lt;T&gt;&gt; GenerateMultiple(string prompt, int count = 4, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Text description of the desired images.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of images to generate (1-4).</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Collection of generated image tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateTileable_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateTileable*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateTileable_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateTileable(System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateTileable(string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L272"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a seamlessly tileable image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateTileable(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Pattern or texture description.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tileable image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_GenerateTileable_System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Useful for creating textures, wallpapers, and backgrounds
+that can be repeated without visible seams.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithComposition_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithComposition*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithComposition_System_String_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String_System_Double___AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithComposition(System.String,System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String,System.Double}},AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateWithComposition(string, IEnumerable&lt;(string Element, string Position, double Prominence)&gt;, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with controlled composition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateWithComposition(string prompt, IEnumerable&lt;(string Element, string Position, double Prominence)&gt; compositionGuide, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Overall description.</p>
+</dd>
+    <dt><code>compositionGuide</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.element">Element</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.position">Position</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string,system.double-.prominence">Prominence</a>)&gt;</dt>
+    <dd><p>Composition elements with positions.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image following composition guide.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithComposition_System_String_System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String_System_Double___AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Control where things appear in your image!
+<p>Composition guide format:
+[(&quot;subject&quot;, &quot;center&quot;, 0.5), (&quot;background&quot;, &quot;back&quot;, 0.2), (&quot;accent&quot;, &quot;bottom-right&quot;, 0.3)]</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithPrompt_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithPrompt*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithPrompt_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithPrompt(System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality,AiDotNet.Interfaces.DallE3Style)">
+  GenerateWithPrompt(string, DallE3ImageSize, DallE3Quality, DallE3Style)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with the revised/expanded prompt returned.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">(Tensor&lt;T&gt; Image, string RevisedPrompt) GenerateWithPrompt(string prompt, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard, DallE3Style style = DallE3Style.Vivid)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Original text prompt.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+    <dt><code>style</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Style.html">DallE3Style</a></dt>
+    <dd><p>Style setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.image">Image</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,system.string-.revisedprompt">RevisedPrompt</a>)</dt>
+    <dd><p>Generated image and the expanded prompt used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithPrompt_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_AiDotNet_Interfaces_DallE3Style__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+DALL-E 3 internally expands prompts for better results.
+This method returns both the image and the expanded prompt
+so you can see how your prompt was interpreted.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithStyle_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithStyle*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithStyle_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_AiDotNet_Interfaces_DallE3Quality_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithStyle(System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize,AiDotNet.Interfaces.DallE3Quality)">
+  GenerateWithStyle(string, string, DallE3ImageSize, DallE3Quality)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image in a specific artistic style.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateWithStyle(string prompt, string artisticStyle, DallE3ImageSize size = DallE3ImageSize.Square1024, DallE3Quality quality = DallE3Quality.Standard)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Content description.</p>
+</dd>
+    <dt><code>artisticStyle</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Style: &quot;photorealistic&quot;, &quot;oil_painting&quot;, &quot;watercolor&quot;, &quot;digital_art&quot;, &quot;anime&quot;, &quot;sketch&quot;, &quot;3d_render&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+    <dt><code>quality</code> <a class="xref" href="AiDotNet.Interfaces.DallE3Quality.html">DallE3Quality</a></dt>
+    <dd><p>Quality setting.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image in specified style.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithText_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithText*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithText_System_String_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.GenerateWithText(System.String,System.String,System.String,AiDotNet.Interfaces.DallE3ImageSize)">
+  GenerateWithText(string, string, string, DallE3ImageSize)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L202"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates an image with specific text rendered in it.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; GenerateWithText(string prompt, string textToRender, string textPlacement = &quot;center&quot;, DallE3ImageSize size = DallE3ImageSize.Square1024)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Overall image description.</p>
+</dd>
+    <dt><code>textToRender</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Exact text to appear in the image.</p>
+</dd>
+    <dt><code>textPlacement</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Where to place text: &quot;top&quot;, &quot;center&quot;, &quot;bottom&quot;, &quot;overlay&quot;.</p>
+</dd>
+    <dt><code>size</code> <a class="xref" href="AiDotNet.Interfaces.DallE3ImageSize.html">DallE3ImageSize</a></dt>
+    <dd><p>Output image size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Generated image with text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IDallE3Model_1_GenerateWithText_System_String_System_String_System_String_AiDotNet_Interfaces_DallE3ImageSize__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+DALL-E 3 has improved text rendering capabilities compared to earlier models.
+Use this method when you need specific text to appear in the image.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_Outpaint_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Outpaint*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_Outpaint_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_String_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Outpaint(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.String)">
+  Outpaint(Tensor&lt;T&gt;, string, int, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L242"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Outpaints an image, extending it beyond its original boundaries.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Outpaint(Tensor&lt;T&gt; image, string direction, int extensionPixels, string? prompt = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Original image.</p>
+</dd>
+    <dt><code>direction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Direction to extend: &quot;left&quot;, &quot;right&quot;, &quot;top&quot;, &quot;bottom&quot;, &quot;all&quot;.</p>
+</dd>
+    <dt><code>extensionPixels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>How many pixels to extend.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional prompt to guide the extension.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Extended image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_IDallE3Model_1_Upscale_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Upscale*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IDallE3Model_1_Upscale_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Boolean_" data-uid="AiDotNet.Interfaces.IDallE3Model`1.Upscale(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Boolean)">
+  Upscale(Tensor&lt;T&gt;, int, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L229"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Upscales an image to higher resolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; Upscale(Tensor&lt;T&gt; image, int scaleFactor = 2, bool enhanceDetails = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Image to upscale.</p>
+</dd>
+    <dt><code>scaleFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Upscale factor (2 or 4).</p>
+</dd>
+    <dt><code>enhanceDetails</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to enhance details during upscaling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Upscaled image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IDallE3Model.cs/#L66" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

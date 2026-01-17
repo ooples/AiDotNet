@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IReranker&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IReranker&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for reranking retrieved documents to improve relevance ordering.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IReranker_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IReranker%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IReranker`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IReranker_1" data-uid="AiDotNet.Interfaces.IReranker`1" class="text-break">
+Interface IReranker&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IReranker.cs/#L35"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for reranking retrieved documents to improve relevance ordering.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IReranker&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for relevance scoring.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IReranker_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A reranker refines the ordering of initially retrieved documents using more sophisticated
+relevance scoring. While initial retrieval must be fast and may use simple similarity metrics,
+reranking can employ computationally expensive methods like cross-encoders or large language
+models to achieve better relevance rankings for the final result set.
+</p>
+<p><b>For Beginners:</b> A reranker is like a second opinion on search results.
+<p>Think of it like a two-stage hiring process:</p>
+<p>Stage 1 (Initial Retrieval):</p>
+<ul>
+<li>Quick screening of 1000 applicants</li>
+<li>Filter to top 20 based on resume keywords</li>
+<li>Fast but might miss some good candidates</li>
+</ul>
+<p>Stage 2 (Reranking):</p>
+<ul>
+<li>Detailed review of those 20 candidates</li>
+<li>Deeper analysis of experience and fit</li>
+<li>Slower but more accurate</li>
+<li>Final ranking of best 5</li>
+</ul>
+<p>Similarly, reranking takes the initial search results and re-orders them using
+more sophisticated analysis, ensuring the best results appear first.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IReranker_1_ModifiesScores_" data-uid="AiDotNet.Interfaces.IReranker`1.ModifiesScores*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IReranker_1_ModifiesScores" data-uid="AiDotNet.Interfaces.IReranker`1.ModifiesScores">
+  ModifiesScores
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IReranker.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets a value indicating whether this reranker modifies relevance scores.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool ModifiesScores { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IReranker_1_ModifiesScores_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Some rerankers (like identity/pass-through rerankers) don't modify scores,
+while others compute new scores. This property indicates the behavior.
+</p>
+<p><b>For Beginners:</b> This tells you if the reranker actually does something.
+<ul>
+<li>False: Pass-through reranker (no changes, just returns documents as-is)</li>
+<li>True: Active reranker (recalculates scores and reorders documents)</li>
+</ul>
+<p>A pass-through reranker is useful as a default when you don't need reranking,
+but want to keep the code structure consistent.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IReranker_1_Rerank_" data-uid="AiDotNet.Interfaces.IReranker`1.Rerank*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IReranker_1_Rerank_System_String_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___" data-uid="AiDotNet.Interfaces.IReranker`1.Rerank(System.String,System.Collections.Generic.IEnumerable{AiDotNet.RetrievalAugmentedGeneration.Models.Document{`0}})">
+  Rerank(string, IEnumerable&lt;Document&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IReranker.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reranks a collection of documents based on their relevance to a query.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Document&lt;T&gt;&gt; Rerank(string query, IEnumerable&lt;Document&lt;T&gt;&gt; documents)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query text used to assess relevance.</p>
+</dd>
+    <dt><code>documents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The documents to rerank.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The documents reordered by relevance, with updated relevance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IReranker_1_Rerank_System_String_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method takes documents (typically from an initial retrieval stage) and reorders
+them using the reranker's scoring strategy. The returned documents have their
+RelevanceScore properties updated to reflect the reranker's assessment. Documents
+are returned in descending order of relevance.
+</p>
+<p><b>For Beginners:</b> This re-sorts search results to put the best matches first.
+<p>For example:</p>
+<ul>
+<li>Input: 10 documents from initial search (roughly ordered)</li>
+<li>Processing: Reranker deeply analyzes each one</li>
+<li>Output: Same 10 documents, but better ordered with updated scores</li>
+</ul>
+<p>The first document in the output is now the absolute best match,
+not just a good match like it might have been before reranking.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IReranker_1_Rerank_" data-uid="AiDotNet.Interfaces.IReranker`1.Rerank*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IReranker_1_Rerank_System_String_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___System_Int32_" data-uid="AiDotNet.Interfaces.IReranker`1.Rerank(System.String,System.Collections.Generic.IEnumerable{AiDotNet.RetrievalAugmentedGeneration.Models.Document{`0}},System.Int32)">
+  Rerank(string, IEnumerable&lt;Document&lt;T&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IReranker.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reranks documents and returns only the top-k highest scoring results.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;Document&lt;T&gt;&gt; Rerank(string query, IEnumerable&lt;Document&lt;T&gt;&gt; documents, int topK)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>query</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The query text used to assess relevance.</p>
+</dd>
+    <dt><code>documents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The documents to rerank.</p>
+</dd>
+    <dt><code>topK</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of top-ranked documents to return.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.Models.Document-1.html">Document</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The top-k documents ordered by relevance, with updated relevance scores.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IReranker_1_Rerank_System_String_System_Collections_Generic_IEnumerable_AiDotNet_RetrievalAugmentedGeneration_Models_Document__0___System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method combines reranking with result limiting. It's more efficient than
+reranking all documents when only the top results are needed, as some implementations
+can optimize by not fully scoring lower-ranked candidates.
+</p>
+<p><b>For Beginners:</b> This re-sorts and then keeps only the best results.
+<p>For example:</p>
+<ul>
+<li>Input: 20 documents from initial search</li>
+<li>Rerank: Analyze and re-sort all 20</li>
+<li>Output: Only the top 5 best matches (if topK = 5)</li>
+</ul>
+<p>This is useful when you retrieved many documents initially but only need
+the very best ones after careful analysis.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IReranker.cs/#L35" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

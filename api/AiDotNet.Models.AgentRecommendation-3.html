@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AgentRecommendation&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AgentRecommendation&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Stores the AI agent&#39;s analysis results and recommendations after examining your data and model configuration.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_AgentRecommendation_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.AgentRecommendation%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.AgentRecommendation`3">
+
+
+
+  <h1 id="AiDotNet_Models_AgentRecommendation_3" data-uid="AiDotNet.Models.AgentRecommendation`3" class="text-break">
+Class AgentRecommendation&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Stores the AI agent's analysis results and recommendations after examining your data and model configuration.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AgentRecommendation&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for model parameters and calculations (typically float or double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data (e.g., Matrix&lt;double&gt;, Vector&lt;float&gt;).</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output predictions (e.g., Vector&lt;double&gt;, double[]).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">AgentRecommendation&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_AgentRecommendation_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class encapsulates all the insights, recommendations, and reasoning provided by the AI agent during the
+model building process. It contains the results of various agent operations such as data analysis, model selection,
+hyperparameter tuning, and feature analysis. Each property corresponds to a specific agent capability that can be
+enabled through AgentAssistanceOptions. Properties will only be populated if their corresponding feature was enabled;
+otherwise, they remain null. This class is returned as part of the PredictionModelResult and provides valuable
+insights into why the agent made specific recommendations.
+</p>
+<p><b>For Beginners:</b> This class holds all the advice and recommendations the AI agent provides about your
+machine learning model.
+<p>Think of it as a detailed report from an AI consultant that contains:</p>
+<ul>
+<li><strong>Analysis of your data</strong>: What patterns, issues, or characteristics the AI found</li>
+<li><strong>Model recommendations</strong>: Which model to use and why</li>
+<li><strong>Setting suggestions</strong>: What hyperparameters to use and why those values make sense</li>
+<li><strong>Feature insights</strong>: Which input variables matter most and how to improve them</li>
+<li><strong>Reasoning explanations</strong>: The AI's thought process behind each recommendation</li>
+</ul>
+<p>How it works:</p>
+<ul>
+<li>Only the sections you enabled in AgentAssistanceOptions will be filled in</li>
+<li>Each property contains detailed, human-readable explanations</li>
+<li>You can read these insights to understand the AI's recommendations</li>
+<li>The reasoning helps you learn about machine learning best practices</li>
+</ul>
+<p>For example, if you enabled ModelSelection and HyperparameterTuning, you might get:</p>
+<ul>
+<li>SuggestedModelType: RandomForest</li>
+<li>ModelSelectionReasoning: &quot;Random Forest is recommended because your dataset has 10,000 samples with
+complex non-linear relationships. It will handle the outliers better than linear models and is less
+likely to overfit than a deep neural network given your data size.&quot;</li>
+<li>SuggestedHyperparameters: {&quot;n_trees&quot;: 100, &quot;max_depth&quot;: 15, &quot;min_samples_split&quot;: 10}</li>
+<li>TuningReasoning: &quot;These hyperparameters balance model complexity with generalization...&quot;</li>
+</ul>
+<p>This information helps you understand not just what to do, but why it's the right approach for your specific problem.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_CompressionReasoning_" data-uid="AiDotNet.Models.AgentRecommendation`3.CompressionReasoning*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_CompressionReasoning" data-uid="AiDotNet.Models.AgentRecommendation`3.CompressionReasoning">
+  CompressionReasoning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's detailed explanation for the compression recommendation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? CompressionReasoning { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A detailed text explanation of the compression selection rationale, or null if not available.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_CompressionReasoning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property explains why the agent recommended a specific compression technique,
+including analysis of the model structure and expected compression-accuracy tradeoffs.
+</p>
+<p><b>For Beginners:</b> This explains why a particular compression technique was chosen.
+<p>For example:
+&quot;Deep Compression (pruning + quantization + Huffman) is recommended because:</p>
+<ol>
+<li>Your model has many fully-connected layers with high redundancy</li>
+<li>92% of weights have magnitude less than 0.1 (good pruning candidates)</li>
+<li>Expected compression: 35-50x with less than 1% accuracy loss</li>
+<li>Target platform (mobile) requires small model size</li>
+</ol>
+<p>Alternative considered: Weight Clustering alone would give 8x compression,
+but Deep Compression's multi-stage approach will achieve better results
+for your deployment constraints.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_DataAnalysis_" data-uid="AiDotNet.Models.AgentRecommendation`3.DataAnalysis*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_DataAnalysis" data-uid="AiDotNet.Models.AgentRecommendation`3.DataAnalysis">
+  DataAnalysis
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's analysis of your training data, including patterns, issues, and characteristics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? DataAnalysis { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A detailed text description of data analysis insights, or null if data analysis was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_DataAnalysis_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the agent's comprehensive analysis of your training data when EnableDataAnalysis is turned on.
+The analysis includes observations about data distributions, outliers, missing values, feature correlations, class
+imbalances, and potential data quality issues. The agent provides this information in natural language with specific
+examples and statistics from your data. This property is null if data analysis was not enabled in AgentAssistanceOptions.
+</p>
+<p><b>For Beginners:</b> This contains what the AI discovered when examining your data.
+<p>What you'll find here:</p>
+<ul>
+<li>Unusual patterns or anomalies in your data</li>
+<li>Statistics about your features and target variable</li>
+<li>Warnings about potential problems (missing data, outliers, etc.)</li>
+<li>Observations about feature relationships and correlations</li>
+<li>Suggestions for data preprocessing or cleaning</li>
+</ul>
+<p>For example, you might see:
+&quot;Your dataset contains 5,000 samples with 12 features. The 'price' feature shows significant right skew with
+some extreme outliers above $2M. Features 'sqft' and 'bedrooms' are highly correlated (r=0.85). About 8% of
+'year_built' values are missing. Consider log-transforming 'price' to handle the skew, and either remove or
+impute the missing values before training.&quot;</p>
+<p>This helps you understand your data better and catch issues before they affect your model's performance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_ExpectedCompressionMetrics_" data-uid="AiDotNet.Models.AgentRecommendation`3.ExpectedCompressionMetrics*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_ExpectedCompressionMetrics" data-uid="AiDotNet.Models.AgentRecommendation`3.ExpectedCompressionMetrics">
+  ExpectedCompressionMetrics
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the expected compression metrics after applying the recommended technique.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ExpectedCompressionMetrics { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Predicted compression metrics, or null if not available.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_ExpectedCompressionMetrics_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the agent's prediction of what compression metrics you can expect
+if you apply the recommended compression technique. These are estimates based on model analysis.
+</p>
+<p><b>For Beginners:</b> This shows what to expect from compression before you apply it.
+<p>Typical information includes:</p>
+<ul>
+<li>Expected compression ratio (e.g., &quot;20-30x smaller&quot;)</li>
+<li>Expected accuracy loss (e.g., &quot;less than 1%&quot;)</li>
+<li>Expected inference speedup (e.g., &quot;2-3x faster&quot;)</li>
+</ul>
+<p>These are estimates - actual results depend on your specific model and data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_FeatureRecommendations_" data-uid="AiDotNet.Models.AgentRecommendation`3.FeatureRecommendations*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_FeatureRecommendations" data-uid="AiDotNet.Models.AgentRecommendation`3.FeatureRecommendations">
+  FeatureRecommendations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's recommendations about feature selection, importance, and engineering.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? FeatureRecommendations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A detailed text description of feature analysis and recommendations, or null if feature analysis was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_FeatureRecommendations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the agent's analysis of your input features when EnableFeatureAnalysis is turned on.
+It includes rankings of feature importance, identification of redundant or unhelpful features, suggestions
+for new features to create through feature engineering, recommendations for feature transformations, and
+insights about feature interactions. The agent explains which features are most predictive, which could be
+removed without hurting performance, and how you might improve your feature set. This property is null if
+feature analysis was not enabled in AgentAssistanceOptions.
+</p>
+<p><b>For Beginners:</b> This tells you which input variables (features) matter most and how to improve them.
+<p>What you'll learn:</p>
+<ul>
+<li>Which features are most important for predictions</li>
+<li>Which features aren't helping and could be removed</li>
+<li>Ideas for new features to create (feature engineering)</li>
+<li>Transformations that might improve feature usefulness</li>
+<li>How features interact with each other</li>
+</ul>
+<p>For example, when predicting house prices:
+&quot;Feature Analysis:</p>
+<p>Most Important Features:</p>
+<ol>
+<li>square_footage (importance: 0.45) - Strongest predictor of price</li>
+<li>location_score (importance: 0.28) - Second most influential</li>
+<li>year_built (importance: 0.12) - Moderate impact</li>
+</ol>
+<p>Low-Impact Features:</p>
+<ul>
+<li>exterior_color (importance: 0.01) - Consider removing</li>
+<li>HOA_name (importance: 0.00) - Not predictive, remove</li>
+</ul>
+<p>Feature Engineering Suggestions:</p>
+<ul>
+<li>Create 'price_per_sqft' = price / square_footage (useful for normalization)</li>
+<li>Create 'age' = current_year - year_built (more intuitive than year_built)</li>
+<li>Consider binning 'year_built' into decades for non-linear patterns</li>
+</ul>
+<p>The strong correlation between square_footage and bedrooms (r=0.85) suggests multicollinearity.
+Consider using just one or creating a composite feature.&quot;</p>
+<p>This helps you focus on important features and improve your model's performance through better feature engineering.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_ModelSelectionReasoning_" data-uid="AiDotNet.Models.AgentRecommendation`3.ModelSelectionReasoning*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_ModelSelectionReasoning" data-uid="AiDotNet.Models.AgentRecommendation`3.ModelSelectionReasoning">
+  ModelSelectionReasoning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's detailed explanation for why it recommended the suggested model type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ModelSelectionReasoning { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A detailed text explanation of the model selection rationale, or null if model selection was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_ModelSelectionReasoning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the agent's natural language explanation of why it recommended the SuggestedModelType.
+The reasoning describes how the model's characteristics align with your data properties, explains what makes
+this model a good fit, discusses potential alternatives that were considered, and may warn about limitations
+or considerations to keep in mind. This educational explanation helps you understand the decision-making process
+rather than just receiving a recommendation blindly. This property is null if model selection was not enabled.
+</p>
+<p><b>For Beginners:</b> This explains why the AI chose the recommended model - the "why" behind the "what."
+<p>The reasoning typically covers:</p>
+<ul>
+<li>Why this model suits your specific data characteristics</li>
+<li>What advantages this model has for your problem</li>
+<li>What alternatives were considered and why they weren't chosen</li>
+<li>Any limitations or caveats to be aware of</li>
+<li>How this model compares to others for your use case</li>
+</ul>
+<p>For example:
+&quot;Random Forest is recommended for your dataset because:</p>
+<ol>
+<li>Your 10,000 samples provide enough data for an ensemble method</li>
+<li>The non-linear relationships in your features need a flexible model</li>
+<li>Random Forest handles the outliers in 'price' better than linear models</li>
+<li>It's less prone to overfitting than a single decision tree</li>
+<li>It provides feature importance scores which will be valuable for your analysis</li>
+</ol>
+<p>While Neural Networks could also work, Random Forest will likely train faster and be easier to interpret
+for your business stakeholders.&quot;</p>
+<p>This helps you learn about model selection while getting personalized advice for your situation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_ReasoningTrace_" data-uid="AiDotNet.Models.AgentRecommendation`3.ReasoningTrace*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_ReasoningTrace" data-uid="AiDotNet.Models.AgentRecommendation`3.ReasoningTrace">
+  ReasoningTrace
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L310"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the complete reasoning trace showing the AI agent's thought process across all operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? ReasoningTrace { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A comprehensive text record of the agent's reasoning steps and decisions, or null if no agent operations were performed.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_ReasoningTrace_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains a chronological trace of all reasoning steps performed by the AI agent during the model
+building process. It combines insights from all enabled agent operations into a single comprehensive narrative,
+showing how the agent analyzed your data, considered different options, made decisions, and arrived at its
+recommendations. This is particularly useful for understanding the complete picture of the agent's analysis
+and for debugging or learning purposes. This property is null if no agent assistance features were enabled.
+</p>
+<p><b>For Beginners:</b> This is the complete record of everything the AI thought about and decided during
+the model building process.
+<p>It's like reading the AI's notebook where it:</p>
+<ul>
+<li>Recorded observations about your data</li>
+<li>Explained its decision-making process</li>
+<li>Showed how different pieces of analysis connect</li>
+<li>Documented why it made each recommendation</li>
+</ul>
+<p>This is the most detailed view of the agent's work. While the other properties give you specific pieces
+(data analysis, model choice, hyperparameters, features), this property shows the complete story of how
+all those pieces fit together.</p>
+<p>Use this when you want to:</p>
+<ul>
+<li>Understand the full picture of the AI's analysis</li>
+<li>Learn about the machine learning process</li>
+<li>Debug unexpected recommendations</li>
+<li>See how the AI connects different insights</li>
+</ul>
+<p>For example, it might show:
+&quot;Step 1: Analyzed data distribution and found right-skewed target variable...
+Step 2: Based on skewness and dataset size, considered RandomForest and GradientBoosting...
+Step 3: Selected RandomForest because it's more robust to outliers...
+Step 4: Tuned hyperparameters considering the dataset size of 5,000 samples...
+Step 5: Identified square_footage as the most important feature due to high correlation with target...&quot;</p>
+<p>This comprehensive view helps you learn how an expert approaches machine learning problems.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionParameters_" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedCompressionParameters*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionParameters" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedCompressionParameters">
+  SuggestedCompressionParameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L382"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the recommended hyperparameters for the compression technique.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt;? SuggestedCompressionParameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary mapping parameter names to recommended values, or null if not available.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the specific hyperparameter values recommended for the suggested
+compression technique. These are tuned based on the model characteristics and constraints.
+</p>
+<p><b>For Beginners:</b> These are the settings to use with the recommended compression technique.
+<p>For example, for Deep Compression:</p>
+<ul>
+<li>&quot;pruningSparsity&quot;: 0.9 (remove 90% of smallest weights)</li>
+<li>&quot;numClusters&quot;: 32 (use 5-bit quantization)</li>
+<li>&quot;huffmanPrecision&quot;: 4 (4 decimal places for encoding)</li>
+</ul>
+<p>These values were chosen based on your model's characteristics to balance
+compression and accuracy.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionType_" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedCompressionType*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionType" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedCompressionType">
+  SuggestedCompressionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L335"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's recommended compression technique for model deployment.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CompressionType? SuggestedCompressionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.CompressionType.html">CompressionType</a>?</dt>
+    <dd><p>The suggested compression type, or null if compression analysis was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_SuggestedCompressionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the specific compression technique that the AI agent recommends
+based on the model architecture, deployment constraints, and accuracy requirements.
+The recommendation considers factors like model size, layer types, and target platform.
+</p>
+<p><b>For Beginners:</b> This tells you which compression method to use to make your model smaller.
+<p>Common recommendations include:</p>
+<ul>
+<li><strong>SparsePruning</strong>: Remove small weights (good for large, dense models)</li>
+<li><strong>WeightClustering</strong>: Group similar weights (good for moderate compression)</li>
+<li><strong>DeepCompression</strong>: Combine multiple techniques (best for maximum compression)</li>
+</ul>
+<p>The agent chooses based on:</p>
+<ul>
+<li>Your model's architecture (CNNs vs fully-connected)</li>
+<li>Your accuracy tolerance (how much accuracy loss is acceptable)</li>
+<li>Your deployment target (mobile, cloud, edge devices)</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_SuggestedHyperparameters_" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedHyperparameters*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_SuggestedHyperparameters" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedHyperparameters">
+  SuggestedHyperparameters
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L180"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's recommended hyperparameter values for the selected model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt;? SuggestedHyperparameters { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd><p>A dictionary mapping hyperparameter names to their recommended values, or null if hyperparameter tuning was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_SuggestedHyperparameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains a dictionary of hyperparameter names and their recommended values for your selected model.
+The keys are hyperparameter names (like "learning_rate", "max_depth", "n_estimators") and the values are the
+suggested settings. These recommendations are tailored to your specific data characteristics and model type.
+The agent considers factors like dataset size, feature dimensionality, and problem complexity when suggesting
+these values. This property is null if hyperparameter tuning was not enabled in AgentAssistanceOptions. See
+TuningReasoning for detailed explanations of why these values were chosen.
+</p>
+<p><b>For Beginners:</b> This contains the recommended settings for your model - like tuning knobs on a machine.
+<p>Hyperparameters control how your model learns:</p>
+<ul>
+<li>How fast it learns (learning_rate)</li>
+<li>How complex it can get (max_depth, n_layers)</li>
+<li>How many parts it has (n_estimators, n_neurons)</li>
+<li>How it handles data (batch_size, regularization)</li>
+</ul>
+<p>For example, if using Random Forest, you might get:
+{
+&quot;n_estimators&quot;: 100,        // Use 100 trees
+&quot;max_depth&quot;: 15,            // Each tree can be 15 levels deep
+&quot;min_samples_split&quot;: 10,    // Need at least 10 samples to split
+&quot;max_features&quot;: &quot;sqrt&quot;      // Consider sqrt(n) features per split
+}</p>
+<p>These aren't random guesses - the AI chose these values specifically for your data size and characteristics.
+Check TuningReasoning to understand why each value was selected.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_SuggestedModelType_" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedModelType*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_SuggestedModelType" data-uid="AiDotNet.Models.AgentRecommendation`3.SuggestedModelType">
+  SuggestedModelType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's recommended model type for your problem.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelType? SuggestedModelType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.ModelType.html">ModelType</a>?</dt>
+    <dd><p>A ModelType enum value representing the recommended model, or null if model selection was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_SuggestedModelType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the specific model type that the AI agent recommends based on your data characteristics,
+problem complexity, and dataset size. The recommendation is made by analyzing factors such as linearity, feature
+dimensionality, sample size, presence of outliers, and computational constraints. This property is null if model
+selection was not enabled in AgentAssistanceOptions. See the ModelSelectionReasoning property for the explanation
+of why this model was chosen.
+</p>
+<p><b>For Beginners:</b> This tells you which machine learning model the AI thinks you should use.
+<p>The AI chooses based on:</p>
+<ul>
+<li>Your data size (small, medium, or large dataset)</li>
+<li>Complexity of patterns in your data</li>
+<li>Type of relationships (linear, non-linear, etc.)</li>
+<li>Presence of outliers or unusual data points</li>
+</ul>
+<p>For example, the AI might recommend:</p>
+<ul>
+<li>SimpleRegression for small datasets with clear linear relationships</li>
+<li>RandomForest for medium-sized datasets with complex patterns</li>
+<li>NeuralNetworkRegression for large datasets with very complex relationships</li>
+</ul>
+<p>Always read the ModelSelectionReasoning property to understand why this model was chosen for your specific situation.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_AgentRecommendation_3_TuningReasoning_" data-uid="AiDotNet.Models.AgentRecommendation`3.TuningReasoning*"></a>
+
+  <h3 id="AiDotNet_Models_AgentRecommendation_3_TuningReasoning" data-uid="AiDotNet.Models.AgentRecommendation`3.TuningReasoning">
+  TuningReasoning
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L220"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the AI agent's detailed explanation for the recommended hyperparameter values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? TuningReasoning { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A detailed text explanation of the hyperparameter tuning rationale, or null if hyperparameter tuning was not enabled.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_AgentRecommendation_3_TuningReasoning_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property contains the agent's natural language explanation of why it chose the specific hyperparameter values
+in SuggestedHyperparameters. For each major hyperparameter, the reasoning explains what the parameter controls,
+how it affects model behavior, why the suggested value is appropriate for your data, and what trade-offs were
+considered. This educational explanation helps you understand hyperparameter tuning principles rather than just
+applying recommended values blindly. This property is null if hyperparameter tuning was not enabled.
+</p>
+<p><b>For Beginners:</b> This explains why the AI chose these specific hyperparameter values.
+<p>For each important setting, you'll learn:</p>
+<ul>
+<li>What the hyperparameter does and why it matters</li>
+<li>Why this specific value is good for your data</li>
+<li>What happens if you increase or decrease the value</li>
+<li>How it balances different trade-offs (speed vs accuracy, simplicity vs power)</li>
+</ul>
+<p>For example:
+&quot;Hyperparameter recommendations for your Random Forest:</p>
+<p>n_estimators=100: Using 100 trees provides a good balance. More trees improve accuracy but with diminishing
+returns beyond 100 for your dataset size. Fewer trees might underfit your complex patterns.</p>
+<p>max_depth=15: Limiting tree depth prevents overfitting. Your dataset's complexity needs depth to capture
+patterns, but unlimited depth would memorize noise in your 5,000 training samples.</p>
+<p>min_samples_split=10: Requiring 10 samples before splitting helps avoid creating overly specific rules
+based on just a few data points, which improves generalization to new data.</p>
+<p>These values are tuned for your specific dataset size and complexity. If you have more data later,
+you could increase max_depth to capture more detailed patterns.&quot;</p>
+<p>This helps you understand hyperparameter tuning and make informed adjustments if needed.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/AgentRecommendation.cs/#L47" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

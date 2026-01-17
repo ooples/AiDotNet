@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DocumentPreprocessor&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DocumentPreprocessor&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="DocumentPreprocessor - Comprehensive document image preprocessing pipeline.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Preprocessing_Document_DocumentPreprocessor_1.md&amp;value=---%0Auid%3A%20AiDotNet.Preprocessing.Document.DocumentPreprocessor%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1">
+
+
+
+  <h1 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1" class="text-break">
+Class DocumentPreprocessor&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Preprocessing.html">Preprocessing</a>.<a class="xref" href="AiDotNet.Preprocessing.Document.html">Document</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>DocumentPreprocessor - Comprehensive document image preprocessing pipeline.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DocumentPreprocessor&lt;T&gt; : IDisposable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DocumentPreprocessor&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.idisposable">IDisposable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+DocumentPreprocessor provides a unified interface for applying multiple
+preprocessing operations to document images before feeding them to AI models.
+</p>
+<p>
+<b>For Beginners:</b> Document preprocessing improves model accuracy by:
+<ul>
+<li>Normalizing image characteristics</li>
+<li>Removing noise and artifacts</li>
+<li>Correcting geometric distortions</li>
+<li>Enhancing text contrast</li>
+</ul>
+<p>Key features:</p>
+<ul>
+<li>Chained preprocessing pipeline</li>
+<li>Configurable operation order</li>
+<li>Quality-aware preprocessing</li>
+<li>Batch processing support</li>
+</ul>
+<p>Example usage:</p>
+<pre><code class="lang-csharp">var preprocessor = new DocumentPreprocessor&lt;float&gt;();
+var processed = preprocessor.Preprocess(documentImage, options);</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1__ctor_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1__ctor" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.#ctor">
+  DocumentPreprocessor()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a DocumentPreprocessor with default settings.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DocumentPreprocessor()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_CenterCrop_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.CenterCrop*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_CenterCrop_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.CenterCrop(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  CenterCrop(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Center crops an image to the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; CenterCrop(Tensor&lt;T&gt; image, int targetWidth, int targetHeight)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Dispose_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Dispose" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Dispose">
+  Dispose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs application-defined tasks associated with freeing, releasing, or resetting unmanaged resources.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Dispose()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Dispose_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Dispose*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Dispose_System_Boolean_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Dispose(System.Boolean)">
+  Dispose(bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L317"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases resources used by the preprocessor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void Dispose(bool disposing)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>disposing</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Pad_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Pad*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Pad_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32__0_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Pad(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32,`0)">
+  Pad(Tensor&lt;T&gt;, int, int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Pads an image to the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Pad(Tensor&lt;T&gt; image, int targetWidth, int targetHeight, T paddingValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>paddingValue</code> <span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Preprocess_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Preprocess*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Preprocess_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Preprocessing_Document_DocumentPreprocessingOptions_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Preprocess(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Preprocessing.Document.DocumentPreprocessingOptions)">
+  Preprocess(Tensor&lt;T&gt;, DocumentPreprocessingOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L70"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the full preprocessing pipeline to a document image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Preprocess(Tensor&lt;T&gt; image, DocumentPreprocessingOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Preprocessing.Document.DocumentPreprocessingOptions.html">DocumentPreprocessingOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_PreprocessBatch_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.PreprocessBatch*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_PreprocessBatch_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___AiDotNet_Preprocessing_Document_DocumentPreprocessingOptions_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.PreprocessBatch(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},AiDotNet.Preprocessing.Document.DocumentPreprocessingOptions)">
+  PreprocessBatch(IEnumerable&lt;Tensor&lt;T&gt;&gt;, DocumentPreprocessingOptions?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies preprocessing to multiple document images.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IList&lt;Tensor&lt;T&gt;&gt; PreprocessBatch(IEnumerable&lt;Tensor&lt;T&gt;&gt; images, DocumentPreprocessingOptions? options = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>images</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.Preprocessing.Document.DocumentPreprocessingOptions.html">DocumentPreprocessingOptions</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ilist-1">IList</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Resize_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Resize*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_Resize_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_AiDotNet_Preprocessing_Document_InterpolationMethod_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.Resize(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32,AiDotNet.Preprocessing.Document.InterpolationMethod)">
+  Resize(Tensor&lt;T&gt;, int, int, InterpolationMethod)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resizes an image to the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Resize(Tensor&lt;T&gt; image, int targetWidth, int targetHeight, InterpolationMethod method = InterpolationMethod.Bilinear)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>targetWidth</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>targetHeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+    <dt><code>method</code> <a class="xref" href="AiDotNet.Preprocessing.Document.InterpolationMethod.html">InterpolationMethod</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_ToGrayscale_" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.ToGrayscale*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_Document_DocumentPreprocessor_1_ToGrayscale_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Preprocessing.Document.DocumentPreprocessor`1.ToGrayscale(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ToGrayscale(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an RGB image to grayscale.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ToGrayscale(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/Document/DocumentPreprocessor.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

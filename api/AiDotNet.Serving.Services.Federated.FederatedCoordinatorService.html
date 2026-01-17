@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FederatedCoordinatorService | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FederatedCoordinatorService | AiDotNet Documentation ">
+      
+      <meta name="description" content="In-process federated coordinator that aggregates client-submitted parameter vectors.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Serving_Services_Federated_FederatedCoordinatorService.md&amp;value=---%0Auid%3A%20AiDotNet.Serving.Services.Federated.FederatedCoordinatorService%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService">
+
+
+
+  <h1 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService" class="text-break">
+Class FederatedCoordinatorService  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L22"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Serving.html">Serving</a>.<a class="xref" href="AiDotNet.Serving.Services.html">Services</a>.<a class="xref" href="AiDotNet.Serving.Services.Federated.html">Federated</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Serving.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>In-process federated coordinator that aggregates client-submitted parameter vectors.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public sealed class FederatedCoordinatorService : IFederatedCoordinatorService</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FederatedCoordinatorService</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Serving.Services.Federated.IFederatedCoordinatorService.html">IFederatedCoordinatorService</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This coordinator is the &quot;server&quot; in federated learning:
+it collects client updates and combines them into a new global model for the next round.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService__ctor_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.#ctor*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService__ctor_AiDotNet_Serving_Services_Federated_IFederatedRunStore_AiDotNet_Serving_Services_IModelRepository_Microsoft_Extensions_Logging_ILogger_AiDotNet_Serving_Services_Federated_FederatedCoordinatorService__AiDotNet_Serving_Security_ITierResolver_AiDotNet_Serving_Security_ITierPolicyProvider_AiDotNet_Serving_Security_Attestation_IAttestationVerifier_Microsoft_AspNetCore_Http_IHttpContextAccessor_AiDotNet_Serving_Services_IModelArtifactProtector_AiDotNet_Serving_Services_IModelArtifactStore_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.#ctor(AiDotNet.Serving.Services.Federated.IFederatedRunStore,AiDotNet.Serving.Services.IModelRepository,Microsoft.Extensions.Logging.ILogger{AiDotNet.Serving.Services.Federated.FederatedCoordinatorService},AiDotNet.Serving.Security.ITierResolver,AiDotNet.Serving.Security.ITierPolicyProvider,AiDotNet.Serving.Security.Attestation.IAttestationVerifier,Microsoft.AspNetCore.Http.IHttpContextAccessor,AiDotNet.Serving.Services.IModelArtifactProtector,AiDotNet.Serving.Services.IModelArtifactStore)">
+  FederatedCoordinatorService(IFederatedRunStore, IModelRepository, ILogger&lt;FederatedCoordinatorService&gt;, ITierResolver, ITierPolicyProvider, IAttestationVerifier, IHttpContextAccessor, IModelArtifactProtector, IModelArtifactStore)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FederatedCoordinatorService(IFederatedRunStore runStore, IModelRepository modelRepository, ILogger&lt;FederatedCoordinatorService&gt; logger, ITierResolver tierResolver, ITierPolicyProvider tierPolicyProvider, IAttestationVerifier attestationVerifier, IHttpContextAccessor httpContextAccessor, IModelArtifactProtector artifactProtector, IModelArtifactStore artifactStore)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runStore</code> <a class="xref" href="AiDotNet.Serving.Services.Federated.IFederatedRunStore.html">IFederatedRunStore</a></dt>
+    <dd></dd>
+    <dt><code>modelRepository</code> <a class="xref" href="AiDotNet.Serving.Services.IModelRepository.html">IModelRepository</a></dt>
+    <dd></dd>
+    <dt><code>logger</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/microsoft.extensions.logging.ilogger-1">ILogger</a>&lt;<a class="xref" href="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.html">FederatedCoordinatorService</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>tierResolver</code> <a class="xref" href="AiDotNet.Serving.Security.ITierResolver.html">ITierResolver</a></dt>
+    <dd></dd>
+    <dt><code>tierPolicyProvider</code> <a class="xref" href="AiDotNet.Serving.Security.ITierPolicyProvider.html">ITierPolicyProvider</a></dt>
+    <dd></dd>
+    <dt><code>attestationVerifier</code> <a class="xref" href="AiDotNet.Serving.Security.Attestation.IAttestationVerifier.html">IAttestationVerifier</a></dt>
+    <dd></dd>
+    <dt><code>httpContextAccessor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/microsoft.aspnetcore.http.ihttpcontextaccessor">IHttpContextAccessor</a></dt>
+    <dd></dd>
+    <dt><code>artifactProtector</code> <a class="xref" href="AiDotNet.Serving.Services.IModelArtifactProtector.html">IModelArtifactProtector</a></dt>
+    <dd></dd>
+    <dt><code>artifactStore</code> <a class="xref" href="AiDotNet.Serving.Services.IModelArtifactStore.html">IModelArtifactStore</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_AggregateRound_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.AggregateRound*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_AggregateRound_System_String_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.AggregateRound(System.String)">
+  AggregateRound(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AggregateFederatedRoundResponse AggregateRound(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Models.Federated.AggregateFederatedRoundResponse.html">AggregateFederatedRoundResponse</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_CreateRun_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.CreateRun*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_CreateRun_AiDotNet_Serving_Models_Federated_CreateFederatedRunRequest_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.CreateRun(AiDotNet.Serving.Models.Federated.CreateFederatedRunRequest)">
+  CreateRun(CreateFederatedRunRequest)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L56"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CreateFederatedRunResponse CreateRun(CreateFederatedRunRequest request)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>request</code> <a class="xref" href="AiDotNet.Serving.Models.Federated.CreateFederatedRunRequest.html">CreateFederatedRunRequest</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Models.Federated.CreateFederatedRunResponse.html">CreateFederatedRunResponse</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetOrCreateEncryptedRunArtifact_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetOrCreateEncryptedRunArtifact*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetOrCreateEncryptedRunArtifact_System_String_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetOrCreateEncryptedRunArtifact(System.String)">
+  GetOrCreateEncryptedRunArtifact(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L460"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or creates an encrypted run artifact for Option C deployments.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ProtectedModelArtifact GetOrCreateEncryptedRunArtifact(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Services.ProtectedModelArtifact.html">ProtectedModelArtifact</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetParameters_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetParameters_System_String_System_Int32_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetParameters(System.String,System.Int32)">
+  GetParameters(string, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FederatedRunParametersResponse GetParameters(string runId, int clientId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>clientId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Models.Federated.FederatedRunParametersResponse.html">FederatedRunParametersResponse</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetRunArtifactPath_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetRunArtifactPath*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetRunArtifactPath_System_String_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetRunArtifactPath(System.String)">
+  GetRunArtifactPath(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L449"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current plaintext run artifact path (updated after each aggregation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string GetRunArtifactPath(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetStatus_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetStatus*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_GetStatus_System_String_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.GetStatus(System.String)">
+  GetStatus(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FederatedRunStatusResponse GetStatus(string runId)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Models.Federated.FederatedRunStatusResponse.html">FederatedRunStatusResponse</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_JoinRunAsync_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.JoinRunAsync*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_JoinRunAsync_System_String_AiDotNet_Serving_Models_Federated_JoinFederatedRunRequest_System_Threading_CancellationToken_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.JoinRunAsync(System.String,AiDotNet.Serving.Models.Federated.JoinFederatedRunRequest,System.Threading.CancellationToken)">
+  JoinRunAsync(string, JoinFederatedRunRequest, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;JoinFederatedRunResponse&gt; JoinRunAsync(string runId, JoinFederatedRunRequest request, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>request</code> <a class="xref" href="AiDotNet.Serving.Models.Federated.JoinFederatedRunRequest.html">JoinFederatedRunRequest</a></dt>
+    <dd></dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Serving.Models.Federated.JoinFederatedRunResponse.html">JoinFederatedRunResponse</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_SubmitUpdate_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.SubmitUpdate*"></a>
+
+  <h3 id="AiDotNet_Serving_Services_Federated_FederatedCoordinatorService_SubmitUpdate_System_String_AiDotNet_Serving_Models_Federated_SubmitFederatedUpdateRequest_" data-uid="AiDotNet.Serving.Services.Federated.FederatedCoordinatorService.SubmitUpdate(System.String,AiDotNet.Serving.Models.Federated.SubmitFederatedUpdateRequest)">
+  SubmitUpdate(string, SubmitFederatedUpdateRequest)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L193"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SubmitFederatedUpdateResponse SubmitUpdate(string runId, SubmitFederatedUpdateRequest request)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>runId</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>request</code> <a class="xref" href="AiDotNet.Serving.Models.Federated.SubmitFederatedUpdateRequest.html">SubmitFederatedUpdateRequest</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Serving.Models.Federated.SubmitFederatedUpdateResponse.html">SubmitFederatedUpdateResponse</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Serving/Services/Federated/FederatedCoordinatorService.cs/#L22" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

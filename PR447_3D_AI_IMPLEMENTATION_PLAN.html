@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>PR #447 3D AI Implementation Plan | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="PR #447 3D AI Implementation Plan | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/PR447_3D_AI_IMPLEMENTATION_PLAN.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="pr-447-3d-ai-implementation-plan">PR #447 3D AI Implementation Plan</h1>
+
+<p>This plan defines the complete scope for production-ready 3D AI support in
+AiDotNet and the phased roadmap to deliver it. Each phase is a checklist of
+concrete deliverables; no placeholders or stubs are acceptable.</p>
+<h2 id="goals">Goals</h2>
+<ul>
+<li>Exhaustive 3D support across point clouds, triangle meshes, voxel grids, and
+implicit fields, with real-world performance and accuracy.</li>
+<li>First-class integration with existing performance stack: AutoDiff, JIT,
+CPU/GPU acceleration via IEngine, and numerically stable defaults.</li>
+<li>Full configurability: every model and pipeline component exposes options with
+industry-standard defaults set via NumOps.FromDouble() in constructors.</li>
+<li>Verified via integration tests, benchmarks, and documented example workflows.</li>
+</ul>
+<h2 id="phase-0---audit-baseline-complete-the-gap-analysis-lock-scope">Phase 0 - Audit Baseline (Complete the gap analysis, lock scope)</h2>
+<ul>
+<li>[x] Audit issue #399 and PR #447 for required features and omissions.</li>
+<li>[x] Identify missing 3D primitives, model families, metrics, and benchmarks.</li>
+<li>[ ] Finalize acceptance criteria per feature family (models, datasets, tests).</li>
+<li>[ ] Establish minimal performance targets (CPU/GPU throughput baselines).</li>
+</ul>
+<h2 id="phase-1---core-3d-data-structures-and-io">Phase 1 - Core 3D Data Structures and IO</h2>
+<ul>
+<li>[x] Triangle mesh data structure with validated topology and attributes.</li>
+<li>[x] Voxel grid data structure with world-space metadata (origin, voxel size).</li>
+<li>[x] Point cloud conversion utilities (mesh -&gt; points, voxels -&gt; points).</li>
+<li>[x] IO utilities for mesh and point data (OBJ, PLY, STL) with tests.</li>
+<li>[x] Dataset adapters for ModelNet40, ShapeNetCore, ScanNet (IO + metadata).</li>
+</ul>
+<h2 id="phase-2---3d-preprocessing-and-geometry-ops">Phase 2 - 3D Preprocessing and Geometry Ops</h2>
+<ul>
+<li>[ ] Standardization and normalization (center, scale, unit sphere).</li>
+<li>[ ] Sampling utilities (uniform, farthest point, Poisson disk).</li>
+<li>[ ] Neighbor search (kNN, radius) with CPU/GPU acceleration.</li>
+<li>[ ] Mesh ops (normal computation, adjacency, subdivision, simplification).</li>
+<li>[ ] Voxelization from mesh/points, occupancy grid generation.</li>
+<li>[ ] Quality metrics for geometry (Chamfer, EMD, F-score, IoU for voxels).</li>
+</ul>
+<h2 id="phase-3---model-families-production-ready">Phase 3 - Model Families (Production-ready)</h2>
+<ul>
+<li>[ ] Point-based: PointNet, PointNet++, DGCNN (classification + segmentation).</li>
+<li>[ ] Voxel-based: 3D CNN (VoxNet-style), 3D U-Net (segmentation).</li>
+<li>[ ] Mesh-based: MeshCNN (edge conv + pooling), mesh GNN variants.</li>
+<li>[ ] Implicit: NeRF, Instant-NGP with correct occupancy grid; SDF (DeepSDF/NeuS).</li>
+<li>[ ] Explicit: Gaussian Splatting with training, densification, and rendering.</li>
+</ul>
+<h2 id="phase-4---training-pipelines-metrics-and-benchmarks">Phase 4 - Training Pipelines, Metrics, and Benchmarks</h2>
+<ul>
+<li>[ ] End-to-end training runners for each model family.</li>
+<li>[ ] Metrics: PSNR, SSIM, LPIPS (rendering); mIoU/accuracy for segmentation.</li>
+<li>[ ] Benchmarks: ModelNet40, ShapeNet, ScanNet, NeRF synthetic/real datasets.</li>
+<li>[ ] Performance validation: CPU vs GPU profiling and memory usage.</li>
+</ul>
+<h2 id="phase-5---integration-examples-and-documentation">Phase 5 - Integration, Examples, and Documentation</h2>
+<ul>
+<li>[ ] Vision model integration hooks (ViT adapters for 3D embeddings).</li>
+<li>[ ] Example pipelines (classification, segmentation, detection, rendering).</li>
+<li>[ ] Updated docs with configuration tables and reproducible benchmarks.</li>
+<li>[ ] Migration notes and API stability review.</li>
+</ul>
+<h2 id="definition-of-done-per-phase">Definition of Done (per phase)</h2>
+<ul>
+<li>All tasks in the phase are implemented (no TODOs or stubs).</li>
+<li>Integration tests cover core paths and edge cases.</li>
+<li>Defaults use NumOps.FromDouble() and are fully configurable via options.</li>
+<li>Performance paths respect AutoDiff, JIT, and IEngine where applicable.</li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/PR447_3D_AI_IMPLEMENTATION_PLAN.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

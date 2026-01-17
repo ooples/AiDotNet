@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NumericalGradient&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NumericalGradient&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides numerical gradient computation using finite differences for gradient verification.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Autodiff_Testing_NumericalGradient_1.md&amp;value=---%0Auid%3A%20AiDotNet.Autodiff.Testing.NumericalGradient%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1">
+
+
+
+  <h1 id="AiDotNet_Autodiff_Testing_NumericalGradient_1" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1" class="text-break">
+Class NumericalGradient&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Autodiff.html">Autodiff</a>.<a class="xref" href="AiDotNet.Autodiff.Testing.html">Testing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides numerical gradient computation using finite differences for gradient verification.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class NumericalGradient&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NumericalGradient&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This utility class computes gradients numerically using the central difference method.
+It serves as a ground truth for verifying that automatic differentiation produces correct gradients.
+</p>
+<p><b>For Beginners:</b> This class helps verify that our gradient calculations are correct.
+<p>The idea is simple:</p>
+<ol>
+<li>We want to know how much f(x) changes when we change x slightly</li>
+<li>We compute f(x+h) and f(x-h) where h is a tiny number</li>
+<li>The gradient is approximately: (f(x+h) - f(x-h)) / (2h)</li>
+</ol>
+<p>This is called the &quot;central difference&quot; method. It's slow but reliable.
+We use it to check that our fast autodiff gradients are correct.</p>
+<p>Example:</p>
+<ul>
+<li>For f(x) = x^2, the true gradient is 2x</li>
+<li>At x=3: numerical gradient = ((3+h)^2 - (3-h)^2) / (2h) ≈ 6</li>
+<li>Autodiff should also give 6</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Autodiff_Testing_NumericalGradient_1_Compare_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.Compare*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_Compare_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.Compare(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double,System.Double)">
+  Compare(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two tensors and returns the maximum relative error.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static NumericalGradient&lt;T&gt;.ComparisonResult Compare(Tensor&lt;T&gt; expected, Tensor&lt;T&gt; actual, double relativeTolerance = 0.0001, double absoluteTolerance = 1E-06)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>expected</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The expected (numerical) gradient.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The actual (autodiff) gradient.</p>
+</dd>
+    <dt><code>relativeTolerance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Relative tolerance for comparison.</p>
+</dd>
+    <dt><code>absoluteTolerance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Absolute tolerance for comparison.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.html">NumericalGradient</a>&lt;T&gt;.<a class="xref" href="AiDotNet.Autodiff.Testing.NumericalGradient-1.ComparisonResult.html">ComparisonResult</a></dt>
+    <dd><p>Comparison result with detailed error information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_NumericalGradient_1_Compare_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method compares two gradient tensors and reports any discrepancies.
+Both relative and absolute tolerances are considered to handle both large
+and near-zero gradient values appropriately.
+</p>
+<p><b>For Beginners:</b> This checks if two gradient tensors are "close enough".
+<p>We use two types of tolerances:</p>
+<ul>
+<li>Relative: For large values, we allow small percentage differences</li>
+<li>Absolute: For values near zero, we allow small absolute differences</li>
+</ul>
+<p>A gradient passes if EITHER tolerance is satisfied.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForBinaryOperation_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForBinaryOperation*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForBinaryOperation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___System_Double_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForBinaryOperation(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Func{AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0}},System.Double)">
+  ComputeForBinaryOperation(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;, Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes numerical gradient for a binary operation (two inputs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static (Tensor&lt;T&gt; grad1, Tensor&lt;T&gt; grad2) ComputeForBinaryOperation(Tensor&lt;T&gt; input1, Tensor&lt;T&gt; input2, Tensor&lt;T&gt; outputGradient, Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt; operation, double epsilon = 1E-05)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The first input tensor.</p>
+</dd>
+    <dt><code>input2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The second input tensor.</p>
+</dd>
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the output.</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A function that takes two ComputationNodes and returns a ComputationNode.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Step size for finite differences (default: 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>A tuple containing gradients for both inputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForBinaryOperation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes numerical gradients for operations with two inputs, like Add or Multiply.
+</p>
+<p><b>For Beginners:</b> Some operations like addition (a + b) have two inputs.
+<p>We need to compute gradients for both:</p>
+<ul>
+<li>dL/da: How does loss change when we change 'a'?</li>
+<li>dL/db: How does loss change when we change 'b'?</li>
+</ul>
+<p>This method computes both gradients numerically.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForOperation_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForOperation*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForOperation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___System_Double_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForOperation(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Func{AiDotNet.Autodiff.ComputationNode{`0},AiDotNet.Autodiff.ComputationNode{`0}},System.Double)">
+  ComputeForOperation(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes numerical gradient using ComputationNode operations for direct comparison with autodiff.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; ComputeForOperation(Tensor&lt;T&gt; inputValue, Tensor&lt;T&gt; outputGradient, Func&lt;ComputationNode&lt;T&gt;, ComputationNode&lt;T&gt;&gt; operation, double epsilon = 1E-05)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputValue</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor value.</p>
+</dd>
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the output.</p>
+</dd>
+    <dt><code>operation</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Autodiff.ComputationNode-1.html">ComputationNode</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A function that takes a ComputationNode and returns a ComputationNode.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Step size for finite differences (default: 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor containing numerical gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForOperation_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Autodiff_ComputationNode__0__AiDotNet_Autodiff_ComputationNode__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method is specifically designed for testing TensorOperations. It wraps inputs in
+ComputationNodes and applies the operation, making it directly comparable to autodiff results.
+</p>
+<p><b>For Beginners:</b> This is used to verify TensorOperations gradients.
+<p>TensorOperations like ReLU, Sigmoid, etc. work with ComputationNodes.
+This method:</p>
+<ol>
+<li>Creates a ComputationNode from the input tensor</li>
+<li>Applies the operation (like ReLU)</li>
+<li>Computes numerical gradients</li>
+<li>These can be compared with the autodiff gradients</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForScalarFunction_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForScalarFunction*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForScalarFunction_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0__System_Double_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForScalarFunction(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},`0},System.Double)">
+  ComputeForScalarFunction(Tensor&lt;T&gt;, Func&lt;Tensor&lt;T&gt;, T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes numerical gradient for a scalar-valued function of a tensor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; ComputeForScalarFunction(Tensor&lt;T&gt; input, Func&lt;Tensor&lt;T&gt;, T&gt; scalarFunction, double epsilon = 1E-05)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to compute gradients for.</p>
+</dd>
+    <dt><code>scalarFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, T&gt;</dt>
+    <dd><p>A function that takes a tensor and returns a scalar value.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Step size for finite differences (default: 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of the same shape as input containing numerical gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForScalarFunction_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0___0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes df/dx for each element x in the input tensor, where f is the
+scalar-valued function. The central difference formula is used:
+df/dx ≈ (f(x+h) - f(x-h)) / (2h)
+</p>
+<p><b>For Beginners:</b> This computes how much the function output changes
+when each input element changes slightly.
+<p>For each element in the input:</p>
+<ol>
+<li>Increase it by a tiny amount (epsilon)</li>
+<li>Compute the function</li>
+<li>Decrease it by the same amount</li>
+<li>Compute the function again</li>
+<li>The gradient is (result1 - result2) / (2 * epsilon)</li>
+</ol>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForTensorFunction_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForTensorFunction*"></a>
+
+  <h3 id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForTensorFunction_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Double_" data-uid="AiDotNet.Autodiff.Testing.NumericalGradient`1.ComputeForTensorFunction(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Func{AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Double)">
+  ComputeForTensorFunction(Tensor&lt;T&gt;, Tensor&lt;T&gt;, Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L133"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes numerical gradient for a tensor-valued function, given an output gradient.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; ComputeForTensorFunction(Tensor&lt;T&gt; input, Tensor&lt;T&gt; outputGradient, Func&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; tensorFunction, double epsilon = 1E-05)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to compute gradients for.</p>
+</dd>
+    <dt><code>outputGradient</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The gradient flowing back from the output (upstream gradient).</p>
+</dd>
+    <dt><code>tensorFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A function that takes a tensor and returns a tensor.</p>
+</dd>
+    <dt><code>epsilon</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Step size for finite differences (default: 1e-5).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>A tensor of the same shape as input containing numerical gradients.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Autodiff_Testing_NumericalGradient_1_ComputeForTensorFunction_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Func_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method computes the gradient of a loss function L with respect to the input,
+where L = sum(output * outputGradient). This matches how gradients flow in backpropagation.
+</p>
+<p><b>For Beginners:</b> In neural networks, gradients flow backwards through layers.
+<p>When we have a layer y = f(x), we receive the gradient dL/dy from the next layer.
+We need to compute dL/dx = dL/dy * dy/dx (chain rule).</p>
+<p>This method computes dL/dx numerically by:</p>
+<ol>
+<li>Perturbing each input element</li>
+<li>Computing how the output changes</li>
+<li>Multiplying by the output gradient (chain rule)</li>
+</ol>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Autodiff/Testing/NumericalGradient.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

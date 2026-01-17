@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TransformerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TransformerBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for all data transformers providing common functionality.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Preprocessing_TransformerBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.Preprocessing.TransformerBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Preprocessing.TransformerBase`3">
+
+
+
+  <h1 id="AiDotNet_Preprocessing_TransformerBase_3" data-uid="AiDotNet.Preprocessing.TransformerBase`3" class="text-break">
+Class TransformerBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Preprocessing.html">Preprocessing</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for all data transformers providing common functionality.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class TransformerBase&lt;T, TInput, TOutput&gt; : IDataTransformer&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type after transformation.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TransformerBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDataTransformer-3.html">IDataTransformer</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Preprocessing.ColumnTransformer-1.html">ColumnTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.DictionaryLearning-1.html">DictionaryLearning&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.DiffusionMaps-1.html">DiffusionMaps&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.FactorAnalysis-1.html">FactorAnalysis&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.FastICA-1.html">FastICA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.HessianLLE-1.html">HessianLLE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.IncrementalPCA-1.html">IncrementalPCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.Isomap-1.html">Isomap&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.KernelPCA-1.html">KernelPCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.LTSA-1.html">LTSA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.LaplacianEigenmaps-1.html">LaplacianEigenmaps&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.LargeVis-1.html">LargeVis&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.LatentDirichletAllocation-1.html">LatentDirichletAllocation&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.LocallyLinearEmbedding-1.html">LocallyLinearEmbedding&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.MDS-1.html">MDS&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.MiniBatchSparsePCA-1.html">MiniBatchSparsePCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.ModifiedLLE-1.html">ModifiedLLE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.NCA-1.html">NCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.NMF-1.html">NMF&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.PCA-1.html">PCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.PHATE-1.html">PHATE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.PaCMAP-1.html">PaCMAP&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.ProbabilisticPCA-1.html">ProbabilisticPCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.RandomProjection-1.html">RandomProjection&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.RandomizedPCA-1.html">RandomizedPCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.SparsePCA-1.html">SparsePCA&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.SpectralEmbedding-1.html">SpectralEmbedding&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.TSNE-1.html">TSNE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.TriMAP-1.html">TriMAP&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.TruncatedSVD-1.html">TruncatedSVD&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.DimensionalityReduction.UMAP-1.html">UMAP&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Discretizers.Binarizer-1.html">Binarizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Discretizers.KBinsDiscretizer-1.html">KBinsDiscretizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.BackwardDifferenceEncoder-1.html">BackwardDifferenceEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.BaseNEncoder-1.html">BaseNEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.BinaryEncoder-1.html">BinaryEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.CatBoostEncoder-1.html">CatBoostEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.CountEncoder-1.html">CountEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.HashingEncoder-1.html">HashingEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.HelmertEncoder-1.html">HelmertEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.JamesSteinEncoder-1.html">JamesSteinEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.LabelEncoder-1.html">LabelEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.LeaveOneOutEncoder-1.html">LeaveOneOutEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.MEstimateEncoder-1.html">MEstimateEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.OneHotEncoder-1.html">OneHotEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.OrdinalEncoder-1.html">OrdinalEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.SumEncoder-1.html">SumEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.TargetEncoder-1.html">TargetEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Encoders.WOEEncoder-1.html">WOEEncoder&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureGeneration.FunctionTransformer-1.html">FunctionTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureGeneration.InteractionFeatures-1.html">InteractionFeatures&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureGeneration.PolynomialFeatures-1.html">PolynomialFeatures&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureGeneration.SplineTransformer-1.html">SplineTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.GenericUnivariateSelect-1.html">GenericUnivariateSelect&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.RFECV-1.html">RFECV&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.RFE-1.html">RFE&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectFdr-1.html">SelectFdr&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectFpr-1.html">SelectFpr&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectFromModel-1.html">SelectFromModel&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectFwe-1.html">SelectFwe&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectKBest-1.html">SelectKBest&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SelectPercentile-1.html">SelectPercentile&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.SequentialFeatureSelector-1.html">SequentialFeatureSelector&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureSelection.VarianceThreshold-1.html">VarianceThreshold&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.FeatureUnion-1.html">FeatureUnion&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Imputers.IterativeImputer-1.html">IterativeImputer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Imputers.KNNImputer-1.html">KNNImputer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Imputers.MissingIndicator-1.html">MissingIndicator&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Imputers.SimpleImputer-1.html">SimpleImputer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.OutlierHandling.IQRClipper-1.html">IQRClipper&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.OutlierHandling.OutlierClipper-1.html">OutlierClipper&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.OutlierHandling.Winsorizer-1.html">Winsorizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.PowerTransforms.PowerTransformer-1.html">PowerTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.PowerTransforms.QuantileTransformer-1.html">QuantileTransformer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.DecimalScaler-1.html">DecimalScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.GlobalContrastScaler-1.html">GlobalContrastScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.LogMeanVarianceScaler-1.html">LogMeanVarianceScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.LogScaler-1.html">LogScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.MaxAbsScaler-1.html">MaxAbsScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.MinMaxScaler-1.html">MinMaxScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.Normalizer-1.html">Normalizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.RobustScaler-1.html">RobustScaler&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Preprocessing.Scalers.StandardScaler-1.html">StandardScaler&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Preprocessing_TransformerBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class provides the template method pattern for data transformation.
+Derived classes implement the core fitting and transformation logic while
+this base class handles validation, state management, and common operations.
+</p>
+<p><b>For Beginners:</b> This is the foundation that all transformers build on.
+It provides common features like:
+- Checking if the transformer is ready to use
+- Managing which columns to transform
+- Serialization for saving/loading transformers
+<p>When creating a new transformer, you extend this class and implement the abstract methods.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3__ctor_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3__ctor_System_Int32___" data-uid="AiDotNet.Preprocessing.TransformerBase`3.#ctor(System.Int32[])">
+  TransformerBase(int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the transformer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected TransformerBase(int[]? columnIndices = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>columnIndices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The column indices to operate on, or null for all columns.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_ColumnIndices_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.ColumnIndices*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_ColumnIndices" data-uid="AiDotNet.Preprocessing.TransformerBase`3.ColumnIndices">
+  ColumnIndices
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the column indices this transformer operates on.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int[]? ColumnIndices { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_Engine_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Engine*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_Engine" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Engine">
+  Engine
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the computational engine for tensor operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IEngine Engine { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.IEngine.html">IEngine</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_IsFitted_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.IsFitted*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_IsFitted" data-uid="AiDotNet.Preprocessing.TransformerBase`3.IsFitted">
+  IsFitted
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this transformer has been fitted to data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsFitted { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_NumOps_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.NumOps*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_NumOps" data-uid="AiDotNet.Preprocessing.TransformerBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the numeric operations helper for type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected INumericOperations&lt;T&gt; NumOps { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_SupportsInverseTransform_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.SupportsInverseTransform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_SupportsInverseTransform" data-uid="AiDotNet.Preprocessing.TransformerBase`3.SupportsInverseTransform">
+  SupportsInverseTransform
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this transformer supports inverse transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract bool SupportsInverseTransform { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_EnsureFitted_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.EnsureFitted*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_EnsureFitted" data-uid="AiDotNet.Preprocessing.TransformerBase`3.EnsureFitted">
+  EnsureFitted()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L177"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Ensures the transformer has been fitted before transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void EnsureFitted()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if not fitted.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_Fit_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Fit*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_Fit__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Fit(`1)">
+  Fit(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fits the transformer to the training data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fit(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The training data to fit.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_FitCore_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.FitCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_FitCore__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.FitCore(`1)">
+  FitCore(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L140"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core fitting implementation. Override this in derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void FitCore(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The training data to fit.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_FitTransform_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.FitTransform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_FitTransform__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.FitTransform(`1)">
+  FitTransform(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fits the transformer and transforms the data in a single step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput FitTransform(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The data to fit and transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_GetColumnsToProcess_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.GetColumnsToProcess*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_GetColumnsToProcess_System_Int32_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.GetColumnsToProcess(System.Int32)">
+  GetColumnsToProcess(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the indices to operate on, defaulting to all if ColumnIndices is null.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int[] GetColumnsToProcess(int totalColumns)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>totalColumns</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The total number of columns in the data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>The column indices to process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_GetFeatureNamesOut_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.GetFeatureNamesOut*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_GetFeatureNamesOut_System_String___" data-uid="AiDotNet.Preprocessing.TransformerBase`3.GetFeatureNamesOut(System.String[])">
+  GetFeatureNamesOut(string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the output feature names after transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputFeatureNames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The input feature names (optional).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>The output feature names.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_InverseTransform_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.InverseTransform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_InverseTransform__2_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.InverseTransform(`2)">
+  InverseTransform(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L107"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reverses the transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TInput InverseTransform(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd><p>The original-scale data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Thrown if inverse transform is not supported.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if Fit() has not been called.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_InverseTransformCore_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.InverseTransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_InverseTransformCore__2_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.InverseTransformCore(`2)">
+  InverseTransformCore(TOutput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core inverse transformation implementation. Override this in derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual TInput InverseTransformCore(TOutput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TInput</span></dt>
+    <dd><p>The original-scale data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_Transform_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Transform*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_Transform__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.Transform(`1)">
+  Transform(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transforms the input data using fitted parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TOutput Transform(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The data to transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown if Fit() has not been called.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_TransformCore_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.TransformCore*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_TransformCore__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.TransformCore(`1)">
+  TransformCore(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core transformation implementation. Override this in derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract TOutput TransformCore(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The data to transform.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The transformed data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Preprocessing_TransformerBase_3_ValidateInputData_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.ValidateInputData*"></a>
+
+  <h3 id="AiDotNet_Preprocessing_TransformerBase_3_ValidateInputData__1_" data-uid="AiDotNet.Preprocessing.TransformerBase`3.ValidateInputData(`1)">
+  ValidateInputData(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L165"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates input data before fitting or transforming.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void ValidateInputData(TInput data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <span class="xref">TInput</span></dt>
+    <dd><p>The data to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown if data is null.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Preprocessing/TransformerBase.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

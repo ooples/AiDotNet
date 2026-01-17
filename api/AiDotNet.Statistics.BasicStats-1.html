@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class BasicStats&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class BasicStats&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a collection of basic statistical measures for a set of numeric values.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Statistics_BasicStats_1.md&amp;value=---%0Auid%3A%20AiDotNet.Statistics.BasicStats%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Statistics.BasicStats`1">
+
+
+
+  <h1 id="AiDotNet_Statistics_BasicStats_1" data-uid="AiDotNet.Statistics.BasicStats`1" class="text-break">
+Class BasicStats&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Statistics.html">Statistics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a collection of basic statistical measures for a set of numeric values.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class BasicStats&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">BasicStats&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Statistics_BasicStats_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+BasicStats calculates and stores a comprehensive set of descriptive statistics for a collection of values,
+including measures of central tendency, dispersion, and distribution shape. These statistics provide
+insights into the characteristics of the data distribution.
+</p>
+<p><b>For Beginners:</b> Think of BasicStats as a calculator that analyzes a set of numbers and tells you
+their important patterns and characteristics.
+<p>It answers questions like:</p>
+<ul>
+<li>What's the typical value? (Mean, Median)</li>
+<li>How spread out are the values? (Variance, StandardDeviation)</li>
+<li>What's the range of values? (Min, Max, InterquartileRange)</li>
+<li>Is the distribution skewed or symmetric? (Skewness)</li>
+<li>Are there unusual extreme values? (Kurtosis)</li>
+</ul>
+<p>For example, if you have test scores from a class:</p>
+<ul>
+<li>Mean tells you the average score</li>
+<li>StandardDeviation tells you how much scores vary from that average</li>
+<li>Skewness might reveal if more students scored above or below average</li>
+</ul>
+<p>These statistics help you understand your data at a glance without having to examine every value.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_FirstQuartile_" data-uid="AiDotNet.Statistics.BasicStats`1.FirstQuartile*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_FirstQuartile" data-uid="AiDotNet.Statistics.BasicStats`1.FirstQuartile">
+  FirstQuartile
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the first quartile (25th percentile) of the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FirstQuartile { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_FirstQuartile_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The first quartile is the value below which 25% of the observations in the dataset fall.
+It represents the median of the lower half of the data.
+</p>
+<p><b>For Beginners:</b> The first quartile is the value where 25% of your data falls below it.
+<p>If you divide your sorted data into four equal parts, the first quartile is the value at the boundary
+of the first and second parts.</p>
+<p>For example, in a class of 20 students, the first quartile test score is the score that 5 students
+scored below and 15 students scored above.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_InterquartileRange_" data-uid="AiDotNet.Statistics.BasicStats`1.InterquartileRange*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_InterquartileRange" data-uid="AiDotNet.Statistics.BasicStats`1.InterquartileRange">
+  InterquartileRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L273"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the interquartile range (IQR) of the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T InterquartileRange { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_InterquartileRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The interquartile range is the difference between the third and first quartiles. It represents
+the middle 50% of the data and is a robust measure of dispersion that is less sensitive to outliers
+than the range or standard deviation.
+</p>
+<p><b>For Beginners:</b> The interquartile range (IQR) measures the spread of the middle 50% of your data.
+<p>It's calculated as: IQR = Third Quartile - First Quartile</p>
+<p>The IQR is useful because:</p>
+<ul>
+<li>It ignores the extreme values (potential outliers)</li>
+<li>It gives you the range where the &quot;typical&quot; values fall</li>
+<li>It's used to identify outliers (values more than 1.5 × IQR from the quartiles)</li>
+</ul>
+<p>For example, if test scores have an IQR of 15 points, it means the middle 50% of students' scores
+span a 15-point range.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Kurtosis_" data-uid="AiDotNet.Statistics.BasicStats`1.Kurtosis*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Kurtosis" data-uid="AiDotNet.Statistics.BasicStats`1.Kurtosis">
+  Kurtosis
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Kurtosis { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_MAD_" data-uid="AiDotNet.Statistics.BasicStats`1.MAD*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_MAD" data-uid="AiDotNet.Statistics.BasicStats`1.MAD">
+  MAD
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L294"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the median absolute deviation (MAD) of the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MAD { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_MAD_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The median absolute deviation is the median of the absolute deviations from the data's median.
+It is a robust measure of variability that is less sensitive to outliers than the standard deviation.
+</p>
+<p><b>For Beginners:</b> MAD is another way to measure spread that's less affected by outliers.
+<p>To calculate MAD:</p>
+<ol>
+<li>Find the median of your data</li>
+<li>Calculate how far each value is from the median (absolute deviation)</li>
+<li>Find the median of those distances</li>
+</ol>
+<p>MAD is useful when your data has outliers that might skew other measures like standard deviation.
+Think of it as measuring the &quot;typical&quot; distance from the center, ignoring extreme values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Max_" data-uid="AiDotNet.Statistics.BasicStats`1.Max*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Max" data-uid="AiDotNet.Statistics.BasicStats`1.Max">
+  Max
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L170"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum value in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Max { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Max_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The maximum is the largest value in the dataset. It represents the upper bound of the data range.
+</p>
+<p><b>For Beginners:</b> The maximum is simply the largest number in your data.
+<p>For the numbers [5, 12, 3, 8, 9], the maximum is 12.</p>
+<p>Together with the minimum, it tells you the full range of your data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Mean_" data-uid="AiDotNet.Statistics.BasicStats`1.Mean*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Mean" data-uid="AiDotNet.Statistics.BasicStats`1.Mean">
+  Mean
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the arithmetic mean (average) of the values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Mean { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Mean_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The mean is calculated by summing all values and dividing by the number of values. It represents
+the central tendency of the data, but can be sensitive to outliers.
+</p>
+<p><b>For Beginners:</b> The mean is the average value - add up all the numbers and divide by how many there are.
+<p>For example, for the numbers [2, 4, 6, 8, 10]:</p>
+<ul>
+<li>Sum: 2 + 4 + 6 + 8 + 10 = 30</li>
+<li>Count: 5</li>
+<li>Mean: 30 ÷ 5 = 6</li>
+</ul>
+<p>The mean gives you the &quot;center&quot; of your data, but can be pulled in the direction of very large or small values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Median_" data-uid="AiDotNet.Statistics.BasicStats`1.Median*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Median" data-uid="AiDotNet.Statistics.BasicStats`1.Median">
+  Median
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the median value of the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Median { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Median_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The median is the middle value when the data is sorted in ascending order. For an even number of values,
+it is the average of the two middle values. The median is less sensitive to outliers than the mean.
+</p>
+<p><b>For Beginners:</b> The median is the middle value when you arrange all numbers in order.
+<p>To find the median:</p>
+<ol>
+<li>Sort all numbers from smallest to largest</li>
+<li>If there's an odd number of values, take the middle one</li>
+<li>If there's an even number, take the average of the two middle values</li>
+</ol>
+<p>For example:</p>
+<ul>
+<li>For [3, 5, 8, 9, 12] (odd count), the median is 8</li>
+<li>For [3, 5, 8, 9, 12, 15] (even count), the median is (8 + 9) ÷ 2 = 8.5</li>
+</ul>
+<p>The median is often better than the mean for describing &quot;typical&quot; values when your data has outliers.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Min_" data-uid="AiDotNet.Statistics.BasicStats`1.Min*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Min" data-uid="AiDotNet.Statistics.BasicStats`1.Min">
+  Min
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum value in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Min { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Min_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The minimum is the smallest value in the dataset. It represents the lower bound of the data range.
+</p>
+<p><b>For Beginners:</b> The minimum is simply the smallest number in your data.
+<p>For the numbers [5, 12, 3, 8, 9], the minimum is 3.</p>
+<p>It's useful to know the extreme values in your data, especially when looking for outliers
+or setting valid ranges.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_N_" data-uid="AiDotNet.Statistics.BasicStats`1.N*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_N" data-uid="AiDotNet.Statistics.BasicStats`1.N">
+  N
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of values in the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int N { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_N_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+N represents the count of values in the dataset. It is used in various statistical calculations
+and indicates the sample size.
+</p>
+<p><b>For Beginners:</b> N is just the count of how many numbers are in your data.
+<p>For the numbers [5, 12, 3, 8, 9], N is 5.</p>
+<p>The sample size is important because larger samples generally give more reliable statistics.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Skewness_" data-uid="AiDotNet.Statistics.BasicStats`1.Skewness*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Skewness" data-uid="AiDotNet.Statistics.BasicStats`1.Skewness">
+  Skewness
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Skewness { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_StandardDeviation_" data-uid="AiDotNet.Statistics.BasicStats`1.StandardDeviation*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_StandardDeviation" data-uid="AiDotNet.Statistics.BasicStats`1.StandardDeviation">
+  StandardDeviation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the standard deviation of the values, a measure of dispersion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T StandardDeviation { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_StandardDeviation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Standard deviation is the square root of the variance. It measures the amount of variation or
+dispersion in the dataset. It is in the same units as the original data, making it more
+interpretable than variance.
+</p>
+<p><b>For Beginners:</b> Standard deviation is the most common way to measure how spread out your data is.
+<p>It's the square root of the variance, which puts it back in the same units as your original numbers.</p>
+<p>For example:</p>
+<ul>
+<li>Low standard deviation: Most values are close to the average</li>
+<li>High standard deviation: Values are widely spread from the average</li>
+</ul>
+<p>If you're looking at test scores with a mean of 75 and standard deviation of 5, you know most scores
+fall roughly between 70 and 80.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_ThirdQuartile_" data-uid="AiDotNet.Statistics.BasicStats`1.ThirdQuartile*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_ThirdQuartile" data-uid="AiDotNet.Statistics.BasicStats`1.ThirdQuartile">
+  ThirdQuartile
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L249"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the third quartile (75th percentile) of the dataset.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ThirdQuartile { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_ThirdQuartile_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The third quartile is the value below which 75% of the observations in the dataset fall.
+It represents the median of the upper half of the data.
+</p>
+<p><b>For Beginners:</b> The third quartile is the value where 75% of your data falls below it.
+<p>If you divide your sorted data into four equal parts, the third quartile is the value at the boundary
+of the third and fourth parts.</p>
+<p>For example, in a class of 20 students, the third quartile test score is the score that 15 students
+scored below and 5 students scored above.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Variance_" data-uid="AiDotNet.Statistics.BasicStats`1.Variance*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Variance" data-uid="AiDotNet.Statistics.BasicStats`1.Variance">
+  Variance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the variance of the values, a measure of dispersion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Variance { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Variance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Variance measures how far each value in the dataset is from the mean. It is calculated as the average
+of the squared differences from the mean. Larger variance indicates greater dispersion in the data.
+</p>
+<p><b>For Beginners:</b> Variance measures how spread out the numbers are from the average.
+<p>To calculate variance:</p>
+<ol>
+<li>Find how far each number is from the mean</li>
+<li>Square each of those differences (to make everything positive)</li>
+<li>Find the average of those squared differences</li>
+</ol>
+<p>Higher variance means values are more spread out; lower variance means they're more clustered around the mean.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_Empty_" data-uid="AiDotNet.Statistics.BasicStats`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_Empty" data-uid="AiDotNet.Statistics.BasicStats`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L382"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty BasicStats object with all statistics set to their default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static BasicStats&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.BasicStats-1.html">BasicStats</a>&lt;T&gt;</dt>
+    <dd><p>An empty BasicStats object.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This factory method creates and returns a BasicStats object with no input values. All statistics
+will be initialized to their default values (typically zero). This can be useful when needing
+to initialize a statistics object before data is available.
+</p>
+<p><b>For Beginners:</b> This creates an empty statistics object with no data.
+<p>Use this method when:</p>
+<ul>
+<li>You need a placeholder statistics object to fill in later</li>
+<li>You're initializing a statistics object but don't have the data yet</li>
+<li>You need a &quot;zero&quot; baseline to compare against</li>
+</ul>
+<p>All the statistics in this empty object will be set to zero or their equivalent default values.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_GetMetric_" data-uid="AiDotNet.Statistics.BasicStats`1.GetMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_GetMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.BasicStats`1.GetMetric(AiDotNet.Enums.MetricType)">
+  GetMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L445"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value of a specific metric based on the provided MetricType.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to retrieve.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The value of the requested metric.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_GetMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method allows you to retrieve any of the calculated statistics by specifying the desired metric type.
+It provides a flexible way to access individual metrics without needing separate properties for each.
+</p>
+<p><b>For Beginners:</b> This method is like a vending machine for statistics.
+<p>You tell it which statistic you want (using the MetricType), and it gives you the value.
+For example:</p>
+<ul>
+<li>If you ask for MetricType.Mean, it gives you the average</li>
+<li>If you ask for MetricType.StandardDeviation, it gives you the standard deviation</li>
+</ul>
+<p>This is useful when you want to work with different statistics in a flexible way,
+especially if you don't know in advance which statistic you'll need.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Statistics_BasicStats_1_HasMetric_" data-uid="AiDotNet.Statistics.BasicStats`1.HasMetric*"></a>
+
+  <h3 id="AiDotNet_Statistics_BasicStats_1_HasMetric_AiDotNet_Enums_MetricType_" data-uid="AiDotNet.Statistics.BasicStats`1.HasMetric(AiDotNet.Enums.MetricType)">
+  HasMetric(MetricType)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if a specific metric is available in this BasicStats instance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasMetric(MetricType metricType)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>metricType</code> <a class="xref" href="AiDotNet.Enums.MetricType.html">MetricType</a></dt>
+    <dd><p>The type of metric to check for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the metric is available, false otherwise.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Statistics_BasicStats_1_HasMetric_AiDotNet_Enums_MetricType__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For Beginners:
+This method allows you to check if a particular metric is available before trying to get its value.
+It's useful when you're not sure if a specific metric was calculated for this set of basic stats.</p>
+<p>For example:</p>
+<pre><code class="lang-csharp">if (stats.HasMetric(MetricType.Mean))
+{
+    var meanValue = stats.GetMetric(MetricType.Mean);
+    // Use meanValue...
+}</code></pre>
+<p>This prevents errors that might occur if you try to access a metric that wasn't calculated.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Statistics/BasicStats.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

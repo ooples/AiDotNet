@@ -1,0 +1,3319 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class Vector&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class Vector&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a mathematical vector with generic type elements.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_LinearAlgebra_Vector_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.LinearAlgebra.Vector%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_LinearAlgebra_Vector_1" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1" class="text-break">
+Class Vector&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a mathematical vector with generic type elements.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class Vector&lt;T&gt; : VectorBase&lt;T&gt;, IEnumerable&lt;T&gt;, IEnumerable</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of elements in the vector.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</div>
+      <div><span class="xref">Vector&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</div>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.ienumerable">IEnumerable</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1__memory">VectorBase&lt;T&gt;._memory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1__memoryOwner">VectorBase&lt;T&gt;._memoryOwner</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1__numOps">VectorBase&lt;T&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Engine">VectorBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Length">VectorBase&lt;T&gt;.Length</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_IsEmpty">VectorBase&lt;T&gt;.IsEmpty</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Item_System_Int32_">VectorBase&lt;T&gt;.this[int]</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_ValidateIndex_System_Int32_">VectorBase&lt;T&gt;.ValidateIndex(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_ToArray">VectorBase&lt;T&gt;.ToArray()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_AsSpan">VectorBase&lt;T&gt;.AsSpan()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_AsMemory">VectorBase&lt;T&gt;.AsMemory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_IndexOf__0_">VectorBase&lt;T&gt;.IndexOf(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_CreateDefault_System_Int32__0_">VectorBase&lt;T&gt;.CreateDefault(int, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Mean">VectorBase&lt;T&gt;.Mean()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Sum">VectorBase&lt;T&gt;.Sum()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_L2Norm">VectorBase&lt;T&gt;.L2Norm()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_AddInPlace_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__">VectorBase&lt;T&gt;.AddInPlace(VectorBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Add_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__System_Span__0__">VectorBase&lt;T&gt;.Add(VectorBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_SubtractInPlace_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__">VectorBase&lt;T&gt;.SubtractInPlace(VectorBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Subtract_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__System_Span__0__">VectorBase&lt;T&gt;.Subtract(VectorBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_MultiplyInPlace__0_">VectorBase&lt;T&gt;.MultiplyInPlace(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Multiply__0_System_Span__0__">VectorBase&lt;T&gt;.Multiply(T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_DivideInPlace__0_">VectorBase&lt;T&gt;.DivideInPlace(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_Divide__0_System_Span__0__">VectorBase&lt;T&gt;.Divide(T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html#AiDotNet_Tensors_LinearAlgebra_VectorBase_1_ToString">VectorBase&lt;T&gt;.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.MatrixExtensions.html#AiDotNet_Extensions_MatrixExtensions_ToComplexVector__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">MatrixExtensions.ToComplexVector&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_AbsoluteMaximum__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.AbsoluteMaximum&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Add__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Add&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Add__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_">VectorExtensions.Add&lt;T&gt;(Vector&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Argsort__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Argsort&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Average__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Average&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_CreateDiagonal__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.CreateDiagonal&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Divide__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_">VectorExtensions.Divide&lt;T&gt;(Vector&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_DotProduct__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.DotProduct&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_EuclideanDistance__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.EuclideanDistance&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Extract__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_">VectorExtensions.Extract&lt;T&gt;(Vector&lt;T&gt;, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Magnitude__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Magnitude&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_MaxIndex__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.MaxIndex&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Max__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Max&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Maximum__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_">VectorExtensions.Maximum&lt;T&gt;(Vector&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Median__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Median&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_MinIndex__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.MinIndex&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Min__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Min&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Minimum__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Minimum&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Multiply__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Matrix___0__">VectorExtensions.Multiply&lt;T&gt;(Vector&lt;T&gt;, Matrix&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Multiply__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_">VectorExtensions.Multiply&lt;T&gt;(Vector&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Norm__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Norm&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_OuterProduct__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.OuterProduct&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseAbs__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseAbs&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseDivide__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseDivide&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseExp__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseExp&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseLog__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseLog&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseMultiplyInPlace__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseMultiplyInPlace&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseMultiply__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseMultiply&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseSign__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseSign&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_PointwiseSqrt__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.PointwiseSqrt&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Repeat__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_">VectorExtensions.Repeat&lt;T&gt;(Vector&lt;T&gt;, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Reshape__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_System_Int32_">VectorExtensions.Reshape&lt;T&gt;(Vector&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Slice__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_System_Int32_">VectorExtensions.Slice&lt;T&gt;(Vector&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_StandardDeviation__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.StandardDeviation&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_SubVector__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32_System_Int32_">VectorExtensions.SubVector&lt;T&gt;(Vector&lt;T&gt;, int, int)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_SubVector__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32___">VectorExtensions.SubVector&lt;T&gt;(Vector&lt;T&gt;, int[])</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Subtract__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Subtract&lt;T&gt;(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Subtract__1_AiDotNet_Tensors_LinearAlgebra_Vector___0____0_">VectorExtensions.Subtract&lt;T&gt;(Vector&lt;T&gt;, T)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Subvector__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Int32___">VectorExtensions.Subvector&lt;T&gt;(Vector&lt;T&gt;, int[])</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Sum__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.Sum&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_ToColumnMatrix__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.ToColumnMatrix&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_ToDiagonalMatrix__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.ToDiagonalMatrix&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_ToRowMatrix__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__">VectorExtensions.ToRowMatrix&lt;T&gt;(Vector&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Transform__1_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Func___0___0__">VectorExtensions.Transform&lt;T&gt;(Vector&lt;T&gt;, Func&lt;T, T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.VectorExtensions.html#AiDotNet_Extensions_VectorExtensions_Transform__2_AiDotNet_Tensors_LinearAlgebra_Vector___0__System_Func___0___1__">VectorExtensions.Transform&lt;T, TResult&gt;(Vector&lt;T&gt;, Func&lt;T, TResult&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Data.Pipeline.DataPipelineExtensions.html#AiDotNet_Data_Pipeline_DataPipelineExtensions_ToPipeline__1_System_Collections_Generic_IEnumerable___0__">DataPipelineExtensions.ToPipeline&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Extensions.EnumerableExtensions.html#AiDotNet_Extensions_EnumerableExtensions_RandomElement__1_System_Collections_Generic_IEnumerable___0__">EnumerableExtensions.RandomElement&lt;T&gt;(IEnumerable&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A vector is a list of numbers arranged in a specific order.
+Think of it as a one-dimensional array or a list of values. In machine learning,
+vectors are commonly used to represent features or _data points.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_System_Collections_Generic_IEnumerable__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.#ctor(System.Collections.Generic.IEnumerable{`0})">
+  Vector(IEnumerable&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Vector class with the specified values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector(IEnumerable&lt;T&gt; values)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>values</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The collection of values to initialize the vector with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_System_Collections_Generic_IEnumerable__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector containing the values you provide.
+For example, new Vector&lt;double&gt;(new[] {1.0, 2.0, 3.0}) creates a vector with three elements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.#ctor(System.Int32)">
+  Vector(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the Vector class with the specified length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector(int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The length of the vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an empty vector with the given size.
+All elements will be initialized to their default values (0 for numeric types).</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsCpuAccelerated_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IsCpuAccelerated*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsCpuAccelerated" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IsCpuAccelerated">
+  IsCpuAccelerated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether CPU SIMD acceleration is available for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsCpuAccelerated { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsCpuAccelerated_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU
+to perform the same operation on multiple values simultaneously.
+<p>When IsCpuAccelerated is true, operations like Add, Multiply, etc. can be
+hardware-accelerated using instructions like SSE, AVX, or NEON, making them
+significantly faster.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsGpuAccelerated_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IsGpuAccelerated*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsGpuAccelerated" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IsGpuAccelerated">
+  IsGpuAccelerated
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether GPU acceleration is available for vector operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static bool IsGpuAccelerated { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IsGpuAccelerated_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform
+many calculations in parallel, which can be much faster than CPU for large datasets.
+<p>When IsGpuAccelerated is true, large vector operations may be offloaded to the GPU.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SimdVectorCount_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SimdVectorCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SimdVectorCount" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SimdVectorCount">
+  SimdVectorCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of elements that fit in a SIMD register for the current type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static int SimdVectorCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SimdVectorCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many numbers can be processed
+at once using SIMD instructions. For example, with AVX and float, this is typically 8
+(256 bits / 32 bits per float = 8 floats).
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Add_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Add_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Add(AiDotNet.Tensors.LinearAlgebra.VectorBase{`0})">
+  Add(VectorBase&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds another vector to this vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Add(VectorBase&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>The vector to add.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the sum of this vector and the other vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Add_AiDotNet_Tensors_LinearAlgebra_VectorBase__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method adds two vectors together element by element.
+For example, adding [1,2,3] and [4,5,6] gives [5,7,9].</p>
+<p><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_AppendAsMatrix_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.AppendAsMatrix*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_AppendAsMatrix__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.AppendAsMatrix(`0)">
+  AppendAsMatrix(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L988"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a row matrix by appending a value to this vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; AppendAsMatrix(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to append at the end of the vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A 1×(N+1) row matrix containing the vector elements followed by the appended value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_AppendAsMatrix__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a row matrix from your vector with an extra value at the end.
+For example, if your vector is [1,2,3] and the value is 5, the result will be:
+[[1, 2, 3, 5]]
+This is particularly useful in machine learning when adding a bias term to feature vectors.
+A feature vector [x1, x2, x3] becomes [x1, x2, x3, 1] for linear regression with bias.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_BinarySearch_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.BinarySearch*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_BinarySearch__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.BinarySearch(`0)">
+  BinarySearch(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L668"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Searches for a specified value in a sorted vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BinarySearch(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to search for.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index of the specified value if found; otherwise, a negative number that is the bitwise
+complement of the index of the next element that is larger than value or the bitwise complement
+of the vector's length if there is no larger element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_BinarySearch__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method quickly finds a value in a sorted vector.
+It returns the position if found. If not found, it returns a negative number that tells
+you where the value would be if it were in the vector. The vector must be sorted
+for this to work correctly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Clone_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Clone" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the same values as this vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Clone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates an exact duplicate of your vector.
+Changes to the copy won't affect the original vector, and vice versa.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Concatenate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_AiDotNet_Tensors_LinearAlgebra_Vector__0____" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Concatenate(AiDotNet.Tensors.LinearAlgebra.Vector{`0}[])">
+  Concatenate(params Vector&lt;T&gt;[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1083"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Combines multiple vectors into a single vector by placing them one after another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Concatenate(params Vector&lt;T&gt;[] vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;[]</dt>
+    <dd><p>The vectors to concatenate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing all elements from the input vectors in sequence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_AiDotNet_Tensors_LinearAlgebra_Vector__0_____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method joins multiple vectors together end-to-end.
+For example, if you concatenate [1,2] and [3,4,5], the result will be [1,2,3,4,5].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Concatenate*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Concatenate(System.Collections.Generic.List{AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  Concatenate(List&lt;Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1108"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Combines a list of vectors into a single vector by placing them one after another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Concatenate(List&lt;Vector&lt;T&gt;&gt; vectors)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vectors</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The list of vectors to concatenate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing all elements from the input vectors in sequence.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Concatenate_System_Collections_Generic_List_AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method is similar to the other Concatenate method but accepts
+a list of vectors instead of individual parameters. It joins all vectors in the list together end-to-end.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance(System.Int32)">
+  CreateInstance(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L522"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the vector type with the specified size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override VectorBase&lt;T&gt; CreateInstance(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the new vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new vector instance of the specified size.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is an internal method that helps create new vectors
+of the right type when performing operations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance(`0[])">
+  CreateInstance(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L796"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the vector class with the specified _data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override VectorBase&lt;T&gt; CreateInstance(T[] _data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>_data</code> T[]</dt>
+    <dd><p>The array of _data to initialize the vector with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the specified _data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateInstance__1_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateInstance``1(System.Int32)">
+  CreateInstance&lt;TResult&gt;(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L807"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of the vector class with the specified size and default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override VectorBase&lt;TResult&gt; CreateInstance&lt;TResult&gt;(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the new vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;TResult&gt;</dt>
+    <dd><p>A new vector of the specified size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type of elements in the new vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateRandom(System.Int32)">
+  CreateRandom(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L821"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector of the specified size filled with random values between 0 and 1.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; CreateRandom(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector to create.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector filled with random values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a vector of a specific size where each element
+is a random number between 0 and 1. This is useful for initializing vectors for machine learning algorithms.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateRandom*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateRandom(System.Int32,System.Double,System.Double)">
+  CreateRandom(int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L846"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector of the specified size filled with random values between the specified minimum and maximum values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; CreateRandom(int size, double min = -1, double max = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector to create.</p>
+</dd>
+    <dt><code>min</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum value for the random numbers (default is -1.0).</p>
+</dd>
+    <dt><code>max</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The maximum value for the random numbers (default is 1.0).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector filled with random values within the specified range.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateRandom_System_Int32_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a vector of a specific size where each element
+is a random number between the minimum and maximum values you specify. For example, CreateRandom(3, 0, 10)
+might create a vector like [2.7, 9.1, 4.3] with random values between 0 and 10.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when min is greater than or equal to max.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateStandardBasis_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateStandardBasis*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateStandardBasis_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.CreateStandardBasis(System.Int32,System.Int32)">
+  CreateStandardBasis(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L878"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a standard basis vector of the specified size with a 1 at the specified index and 0s elsewhere.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; CreateStandardBasis(int size, int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector to create.</p>
+</dd>
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The index at which to place the value 1.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new standard basis vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_CreateStandardBasis_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> A standard basis vector has a 1 at one position and 0s everywhere else.
+For example, CreateStandardBasis(3, 1) creates the vector [0,1,0]. These vectors are important in
+linear algebra and are used to represent directions in space.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when size is negative or when index is negative or greater than or equal to size.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Default_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Default*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Default_System_Int32__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Default(System.Int32,`0)">
+  Default(int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L316"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a vector of the specified size with all elements set to the default value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override VectorBase&lt;T&gt; Default(int size, T defaultValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector.</p>
+</dd>
+    <dt><code>defaultValue</code> <span class="xref">T</span></dt>
+    <dd><p>The default value for all elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with all elements set to the default value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Default_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector where every element has the same value
+that you specify.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Deserialize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Deserialize_System_Byte___" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L564"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a vector from a previously serialized byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized vector data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector created from the serialized data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Deserialize_System_Byte____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a previously serialized vector back into
+a usable vector object. Use this when loading a saved model from a file.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Divide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Divide__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Divide(`0)">
+  Divide(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L506"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of the vector by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Divide(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with each element divided by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Divide__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This divides every number in your vector by the same value.
+For example, [10,20,30] divided by 10 gives [1,2,3].</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_DotProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.DotProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_DotProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.DotProduct(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  DotProduct(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L465"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product (inner product) of this vector with another vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T DotProduct(Vector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to compute the dot product with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The scalar result of the dot product operation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_DotProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The dot product multiplies corresponding elements of two vectors
+and then adds all the results. For example, the dot product of [1, 2, 3] and [4, 5, 6]
+is (1*4) + (2*5) + (3*6) = 4 + 10 + 18 = 32. This is fundamental in machine learning for
+calculating similarities between vectors, projections, and in neural network operations.</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when other is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseDivide_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.ElementwiseDivide*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseDivide_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.ElementwiseDivide(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ElementwiseDivide(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L218"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division of this vector by another vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ElementwiseDivide(Vector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the results of dividing each element of this vector by the corresponding element in the other vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseDivide_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This divides each element in your vector by the corresponding element
+in another vector. For example, [10, 20, 30] divided by [2, 4, 5] gives [5, 5, 6].</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when other is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseMultiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.ElementwiseMultiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.ElementwiseMultiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ElementwiseMultiply(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L599"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element of this vector with the corresponding element of another vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ElementwiseMultiply(Vector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply with.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the element-wise product.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_ElementwiseMultiply_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This multiplies corresponding elements together.
+For example, [1,2,3] element-wise multiplied by [4,5,6] gives [4,10,18].
+This is different from dot product, which would give a single number (1*4 + 2*5 + 3*6 = 32).</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when other is null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the vectors have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Empty_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Empty*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Empty" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Empty">
+  Empty()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L389"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an empty vector with zero elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Empty()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new empty vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Empty_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector with no elements (length of 0).
+It's useful as a starting point when you need to build a vector by adding elements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Fill_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Fill__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Fill(`0)">
+  Fill(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1069"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets all elements of the vector to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The value to set for all elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Fill__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method changes every element in your vector to the same value.
+For example, if your vector is [1,2,3] and you call Fill(5), your vector will become [5,5,5].</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated fill operation for float/double types,
+providing 5-10x speedup for large vectors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromArray_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromArray*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromArray__0___" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromArray(`0[])">
+  FromArray(T[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector from an array of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; FromArray(T[] array)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>array</code> T[]</dt>
+    <dd><p>The array of values to create the vector from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the values from the array.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromArray__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a vector from an existing array of numbers.
+For example, if you have an array [1,2,3], you can create a vector with the same values
+by calling Vector.FromArray([1,2,3]).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromEnumerable_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromEnumerable*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromEnumerable_System_Collections_Generic_IEnumerable__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromEnumerable(System.Collections.Generic.IEnumerable{`0})">
+  FromEnumerable(IEnumerable&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector from any collection of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; FromEnumerable(IEnumerable&lt;T&gt; enumerable)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>enumerable</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;T&gt;</dt>
+    <dd><p>The collection of values to create the vector from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the values from the collection.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromEnumerable_System_Collections_Generic_IEnumerable__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a vector from any collection of numbers.
+It's more flexible than FromArray or FromList because it works with any type of collection.
+For example, you could use it with a Queue, Stack, or any other collection type in C#.</p>
+<p>The method is smart enough to use the most efficient approach based on what type of collection you provide.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the collection is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromList_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromList*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromList_System_Collections_Generic_List__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromList(System.Collections.Generic.List{`0})">
+  FromList(List&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1368"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector from a list of values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; FromList(List&lt;T&gt; list)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>list</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd><p>The list of values to create the vector from.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the values from the list.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromList_System_Collections_Generic_List__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a vector from a List collection.
+Lists are one of the most common collection types in C#, so this method provides
+a convenient and efficient way to convert your list _data into a vector for mathematical operations.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the list is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromMemory_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromMemory*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromMemory_System_Memory__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.FromMemory(System.Memory{`0})">
+  FromMemory(Memory&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector from an existing Memory&lt;T&gt; backing store.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; FromMemory(Memory&lt;T&gt; memory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.memory-1">Memory</a>&lt;T&gt;</dt>
+    <dd><p>The memory to use as the vector's backing store.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector using the provided memory.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_FromMemory_System_Memory__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector that uses existing memory without copying.
+This is useful for zero-copy operations and integration with memory pooling.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetElements_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetElements*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetElements_System_Collections_Generic_IEnumerable_System_Int32__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetElements(System.Collections.Generic.IEnumerable{System.Int32})">
+  GetElements(IEnumerable&lt;int&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1010"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector containing only the elements at the specified indices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetElements(IEnumerable&lt;int&gt; indices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>indices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>The indices of elements to include in the new vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing only the elements at the specified indices.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetElements_System_Collections_Generic_IEnumerable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you pick specific elements from your vector by their positions.
+For example, if your vector is [10,20,30,40,50] and you specify indices [1,3], the result will be [20,40].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetEnumerator_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetEnumerator*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetEnumerator" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetEnumerator">
+  GetEnumerator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns an enumerator that iterates through the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerator&lt;T&gt; GetEnumerator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerator-1">IEnumerator</a>&lt;T&gt;</dt>
+    <dd><p>An enumerator that can be used to iterate through the vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetEnumerator_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This allows you to use the vector in foreach loops,
+making it easy to process each element one by one.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetRange_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetRange*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetRange_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetRange(System.Int32,System.Int32)">
+  GetRange(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L704"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a portion of the vector as a new vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetRange(int startIndex, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index at which to start extraction.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the extracted elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetRange_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
+For example, if you have a vector [1,2,3,4,5] and call GetRange(1,3), you'll get a new vector [2,3,4].</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when startIndex is negative or beyond the vector's bounds,
+or when count is negative or would extend beyond the end of the vector.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSegment_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetSegment*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSegment_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetSegment(System.Int32,System.Int32)">
+  GetSegment(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L786"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a segment of the vector using LINQ operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetSegment(int startIndex, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index at which to start extraction.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the extracted elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSegment_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
+It extracts a portion of your vector starting at a specific position and taking a certain number of elements.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when startIndex is negative or beyond the vector's bounds,
+or when length is negative or would extend beyond the end of the vector.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSubVector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetSubVector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSubVector_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.GetSubVector(System.Int32,System.Int32)">
+  GetSubVector(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L409"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a portion of the vector as a new vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetSubVector(int startIndex, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index at which to start extraction.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the extracted elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_GetSubVector_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method lets you take a slice of your vector.
+For example, if you have a vector [1,2,3,4,5] and call GetSubVector(1,3),
+you'll get a new vector [2,3,4].</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when startIndex is negative or greater than or equal to the vector's length,
+or when length is negative or would extend beyond the end of the vector.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IndexOfMax_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IndexOfMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IndexOfMax" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.IndexOfMax">
+  IndexOfMax()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L718"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the index of the maximum value in the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int IndexOfMax()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the maximum value in the vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_IndexOfMax_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method tells you the position of the largest number in your vector.
+For example, in the vector [3,8,2,5], the maximum value is 8, which is at index 1.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when the vector is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Multiply__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Multiply(`0)">
+  Multiply(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies this vector by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Multiply(T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with each element multiplied by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Multiply__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method multiplies every element in your vector by the same number.
+For example, multiplying [1,2,3] by 2 gives [2,4,6].</p>
+<p><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroCount_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.NonZeroCount*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroCount" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.NonZeroCount">
+  NonZeroCount()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1054"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Counts the number of non-zero elements in the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NonZeroCount()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The count of non-zero elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method tells you how many elements in your vector are not zero.
+For example, in the vector [0,5,0,3,0], there are 2 non-zero elements (5 and 3).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroIndices_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.NonZeroIndices*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroIndices" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.NonZeroIndices">
+  NonZeroIndices()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L938"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the indices of all non-zero elements in the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IEnumerable&lt;int&gt; NonZeroIndices()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd><p>An enumerable collection of indices where the vector has non-zero values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_NonZeroIndices_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method finds the positions of all elements in your vector that are not zero.
+For example, in the vector [0,5,0,3,0], this would return the indices 1 and 3, since those are the positions
+of the non-zero values (5 and 3).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Norm_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Norm*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Norm" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Norm">
+  Norm()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L487"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Euclidean norm (magnitude) of the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Norm()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Euclidean norm of the vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Norm_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The norm is the "length" of a vector in multi-dimensional space.
+For a 2D vector [x,y], the norm is sqrt(x^2 + y^2), which is the same as the Pythagorean theorem.
+For higher dimensions, it's the square root of the sum of all squared components.</p>
+<p><b>Performance:</b> This method uses SIMD-accelerated dot product for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Normalize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Normalize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Normalize" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Normalize">
+  Normalize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L903"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a unit vector in the same direction as this vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Normalize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with length 1 in the same direction as this vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Normalize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Normalizing a vector means changing its length to 1 while keeping its direction.
+This is useful in many algorithms where only the direction matters, not the magnitude.
+For example, normalizing [3,4] gives [0.6,0.8] because 0.6ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ + 0.8ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½ = 1.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when trying to normalize a zero vector.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Ones_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Ones*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Ones_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Ones(System.Int32)">
+  Ones(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a vector of the specified size with all elements set to one.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override VectorBase&lt;T&gt; Ones(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with all elements set to one.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Ones_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector filled with ones.
+It's commonly used in various mathematical operations and algorithms.</p>
+<p><b>Performance:</b> Uses SIMD-accelerated Fill operation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_OuterProduct_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.OuterProduct*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.OuterProduct(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  OuterProduct(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L754"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the outer product of two vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; OuterProduct(Vector&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector for the outer product.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix representing the outer product of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_OuterProduct_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The outer product creates a matrix by multiplying each element of the first vector
+with every element of the second vector. For example, if you have vectors [1,2] and [3,4,5], 
+the result will be a 2ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½3 matrix:
+[1ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½3, 1ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½4, 1ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½5]
+[2ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½3, 2ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½4, 2ÃƒÆ’Ã‚Â¯Ãƒâ€šÃ‚Â¿Ãƒâ€šÃ‚Â½5]
+which equals:
+[3, 4, 5]
+[6, 8, 10]</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Range_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Range*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Range_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Range(System.Int32,System.Int32)">
+  Range(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L624"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a vector with sequential values starting from a specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; Range(int start, int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>start</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The starting value.</p>
+</dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements in the vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with sequential values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Range_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector with evenly spaced values.
+For example, Range(1, 5) creates [1,2,3,4,5]. This is useful for creating
+indices or x-values for plotting.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_RemoveAt_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.RemoveAt*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_RemoveAt_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.RemoveAt(System.Int32)">
+  RemoveAt(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1033"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector with one element removed at the specified index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; RemoveAt(int index)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the element to remove.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the element at the specified index removed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_RemoveAt_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a new vector that's identical to your original vector,
+but with one element removed. For example, if your vector is [1,2,3,4] and you remove the element at index 1,
+the result will be [1,3,4].</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when the index is negative or greater than or equal to the vector's length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SafeNormalize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SafeNormalize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SafeNormalize" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SafeNormalize">
+  SafeNormalize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L918"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Normalizes the vector, or returns a zero vector if the norm is zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; SafeNormalize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A normalized vector or a zero vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Select_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Select*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Select__1_System_Func__0___0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Select``1(System.Func{`0,``0})">
+  Select&lt;TResult&gt;(Func&lt;T, TResult&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Projects each element of the vector into a new form.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;TResult&gt; Select&lt;TResult&gt;(Func&lt;T, TResult&gt; selector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selector</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T, TResult&gt;</dt>
+    <dd><p>A function that transforms each element.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TResult&gt;</dt>
+    <dd><p>A new vector containing the transformed elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type of the elements in the resulting vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Select__1_System_Func__0___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This transforms each element in your vector using a function you provide.
+For example, you could multiply each element by 2, or convert each number to its absolute value.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Serialize_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Serialize*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Serialize" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L536"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts the vector to a byte array for storage or transmission.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array representing the serialized vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Serialize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Serialization converts your vector into a format that can be
+saved to a file or sent over a network. This is useful when you want to save your
+trained model for later use.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SetValue_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SetValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SetValue_System_Int32__0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.SetValue(System.Int32,`0)">
+  SetValue(int, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L437"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new vector with a single value changed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; SetValue(int index, T value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>index</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index of the element to change.</p>
+</dd>
+    <dt><code>value</code> <span class="xref">T</span></dt>
+    <dd><p>The new value to set.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the specified element changed.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_SetValue_System_Int32__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method creates a copy of your vector with just one value changed.
+It's useful when you want to keep your original vector unchanged while working with a modified version.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when index is negative or greater than or equal to the vector's length.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subtract_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subtract_AiDotNet_Tensors_LinearAlgebra_VectorBase__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Subtract(AiDotNet.Tensors.LinearAlgebra.VectorBase{`0})">
+  Subtract(VectorBase&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts another vector from this vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Subtract(VectorBase&lt;T&gt; other)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>other</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>The vector to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the difference of this vector and the other vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subtract_AiDotNet_Tensors_LinearAlgebra_VectorBase__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method subtracts one vector from another element by element.
+For example, subtracting [4,5,6] from [10,10,10] gives [6,5,4].</p>
+<p><b>Performance:</b> Uses SIMD-accelerated operations with single allocation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subvector_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Subvector*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subvector_System_Int32_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Subvector(System.Int32,System.Int32)">
+  Subvector(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L648"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts a portion of the vector as a new vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Subvector(int startIndex, int length)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>startIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The zero-based index at which to start extraction.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elements to extract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing the extracted elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Subvector_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method delegates to GetSubVector and provides the same functionality.
+It lets you extract a portion of your vector as a new vector.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when startIndex is negative, length is negative, or the subvector would extend beyond the end of the vector.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transform*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform__1_System_Func__0_System_Int32___0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transform``1(System.Func{`0,System.Int32,``0})">
+  Transform&lt;TResult&gt;(Func&lt;T, int, TResult&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L353"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a transformation function to each element of the vector, also providing the element's index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;TResult&gt; Transform&lt;TResult&gt;(Func&lt;T, int, TResult&gt; function)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, TResult&gt;</dt>
+    <dd><p>The transformation function to apply to each element and its index.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TResult&gt;</dt>
+    <dd><p>A new vector containing the transformed elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type of the elements in the resulting vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform__1_System_Func__0_System_Int32___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Like Transform, but your function also receives the position (index)
+of each element. This is useful when the transformation depends on where the element is located
+in the vector.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transform*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform__1_System_Func__0___0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transform``1(System.Func{`0,``0})">
+  Transform&lt;TResult&gt;(Func&lt;T, TResult&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L331"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies a transformation function to each element of the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;TResult&gt; Transform&lt;TResult&gt;(Func&lt;T, TResult&gt; function)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>function</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T, TResult&gt;</dt>
+    <dd><p>The transformation function to apply to each element.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;TResult&gt;</dt>
+    <dd><p>A new vector containing the transformed elements.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TResult</code></dt>
+    <dd><p>The type of the elements in the resulting vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transform__1_System_Func__0___0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is similar to Select, but specifically designed for
+mathematical transformations. It applies a function to each element in your vector.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transpose_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transpose*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transpose" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Transpose">
+  Transpose()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L963"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Transposes this vector into an nx1 column matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; Transpose()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>A matrix with n rows and 1 column, where n is the length of this vector.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Transpose_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method transforms your vector into a column matrix.
+A vector [1,2,3] becomes the matrix:
+[[1],
+ [2],
+ [3]]
+This is the standard mathematical interpretation of transposing a row vector to a column vector.
+Useful when you need to perform matrix operations that require column vectors.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Variance_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Variance*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Variance" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Variance">
+  Variance()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L243"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the variance of the vector elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Variance()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The variance of the vector elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Variance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Variance measures how spread out the values in your vector are.
+A high variance means the values are widely spread; a low variance means they're clustered together.
+It's calculated by finding the average of the squared differences from the mean.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Where_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Where*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Where_System_Func__0_System_Boolean__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Where(System.Func{`0,System.Boolean})">
+  Where(Func&lt;T, bool&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Filters the vector elements based on a condition.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; Where(Func&lt;T, bool&gt; predicate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;T, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd><p>A function that determines whether an element should be included.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector containing only the elements that satisfy the condition.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Where_System_Func__0_System_Boolean___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This lets you keep only certain elements from your vector
+that meet a condition you specify. For example, you could keep only positive numbers
+or only values above a certain threshold.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Zeros_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Zeros*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Zeros_System_Int32_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.Zeros(System.Int32)">
+  Zeros(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L301"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a vector of the specified size with all elements set to zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override VectorBase&lt;T&gt; Zeros(int size)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.VectorBase-1.html">VectorBase</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with all elements set to zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_Zeros_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates a vector filled with zeros.
+It's often used as a starting point for calculations.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="operators">Operators
+</h2>
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  operator +(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two vectors together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator +(Vector&lt;T&gt; left, Vector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first vector.</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the sum of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you use the + symbol to add two vectors together.
+For example, you can write "result = vectorA + vectorB" instead of "result = vectorA.Add(vectorB)".</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Addition*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Addition(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  operator +(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1207"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar value to each element of the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator +(Vector&lt;T&gt; vector, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to add the scalar to.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to add to each element.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the scalar added to each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Addition_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you add a single number to every element in your vector.
+For example, if your vector is [1,2,3] and you add 5, the result will be [6,7,8].</p>
+<p><b>Performance:</b> This operator uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the vector is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Division_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Division*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Division(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  operator /(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1298"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element of the vector by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator /(Vector&lt;T&gt; vector, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to divide.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with each element divided by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Division_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you divide every element in your vector by a number.
+For example, if your vector is [10,20,30] and you divide by 10, the result will be [1,2,3].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Implicit_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Implicit*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Implicit_AiDotNet_Tensors_LinearAlgebra_Vector__0____0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Implicit(AiDotNet.Tensors.LinearAlgebra.Vector{`0})~`0[]">
+  implicit operator T[](Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1313"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Implicitly converts a vector to an array of its elements.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static implicit operator T[](Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>An array containing the vector's elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Implicit_AiDotNet_Tensors_LinearAlgebra_Vector__0____0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator allows a vector to be used anywhere an array is expected.
+For example, if you have a method that takes an array as a parameter, you can pass a vector directly
+without having to manually convert it to an array first.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Multiply(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  operator *(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1267"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element of the vector by a scalar value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator *(Vector&lt;T&gt; vector, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with each element multiplied by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you use the * symbol to multiply every element in your vector by a number.
+For example, you can write "result = vector * 2" to double every value in your vector.
+So [1,2,3] * 2 gives [2,4,6].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply__0_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Multiply(`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  operator *(T, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1283"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies a scalar value by each element of the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator *(T scalar, Vector&lt;T&gt; vector)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to multiply.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with each element multiplied by the scalar.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Multiply__0_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator is the same as the previous one, but allows you to write the scalar first.
+For example, you can write "result = 2 * vector" instead of "result = vector * 2".
+Both will give the same result, like [2,4,6] for a vector [1,2,3].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  operator -(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts one vector from another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator -(Vector&lt;T&gt; left, Vector&lt;T&gt; right)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>left</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to subtract from (minuend).</p>
+</dd>
+    <dt><code>right</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to subtract (subtrahend).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector that is the difference of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you use the - symbol to subtract one vector from another.
+For example, you can write "result = vectorA - vectorB" instead of "result = vectorA.Subtract(vectorB)".
+The subtraction happens element by element, so [10,20,30] - [1,2,3] gives [9,18,27].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Subtraction*"></a>
+
+  <h3 id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.Tensors.LinearAlgebra.Vector`1.op_Subtraction(AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  operator -(Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L1230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar value from each element of the vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Vector&lt;T&gt; operator -(Vector&lt;T&gt; vector, T scalar)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>vector</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The vector to subtract the scalar from.</p>
+</dd>
+    <dt><code>scalar</code> <span class="xref">T</span></dt>
+    <dd><p>The scalar value to subtract from each element.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A new vector with the scalar subtracted from each element.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_LinearAlgebra_Vector_1_op_Subtraction_AiDotNet_Tensors_LinearAlgebra_Vector__0___0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This operator lets you subtract a single number from every element in your vector.
+For example, if your vector is [5,7,9] and you subtract 2, the result will be [3,5,7].</p>
+<p><b>Performance:</b> This operator uses SIMD-accelerated operations for float/double types
+via TensorPrimitives, providing 5-10x speedup for large vectors.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when the vector is null.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/LinearAlgebra/Vector.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

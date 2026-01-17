@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LocallyWeightedRegressionOptions | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LocallyWeightedRegressionOptions | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Locally Weighted Regression, a non-parametric method that creates a model by fitting simple models to localized subsets of data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LocallyWeightedRegressionOptions.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LocallyWeightedRegressionOptions%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions" class="text-break">
+Class LocallyWeightedRegressionOptions  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LocallyWeightedRegressionOptions.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Locally Weighted Regression, a non-parametric method
+that creates a model by fitting simple models to localized subsets of data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LocallyWeightedRegressionOptions : NonLinearRegressionOptions</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html">NonLinearRegressionOptions</a></div>
+      <div><span class="xref">LocallyWeightedRegressionOptions</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_MaxIterations">NonLinearRegressionOptions.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Tolerance">NonLinearRegressionOptions.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_KernelType">NonLinearRegressionOptions.KernelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Gamma">NonLinearRegressionOptions.Gamma</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_Coef0">NonLinearRegressionOptions.Coef0</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.NonLinearRegressionOptions.html#AiDotNet_Models_Options_NonLinearRegressionOptions_PolynomialDegree">NonLinearRegressionOptions.PolynomialDegree</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Locally Weighted Regression (LWR) is a memory-based technique that performs a regression
+around a point of interest using only training data that are "local" to that point.
+Unlike global methods that fit a single model to the entire dataset, LWR fits a separate
+simple model for each query point by using nearby training examples weighted by their distance.
+This allows the method to capture complex, non-linear relationships in the data without
+specifying a global functional form.
+</p>
+<p><b>For Beginners:</b> Locally Weighted Regression is like asking your neighbors for advice,
+but giving more importance to those who live closest to you.
+<p>Imagine you're trying to estimate house prices:</p>
+<ul>
+<li>Traditional regression creates one formula for the entire city</li>
+<li>Locally Weighted Regression works differently - when estimating the price of a specific house,
+it looks primarily at similar nearby houses</li>
+<li>Houses very similar to yours get a high &quot;weight&quot; (strong influence)</li>
+<li>Houses quite different from yours get a low &quot;weight&quot; (weak influence)</li>
+<li>This helps capture neighborhood-specific patterns that might get lost in a city-wide formula</li>
+</ul>
+<p>This approach is particularly useful when different regions of your data behave differently,
+as it can adapt to local patterns rather than forcing a single model on everything.
+This class allows you to configure how the &quot;neighborhood&quot; is defined and how the local
+models are calculated.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_Bandwidth_" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.Bandwidth*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_Bandwidth" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.Bandwidth">
+  Bandwidth
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LocallyWeightedRegressionOptions.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the bandwidth parameter that controls the size of the &quot;neighborhood&quot;
+used in locally weighted regression.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Bandwidth { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The bandwidth value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_Bandwidth_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The bandwidth parameter determines how quickly the influence of training examples
+decreases as their distance from the query point increases. It acts as a smoothing parameter:
+larger values create smoother functions that average over more training examples, while
+smaller values create more flexible functions that can fit local variations but may be more
+sensitive to noise. The optimal value depends on the specific dataset and problem.
+</p>
+<p><b>For Beginners:</b> The bandwidth controls how large your "neighborhood" is
+when making predictions.
+<p>Think of it like defining your &quot;local community&quot;:</p>
+<ul>
+<li>A small bandwidth (like 0.1) means only very similar examples strongly influence the prediction,
+creating a &quot;tight-knit community&quot; effect</li>
+<li>A large bandwidth (like 10.0) means even somewhat different examples have influence,
+creating a &quot;broad community&quot; effect</li>
+</ul>
+<p>The default value of 1.0 provides a reasonable balance for many problems:</p>
+<ul>
+<li>Too small: Your model might become too &quot;choppy&quot; and sensitive to noise</li>
+<li>Too large: Your model might become too &quot;smoothed out&quot; and miss important local patterns</li>
+</ul>
+<p>If your predictions seem too sensitive to small changes in input, try increasing this value.
+If your predictions seem too generalized and miss obvious patterns, try decreasing it.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_DecompositionType_" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_DecompositionType" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LocallyWeightedRegressionOptions.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the matrix decomposition method used to solve the weighted least squares
+problem at each query point.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>The matrix decomposition type, defaulting to MatrixDecompositionType.Cholesky.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When fitting a local model at each query point, the algorithm must solve a weighted
+least squares problem, which involves matrix operations. Different decomposition methods
+offer trade-offs between numerical stability, computational efficiency, and accuracy. 
+Cholesky decomposition is the default as it is generally efficient for positive definite
+matrices, but SVD (Singular Value Decomposition) might be more stable for ill-conditioned
+problems, while QR decomposition offers a balance between the two.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical method used to
+solve the equations when fitting local models.
+<p>Think of it like choosing a tool for a job:</p>
+<ul>
+<li>Cholesky (the default): Like using a standard screwdriver - efficient for most regular tasks</li>
+<li>SVD: Like using a specialized tool - more reliable for difficult situations but takes longer</li>
+<li>QR: Like a middle-ground option - more versatile than Cholesky but faster than SVD</li>
+</ul>
+<p>For most problems, the default Cholesky method works well and is efficient. You might
+consider changing to SVD if:</p>
+<ul>
+<li>Your model produces warnings about numerical stability</li>
+<li>Your data has highly correlated features (multicollinearity)</li>
+<li>You're working with very small bandwidth values</li>
+</ul>
+<p>This is a somewhat advanced setting that many beginners won't need to adjust.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_UseSoftMode_" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.UseSoftMode*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_UseSoftMode" data-uid="AiDotNet.Models.Options.LocallyWeightedRegressionOptions.UseSoftMode">
+  UseSoftMode
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LocallyWeightedRegressionOptions.cs/#L128"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use soft (differentiable) mode for JIT compilation support.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseSoftMode { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p><code>true</code> to enable soft mode; <code>false</code> (default) for traditional LWR behavior.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LocallyWeightedRegressionOptions_UseSoftMode_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+When enabled, LocallyWeightedRegression uses a differentiable approximation that embeds
+all training data as constants in the computation graph and computes attention-weighted
+predictions using the softmax of negative squared distances.
+</p>
+<p>
+Formula: weights = softmax(-||input - xTrain[i]||² / bandwidth)
+         output = Σ weights[i] * yTrain[i]
+</p>
+<p><b>For Beginners:</b> Soft mode allows this model to be JIT compiled for faster inference.
+<p>Traditional LWR solves a new weighted least squares problem for each prediction, which
+cannot be represented as a static computation graph. Soft mode uses a simplified approach:</p>
+<ul>
+<li>Compute distances from the query point to all training examples</li>
+<li>Convert distances to weights using softmax (similar to attention mechanisms)</li>
+<li>Return the weighted average of training targets</li>
+</ul>
+<p>This approximation:</p>
+<ul>
+<li>Enables JIT compilation for faster predictions</li>
+<li>Gives similar results for smooth data</li>
+<li>May be less accurate than traditional LWR for complex local patterns</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LocallyWeightedRegressionOptions.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

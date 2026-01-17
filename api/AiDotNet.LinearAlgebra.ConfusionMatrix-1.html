@@ -1,0 +1,2010 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ConfusionMatrix&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ConfusionMatrix&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a confusion matrix for evaluating the performance of a classification model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LinearAlgebra_ConfusionMatrix_1.md&amp;value=---%0Auid%3A%20AiDotNet.LinearAlgebra.ConfusionMatrix%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1">
+
+
+
+  <h1 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1" class="text-break">
+Class ConfusionMatrix&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LinearAlgebra.html">LinearAlgebra</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a confusion matrix for evaluating the performance of a classification model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ConfusionMatrix&lt;T&gt; : MatrixBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ConfusionMatrix&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__memory">MatrixBase&lt;T&gt;._memory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__rows">MatrixBase&lt;T&gt;._rows</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__cols">MatrixBase&lt;T&gt;._cols</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1__numOps">MatrixBase&lt;T&gt;._numOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Engine">MatrixBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Rows">MatrixBase&lt;T&gt;.Rows</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Columns">MatrixBase&lt;T&gt;.Columns</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_IsEmpty">MatrixBase&lt;T&gt;.IsEmpty</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Item_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.this[int, int]</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Ones_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.Ones(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Zeros_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.Zeros(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Slice_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.Slice(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SetColumn_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MatrixBase&lt;T&gt;.SetColumn(int, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SetRow_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MatrixBase&lt;T&gt;.SetRow(int, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Empty">MatrixBase&lt;T&gt;.Empty()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_GetRow_System_Int32_">MatrixBase&lt;T&gt;.GetRow(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_GetColumn_System_Int32_">MatrixBase&lt;T&gt;.GetColumn(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Diagonal">MatrixBase&lt;T&gt;.Diagonal()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubMatrix_System_Int32_System_Int32_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.SubMatrix(int, int, int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubMatrix_System_Int32_System_Int32_System_Collections_Generic_List_System_Int32__">MatrixBase&lt;T&gt;.SubMatrix(int, int, List&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ElementWiseMultiplyAndSum_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.ElementWiseMultiplyAndSum(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Add_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.Add(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AddInPlace_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.AddInPlace(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Add_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__System_Span__0__">MatrixBase&lt;T&gt;.Add(MatrixBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Subtract_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.Subtract(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_SubtractInPlace_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.SubtractInPlace(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Subtract_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__System_Span__0__">MatrixBase&lt;T&gt;.Subtract(MatrixBase&lt;T&gt;, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Multiply_AiDotNet_Tensors_LinearAlgebra_MatrixBase__0__">MatrixBase&lt;T&gt;.Multiply(MatrixBase&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Vector__0__">MatrixBase&lt;T&gt;.Multiply(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Multiply__0_">MatrixBase&lt;T&gt;.Multiply(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_MultiplyInPlace__0_">MatrixBase&lt;T&gt;.MultiplyInPlace(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Multiply__0_System_Span__0__">MatrixBase&lt;T&gt;.Multiply(T, Span&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Transpose">MatrixBase&lt;T&gt;.Transpose()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_TransposeInPlace">MatrixBase&lt;T&gt;.TransposeInPlace()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_Clone">MatrixBase&lt;T&gt;.Clone()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ValidateIndices_System_Int32_System_Int32_">MatrixBase&lt;T&gt;.ValidateIndices(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AsSpan">MatrixBase&lt;T&gt;.AsSpan()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_AsMemory">MatrixBase&lt;T&gt;.AsMemory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html#AiDotNet_Tensors_LinearAlgebra_MatrixBase_1_ToString">MatrixBase&lt;T&gt;.ToString()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A confusion matrix is a table that summarizes the prediction results of a classification model.
+It supports both binary classification (2x2 matrix) and multi-class classification (NxN matrix).
+</p>
+<p>
+<b>For Beginners:</b> A confusion matrix helps you understand how well your AI model is performing
+when classifying data into categories.
+</p>
+<p>
+<b>Binary Classification:</b> For 2-class problems, it shows four important numbers:
+<ul><li><span class="term">True Positives</span>When your model correctly predicted "Yes" (e.g., correctly identified a cat as a cat)</li><li><span class="term">True Negatives</span>When your model correctly predicted "No" (e.g., correctly identified a non-cat as not a cat)</li><li><span class="term">False Positives</span>When your model incorrectly predicted "Yes" (e.g., identified a dog as a cat) - also called a "Type I error"</li><li><span class="term">False Negatives</span>When your model incorrectly predicted "No" (e.g., identified a cat as not a cat) - also called a "Type II error"</li></ul>
+
+<p>
+<b>Multi-Class Classification:</b> For 3+ class problems, the matrix is NxN where N is the number of classes.
+Rows represent predicted classes, columns represent actual classes. Cell [i,j] contains the count of samples
+predicted as class i but actually belonging to class j.
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.#ctor(System.Int32)">
+  ConfusionMatrix(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.LinearAlgebra.ConfusionMatrix-1.html">ConfusionMatrix&lt;T&gt;</a> class with the specified dimension.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConfusionMatrix(int dimension)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dimension</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of classes (creates a dimension x dimension matrix).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a zero-initialized NxN confusion matrix for multi-class classification.
+Use the <a class="xref" href="AiDotNet.LinearAlgebra.ConfusionMatrix-1.html#AiDotNet_LinearAlgebra_ConfusionMatrix_1_Increment_System_Int32_System_Int32_">Increment(int, int)</a> method to populate the matrix as predictions are made.
+</p>
+<p>
+<b>For Beginners:</b> This constructor creates an empty confusion matrix for problems with multiple classes.
+For example, if you're classifying images into 10 categories (0-9 digits), you would use dimension=10.
+The matrix starts with all zeros, and you increment cells as your model makes predictions.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimension is less than 2.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor__0__0__0__0_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.#ctor(`0,`0,`0,`0)">
+  ConfusionMatrix(T, T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the <a class="xref" href="AiDotNet.LinearAlgebra.ConfusionMatrix-1.html">ConfusionMatrix&lt;T&gt;</a> class with the specified values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ConfusionMatrix(T truePositives, T trueNegatives, T falsePositives, T falseNegatives)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>truePositives</code> <span class="xref">T</span></dt>
+    <dd><p>The number of true positive predictions.</p>
+</dd>
+    <dt><code>trueNegatives</code> <span class="xref">T</span></dt>
+    <dd><p>The number of true negative predictions.</p>
+</dd>
+    <dt><code>falsePositives</code> <span class="xref">T</span></dt>
+    <dd><p>The number of false positive predictions.</p>
+</dd>
+    <dt><code>falseNegatives</code> <span class="xref">T</span></dt>
+    <dd><p>The number of false negative predictions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1__ctor__0__0__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This constructor creates a new confusion matrix with the four basic counts
+that describe how well your model performed. The matrix is always 2x2 in size, representing
+the four possible outcomes of a binary classification.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Accuracy_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Accuracy*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Accuracy" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Accuracy">
+  Accuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the accuracy of the classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Accuracy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Accuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Accuracy is calculated as (True Positives + True Negatives) / (Total Predictions).
+</p>
+<p>
+<b>For Beginners:</b> Accuracy tells you what percentage of all predictions your model got right.
+It's calculated by adding up all the correct predictions (both true positives and true negatives)
+and dividing by the total number of predictions made. A higher accuracy means your model is performing better.
+However, accuracy alone can be misleading if your data is imbalanced (e.g., if most of your data belongs to one class).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_ClassCount_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.ClassCount*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_ClassCount" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.ClassCount">
+  ClassCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of classes represented in the confusion matrix.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ClassCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_ClassCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For multi-class classification, this property returns the dimension <code>N</code> of the NxN confusion matrix,
+where each class is represented by a row and a column.
+</p>
+<p>
+<b>For Beginners:</b> This tells you how many categories your model is trying to predict.
+For example, if you are classifying images of digits (0-9), <code>ClassCount</code> will be 10.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_F1Score_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.F1Score*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_F1Score" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.F1Score">
+  F1Score
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the F1 score of the classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T F1Score { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_F1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+F1 score is calculated as 2 * (Precision * Recall) / (Precision + Recall).
+</p>
+<p>
+<b>For Beginners:</b> The F1 score is a balance between precision and recall. It's useful when you need
+to find a middle ground between these two metrics. A high F1 score means that your model has both good
+precision and good recall. This is particularly useful when your data is imbalanced (when one class has
+many more examples than another). The F1 score ranges from 0 (worst) to 1 (best).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalseNegatives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.FalseNegatives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalseNegatives" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.FalseNegatives">
+  FalseNegatives
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of false negative predictions (incorrectly predicted negative cases).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FalseNegatives { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalseNegatives_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> False negatives are when your model incorrectly identified something as negative
+when it was actually positive. This is also called a &quot;Type II error&quot;. For example, if your model
+is detecting spam emails, a false negative is when it incorrectly lets a spam email into your inbox.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalsePositives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.FalsePositives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalsePositives" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.FalsePositives">
+  FalsePositives
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of false positive predictions (incorrectly predicted positive cases).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FalsePositives { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_FalsePositives_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> False positives are when your model incorrectly identified something as positive
+when it was actually negative. This is also called a &quot;Type I error&quot;. For example, if your model
+is detecting spam emails, a false positive is when it incorrectly marks a legitimate email as spam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Precision_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Precision*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Precision" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Precision">
+  Precision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L199"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the precision of the classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Precision { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Precision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Precision is calculated as True Positives / (True Positives + False Positives).
+</p>
+<p>
+<b>For Beginners:</b> Precision answers the question: "Of all the items my model predicted as positive,
+what percentage was actually positive?" It's a measure of how trustworthy the positive predictions are.
+High precision means that when your model says something is positive, it's usually correct.
+This is important in cases where false positives are costly (e.g., in medical diagnoses where a false
+positive might lead to unnecessary treatment).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Recall_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Recall*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Recall" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Recall">
+  Recall
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L223"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the recall (sensitivity) of the classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Recall { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Recall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Recall is calculated as True Positives / (True Positives + False Negatives).
+</p>
+<p>
+<b>For Beginners:</b> Recall (also called sensitivity) answers the question: "Of all the items that were
+actually positive, what percentage did my model correctly identify as positive?" It measures how good
+your model is at finding all the positive cases. High recall means your model rarely misses positive cases.
+This is important in situations where missing a positive case is costly (e.g., in cancer detection where
+missing a cancer diagnosis could be life-threatening).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Specificity_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Specificity*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Specificity" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Specificity">
+  Specificity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the specificity of the classification model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Specificity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Specificity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Specificity is calculated as True Negatives / (True Negatives + False Positives).
+</p>
+<p>
+<b>For Beginners:</b> Specificity answers the question: "Of all the items that were actually negative,
+what percentage did my model correctly identify as negative?" It measures how good your model is at
+avoiding false alarms. High specificity means your model rarely misclassifies negative cases as positive.
+This is important in situations where false positives are costly (e.g., in spam detection where marking
+legitimate emails as spam would be problematic).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TrueNegatives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.TrueNegatives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TrueNegatives" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.TrueNegatives">
+  TrueNegatives
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of true negative predictions (correctly predicted negative cases).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TrueNegatives { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TrueNegatives_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> True negatives are when your model correctly identified something as negative.
+For example, if your model is detecting spam emails, a true negative is when it correctly
+identifies a legitimate email as not spam.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TruePositives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.TruePositives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TruePositives" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.TruePositives">
+  TruePositives
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of true positive predictions (correctly predicted positive cases).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TruePositives { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_TruePositives_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> True positives are when your model correctly identified something as positive.
+For example, if your model is detecting spam emails, a true positive is when it correctly
+identifies a spam email as spam.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_CreateInstance_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.CreateInstance*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_CreateInstance_System_Int32_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.CreateInstance(System.Int32,System.Int32)">
+  CreateInstance(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new instance of a matrix with the specified dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override MatrixBase&lt;T&gt; CreateInstance(int rows, int cols)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>rows</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of rows in the new matrix.</p>
+</dd>
+    <dt><code>cols</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of columns in the new matrix.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.MatrixBase-1.html">MatrixBase</a>&lt;T&gt;</dt>
+    <dd><p>A new matrix instance with the specified dimensions.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_CreateInstance_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This is an internal method used for matrix operations that require creating new matrices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetAccuracy_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetAccuracy*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetAccuracy" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetAccuracy">
+  GetAccuracy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L467"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the overall accuracy across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetAccuracy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The accuracy as a value between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetAccuracy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Accuracy is calculated as the sum of diagonal elements (correct predictions) divided by the sum of all elements (total predictions).
+</p>
+<p>
+<b>For Beginners:</b> This tells you what percentage of all predictions your model got right, across all classes.
+An accuracy of 0.85 means your model was correct 85% of the time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetCohenKappa_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetCohenKappa*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetCohenKappa" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetCohenKappa">
+  GetCohenKappa()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L916"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Cohen's Kappa coefficient, measuring inter-rater agreement.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetCohenKappa()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Kappa value between -1 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetCohenKappa_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Cohen's Kappa is calculated as: (observed agreement - expected agreement) / (1 - expected agreement)
+</p>
+<p>
+<b>For Beginners:</b> Cohen's Kappa measures how much better your model is compared to random chance.
+It accounts for the possibility of agreement occurring by accident.
+<p>The Kappa value ranges from -1 to +1:</p>
+<ul>
+<li>1.0: Perfect agreement</li>
+<li>0.81-1.0: Almost perfect agreement</li>
+<li>0.61-0.80: Substantial agreement</li>
+<li>0.41-0.60: Moderate agreement</li>
+<li>0.21-0.40: Fair agreement</li>
+<li>0.0-0.20: Slight agreement</li>
+<li>Less than 0: Less than chance agreement</li>
+</ul>
+<p>Kappa is especially useful when you have imbalanced classes, as it adjusts for the expected
+agreement that would occur by chance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetF1Score_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetF1Score*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetF1Score_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetF1Score(System.Int32)">
+  GetF1Score(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L552"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the F1 score for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetF1Score(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The F1 score for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetF1Score_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+F1 score for class i is the harmonic mean of precision and recall: 2 * (Precision * Recall) / (Precision + Recall).
+</p>
+<p>
+<b>For Beginners:</b> This is a balanced measure that considers both precision and recall for this class.
+It's useful when you want a single metric that captures both how accurate and how complete your predictions are.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalseNegatives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetFalseNegatives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalseNegatives_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetFalseNegatives(System.Int32)">
+  GetFalseNegatives(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L394"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the false negatives for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetFalseNegatives(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The number of false negatives for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalseNegatives_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+False negatives for class i are the sum of column i excluding the diagonal element [i,i].
+These are cases that were actually class i but were incorrectly predicted as other classes.
+</p>
+<p>
+<b>For Beginners:</b> This tells you how many times your model missed this class by predicting something else.
+For example, GetFalseNegatives(5) tells you how many times the digit was actually 5, but your model predicted
+it as some other digit.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalsePositives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetFalsePositives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalsePositives_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetFalsePositives(System.Int32)">
+  GetFalsePositives(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the false positives for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetFalsePositives(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The number of false positives for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetFalsePositives_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+False positives for class i are the sum of row i excluding the diagonal element [i,i].
+These are cases incorrectly predicted as class i when they were actually other classes.
+</p>
+<p>
+<b>For Beginners:</b> This tells you how many times your model incorrectly identified something as this class
+when it was actually a different class. For example, GetFalsePositives(5) tells you how many times your model
+predicted digit 5 when it was actually a different digit.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetHammingLoss_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetHammingLoss*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetHammingLoss" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetHammingLoss">
+  GetHammingLoss()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L994"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Hamming Loss, measuring the fraction of incorrect predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetHammingLoss()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Hamming Loss value between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetHammingLoss_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Hamming Loss is calculated as: (number of incorrect predictions) / (total predictions)
+</p>
+<p>
+<b>For Beginners:</b> Hamming Loss is simply 1 minus accuracy. It measures the fraction of
+labels that are incorrectly predicted. While this seems redundant with accuracy, it's the
+standard metric in multi-label classification where each sample can have multiple labels.
+<p>The Hamming Loss ranges from 0 to 1:</p>
+<ul>
+<li>0: Perfect prediction (no errors)</li>
+<li>1: Complete failure (all predictions wrong)</li>
+</ul>
+<p>Lower values are better. A Hamming Loss of 0.1 means 10% of your predictions are wrong.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetJaccardScore*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetJaccardScore">
+  GetJaccardScore()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L1021"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Jaccard Score (Jaccard Index) for classification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetJaccardScore()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The macro-averaged Jaccard Score between 0 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Jaccard Score for each class is calculated as: TP / (TP + FP + FN)
+This returns the macro-averaged Jaccard Score across all classes.
+</p>
+<p>
+<b>For Beginners:</b> The Jaccard Score (also known as Jaccard Index or Intersection over Union)
+measures the similarity between predicted and actual labels. It's the size of the intersection
+divided by the size of the union of the predicted and actual label sets.
+<p>The Jaccard Score ranges from 0 to 1:</p>
+<ul>
+<li>1: Perfect overlap (prediction exactly matches actual)</li>
+<li>0: No overlap at all</li>
+</ul>
+<p>Unlike F1 Score, Jaccard Score doesn't double-count true positives, making it a more
+conservative measure. It's commonly used in image segmentation and multi-label classification.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetJaccardScore*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetJaccardScore(System.Int32)">
+  GetJaccardScore(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L1065"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Jaccard Score for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetJaccardScore(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The Jaccard Score for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetJaccardScore_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Jaccard Score for class i is calculated as: TP / (TP + FP + FN)
+</p>
+<p>
+<b>For Beginners:</b> This calculates the Jaccard Score for a single class. It measures
+how well your model predicts this specific class by comparing the overlap between
+predicted and actual instances of this class.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroF1Score_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroF1Score*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroF1Score" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroF1Score">
+  GetMacroF1Score()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L626"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the macro-averaged F1 score across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMacroF1Score()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The macro-averaged F1 score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroF1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Macro-average treats all classes equally by computing the metric independently for each class
+and then taking the average. This gives equal weight to each class regardless of support.
+</p>
+<p>
+<b>For Beginners:</b> This is the average F1 score across all classes, treating each class equally.
+It provides a balanced view of model performance across all classes.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroPrecision_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroPrecision*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroPrecision" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroPrecision">
+  GetMacroPrecision()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the macro-averaged precision across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMacroPrecision()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The macro-averaged precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroPrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Macro-average treats all classes equally by computing the metric independently for each class
+and then taking the average. This gives equal weight to each class regardless of support.
+</p>
+<p>
+<b>For Beginners:</b> This is the average precision across all classes, treating each class equally.
+It's useful when you care about performance on all classes equally, even rare ones.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroRecall_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroRecall*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroRecall" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMacroRecall">
+  GetMacroRecall()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L601"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the macro-averaged recall across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMacroRecall()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The macro-averaged recall.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMacroRecall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Macro-average treats all classes equally by computing the metric independently for each class
+and then taking the average. This gives equal weight to each class regardless of support.
+</p>
+<p>
+<b>For Beginners:</b> This is the average recall across all classes, treating each class equally.
+It tells you how good your model is at finding instances across all classes on average.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMatthewsCorrelationCoefficient_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMatthewsCorrelationCoefficient*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMatthewsCorrelationCoefficient" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMatthewsCorrelationCoefficient">
+  GetMatthewsCorrelationCoefficient()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L827"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the Matthews Correlation Coefficient (MCC) for classification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMatthewsCorrelationCoefficient()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The MCC value between -1 and 1.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMatthewsCorrelationCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+For binary classification: MCC = (TP * TN - FP * FN) / sqrt((TP+FP)(TP+FN)(TN+FP)(TN+FN))
+</p>
+<p>
+For multi-class classification, this uses the generalized formula that operates directly
+on the confusion matrix: MCC = (c * s - sum(pk * tk)) / sqrt((s^2 - sum(pk^2)) * (s^2 - sum(tk^2)))
+where c is the trace, s is total sum, pk is row sum, and tk is column sum.
+</p>
+<p>
+<b>For Beginners:</b> The Matthews Correlation Coefficient is considered one of the best metrics
+for classification, especially when classes are imbalanced. Unlike accuracy, it takes into
+account all values in the confusion matrix.
+<p>The MCC ranges from -1 to +1:</p>
+<ul>
+<li>+1: Perfect prediction (your model is always correct)</li>
+<li>0: No better than random prediction</li>
+<li>-1: Total disagreement (your model is always wrong)</li>
+</ul>
+<p>MCC is particularly useful because it only produces a high score if your model performs well
+on all classes.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroF1Score_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroF1Score*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroF1Score" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroF1Score">
+  GetMicroF1Score()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L689"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the micro-averaged F1 score across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMicroF1Score()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The micro-averaged F1 score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroF1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Micro-average aggregates the contributions of all classes to compute the average metric.
+For F1 score, this equals accuracy in multi-class classification.
+</p>
+<p>
+<b>For Beginners:</b> This calculates F1 score by considering all predictions together, giving more
+weight to classes with more samples. For multi-class problems, this equals overall accuracy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroPrecision_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroPrecision*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroPrecision" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroPrecision">
+  GetMicroPrecision()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L651"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the micro-averaged precision across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMicroPrecision()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The micro-averaged precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroPrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Micro-average aggregates the contributions of all classes to compute the average metric.
+For precision, this equals accuracy in multi-class classification.
+</p>
+<p>
+<b>For Beginners:</b> This calculates precision by considering all predictions together, giving more
+weight to classes with more samples. For multi-class problems, this equals overall accuracy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroRecall_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroRecall*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroRecall" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetMicroRecall">
+  GetMicroRecall()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L670"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the micro-averaged recall across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetMicroRecall()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The micro-averaged recall.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetMicroRecall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Micro-average aggregates the contributions of all classes to compute the average metric.
+For recall, this equals accuracy in multi-class classification.
+</p>
+<p>
+<b>For Beginners:</b> This calculates recall by considering all predictions together, giving more
+weight to classes with more samples. For multi-class problems, this equals overall accuracy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetPrecision_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetPrecision*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetPrecision_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetPrecision(System.Int32)">
+  GetPrecision(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L503"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the precision for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetPrecision(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The precision for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetPrecision_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Precision for class i is calculated as TP / (TP + FP).
+It answers: "Of all predictions for this class, what percentage was correct?"
+</p>
+<p>
+<b>For Beginners:</b> This tells you how trustworthy your model's predictions are for this specific class.
+High precision means when your model says something is class i, it's usually right.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetRecall_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetRecall*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetRecall_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetRecall(System.Int32)">
+  GetRecall(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L528"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the recall for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetRecall(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The recall for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetRecall_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Recall for class i is calculated as TP / (TP + FN).
+It answers: "Of all actual cases of this class, what percentage did we correctly identify?"
+</p>
+<p>
+<b>For Beginners:</b> This tells you how good your model is at finding all instances of this class.
+High recall means your model rarely misses cases of this class.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTrueNegatives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetTrueNegatives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTrueNegatives_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetTrueNegatives(System.Int32)">
+  GetTrueNegatives(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L431"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the true negatives for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetTrueNegatives(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The number of true negatives for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTrueNegatives_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+True negatives for class i are all predictions where neither predicted nor actual was class i.
+This is the sum of all cells excluding row i and column i.
+</p>
+<p>
+<b>For Beginners:</b> This tells you how many times your model correctly identified that something was NOT
+this class. For example, GetTrueNegatives(5) tells you how many times your model correctly determined that
+a digit was NOT 5 (it was some other digit, and the model predicted correctly).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTruePositives_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetTruePositives*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTruePositives_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetTruePositives(System.Int32)">
+  GetTruePositives(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the true positives for a specific class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetTruePositives(int classIndex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>classIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The class index (0-based).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The number of true positives for the specified class.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetTruePositives_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+True positives for class i are the diagonal element [i,i] - cases correctly predicted as class i.
+</p>
+<p>
+<b>For Beginners:</b> This tells you how many times your model correctly identified this specific class.
+For example, if you're classifying digits 0-9, GetTruePositives(5) tells you how many times your model
+correctly identified the digit 5 as 5.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class index is out of range.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedF1Score_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedF1Score*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedF1Score" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedF1Score">
+  GetWeightedF1Score()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L779"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the weighted-averaged F1 score across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetWeightedF1Score()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The weighted-averaged F1 score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedF1Score_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Weighted-average computes the metric for each class and averages them, weighted by the number of
+true instances for each class (support). This accounts for class imbalance.
+</p>
+<p>
+<b>For Beginners:</b> This is like macro-average, but gives more importance to classes that appear
+more frequently in your data. It provides a balanced measure that accounts for class imbalance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedPrecision_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedPrecision*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedPrecision" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedPrecision">
+  GetWeightedPrecision()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L709"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the weighted-averaged precision across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetWeightedPrecision()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The weighted-averaged precision.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedPrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Weighted-average computes the metric for each class and averages them, weighted by the number of
+true instances for each class (support). This accounts for class imbalance.
+</p>
+<p>
+<b>For Beginners:</b> This is like macro-average, but gives more importance to classes that appear
+more frequently in your data. It's useful when you have imbalanced classes but still want to see
+per-class performance weighted by how common each class is.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedRecall_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedRecall*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedRecall" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.GetWeightedRecall">
+  GetWeightedRecall()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L744"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the weighted-averaged recall across all classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T GetWeightedRecall()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The weighted-averaged recall.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_GetWeightedRecall_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Weighted-average computes the metric for each class and averages them, weighted by the number of
+true instances for each class (support). This accounts for class imbalance.
+</p>
+<p>
+<b>For Beginners:</b> This is like macro-average, but gives more importance to classes that appear
+more frequently in your data. For recall, this often equals overall accuracy.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Increment_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Increment*"></a>
+
+  <h3 id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Increment_System_Int32_System_Int32_" data-uid="AiDotNet.LinearAlgebra.ConfusionMatrix`1.Increment(System.Int32,System.Int32)">
+  Increment(int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L296"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Increments the count for a specific prediction-actual class pair.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Increment(int predictedClass, int actualClass)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predictedClass</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The predicted class index (0-based).</p>
+</dd>
+    <dt><code>actualClass</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The actual class index (0-based).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_LinearAlgebra_ConfusionMatrix_1_Increment_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method is used to build up your confusion matrix as you evaluate predictions.
+Each time your model makes a prediction, you call this method with what it predicted and what the true answer was.
+For example, if your model predicted class 2 but the actual class was 1, you call Increment(2, 1).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when class indices are out of range.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LinearAlgebra/ConfusionMatrix.cs/#L43" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

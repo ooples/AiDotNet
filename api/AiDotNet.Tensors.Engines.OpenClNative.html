@@ -1,0 +1,1848 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class OpenClNative | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class OpenClNative | AiDotNet Documentation ">
+      
+      <meta name="description" content="OpenCL P/Invoke bindings for cross-platform GPU acceleration. Supports AMD, Intel, and NVIDIA GPUs through the OpenCL API.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_Engines_OpenClNative.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.Engines.OpenClNative%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.Engines.OpenClNative">
+
+
+
+  <h1 id="AiDotNet_Tensors_Engines_OpenClNative" data-uid="AiDotNet.Tensors.Engines.OpenClNative" class="text-break">
+Class OpenClNative  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/OpenClNative.cs/#L26"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.Engines.html">Engines</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>OpenCL P/Invoke bindings for cross-platform GPU acceleration.
+Supports AMD, Intel, and NVIDIA GPUs through the OpenCL API.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static class OpenClNative</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">OpenClNative</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Tensors_Engines_OpenClNative_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>Performance Targets:</b></p>
+<ul><li>AMD RX 7900 XTX: ~25,000 GFLOPS (FP32)</li><li>Intel Arc A770: ~18,000 GFLOPS (FP32)</li><li>NVIDIA RTX 4090: ~30,000 GFLOPS (OpenCL, ~82,000 via CUDA)</li></ul>
+<p><b>Why OpenCL:</b></p>
+<ul><li>Cross-vendor: Works on AMD, Intel, NVIDIA, Apple, ARM Mali, Qualcomm Adreno</li><li>No vendor lock-in: Not tied to NVIDIA's ecosystem</li><li>Mature ecosystem: CLBlast, clBLAS provide cuBLAS-like performance</li></ul>
+</div>
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clBuildProgram_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clBuildProgram*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clBuildProgram_System_IntPtr_System_UInt32_System_IntPtr___System_String_System_IntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clBuildProgram(System.IntPtr,System.UInt32,System.IntPtr[],System.String,System.IntPtr,System.IntPtr)">
+  clBuildProgram(nint, uint, nint[], string, nint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Builds (compiles and links) a program.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clBuildProgram(nint program, uint numDevices, nint[] deviceList, string options, nint pfnNotify, nint userData)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>program</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>numDevices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>deviceList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>options</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>pfnNotify</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>userData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateBuffer_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateBuffer_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClMemFlags_System_UIntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateBuffer(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClMemFlags,System.UIntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateBuffer(nint, ClMemFlags, nuint, nint, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a buffer object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateBuffer(nint context, OpenClNative.ClMemFlags flags, nuint size, nint hostPtr, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>flags</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClMemFlags.html">ClMemFlags</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>hostPtr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateCommandQueue_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateCommandQueue*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateCommandQueue_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClCommandQueueProperties_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateCommandQueue(System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClCommandQueueProperties,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateCommandQueue(nint, nint, ClCommandQueueProperties, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a command queue (OpenCL 1.x, deprecated in 2.0).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateCommandQueue(nint context, nint device, OpenClNative.ClCommandQueueProperties properties, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>properties</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClCommandQueueProperties.html">ClCommandQueueProperties</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateCommandQueueWithProperties_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateCommandQueueWithProperties*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateCommandQueueWithProperties_System_IntPtr_System_IntPtr_System_UInt64___AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateCommandQueueWithProperties(System.IntPtr,System.IntPtr,System.UInt64[],AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateCommandQueueWithProperties(nint, nint, ulong[], out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a command queue (OpenCL 2.0+).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateCommandQueueWithProperties(nint context, nint device, ulong[] properties, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>properties</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a>[]</dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateContext_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateContext*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateContext_System_IntPtr___System_UInt32_System_IntPtr___System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateContext(System.IntPtr[],System.UInt32,System.IntPtr[],System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateContext(nint[], uint, nint[], nint, nint, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an OpenCL context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateContext(nint[] properties, uint numDevices, nint[] devices, nint pfnNotify, nint userData, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>properties</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>numDevices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>devices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>pfnNotify</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>userData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateContextFromType_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateContextFromType*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateContextFromType_System_IntPtr___AiDotNet_Tensors_Engines_OpenClNative_ClDeviceType_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateContextFromType(System.IntPtr[],AiDotNet.Tensors.Engines.OpenClNative.ClDeviceType,System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateContextFromType(nint[], ClDeviceType, nint, nint, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an OpenCL context from a device type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateContextFromType(nint[] properties, OpenClNative.ClDeviceType deviceType, nint pfnNotify, nint userData, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>properties</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>deviceType</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClDeviceType.html">ClDeviceType</a></dt>
+    <dd></dd>
+    <dt><code>pfnNotify</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>userData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateKernel_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateKernel*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateKernel_System_IntPtr_System_String_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateKernel(System.IntPtr,System.String,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateKernel(nint, string, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a kernel object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateKernel(nint program, string kernelName, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>program</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>kernelName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateKernelsInProgram_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateKernelsInProgram*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateKernelsInProgram_System_IntPtr_System_UInt32_System_IntPtr___System_UInt32__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateKernelsInProgram(System.IntPtr,System.UInt32,System.IntPtr[],System.UInt32@)">
+  clCreateKernelsInProgram(nint, uint, nint[], out uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates kernel objects for all kernels in a program.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clCreateKernelsInProgram(nint program, uint numKernels, nint[] kernels, out uint numKernelsRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>program</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>numKernels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>kernels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>numKernelsRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithBinary_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithBinary*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithBinary_System_IntPtr_System_UInt32_System_IntPtr___System_UIntPtr___System_IntPtr___System_Int32___AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithBinary(System.IntPtr,System.UInt32,System.IntPtr[],System.UIntPtr[],System.IntPtr[],System.Int32[],AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateProgramWithBinary(nint, uint, nint[], nuint[], nint[], int[], out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a program from binary.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateProgramWithBinary(nint context, uint numDevices, nint[] deviceList, nuint[] lengths, nint[] binaries, int[] binaryStatus, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>numDevices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>deviceList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>lengths</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a>[]</dt>
+    <dd></dd>
+    <dt><code>binaries</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>binaryStatus</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithIL_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithIL*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithIL_System_IntPtr_System_Byte___System_UIntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithIL(System.IntPtr,System.Byte[],System.UIntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateProgramWithIL(nint, byte[], nuint, out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a program from IL (SPIR-V).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateProgramWithIL(nint context, byte[] il, nuint length, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>il</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithSource_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithSource*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clCreateProgramWithSource_System_IntPtr_System_UInt32_System_String___System_UIntPtr___AiDotNet_Tensors_Engines_OpenClNative_ClError__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clCreateProgramWithSource(System.IntPtr,System.UInt32,System.String[],System.UIntPtr[],AiDotNet.Tensors.Engines.OpenClNative.ClError@)">
+  clCreateProgramWithSource(nint, uint, string[], nuint[], out ClError)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a program object from source code.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern nint clCreateProgramWithSource(nint context, uint count, string[] strings, nuint[] lengths, out OpenClNative.ClError errcode)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>strings</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+    <dt><code>lengths</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a>[]</dt>
+    <dd></dd>
+    <dt><code>errcode</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueCopyBuffer_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueCopyBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueCopyBuffer_System_IntPtr_System_IntPtr_System_IntPtr_System_UIntPtr_System_UIntPtr_System_UIntPtr_System_UInt32_System_IntPtr___System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueCopyBuffer(System.IntPtr,System.IntPtr,System.IntPtr,System.UIntPtr,System.UIntPtr,System.UIntPtr,System.UInt32,System.IntPtr[],System.IntPtr@)">
+  clEnqueueCopyBuffer(nint, nint, nint, nuint, nuint, nuint, uint, nint[], out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enqueues a command to copy from one buffer to another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clEnqueueCopyBuffer(nint commandQueue, nint srcBuffer, nint dstBuffer, nuint srcOffset, nuint dstOffset, nuint size, uint numEventsInWaitList, nint[] eventWaitList, out nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>srcBuffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>dstBuffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>srcOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>dstOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>numEventsInWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueFillBuffer_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueFillBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueFillBuffer_System_IntPtr_System_IntPtr_System_IntPtr_System_UIntPtr_System_UIntPtr_System_UIntPtr_System_UInt32_System_IntPtr___System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueFillBuffer(System.IntPtr,System.IntPtr,System.IntPtr,System.UIntPtr,System.UIntPtr,System.UIntPtr,System.UInt32,System.IntPtr[],System.IntPtr@)">
+  clEnqueueFillBuffer(nint, nint, nint, nuint, nuint, nuint, uint, nint[], out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enqueues a command to fill a buffer with a pattern.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clEnqueueFillBuffer(nint commandQueue, nint buffer, nint pattern, nuint patternSize, nuint offset, nuint size, uint numEventsInWaitList, nint[] eventWaitList, out nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>pattern</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>patternSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>numEventsInWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueNDRangeKernel_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueNDRangeKernel*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueNDRangeKernel_System_IntPtr_System_IntPtr_System_UInt32_System_UIntPtr___System_UIntPtr___System_UIntPtr___System_UInt32_System_IntPtr___System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueNDRangeKernel(System.IntPtr,System.IntPtr,System.UInt32,System.UIntPtr[],System.UIntPtr[],System.UIntPtr[],System.UInt32,System.IntPtr[],System.IntPtr@)">
+  clEnqueueNDRangeKernel(nint, nint, uint, nuint[], nuint[], nuint[], uint, nint[], out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enqueues a command to execute a kernel on a device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clEnqueueNDRangeKernel(nint commandQueue, nint kernel, uint workDim, nuint[] globalWorkOffset, nuint[] globalWorkSize, nuint[] localWorkSize, uint numEventsInWaitList, nint[] eventWaitList, out nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>workDim</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>globalWorkOffset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a>[]</dt>
+    <dd></dd>
+    <dt><code>globalWorkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a>[]</dt>
+    <dd></dd>
+    <dt><code>localWorkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a>[]</dt>
+    <dd></dd>
+    <dt><code>numEventsInWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueReadBuffer_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueReadBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueReadBuffer_System_IntPtr_System_IntPtr_System_UInt32_System_UIntPtr_System_UIntPtr_System_IntPtr_System_UInt32_System_IntPtr___System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueReadBuffer(System.IntPtr,System.IntPtr,System.UInt32,System.UIntPtr,System.UIntPtr,System.IntPtr,System.UInt32,System.IntPtr[],System.IntPtr@)">
+  clEnqueueReadBuffer(nint, nint, uint, nuint, nuint, nint, uint, nint[], out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enqueues a command to read from a buffer to host memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clEnqueueReadBuffer(nint commandQueue, nint buffer, uint blockingRead, nuint offset, nuint size, nint ptr, uint numEventsInWaitList, nint[] eventWaitList, out nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>blockingRead</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>ptr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>numEventsInWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueWriteBuffer_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueWriteBuffer*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clEnqueueWriteBuffer_System_IntPtr_System_IntPtr_System_UInt32_System_UIntPtr_System_UIntPtr_System_IntPtr_System_UInt32_System_IntPtr___System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clEnqueueWriteBuffer(System.IntPtr,System.IntPtr,System.UInt32,System.UIntPtr,System.UIntPtr,System.IntPtr,System.UInt32,System.IntPtr[],System.IntPtr@)">
+  clEnqueueWriteBuffer(nint, nint, uint, nuint, nuint, nint, uint, nint[], out nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Enqueues a command to write from host memory to a buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clEnqueueWriteBuffer(nint commandQueue, nint buffer, uint blockingWrite, nuint offset, nuint size, nint ptr, uint numEventsInWaitList, nint[] eventWaitList, out nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>buffer</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>blockingWrite</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>offset</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>size</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>ptr</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>numEventsInWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventWaitList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clFinish_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clFinish*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clFinish_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clFinish(System.IntPtr)">
+  clFinish(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Blocks until all commands in the queue complete.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clFinish(nint commandQueue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clFlush_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clFlush*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clFlush_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clFlush(System.IntPtr)">
+  clFlush(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Issues all queued commands to the device.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clFlush(nint commandQueue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceIDs_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceIDs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceIDs_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClDeviceType_System_UInt32_System_IntPtr___System_UInt32__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceIDs(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClDeviceType,System.UInt32,System.IntPtr[],System.UInt32@)">
+  clGetDeviceIDs(nint, ClDeviceType, uint, nint[], out uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets available devices for a platform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetDeviceIDs(nint platform, OpenClNative.ClDeviceType deviceType, uint numEntries, nint[] devices, out uint numDevices)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>platform</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>deviceType</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClDeviceType.html">ClDeviceType</a></dt>
+    <dd></dd>
+    <dt><code>numEntries</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>devices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>numDevices</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClDeviceInfo_System_UIntPtr_System_Byte___System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo,System.UIntPtr,System.Byte[],System.UIntPtr@)">
+  clGetDeviceInfo(nint, ClDeviceInfo, nuint, byte[], out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets device info.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetDeviceInfo(nint device, OpenClNative.ClDeviceInfo paramName, nuint paramValueSize, byte[] paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo.html">ClDeviceInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClDeviceInfo_System_UIntPtr_System_UInt32__System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo,System.UIntPtr,System.UInt32@,System.UIntPtr@)">
+  clGetDeviceInfo(nint, ClDeviceInfo, nuint, out uint, out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets device info (uint value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetDeviceInfo(nint device, OpenClNative.ClDeviceInfo paramName, nuint paramValueSize, out uint paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo.html">ClDeviceInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetDeviceInfo_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClDeviceInfo_System_UIntPtr_System_UInt64__System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetDeviceInfo(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo,System.UIntPtr,System.UInt64@,System.UIntPtr@)">
+  clGetDeviceInfo(nint, ClDeviceInfo, nuint, out ulong, out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets device info (native types).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetDeviceInfo(nint device, OpenClNative.ClDeviceInfo paramName, nuint paramValueSize, out ulong paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClDeviceInfo.html">ClDeviceInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint64">ulong</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetKernelWorkGroupInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetKernelWorkGroupInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetKernelWorkGroupInfo_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClKernelWorkGroupInfo_System_UIntPtr_System_UIntPtr__System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetKernelWorkGroupInfo(System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClKernelWorkGroupInfo,System.UIntPtr,System.UIntPtr@,System.UIntPtr@)">
+  clGetKernelWorkGroupInfo(nint, nint, ClKernelWorkGroupInfo, nuint, out nuint, out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets kernel work group info.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetKernelWorkGroupInfo(nint kernel, nint device, OpenClNative.ClKernelWorkGroupInfo paramName, nuint paramValueSize, out nuint paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClKernelWorkGroupInfo.html">ClKernelWorkGroupInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetPlatformIDs_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetPlatformIDs*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetPlatformIDs_System_UInt32_System_IntPtr___System_UInt32__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetPlatformIDs(System.UInt32,System.IntPtr[],System.UInt32@)">
+  clGetPlatformIDs(uint, nint[], out uint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets available OpenCL platforms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetPlatformIDs(uint numEntries, nint[] platforms, out uint numPlatforms)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numEntries</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>platforms</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+    <dt><code>numPlatforms</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetPlatformInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetPlatformInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetPlatformInfo_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClPlatformInfo_System_UIntPtr_System_Byte___System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetPlatformInfo(System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClPlatformInfo,System.UIntPtr,System.Byte[],System.UIntPtr@)">
+  clGetPlatformInfo(nint, ClPlatformInfo, nuint, byte[], out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets platform info.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetPlatformInfo(nint platform, OpenClNative.ClPlatformInfo paramName, nuint paramValueSize, byte[] paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>platform</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClPlatformInfo.html">ClPlatformInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clGetProgramBuildInfo_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetProgramBuildInfo*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clGetProgramBuildInfo_System_IntPtr_System_IntPtr_AiDotNet_Tensors_Engines_OpenClNative_ClProgramBuildInfo_System_UIntPtr_System_Byte___System_UIntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clGetProgramBuildInfo(System.IntPtr,System.IntPtr,AiDotNet.Tensors.Engines.OpenClNative.ClProgramBuildInfo,System.UIntPtr,System.Byte[],System.UIntPtr@)">
+  clGetProgramBuildInfo(nint, nint, ClProgramBuildInfo, nuint, byte[], out nuint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets program build info.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clGetProgramBuildInfo(nint program, nint device, OpenClNative.ClProgramBuildInfo paramName, nuint paramValueSize, byte[] paramValue, out nuint paramValueSizeRet)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>program</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>device</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>paramName</code> <a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClProgramBuildInfo.html">ClProgramBuildInfo</a></dt>
+    <dd></dd>
+    <dt><code>paramValueSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>paramValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd></dd>
+    <dt><code>paramValueSizeRet</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseCommandQueue_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseCommandQueue*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseCommandQueue_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseCommandQueue(System.IntPtr)">
+  clReleaseCommandQueue(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases a command queue.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseCommandQueue(nint commandQueue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>commandQueue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseContext_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseContext*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseContext_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseContext(System.IntPtr)">
+  clReleaseContext(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases an OpenCL context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseContext(nint context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseEvent_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseEvent*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseEvent_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseEvent(System.IntPtr)">
+  clReleaseEvent(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases an event object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseEvent(nint evt)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>evt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseKernel_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseKernel*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseKernel_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseKernel(System.IntPtr)">
+  clReleaseKernel(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases a kernel object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseKernel(nint kernel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseMemObject_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseMemObject*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseMemObject_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseMemObject(System.IntPtr)">
+  clReleaseMemObject(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases a memory object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseMemObject(nint memobj)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>memobj</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseProgram_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseProgram*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clReleaseProgram_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clReleaseProgram(System.IntPtr)">
+  clReleaseProgram(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Releases a program object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clReleaseProgram(nint program)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>program</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clRetainContext_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clRetainContext*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clRetainContext_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clRetainContext(System.IntPtr)">
+  clRetainContext(nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Retains (increments reference count) an OpenCL context.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clRetainContext(nint context)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>context</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArg_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArg*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArg_System_IntPtr_System_UInt32_System_UIntPtr_System_IntPtr_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArg(System.IntPtr,System.UInt32,System.UIntPtr,System.IntPtr)">
+  clSetKernelArg(nint, uint, nuint, nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a kernel argument.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clSetKernelArg(nint kernel, uint argIndex, nuint argSize, nint argValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>argIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>argSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>argValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArg_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArg*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArg_System_IntPtr_System_UInt32_System_UIntPtr_System_IntPtr__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArg(System.IntPtr,System.UInt32,System.UIntPtr,System.IntPtr@)">
+  clSetKernelArg(nint, uint, nuint, ref nint)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a kernel argument (memory object).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clSetKernelArg(nint kernel, uint argIndex, nuint argSize, ref nint argValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>argIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>argSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>argValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArgFloat_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArgFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArgFloat_System_IntPtr_System_UInt32_System_UIntPtr_System_Single__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArgFloat(System.IntPtr,System.UInt32,System.UIntPtr,System.Single@)">
+  clSetKernelArgFloat(nint, uint, nuint, ref float)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a kernel argument (float value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clSetKernelArgFloat(nint kernel, uint argIndex, nuint argSize, ref float argValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>argIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>argSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>argValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArgInt_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArgInt*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clSetKernelArgInt_System_IntPtr_System_UInt32_System_UIntPtr_System_Int32__" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clSetKernelArgInt(System.IntPtr,System.UInt32,System.UIntPtr,System.Int32@)">
+  clSetKernelArgInt(nint, uint, nuint, ref int)
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets a kernel argument (int value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clSetKernelArgInt(nint kernel, uint argIndex, nuint argSize, ref int argValue)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>kernel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a></dt>
+    <dd></dd>
+    <dt><code>argIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>argSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uintptr">nuint</a></dt>
+    <dd></dd>
+    <dt><code>argValue</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_Engines_OpenClNative_clWaitForEvents_" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clWaitForEvents*"></a>
+
+  <h3 id="AiDotNet_Tensors_Engines_OpenClNative_clWaitForEvents_System_UInt32_System_IntPtr___" data-uid="AiDotNet.Tensors.Engines.OpenClNative.clWaitForEvents(System.UInt32,System.IntPtr[])">
+  clWaitForEvents(uint, nint[])
+  
+  </h3>
+
+  <div class="markdown level1 summary"><p>Waits for a list of events to complete.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static extern OpenClNative.ClError clWaitForEvents(uint numEvents, nint[] eventList)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numEvents</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.uint32">uint</a></dt>
+    <dd></dd>
+    <dt><code>eventList</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.intptr">nint</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.html">OpenClNative</a>.<a class="xref" href="AiDotNet.Tensors.Engines.OpenClNative.ClError.html">ClError</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/Engines/OpenClNative.cs/#L26" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

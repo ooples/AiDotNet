@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for the Simulated Annealing optimization algorithm, a probabilistic technique for approximating the global optimum of a given function.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_SimulatedAnnealingOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.SimulatedAnnealingOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3" class="text-break">
+Class SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for the Simulated Annealing optimization algorithm, a probabilistic technique
+for approximating the global optimum of a given function.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt; : OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">SimulatedAnnealingOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Simulated Annealing is a probabilistic optimization algorithm inspired by the annealing process in metallurgy, 
+where metals are heated and then slowly cooled to reduce defects. In optimization, it uses a similar approach 
+to find the global minimum of a function by occasionally accepting worse solutions to escape local minima. 
+The algorithm starts with a high "temperature" that allows for large random moves in the solution space, 
+including accepting worse solutions with high probability. As the temperature decreases according to a cooling 
+schedule, the algorithm becomes more selective, gradually focusing on promising regions of the solution space. 
+This class provides configuration options for controlling the annealing process, including temperature parameters, 
+iteration limits, and neighborhood generation settings. Simulated Annealing is particularly useful for complex 
+optimization problems with many local optima where deterministic methods might get trapped.
+</p>
+<p><b>For Beginners:</b> Simulated Annealing is an optimization technique inspired by metallurgy.
+<p>When metalworkers want to remove defects from metals, they:</p>
+<ul>
+<li>Heat the metal to a high temperature (atoms move freely)</li>
+<li>Slowly cool it down (atoms gradually settle into a low-energy state)</li>
+</ul>
+<p>Simulated Annealing works similarly to find the best solution to a problem:</p>
+<ul>
+<li>It starts with a high &quot;temperature&quot; where it makes big, sometimes random changes</li>
+<li>It gradually &quot;cools down,&quot; making smaller, more careful adjustments</li>
+<li>This approach helps it avoid getting stuck in mediocre solutions</li>
+</ul>
+<p>The key insight is that sometimes accepting a worse solution temporarily
+helps you find a better solution in the long run:</p>
+<ul>
+<li>At high temperatures, it frequently accepts worse solutions to explore widely</li>
+<li>At low temperatures, it rarely accepts worse solutions, focusing on refinement</li>
+</ul>
+<p>This is particularly useful for complex problems with many possible solutions,
+like route optimization, scheduling, or parameter tuning.</p>
+<p>This class lets you configure exactly how the algorithm heats, cools, and explores
+the solution space.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_CoolingRate_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.CoolingRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_CoolingRate" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.CoolingRate">
+  CoolingRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the cooling rate for the temperature reduction schedule.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CoolingRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A double value between 0 and 1, defaulting to 0.995.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_CoolingRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The cooling rate determines how quickly the temperature decreases during the annealing process. After each 
+iteration or set of iterations, the current temperature is multiplied by this rate. A value closer to 1 
+results in slower cooling, allowing more exploration but requiring more iterations to converge. A value 
+further from 1 results in faster cooling, potentially converging more quickly but with a higher risk of 
+getting trapped in local optima. The default value of 0.995 provides a relatively slow cooling schedule 
+that works well for many problems. For complex problems requiring extensive exploration, a value even 
+closer to 1 (e.g., 0.999) might be appropriate. For simpler problems or when computational resources are 
+limited, a lower value (e.g., 0.99 or 0.98) might be used to accelerate convergence.
+</p>
+<p><b>For Beginners:</b> This setting controls how quickly the system "cools down" and becomes less random.
+<p>The cooling rate determines:</p>
+<ul>
+<li>How quickly the algorithm transitions from exploration to exploitation</li>
+<li>How many iterations it will take to reach the minimum temperature</li>
+</ul>
+<p>The default value of 0.995 means:</p>
+<ul>
+<li>After each iteration, the temperature is multiplied by 0.995</li>
+<li>This creates a gradual cooling effect (temperature after n iterations = InitialTemperature × 0.995n)</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Values closer to 1.0 (e.g., 0.999): Very slow cooling, more thorough exploration</li>
+<li>Values further from 1.0 (e.g., 0.98): Faster cooling, quicker convergence but might miss optimal solutions</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (closer to 1, e.g., 0.999) for complex problems that need thorough exploration</li>
+<li>Decrease it (further from 1, e.g., 0.99) when you need faster results and have simpler problems</li>
+</ul>
+<p>For example, with InitialTemperature=100 and CoolingRate=0.995:</p>
+<ul>
+<li>After 100 iterations: Temperature ˜ 60.6</li>
+<li>After 500 iterations: Temperature ˜ 8.2</li>
+<li>After 1000 iterations: Temperature ˜ 0.7</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_InitialTemperature_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.InitialTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_InitialTemperature" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.InitialTemperature">
+  InitialTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial temperature of the annealing process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 100.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_InitialTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The initial temperature determines how likely the algorithm is to accept worse solutions at the beginning 
+of the optimization process. A higher initial temperature increases the probability of accepting worse 
+solutions, promoting more exploration of the solution space. This is crucial for avoiding getting trapped 
+in local optima early in the search. The default value of 100.0 provides a good balance between exploration 
+and exploitation for many problems. For complex problems with many local optima, a higher initial temperature 
+might be appropriate to ensure sufficient exploration. For simpler problems or when a good initial solution 
+is provided, a lower initial temperature might be sufficient. The appropriate value depends on the scale of 
+the objective function and the complexity of the optimization landscape.
+</p>
+<p><b>For Beginners:</b> This setting controls how "hot" the system starts - how willing it is to make random moves initially.
+<p>The temperature in Simulated Annealing determines:</p>
+<ul>
+<li>How likely the algorithm is to accept a worse solution temporarily</li>
+<li>Higher temperature = more randomness and exploration</li>
+</ul>
+<p>The default value of 100.0 means:</p>
+<ul>
+<li>The algorithm starts in a highly exploratory state</li>
+<li>It will frequently accept worse solutions to avoid getting trapped in local optima</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>High temperature (e.g., 1000): Very random, like shaking a box of puzzle pieces vigorously</li>
+<li>Medium temperature (e.g., 100): Moderately random, allowing significant exploration</li>
+<li>Low temperature (e.g., 1): More focused, making mostly improvements with occasional random moves</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it (e.g., to 500 or 1000) for complex problems with many local optima</li>
+<li>Decrease it (e.g., to 10 or 50) when you have a good starting point or simpler problems</li>
+</ul>
+<p>The ideal value depends on your specific problem and objective function scale.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterations_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterations" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations for the annealing process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 10000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property overrides the MaxIterations property inherited from the base class to provide a more 
+appropriate default value for Simulated Annealing. It specifies the maximum number of iterations allowed 
+before the algorithm terminates, regardless of whether other stopping criteria (such as reaching the 
+minimum temperature) have been met. The default value of 10000 is sufficient for many problems of moderate 
+complexity. For more complex problems with large solution spaces, a higher value might be needed to ensure 
+adequate exploration. For simpler problems or when computational resources are limited, a lower value might 
+be appropriate. This parameter helps prevent the algorithm from running indefinitely in cases where the 
+temperature decreases very slowly or other stopping criteria are difficult to meet.
+</p>
+<p><b>For Beginners:</b> This setting limits the total number of solution attempts the algorithm will make.
+<p>The maximum iterations:</p>
+<ul>
+<li>Ensures the algorithm eventually stops, even if other stopping conditions aren't met</li>
+<li>Provides a hard limit on computational resources used</li>
+</ul>
+<p>The default value of 10000 means:</p>
+<ul>
+<li>The algorithm will try at most 10000 different solutions</li>
+<li>This is usually sufficient for problems of moderate complexity</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 50000 or 100000): More thorough exploration, better chance of finding optimal solution</li>
+<li>Lower values (e.g., 1000 or 5000): Faster execution, but might not find the best solution</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for complex problems with large solution spaces</li>
+<li>Decrease it when you need faster results or have simpler problems</li>
+</ul>
+<p>This parameter works together with MinTemperature - the algorithm stops when either
+the temperature falls below MinTemperature OR the number of iterations reaches MaxIterations.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterationsWithoutImprovement_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxIterationsWithoutImprovement*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterationsWithoutImprovement" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxIterationsWithoutImprovement">
+  MaxIterationsWithoutImprovement
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of consecutive iterations without improvement before early stopping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterationsWithoutImprovement { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxIterationsWithoutImprovement_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the maximum number of consecutive iterations allowed without improvement to the best 
+solution before the algorithm terminates early. This is an additional stopping criterion that can help save 
+computational resources when the algorithm appears to have stagnated. The default value of 1000 allows for 
+substantial exploration without improvement before concluding that further iterations are unlikely to yield 
+better results. For problems with complex landscapes where improvements might be rare but significant, a 
+higher value might be appropriate to prevent premature termination. For simpler problems or when computational 
+efficiency is a priority, a lower value might be used to terminate the search earlier when it appears to have 
+stagnated.
+</p>
+<p><b>For Beginners:</b> This setting allows the algorithm to stop early if it's not making progress.
+<p>While exploring the solution space:</p>
+<ul>
+<li>The algorithm keeps track of the best solution found so far</li>
+<li>This parameter counts how many iterations it will continue without finding a better solution</li>
+</ul>
+<p>The default value of 1000 means:</p>
+<ul>
+<li>If 1000 consecutive iterations pass without improving the best solution, the algorithm stops</li>
+<li>This prevents wasting computation time when progress has stalled</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 5000): More patient, continues searching longer without improvement</li>
+<li>Lower values (e.g., 500): More aggressive early stopping, saves computation time</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it for difficult problems where improvements might be rare but valuable</li>
+<li>Decrease it when you want faster results and are willing to accept potentially suboptimal solutions</li>
+</ul>
+<p>This is an efficiency feature that helps balance thoroughness with computational cost.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxNeighborGenerationRange_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxNeighborGenerationRange*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxNeighborGenerationRange" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxNeighborGenerationRange">
+  MaxNeighborGenerationRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum range for generating neighboring solutions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxNeighborGenerationRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxNeighborGenerationRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property defines the upper bound for the range used when generating neighboring solutions. In adaptive 
+implementations that adjust the neighbor generation range during the optimization process, this value ensures 
+that the range doesn't become too large, which could make the search too random and inefficient. The default 
+value of 1.0 (100% of the parameter range) allows for very large steps that can jump across the entire solution 
+space when appropriate. For problems where more controlled exploration is desired, a smaller value might be 
+appropriate. For problems with very large or disconnected solution spaces, a larger value might be needed to 
+allow jumps between distant regions. This parameter is particularly relevant in the early stages of the annealing 
+process when the temperature is high and the algorithm is focusing on exploration rather than exploitation.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from taking steps that are too large to be efficient.
+<p>In adaptive implementations:</p>
+<ul>
+<li>The neighbor generation range might increase in certain situations (like when stuck in a local optimum)</li>
+<li>This parameter sets an upper limit on how large that range can become</li>
+</ul>
+<p>The default value of 1.0 means:</p>
+<ul>
+<li>The algorithm will never generate neighbors by changing the current solution by more than 100%</li>
+<li>This allows for large jumps across the solution space while preventing excessive randomness</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2.0): Allows for very large jumps, potentially across the entire solution space</li>
+<li>Lower values (e.g., 0.5): Keeps exploration more controlled and focused</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the solution space is very large or has disconnected promising regions</li>
+<li>Decrease it when more controlled exploration is desired or when large jumps are unlikely to be helpful</li>
+</ul>
+<p>This parameter is most relevant in the early stages of optimization or when the algorithm
+is trying to escape local optima by making larger moves.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxTemperature_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxTemperature" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MaxTemperature">
+  MaxTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum temperature allowed during the annealing process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1000.0.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MaxTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The maximum temperature defines an upper bound for the temperature during the annealing process. This is 
+particularly relevant when using adaptive temperature schedules that might increase the temperature in 
+certain situations, such as when the algorithm appears to be trapped in a local optimum. The default value 
+of 1000.0 is significantly higher than the default initial temperature, allowing for substantial temperature 
+increases if needed. For problems requiring more aggressive exploration, a higher maximum temperature might 
+be appropriate. For problems where more controlled exploration is desired, a lower maximum temperature closer 
+to the initial temperature might be used. This parameter helps prevent the algorithm from becoming too random 
+in adaptive schemes while still allowing for temperature increases when beneficial.
+</p>
+<p><b>For Beginners:</b> This setting limits how "hot" the system can get, even with adaptive temperature adjustments.
+<p>While the algorithm typically starts at InitialTemperature and cools down:</p>
+<ul>
+<li>Some advanced implementations might temporarily increase temperature to escape local optima</li>
+<li>This parameter sets an upper limit on how high the temperature can go</li>
+</ul>
+<p>The default value of 1000.0 means:</p>
+<ul>
+<li>The temperature will never exceed 1000, even if the algorithm tries to increase it</li>
+<li>This prevents excessive randomness while still allowing for adaptive behavior</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it if you're using adaptive temperature schedules and want to allow more dramatic
+&quot;reheating&quot; to escape difficult local optima</li>
+<li>Decrease it (closer to InitialTemperature) if you want more controlled exploration</li>
+</ul>
+<p>This is primarily useful for advanced implementations of Simulated Annealing that use
+adaptive cooling schedules rather than monotonically decreasing temperatures.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinNeighborGenerationRange_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MinNeighborGenerationRange*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinNeighborGenerationRange" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MinNeighborGenerationRange">
+  MinNeighborGenerationRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L352"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum range for generating neighboring solutions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinNeighborGenerationRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 0.001.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinNeighborGenerationRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property defines the lower bound for the range used when generating neighboring solutions. In adaptive 
+implementations that adjust the neighbor generation range during the optimization process, this value ensures 
+that the range doesn't become too small, which could limit the algorithm's ability to escape local optima or 
+make meaningful progress. The default value of 0.001 (0.1% of the parameter range) allows for fine-grained 
+local search while still permitting meaningful steps. For problems requiring extremely precise optimization, 
+a smaller value might be appropriate, while for problems where very small steps are not meaningful or efficient, 
+a larger value might be used. This parameter is particularly relevant in the later stages of the annealing 
+process when the temperature is low and the algorithm is focusing on exploitation rather than exploration.
+</p>
+<p><b>For Beginners:</b> This setting prevents the algorithm from taking steps that are too tiny to be useful.
+<p>In adaptive implementations:</p>
+<ul>
+<li>The neighbor generation range might decrease over time or based on success rates</li>
+<li>This parameter sets a lower limit on how small that range can become</li>
+</ul>
+<p>The default value of 0.001 means:</p>
+<ul>
+<li>The algorithm will never generate neighbors by changing the current solution by less than 0.1%</li>
+<li>This ensures that even in the final stages, meaningful steps are still taken</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.01): Prevents the algorithm from making very small adjustments</li>
+<li>Lower values (e.g., 0.0001): Allows for extremely fine-tuning in the final stages</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when very small changes don't meaningfully affect your objective function</li>
+<li>Decrease it when extremely precise fine-tuning is important for your problem</li>
+</ul>
+<p>This parameter is most relevant in the later stages of optimization when the algorithm
+is refining a promising solution rather than exploring broadly.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinTemperature_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MinTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinTemperature" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.MinTemperature">
+  MinTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum temperature at which the annealing process stops.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 1e-8 (0.00000001).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_MinTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The minimum temperature defines a stopping criterion for the annealing process. When the current temperature 
+falls below this threshold, the algorithm transitions to a pure hill-climbing approach, accepting only 
+improvements to the current solution. This effectively ends the exploration phase of the algorithm. The 
+default value of 1e-8 is very small, ensuring that the algorithm has ample opportunity to explore the 
+solution space before focusing exclusively on exploitation. For problems requiring less exploration or 
+when computational resources are limited, a higher minimum temperature might be appropriate to terminate 
+the annealing process earlier. The appropriate value depends on the initial temperature, cooling rate, 
+and the specific characteristics of the optimization problem.
+</p>
+<p><b>For Beginners:</b> This setting defines when the system is considered "cold" and stops accepting worse solutions.
+<p>The minimum temperature:</p>
+<ul>
+<li>Acts as a stopping condition for the cooling process</li>
+<li>When reached, the algorithm essentially becomes a hill-climbing method (only accepting improvements)</li>
+</ul>
+<p>The default value of 1e-8 (0.00000001) means:</p>
+<ul>
+<li>The algorithm continues exploring until the temperature becomes extremely low</li>
+<li>At this temperature, the probability of accepting worse solutions is virtually zero</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 0.1 or 1.0): The algorithm stops exploring earlier, potentially saving computation time</li>
+<li>Lower values (e.g., 1e-10): The algorithm continues the annealing process longer, potentially finding better solutions</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when you want faster convergence and are less concerned about finding the absolute best solution</li>
+<li>Decrease it when you want to ensure the algorithm thoroughly explores the solution space</li>
+</ul>
+<p>This parameter works together with MaxIterations to determine when the algorithm stops -
+whichever condition is met first.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_NeighborGenerationRange_" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.NeighborGenerationRange*"></a>
+
+  <h3 id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_NeighborGenerationRange" data-uid="AiDotNet.Models.Options.SimulatedAnnealingOptions`3.NeighborGenerationRange">
+  NeighborGenerationRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L313"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial range for generating neighboring solutions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double NeighborGenerationRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>A positive double value, defaulting to 0.1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_SimulatedAnnealingOptions_3_NeighborGenerationRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property defines the initial scale or range used when generating neighboring solutions from the current 
+solution. In many implementations, this value represents a fraction of the parameter range or a step size for 
+perturbations. A larger value allows for bigger jumps in the solution space, promoting exploration, while a 
+smaller value focuses on local refinement. The default value of 0.1 (10% of the parameter range) provides a 
+moderate step size that works well for many problems. For problems requiring more fine-grained exploration, a 
+smaller value might be appropriate, while for problems with large or sparse solution spaces, a larger value 
+might be needed. Some implementations may adaptively adjust this range during the optimization process, using 
+this value as the starting point and respecting the minimum and maximum range constraints.
+</p>
+<p><b>For Beginners:</b> This setting controls how different each new solution is from the current one.
+<p>When exploring the solution space:</p>
+<ul>
+<li>The algorithm needs to generate &quot;neighboring&quot; solutions to consider</li>
+<li>This parameter determines how far away these neighbors are from the current solution</li>
+</ul>
+<p>The default value of 0.1 means:</p>
+<ul>
+<li>New solutions are generated by changing the current solution by approximately 10%</li>
+<li>This provides a moderate balance between small refinements and larger jumps</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Larger values (e.g., 0.5): Bigger jumps, exploring more distant solutions</li>
+<li>Smaller values (e.g., 0.05): Smaller steps, focusing on refining the current area</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when the solution space is large or sparse and you need to explore more widely</li>
+<li>Decrease it when fine-tuning is important or when the optimal solution is likely near the starting point</li>
+</ul>
+<p>Some implementations may adaptively adjust this range during optimization, starting with
+this value and changing it based on success rates or temperature.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/SimulatedAnnealingOptions.cs/#L42" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

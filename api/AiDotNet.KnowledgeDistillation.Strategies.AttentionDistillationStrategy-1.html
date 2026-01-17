@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class AttentionDistillationStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class AttentionDistillationStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements attention-based knowledge distillation for transformer models. Transfers knowledge through attention patterns rather than just final outputs.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1" class="text-break">
+Class AttentionDistillationStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.html">Strategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements attention-based knowledge distillation for transformer models.
+Transfers knowledge through attention patterns rather than just final outputs.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class AttentionDistillationStrategy&lt;T&gt; : DistillationStrategyBase&lt;T&gt;, IDistillationStrategy&lt;T&gt;, IIntermediateActivationStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html">DistillationStrategyBase</a>&lt;T&gt;</div>
+      <div><span class="xref">AttentionDistillationStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IIntermediateActivationStrategy-1.html">IIntermediateActivationStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_NumOps">DistillationStrategyBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Temperature">DistillationStrategyBase&lt;T&gt;.Temperature</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Alpha">DistillationStrategyBase&lt;T&gt;.Alpha</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateOutputDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">DistillationStrategyBase&lt;T&gt;.ValidateOutputDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateLabelDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__">DistillationStrategyBase&lt;T&gt;.ValidateLabelDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationStrategyBase-1.html#AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Epsilon">DistillationStrategyBase&lt;T&gt;.Epsilon</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Attention mechanisms in transformers tell us "what the model is focusing on."
+Instead of just copying the teacher's final answers, attention distillation teaches the student to
+focus on the same things the teacher focuses on.</p>
+<p><b>Real-world Analogy:</b>
+Imagine learning to play chess from a grandmaster. Instead of just copying their moves (outputs),
+you also learn where they look on the board and what pieces they pay attention to. This deeper
+understanding helps you think like the master, not just mimic their moves.</p>
+<p><b>Why Attention Distillation?</b>
+- **Richer Knowledge**: Attention patterns reveal reasoning process
+- **Better for Transformers**: Transformers rely heavily on attention
+- **Interpretability**: Can see what student learned to focus on
+- **Complementary**: Works with response-based distillation</p>
+<p><b>How It Works:</b>
+1. Extract attention weights from teacher layers
+2. Extract attention weights from student layers
+3. Minimize MSE between attention distributions
+4. Combine with standard output distillation loss</p>
+<p><b>Attention Matching Strategies:</b>
+- **Layer-wise**: Match corresponding layers (layer 6→layer 3)
+- **Head-wise**: Match individual attention heads
+- **Global**: Match averaged attention across all heads
+- **Selective**: Match only the most important heads</p>
+<p><b>Common Applications:</b>
+- **DistilBERT**: Used attention distillation to compress BERT
+- **TinyBERT**: Attention transfer + representation transfer
+- **MobileBERT**: Layer-wise attention matching
+- **Vision Transformers**: Attention distillation for ViT compression</p>
+<p><b>Benefits:</b>
+- Preserves model's "reasoning" process
+- Improves student's interpretability
+- Often yields 2-5% better accuracy than output-only distillation
+- Helps with few-shot and zero-shot transfer</p>
+<p><b>References:</b>
+- Sanh et al. (2019). DistilBERT: A Distilled Version of BERT. arXiv:1910.01108
+- Jiao et al. (2020). TinyBERT: Distilling BERT for Natural Language Understanding. EMNLP.
+- Wang et al. (2020). MiniLM: Deep Self-Attention Distillation for Task-Agnostic Compression.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1__ctor_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1__ctor_System_String___System_Double_System_Double_System_Double_AiDotNet_KnowledgeDistillation_Strategies_AttentionMatchingMode_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.#ctor(System.String[],System.Double,System.Double,System.Double,AiDotNet.KnowledgeDistillation.Strategies.AttentionMatchingMode)">
+  AttentionDistillationStrategy(string[], double, double, double, AttentionMatchingMode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the AttentionDistillationStrategy class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public AttentionDistillationStrategy(string[] attentionLayers, double attentionWeight = 0.3, double temperature = 3, double alpha = 0.3, AttentionMatchingMode matchingMode = AttentionMatchingMode.MSE)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>attentionLayers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Names of attention layers to match (e.g., [&quot;layer.0.attention&quot;, &quot;layer.1.attention&quot;]).</p>
+</dd>
+    <dt><code>attentionWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for attention loss vs. output loss (default: 0.3).</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Temperature for softmax scaling (default: 3.0).</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Balance between hard and soft loss (default: 0.3).</p>
+</dd>
+    <dt><code>matchingMode</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.AttentionMatchingMode.html">AttentionMatchingMode</a></dt>
+    <dd><p>How to match attention patterns (default: MSE).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1__ctor_System_String___System_Double_System_Double_System_Double_AiDotNet_KnowledgeDistillation_Strategies_AttentionMatchingMode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Specify which attention layers to match and how much weight
+to give to attention matching vs. output matching.</p>
+<p>Example for BERT-like model:
+<pre><code class="lang-csharp">var strategy = new AttentionDistillationStrategy&lt;double&gt;(
+    attentionLayers: new[] {
+        "encoder.layer.0.attention",
+        "encoder.layer.3.attention",
+        "encoder.layer.6.attention"
+    },
+    attentionWeight: 0.3,  // 30% attention, 70% output
+    temperature: 2.0,
+    alpha: 0.5
+);</code></pre>
+
+<p><b>Layer Selection Tips:</b>
+- **Early layers**: Low-level patterns (syntax, local features)
+- **Middle layers**: Mid-level concepts (phrases, object parts)
+- **Late layers**: High-level semantics (meaning, objects)
+- **All layers**: Most comprehensive but computationally expensive
+- **Selective**: Match 2-3 key layers for efficiency</p>
+<p><b>Weight Selection:</b>
+- 0.1-0.2: Slight attention guidance
+- 0.3-0.4: Balanced (recommended for most cases)
+- 0.5-0.7: Strong attention focus
+- 0.8+: Primarily attention-driven (risky)</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeAttentionLoss_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeAttentionLoss*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeAttentionLoss_System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeAttentionLoss(System.Func{System.String,AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Func{System.String,AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  ComputeAttentionLoss(Func&lt;string, Vector&lt;T&gt;&gt;, Func&lt;string, Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L282"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes attention matching loss between teacher and student attention patterns.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeAttentionLoss(Func&lt;string, Vector&lt;T&gt;&gt; teacherAttentionExtractor, Func&lt;string, Vector&lt;T&gt;&gt; studentAttentionExtractor)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>teacherAttentionExtractor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function to extract teacher attention for a layer.</p>
+</dd>
+    <dt><code>studentAttentionExtractor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Function to extract student attention for a layer.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Attention matching loss.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeAttentionLoss_System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Func_System_String_AiDotNet_Tensors_LinearAlgebra_Vector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This measures how different the attention patterns are.
+Lower loss means student is focusing on the same things as the teacher.</p>
+<p>The extractors should return attention weights as vectors, typically
+flattened from [num_heads, seq_len, seq_len] matrices.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeGradient_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeGradient*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeGradient_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeGradient(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeGradient(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradient of the combined loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Matrix&lt;T&gt; ComputeGradient(Matrix&lt;T&gt; studentBatchOutput, Matrix&lt;T&gt; teacherBatchOutput, Matrix&lt;T&gt;? trueLabelsBatch = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>teacherBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>trueLabelsBatch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeIntermediateGradient_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeIntermediateGradient*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeIntermediateGradient_AiDotNet_KnowledgeDistillation_IntermediateActivations__0__AiDotNet_KnowledgeDistillation_IntermediateActivations__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeIntermediateGradient(AiDotNet.KnowledgeDistillation.IntermediateActivations{`0},AiDotNet.KnowledgeDistillation.IntermediateActivations{`0})">
+  ComputeIntermediateGradient(IntermediateActivations&lt;T&gt;, IntermediateActivations&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L458"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes gradients of intermediate activation loss with respect to student activations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IntermediateActivations&lt;T&gt; ComputeIntermediateGradient(IntermediateActivations&lt;T&gt; studentIntermediateActivations, IntermediateActivations&lt;T&gt; teacherIntermediateActivations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentIntermediateActivations</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.IntermediateActivations-1.html">IntermediateActivations</a>&lt;T&gt;</dt>
+    <dd><p>Student's intermediate layer activations.</p>
+</dd>
+    <dt><code>teacherIntermediateActivations</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.IntermediateActivations-1.html">IntermediateActivations</a>&lt;T&gt;</dt>
+    <dd><p>Teacher's intermediate layer activations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.KnowledgeDistillation.IntermediateActivations-1.html">IntermediateActivations</a>&lt;T&gt;</dt>
+    <dd><p>Gradients for each attention layer (already weighted by attentionWeight).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeIntermediateLoss_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeIntermediateLoss*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeIntermediateLoss_AiDotNet_KnowledgeDistillation_IntermediateActivations__0__AiDotNet_KnowledgeDistillation_IntermediateActivations__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeIntermediateLoss(AiDotNet.KnowledgeDistillation.IntermediateActivations{`0},AiDotNet.KnowledgeDistillation.IntermediateActivations{`0})">
+  ComputeIntermediateLoss(IntermediateActivations&lt;T&gt;, IntermediateActivations&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L329"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes intermediate activation loss by matching attention patterns between teacher and student.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeIntermediateLoss(IntermediateActivations&lt;T&gt; studentIntermediateActivations, IntermediateActivations&lt;T&gt; teacherIntermediateActivations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentIntermediateActivations</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.IntermediateActivations-1.html">IntermediateActivations</a>&lt;T&gt;</dt>
+    <dd><p>Student's intermediate layer activations (must include attention layers).</p>
+</dd>
+    <dt><code>teacherIntermediateActivations</code> <a class="xref" href="AiDotNet.KnowledgeDistillation.IntermediateActivations-1.html">IntermediateActivations</a>&lt;T&gt;</dt>
+    <dd><p>Teacher's intermediate layer activations (must include attention layers).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The attention matching loss (already weighted by attentionWeight).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeIntermediateLoss_AiDotNet_KnowledgeDistillation_IntermediateActivations__0__AiDotNet_KnowledgeDistillation_IntermediateActivations__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This implements the IIntermediateActivationStrategy interface to properly integrate
+attention matching into the training loop. The loss is computed from attention patterns stored
+in the intermediate activations for layers specified in the constructor.</p>
+<p>If any target layer is not found, it is skipped. Returns zero if no layers are found.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeLoss_" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeLoss*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy`1.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeLoss(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes combined distillation loss (output loss + attention loss).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T ComputeLoss(Matrix&lt;T&gt; studentBatchOutput, Matrix&lt;T&gt; teacherBatchOutput, Matrix&lt;T&gt;? trueLabelsBatch = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Student batch output [batchSize x outputDim].</p>
+</dd>
+    <dt><code>teacherBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Teacher batch output [batchSize x outputDim].</p>
+</dd>
+    <dt><code>trueLabelsBatch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Optional batch labels [batchSize x outputDim].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Average loss across the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_Strategies_AttentionDistillationStrategy_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This combines two types of loss:
+1. Standard distillation loss on final outputs
+2. Attention matching loss on intermediate attention patterns</p>
+<p>Formula: L = (1 - w) × L_output + w × L_attention
+where w is attentionWeight.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/Strategies/AttentionDistillationStrategy.cs/#L57" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MASTrainer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MASTrainer&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Continual learning trainer using Memory Aware Synapses (MAS).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ContinualLearning_Trainers_MASTrainer_3.md&amp;value=---%0Auid%3A%20AiDotNet.ContinualLearning.Trainers.MASTrainer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3">
+
+
+
+  <h1 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3" class="text-break">
+Class MASTrainer&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L122"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ContinualLearning.html">ContinualLearning</a>.<a class="xref" href="AiDotNet.ContinualLearning.Trainers.html">Trainers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Continual learning trainer using Memory Aware Synapses (MAS).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MASTrainer&lt;T, TInput, TOutput&gt; : ContinualLearnerBase&lt;T, TInput, TOutput&gt;, IContinualLearner&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html">ContinualLearnerBase</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">MASTrainer&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearner-3.html">IContinualLearner</a>&lt;T, TInput, TOutput&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Model">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Model</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_LossFunction">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Configuration">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Configuration</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Strategy">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Strategy</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_MemoryBuffer">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.MemoryBuffer</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_NumOps">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__tasksLearned">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._tasksLearned</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__taskTestSets">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._taskTestSets</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__initialAccuracies">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._initialAccuracies</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__peakAccuracies">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._peakAccuracies</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__trainingHistory">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._trainingHistory</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__isTraining">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._isTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3__lock">ContinualLearnerBase&lt;T, TInput, TOutput&gt;._lock</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_BaseModel">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.BaseModel</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Config">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Config</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_TasksLearned">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.TasksLearned</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_IsTraining">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.IsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_MemoryUsageBytes">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.MemoryUsageBytes</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_TaskStarted">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.TaskStarted</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_TaskCompleted">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.TaskCompleted</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_EpochCompleted">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.EpochCompleted</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_OnTaskStarted_System_Int32_System_Int32_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.OnTaskStarted(int, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_OnTaskCompleted_System_Int32_System_Int32_AiDotNet_ContinualLearning_Results_ContinualLearningResult__0__">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.OnTaskCompleted(int, int, ContinualLearningResult&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_OnEpochCompleted_System_Int32_System_Int32_System_Int32__0__0_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.OnEpochCompleted(int, int, int, T, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_LearnTask_AiDotNet_Interfaces_IDataset__0__1__2__">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.LearnTask(IDataset&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_LearnTask_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__System_Nullable_System_Int32__">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.LearnTask(IDataset&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_EvaluateAllTasks">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.EvaluateAllTasks()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_EvaluateTask_System_Int32_AiDotNet_Interfaces_IDataset__0__1__2__">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.EvaluateTask(int, IDataset&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_GetTaskHistory_System_Int32_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.GetTaskHistory(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_GetAllHistory">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.GetAllHistory()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_ComputeForgetting">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.ComputeForgetting()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Save_System_String_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Save(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Load_System_String_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Load(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Reset">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.Reset()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_TrainOnTask_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__System_Int32_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.TrainOnTask(IDataset&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;, int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_EvaluateOnDataset_AiDotNet_Interfaces_IDataset__0__1__2__">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.EvaluateOnDataset(IDataset&lt;T, TInput, TOutput&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_IsPredictionCorrect__2__2_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.IsPredictionCorrect(TOutput, TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_GetClassLabel__2_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.GetClassLabel(TOutput)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_ComputeAveragePreviousTaskAccuracy">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.ComputeAveragePreviousTaskAccuracy()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_ComputeCurrentForgetting">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.ComputeCurrentForgetting()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_ValidatePathWithinDirectory_System_String_System_String_">ContinualLearnerBase&lt;T, TInput, TOutput&gt;.ValidatePathWithinDirectory(string, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This trainer implements continual learning using MAS,
+which prevents catastrophic forgetting by measuring how sensitive the network
+output is to each parameter. The key advantage is that MAS is unsupervised -
+it doesn't need task labels, just input data!</p>
+<p><b>How MAS Works:</b></p>
+<ol><li>After training on a task, compute output sensitivity for each parameter</li><li>Parameters causing large output changes are marked as important</li><li>When learning new tasks, penalize changes to important parameters</li><li>Importance is computed as: Ω_i = (1/N) × Σ_n |∂||F(x_n)||²/∂θ_i|</li></ol>
+<p><b>MAS Regularization:</b></p>
+<pre><code class="lang-csharp">L_total = L_task + (λ/2) × Σ Ω_i × (θ_i - θ*_i)²</code></pre>
+<p>Where Ω_i is the accumulated importance and θ*_i are the optimal parameters.</p>
+<p><b>Key Advantages over EWC:</b></p>
+<ul><li>Unsupervised: doesn't need task labels, just input data</li><li>Can be computed on any unlabeled data distribution</li><li>Simpler than Fisher Information - no loss function needed for importance</li><li>Works well for transfer learning scenarios</li></ul>
+<p><b>Usage Example:</b></p>
+<pre><code class="lang-csharp">var model = new MyNeuralNetwork();
+var lossFunction = new CrossEntropyLoss&lt;double&gt;();
+var config = new ContinualLearnerConfig&lt;double&gt;();
+var masStrategy = new MemoryAwareSynapses&lt;double, Matrix, Vector&gt;(lossFunction, 1.0);
+var trainer = new MASTrainer&lt;double, Matrix, Vector&gt;(model, lossFunction, config, masStrategy);
+
+// Learn tasks sequentially
+var task1Result = trainer.LearnTask(task1Data);
+var task2Result = trainer.LearnTask(task2Data);
+
+// Evaluate on all tasks
+var evalResult = trainer.EvaluateAllTasks();</code></pre>
+<p><b>Reference:</b> Aljundi et al. "Memory Aware Synapses: Learning what (not) to forget" (ECCV 2018)</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3__ctor_" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Interfaces_ILossFunction__0__AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig__0__AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy__0__1__2__" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig{`0},AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy{`0,`1,`2})">
+  MASTrainer(IFullModel&lt;T, TInput, TOutput&gt;, ILossFunction&lt;T&gt;, IContinualLearnerConfig&lt;T&gt;, IContinualLearningStrategy&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new MAS trainer with default options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MASTrainer(IFullModel&lt;T, TInput, TOutput&gt; model, ILossFunction&lt;T&gt; lossFunction, IContinualLearnerConfig&lt;T&gt; config, IContinualLearningStrategy&lt;T, TInput, TOutput&gt; strategy)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to train.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function for training.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig-1.html">IContinualLearnerConfig</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for continual learning.</p>
+</dd>
+    <dt><code>strategy</code> <a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy-3.html">IContinualLearningStrategy</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The MAS strategy (must be MemoryAwareSynapses or compatible).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3__ctor_" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3__ctor_AiDotNet_Interfaces_IFullModel__0__1__2__AiDotNet_Interfaces_ILossFunction__0__AiDotNet_ContinualLearning_Interfaces_IContinualLearnerConfig__0__AiDotNet_ContinualLearning_Interfaces_IContinualLearningStrategy__0__1__2__AiDotNet_ContinualLearning_Trainers_MASTrainerOptions__0__" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.#ctor(AiDotNet.Interfaces.IFullModel{`0,`1,`2},AiDotNet.Interfaces.ILossFunction{`0},AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig{`0},AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy{`0,`1,`2},AiDotNet.ContinualLearning.Trainers.MASTrainerOptions{`0})">
+  MASTrainer(IFullModel&lt;T, TInput, TOutput&gt;, ILossFunction&lt;T&gt;, IContinualLearnerConfig&lt;T&gt;, IContinualLearningStrategy&lt;T, TInput, TOutput&gt;, MASTrainerOptions&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new MAS trainer with custom options.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MASTrainer(IFullModel&lt;T, TInput, TOutput&gt; model, ILossFunction&lt;T&gt; lossFunction, IContinualLearnerConfig&lt;T&gt; config, IContinualLearningStrategy&lt;T, TInput, TOutput&gt; strategy, MASTrainerOptions&lt;T&gt;? options)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The model to train.</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>The loss function for training.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearnerConfig-1.html">IContinualLearnerConfig</a>&lt;T&gt;</dt>
+    <dd><p>Configuration for continual learning.</p>
+</dd>
+    <dt><code>strategy</code> <a class="xref" href="AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy-3.html">IContinualLearningStrategy</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The MAS strategy (must be MemoryAwareSynapses or compatible).</p>
+</dd>
+    <dt><code>options</code> <a class="xref" href="AiDotNet.ContinualLearning.Trainers.MASTrainerOptions-1.html">MASTrainerOptions</a>&lt;T&gt;</dt>
+    <dd><p>Training options for MAS.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_MASStrategy_" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.MASStrategy*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_MASStrategy" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.MASStrategy">
+  MASStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the MAS-specific strategy if available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MemoryAwareSynapses&lt;T, TInput, TOutput&gt;? MASStrategy { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Strategies.MemoryAwareSynapses-3.html">MemoryAwareSynapses</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_TrainOnTask_" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.TrainOnTask*"></a>
+
+  <h3 id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_TrainOnTask_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__System_Int32_" data-uid="AiDotNet.ContinualLearning.Trainers.MASTrainer`3.TrainOnTask(AiDotNet.Interfaces.IDataset{`0,`1,`2},AiDotNet.Interfaces.IDataset{`0,`1,`2},System.Int32)">
+  TrainOnTask(IDataset&lt;T, TInput, TOutput&gt;, IDataset&lt;T, TInput, TOutput&gt;?, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs the actual training on a task. Implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override ContinualLearningResult&lt;T&gt; TrainOnTask(IDataset&lt;T, TInput, TOutput&gt; taskData, IDataset&lt;T, TInput, TOutput&gt;? validationData, int earlyStoppingPatience)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>taskData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The training data for the task.</p>
+</dd>
+    <dt><code>validationData</code> <a class="xref" href="AiDotNet.Interfaces.IDataset-3.html">IDataset</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Optional validation data.</p>
+</dd>
+    <dt><code>earlyStoppingPatience</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of epochs without improvement before stopping.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ContinualLearning.Results.ContinualLearningResult-1.html">ContinualLearningResult</a>&lt;T&gt;</dt>
+    <dd><p>Training result with metrics.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ContinualLearning_Trainers_MASTrainer_3_TrainOnTask_AiDotNet_Interfaces_IDataset__0__1__2__AiDotNet_Interfaces_IDataset__0__1__2__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Derived classes should:
+<ul><li>Iterate through epochs</li><li>Call <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_OnEpochCompleted_System_Int32_System_Int32_System_Int32__0__0_">OnEpochCompleted(int, int, int, T, T?)</a> after each epoch</li><li>Use <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_Strategy">Strategy</a> for regularization</li><li>Optionally replay from <a class="xref" href="AiDotNet.ContinualLearning.Trainers.ContinualLearnerBase-3.html#AiDotNet_ContinualLearning_Trainers_ContinualLearnerBase_3_MemoryBuffer">MemoryBuffer</a></li></ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ContinualLearning/Trainers/MASTrainer.cs/#L122" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DistillationStrategyBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DistillationStrategyBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Abstract base class for knowledge distillation strategies. Provides common functionality for computing losses and gradients in student-teacher training.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.KnowledgeDistillation.DistillationStrategyBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1">
+
+
+
+  <h1 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1" class="text-break">
+Class DistillationStrategyBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.KnowledgeDistillation.html">KnowledgeDistillation</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Abstract base class for knowledge distillation strategies.
+Provides common functionality for computing losses and gradients in student-teacher training.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class DistillationStrategyBase&lt;T&gt; : IDistillationStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">DistillationStrategyBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IDistillationStrategy-1.html">IDistillationStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.DistillationLoss-1.html">DistillationLoss&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.AdaptiveDistillationStrategyBase-1.html">AdaptiveDistillationStrategyBase&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.AttentionDistillationStrategy-1.html">AttentionDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.ContrastiveDistillationStrategy-1.html">ContrastiveDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.CurriculumDistillationStrategyBase-1.html">CurriculumDistillationStrategyBase&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.FactorTransferDistillationStrategy-1.html">FactorTransferDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.FlowBasedDistillationStrategy-1.html">FlowBasedDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.HybridDistillationStrategy-1.html">HybridDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.NeuronSelectivityDistillationStrategy-1.html">NeuronSelectivityDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.ProbabilisticDistillationStrategy-1.html">ProbabilisticDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.RelationalDistillationStrategy-1.html">RelationalDistillationStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.SimilarityPreservingStrategy-1.html">SimilarityPreservingStrategy&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.KnowledgeDistillation.Strategies.VariationalDistillationStrategy-1.html">VariationalDistillationStrategy&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A distillation strategy defines how to measure the difference
+between student and teacher predictions. This base class provides common functionality that
+all strategies need, like temperature and alpha parameters.</p>
+<p><b>Design Philosophy:</b>
+Different distillation strategies focus on different aspects:
+- **Response-based**: Match final outputs (logits/probabilities)
+- **Feature-based**: Match intermediate layer representations
+- **Relation-based**: Match relationships between samples
+- **Attention-based**: Match attention patterns (for transformers)</p>
+<p>This base class ensures all strategies handle temperature and alpha consistently,
+while allowing flexibility in how loss is computed.</p>
+<p><b>Batch Processing:</b> All strategies now operate on batches (Matrix&lt;T&gt;) for efficiency.
+Each row in the matrices represents one sample in the batch.</p>
+<p><b>Template Method Pattern:</b> The base class defines the structure (properties, validation),
+and subclasses implement the specifics (loss computation logic).</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1__ctor_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1__ctor_System_Double_System_Double_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.#ctor(System.Double,System.Double)">
+  DistillationStrategyBase(double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L98"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the distillation strategy base class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected DistillationStrategyBase(double temperature = 3, double alpha = 0.3)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Softmax temperature (default 3.0).</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Balance between hard and soft loss (default 0.3).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Epsilon" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.Epsilon">
+  Epsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the epsilon value for numerical stability (to avoid log(0), division by zero, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected const double Epsilon = 1E-10</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_NumOps" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Numeric operations for the specified type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Alpha_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.Alpha*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Alpha" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.Alpha">
+  Alpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the balance parameter between hard loss and soft loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Alpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Alpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Alpha controls the trade-off between learning from true labels
+(hard loss) and learning from the teacher (soft loss).</p>
+<p>Alpha values:
+- α = 0: Only learn from teacher (pure distillation)
+- α = 0.3-0.5: Balanced (recommended)
+- α = 1: Only learn from labels (no distillation)</p>
+<p><b>Validation:</b> Must be between 0 and 1. Setting invalid values throws ArgumentException.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Temperature_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.Temperature*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Temperature" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.Temperature">
+  Temperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the temperature parameter for softening probability distributions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Temperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_Temperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Higher temperature makes predictions "softer", revealing
+more about the model's uncertainty and class relationships.</p>
+<p>Temperature effects:
+- T = 1: Standard predictions (sharp)
+- T = 2-5: Softer predictions (recommended for distillation)
+- T &gt; 10: Very soft (may be too smooth)</p>
+<p><b>Validation:</b> Must be positive (&gt; 0). Setting invalid values throws ArgumentException.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeGradient_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ComputeGradient*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeGradient_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ComputeGradient(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeGradient(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the gradient of the distillation loss for backpropagation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract Matrix&lt;T&gt; ComputeGradient(Matrix&lt;T&gt; studentBatchOutput, Matrix&lt;T&gt; teacherBatchOutput, Matrix&lt;T&gt;? trueLabelsBatch = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The student model's output logits for a batch. Shape: [batch_size x num_classes]</p>
+</dd>
+    <dt><code>teacherBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</p>
+</dd>
+    <dt><code>trueLabelsBatch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The gradient of the loss with respect to student outputs. Shape: [batch_size x num_classes]</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeGradient_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> Override this method to compute gradients for your strategy.
+The gradient should match the loss computation in ComputeLoss.</p>
+<p><b>Batch Processing:</b> Returns a gradient matrix with the same shape as the input,
+one gradient row for each sample in the batch.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeLoss_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ComputeLoss*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ComputeLoss(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeLoss(Matrix&lt;T&gt;, Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the distillation loss between student and teacher batch outputs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract T ComputeLoss(Matrix&lt;T&gt; studentBatchOutput, Matrix&lt;T&gt; teacherBatchOutput, Matrix&lt;T&gt;? trueLabelsBatch = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The student model's output logits for a batch. Shape: [batch_size x num_classes]</p>
+</dd>
+    <dt><code>teacherBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The teacher model's output logits for a batch. Shape: [batch_size x num_classes]</p>
+</dd>
+    <dt><code>trueLabelsBatch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Ground truth labels for the batch (optional). Shape: [batch_size x num_classes]</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The computed distillation loss value (scalar) for the batch.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ComputeLoss_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Implementers:</b> Override this method to define your strategy's loss computation.
+The base class handles temperature and alpha; you focus on the loss calculation logic.</p>
+<p><b>Batch Processing:</b> The loss should be computed over all samples in the batch
+and typically averaged. Each row in the input matrices represents one sample.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateLabelDimensions_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ValidateLabelDimensions*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateLabelDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ValidateLabelDimensions(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ValidateLabelDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that batch outputs and labels have matching dimensions (if labels are provided).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateLabelDimensions(Matrix&lt;T&gt; batchOutput, Matrix&lt;T&gt;? labelsBatch)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Batch output to validate.</p>
+</dd>
+    <dt><code>labelsBatch</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Labels batch to validate (can be null).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateLabelDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If labels are null, validation is skipped (for pure soft distillation without labels).</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateOutputDimensions_" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ValidateOutputDimensions*"></a>
+
+  <h3 id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateOutputDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.KnowledgeDistillation.DistillationStrategyBase`1.ValidateOutputDimensions(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ValidateOutputDimensions(Matrix&lt;T&gt;, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Validates that student and teacher batch outputs have matching dimensions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void ValidateOutputDimensions(Matrix&lt;T&gt; studentBatchOutput, Matrix&lt;T&gt; teacherBatchOutput)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>studentBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Student batch output to validate.</p>
+</dd>
+    <dt><code>teacherBatchOutput</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Teacher batch output to validate.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_KnowledgeDistillation_DistillationStrategyBase_1_ValidateOutputDimensions_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Checks both batch size (rows) and output dimension (columns) match between student and teacher.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when outputs are null.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when dimensions don't match.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/KnowledgeDistillation/DistillationStrategyBase.cs/#L33" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

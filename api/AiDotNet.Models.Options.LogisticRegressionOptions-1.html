@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LogisticRegressionOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LogisticRegressionOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Logistic Regression, a statistical method used for binary classification problems in machine learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_LogisticRegressionOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.LogisticRegressionOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_LogisticRegressionOptions_1" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1" class="text-break">
+Class LogisticRegressionOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LogisticRegressionOptions.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Logistic Regression, a statistical method used for binary
+classification problems in machine learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LogisticRegressionOptions&lt;T&gt; : RegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">LogisticRegressionOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_LogisticRegressionOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Logistic Regression is a supervised learning algorithm that predicts the probability of an
+observation belonging to a certain class. Despite its name, it's used for classification rather
+than regression. The algorithm applies the logistic function to a linear combination of features
+to transform the output to a probability value between 0 and 1. The model parameters are typically
+learned through an iterative optimization process like gradient descent, which aims to maximize
+the likelihood of the observed data.
+</p>
+<p><b>For Beginners:</b> Logistic Regression is one of the most fundamental classification
+algorithms in machine learning, used when you want to predict categories (like "yes/no" or "spam/not spam").
+<p>Despite having &quot;regression&quot; in its name, it's actually used for classification problems:</p>
+<ul>
+<li>It calculates the probability that something belongs to a particular category</li>
+<li>If the probability is above 50%, it predicts one category; otherwise, it predicts the other</li>
+</ul>
+<p>Think of it like determining whether a student will pass or fail an exam:</p>
+<ul>
+<li>You gather information about study hours, attendance, and previous grades</li>
+<li>Logistic Regression learns how these factors contribute to passing probability</li>
+<li>When a new student comes along, you can predict their outcome based on these factors</li>
+</ul>
+<p>This class allows you to configure how the algorithm learns these relationships from your data.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_LogisticRegressionOptions_1_LearningRate_" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LogisticRegressionOptions_1_LearningRate" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LogisticRegressionOptions.cs/#L97"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate that controls the step size in each iteration of the optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The learning rate, defaulting to 0.01.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LogisticRegressionOptions_1_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The learning rate determines how large of a step the optimization algorithm takes in the direction
+of the gradient during each iteration. A higher learning rate means larger steps, which can lead
+to faster convergence but risks overshooting the optimal solution or causing instability. A lower
+learning rate means smaller steps, which provides more stability but may require more iterations
+to converge and risks getting stuck in local optima.
+</p>
+<p><b>For Beginners:</b> This setting controls how big of an adjustment the algorithm
+makes with each practice session.
+<p>Imagine you're turning a dial to tune a radio station:</p>
+<ul>
+<li>A high learning rate (like 0.1) means making big turns of the dial</li>
+<li>A low learning rate (like 0.001) means making tiny, precise turns</li>
+</ul>
+<p>The default value of 0.01 works well for many problems, providing a balance between:</p>
+<ul>
+<li>Speed: Higher values help the model learn faster</li>
+<li>Stability: Lower values help prevent the model from &quot;overshooting&quot; the best answer</li>
+</ul>
+<p>If your model's performance is fluctuating wildly during training, try decreasing this value.
+If your model is learning too slowly, try increasing it.</p>
+<p>Finding the right learning rate is often a matter of experimentation - it's like finding the
+right temperature for cooking: too high and things burn, too low and nothing cooks.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LogisticRegressionOptions_1_MaxIterations_" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.MaxIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LogisticRegressionOptions_1_MaxIterations" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.MaxIterations">
+  MaxIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LogisticRegressionOptions.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of iterations allowed for the optimization algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The maximum number of iterations, defaulting to 1000.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LogisticRegressionOptions_1_MaxIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter sets an upper limit on how many iterations the optimization algorithm will perform
+when fitting the model. The algorithm may terminate earlier if convergence is achieved based on
+the tolerance value. Setting this too low might prevent the algorithm from converging to an optimal
+solution, while setting it too high might waste computational resources if the algorithm has already
+effectively converged.
+</p>
+<p><b>For Beginners:</b> This setting controls how long the algorithm will try to improve
+its predictions before giving up.
+<p>Think of it like practicing a skill:</p>
+<ul>
+<li>Each &quot;iteration&quot; is like a practice session</li>
+<li>The algorithm keeps practicing until it stops getting significantly better</li>
+<li>This parameter sets a maximum number of practice sessions</li>
+</ul>
+<p>The default value of 1000 is sufficient for many problems. You might need to increase it if:</p>
+<ul>
+<li>You have a very large or complex dataset</li>
+<li>Your model isn't reaching good performance and the training logs show it was stopped early</li>
+</ul>
+<p>You might want to decrease it if:</p>
+<ul>
+<li>Training is taking too long and you want faster results</li>
+<li>You're doing initial experimentation and don't need perfect results</li>
+</ul>
+<p>Note that the algorithm might stop before reaching this maximum if it determines that
+additional iterations won't significantly improve the model (based on the Tolerance setting).</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_LogisticRegressionOptions_1_Tolerance_" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.Tolerance*"></a>
+
+  <h3 id="AiDotNet_Models_Options_LogisticRegressionOptions_1_Tolerance" data-uid="AiDotNet.Models.Options.LogisticRegressionOptions`1.Tolerance">
+  Tolerance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LogisticRegressionOptions.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the convergence tolerance that determines when the optimization algorithm should stop.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Tolerance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The convergence tolerance, defaulting to 0.0001 (1e-4).</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_LogisticRegressionOptions_1_Tolerance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This parameter defines the threshold for determining when the optimization has converged.
+The algorithm will stop when the improvement in the objective function between consecutive
+iterations falls below this tolerance value. A smaller tolerance requires more precision in
+the solution, potentially leading to better model performance but requiring more iterations,
+while a larger tolerance allows for earlier termination but might result in a less optimal model.
+</p>
+<p><b>For Beginners:</b> This setting determines how much improvement is considered
+"good enough" to keep training.
+<p>Imagine you're trying to hit a target:</p>
+<ul>
+<li>Each iteration gets you closer to the bullseye</li>
+<li>Eventually, your improvements become very small</li>
+<li>This setting decides when those improvements are small enough to stop</li>
+</ul>
+<p>The default value of 0.0001 means:</p>
+<ul>
+<li>If an iteration improves the model by less than 0.01% of its current performance</li>
+<li>The algorithm will decide it's &quot;good enough&quot; and stop</li>
+</ul>
+<p>You might want to decrease this value (like to 0.00001) if:</p>
+<ul>
+<li>You need very precise results</li>
+<li>You have enough computing resources for longer training</li>
+</ul>
+<p>You might want to increase this value (like to 0.001) if:</p>
+<ul>
+<li>You're more concerned with training speed than perfect accuracy</li>
+<li>You're doing preliminary testing or exploration</li>
+</ul>
+<p>This is like deciding when a drawing is &quot;finished&quot; - perfectionists will keep making tiny
+improvements, while pragmatists will stop once it looks good enough.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/LogisticRegressionOptions.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

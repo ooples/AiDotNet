@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class NormalizationParameters&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class NormalizationParameters&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the parameters used for normalizing a single feature or target variable in a machine learning model.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_NormalizationParameters_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.NormalizationParameters%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.NormalizationParameters`1">
+
+
+
+  <h1 id="AiDotNet_Models_NormalizationParameters_1" data-uid="AiDotNet.Models.NormalizationParameters`1" class="text-break">
+Class NormalizationParameters&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the parameters used for normalizing a single feature or target variable in a machine learning model.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class NormalizationParameters&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">NormalizationParameters&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_NormalizationParameters_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This class encapsulates all the parameters needed to normalize and denormalize a single feature or target variable. 
+It supports multiple normalization methods, such as min-max scaling, z-score normalization, robust scaling, and 
+binning, and stores the relevant parameters for each method. These parameters are typically calculated during 
+training based on the training data and are then used to normalize new data in the same way.
+</p>
+<p><b>For Beginners:</b> This class stores the information needed to scale a single feature or target variable.
+<p>When normalizing data for machine learning:</p>
+<ul>
+<li>Different methods can be used (min-max scaling, z-score normalization, etc.)</li>
+<li>Each method requires specific parameters (like minimum/maximum values or mean/standard deviation)</li>
+<li>These parameters need to be saved to ensure consistent scaling</li>
+</ul>
+<p>This class stores all those parameters for a single feature, including:</p>
+<ul>
+<li>Which normalization method is being used</li>
+<li>The specific values needed for that method (min/max, mean/stddev, etc.)</li>
+</ul>
+<p>For example, if using min-max scaling to normalize house prices from $100,000-$1,500,000 to a 0-1 range,
+this class would store the minimum ($100,000) and maximum ($1,500,000) values needed for that conversion.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1__ctor_" data-uid="AiDotNet.Models.NormalizationParameters`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1__ctor_AiDotNet_Tensors_Interfaces_INumericOperations__0__" data-uid="AiDotNet.Models.NormalizationParameters`1.#ctor(AiDotNet.Tensors.Interfaces.INumericOperations{`0})">
+  NormalizationParameters(INumericOperations&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the NormalizationParameters class with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NormalizationParameters(INumericOperations&lt;T&gt;? numOps = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numOps</code> <a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd><p>Optional numeric operations provider. If null, a default provider will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1__ctor_AiDotNet_Tensors_Interfaces_INumericOperations__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new NormalizationParameters instance with default values. It initializes all numeric 
+properties to zero and sets the normalization method to None. The constructor takes an optional numeric operations 
+provider, which is used for mathematical operations on the generic type T. If no provider is specified, a default 
+one is obtained from the MathHelper class.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new set of normalization parameters with default values.
+<p>When creating new normalization parameters:</p>
+<ul>
+<li>All numeric values are initialized to zero</li>
+<li>The normalization method is set to &quot;None&quot;</li>
+<li>A numeric operations provider is set up to handle the math</li>
+</ul>
+<p>The numeric operations provider:</p>
+<ul>
+<li>Allows the class to work with different numeric types (float, double, decimal)</li>
+<li>Provides methods for basic math operations on type T</li>
+<li>Is usually obtained automatically from MathHelper</li>
+</ul>
+<p>This constructor is typically used when:</p>
+<ul>
+<li>Creating parameters before calculating actual values</li>
+<li>Deserializing parameters from storage</li>
+<li>Creating empty parameters as placeholders</li>
+</ul>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Bins_" data-uid="AiDotNet.Models.NormalizationParameters`1.Bins*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Bins" data-uid="AiDotNet.Models.NormalizationParameters`1.Bins">
+  Bins
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; Bins { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_IQR_" data-uid="AiDotNet.Models.NormalizationParameters`1.IQR*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_IQR" data-uid="AiDotNet.Models.NormalizationParameters`1.IQR">
+  IQR
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the interquartile range (IQR) of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T IQR { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The interquartile range, used for robust normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_IQR_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the interquartile range (IQR) of the data for the feature or target variable. The IQR is the 
+difference between the 75th percentile (Q3) and the 25th percentile (Q1) of the data. It is primarily used for 
+robust normalization, where values are scaled by subtracting the median and dividing by the IQR. This approach is 
+less sensitive to outliers than z-score normalization, which uses the mean and standard deviation. The IQR is 
+typically calculated during training based on the training data.
+</p>
+<p><b>For Beginners:</b> This stores the range between the 25th and 75th percentiles of the data.
+<p>The interquartile range (IQR):</p>
+<ul>
+<li>Is used primarily for robust normalization</li>
+<li>Measures the spread of the middle 50% of the data</li>
+<li>Is less affected by outliers than standard deviation</li>
+</ul>
+<p>For example, if the middle 50% of house prices in your dataset range from $250,000 to $450,000,
+the IQR would be 200000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It provides a robust measure of data spread</li>
+<li>It's less influenced by extreme values than standard deviation</li>
+<li>It's used as a divisor in robust scaling to handle data with outliers</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Max_" data-uid="AiDotNet.Models.NormalizationParameters`1.Max*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Max" data-uid="AiDotNet.Models.NormalizationParameters`1.Max">
+  Max
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum value observed in the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Max { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The maximum value, used for min-max normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Max_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the maximum value observed in the data for the feature or target variable. It is primarily 
+used for min-max normalization, where values are scaled to a range based on the minimum and maximum values. The 
+maximum value is typically calculated during training based on the training data.
+</p>
+<p><b>For Beginners:</b> This stores the largest value observed in the data.
+<p>The maximum value:</p>
+<ul>
+<li>Is used primarily for min-max scaling</li>
+<li>Represents the upper bound of the original data range</li>
+<li>Is typically mapped to 1 or another upper bound in the normalized range</li>
+</ul>
+<p>For example, if normalizing house prices and the most expensive house is $1,500,000,
+this value would be 1500000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It defines the upper end of the data range</li>
+<li>It's needed to properly scale new data points</li>
+<li>It helps ensure consistent normalization</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_MaxAbs_" data-uid="AiDotNet.Models.NormalizationParameters`1.MaxAbs*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_MaxAbs" data-uid="AiDotNet.Models.NormalizationParameters`1.MaxAbs">
+  MaxAbs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L433"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum absolute value observed in the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T MaxAbs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The maximum absolute value, used for MaxAbsScaler normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_MaxAbs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the maximum absolute value observed in the data for the feature or target variable.
+It is used for MaxAbsScaler normalization, which scales data to the range [-1, 1] by dividing each value
+by the maximum absolute value. This method preserves the sign of values and maintains zeros (which is
+important for sparse data). The maximum absolute value is typically calculated during training based on
+the training data.
+</p>
+<p><b>For Beginners:</b> This stores the largest absolute value (ignoring the sign) in your data.
+<p>The maximum absolute value:</p>
+<ul>
+<li>Is used for MaxAbsScaler normalization</li>
+<li>Represents the farthest distance from zero in either direction</li>
+<li>Is used as a divisor to scale values to the range [-1, 1]</li>
+</ul>
+<p>For example, if your data ranges from -75 to 100, the maximum absolute value would be 100,
+and all values would be divided by 100 to scale them to [-0.75, 1.0].</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It preserves the sign of values (positive stays positive, negative stays negative)</li>
+<li>It keeps zero values as zero (important for sparse data)</li>
+<li>It's simpler than min-max scaling but still effective</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Mean_" data-uid="AiDotNet.Models.NormalizationParameters`1.Mean*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Mean" data-uid="AiDotNet.Models.NormalizationParameters`1.Mean">
+  Mean
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mean (average) value of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Mean { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The mean value, used for z-score normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Mean_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the mean (average) value of the data for the feature or target variable. It is primarily 
+used for z-score normalization, where values are scaled by subtracting the mean and dividing by the standard 
+deviation. This centers the data around zero. The mean is typically calculated during training based on the 
+training data.
+</p>
+<p><b>For Beginners:</b> This stores the average value of the data.
+<p>The mean value:</p>
+<ul>
+<li>Is used primarily for z-score normalization</li>
+<li>Represents the center point of the data distribution</li>
+<li>Is subtracted from each value during z-score normalization</li>
+</ul>
+<p>For example, if the average house price in your dataset is $350,000,
+this value would be 350000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It defines the center of the data distribution</li>
+<li>It's needed to properly center new data points</li>
+<li>It helps ensure consistent normalization</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Median_" data-uid="AiDotNet.Models.NormalizationParameters`1.Median*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Median" data-uid="AiDotNet.Models.NormalizationParameters`1.Median">
+  Median
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L341"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the median value of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Median { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The median value, used for robust normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Median_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the median value of the data for the feature or target variable. It is primarily used for 
+robust normalization, where values are scaled by subtracting the median and dividing by the interquartile range. 
+This approach is less sensitive to outliers than z-score normalization, which uses the mean and standard deviation. 
+The median is the middle value when the data is sorted and is typically calculated during training based on the 
+training data.
+</p>
+<p><b>For Beginners:</b> This stores the middle value of the data when sorted.
+<p>The median value:</p>
+<ul>
+<li>Is used primarily for robust normalization</li>
+<li>Represents the middle point of the sorted data</li>
+<li>Is less affected by outliers than the mean</li>
+</ul>
+<p>For example, if the middle house price in your sorted dataset is $320,000,
+this value would be 320000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It provides a robust measure of central tendency</li>
+<li>It's less influenced by extreme values than the mean</li>
+<li>It's used in robust scaling to handle data with outliers</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Method_" data-uid="AiDotNet.Models.NormalizationParameters`1.Method*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Method" data-uid="AiDotNet.Models.NormalizationParameters`1.Method">
+  Method
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the normalization method used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public NormalizationMethod Method { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.NormalizationMethod.html">NormalizationMethod</a></dt>
+    <dd><p>A NormalizationMethod enumeration value indicating which normalization technique is used.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Method_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates which normalization method is used for the feature or target variable. Different methods 
+use different parameters and have different characteristics. For example, min-max scaling normalizes values to a 
+specific range (typically 0 to 1), z-score normalization centers the data around zero with a standard deviation 
+of one, and robust scaling uses the median and interquartile range to be less sensitive to outliers.
+</p>
+<p><b>For Beginners:</b> This indicates which scaling technique is being used.
+<p>The normalization method:</p>
+<ul>
+<li>Determines how the data will be scaled</li>
+<li>Affects which parameters are actually used</li>
+<li>Has different properties and use cases</li>
+</ul>
+<p>Common methods include:</p>
+<ul>
+<li>None: No normalization is applied</li>
+<li>MinMax: Scales data to a range, typically 0-1 (uses Min and Max)</li>
+<li>ZScore: Centers data around 0 with standard deviation of 1 (uses Mean and StdDev)</li>
+<li>Robust: Similar to ZScore but less affected by outliers (uses Median and IQR)</li>
+<li>Custom: Uses custom Scale and Shift values</li>
+<li>Binning: Divides data into discrete bins</li>
+</ul>
+<p>Each method has advantages for different types of data and models.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Min_" data-uid="AiDotNet.Models.NormalizationParameters`1.Min*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Min" data-uid="AiDotNet.Models.NormalizationParameters`1.Min">
+  Min
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum value observed in the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Min { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The minimum value, used for min-max normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Min_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the minimum value observed in the data for the feature or target variable. It is primarily 
+used for min-max normalization, where values are scaled to a range based on the minimum and maximum values. The 
+minimum value is typically calculated during training based on the training data.
+</p>
+<p><b>For Beginners:</b> This stores the smallest value observed in the data.
+<p>The minimum value:</p>
+<ul>
+<li>Is used primarily for min-max scaling</li>
+<li>Represents the lower bound of the original data range</li>
+<li>Is typically mapped to 0 or another lower bound in the normalized range</li>
+</ul>
+<p>For example, if normalizing house prices and the cheapest house is $100,000,
+this value would be 100000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It defines the lower end of the data range</li>
+<li>It's needed to properly scale new data points</li>
+<li>It helps ensure consistent normalization</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_OutputDistribution_" data-uid="AiDotNet.Models.NormalizationParameters`1.OutputDistribution*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_OutputDistribution" data-uid="AiDotNet.Models.NormalizationParameters`1.OutputDistribution">
+  OutputDistribution
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L494"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target output distribution for quantile transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OutputDistribution OutputDistribution { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OutputDistribution.html">OutputDistribution</a></dt>
+    <dd><p>An OutputDistribution enum indicating either Uniform or Normal distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_OutputDistribution_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies whether the QuantileTransformer should map data to a uniform distribution
+(where all ranges have equal probability) or a normal distribution (bell-shaped curve). This setting
+determines how the quantiles are mapped during transformation.
+</p>
+<p><b>For Beginners:</b> This specifies what shape you want your data to have after transformation.
+<p>The output distribution:</p>
+<ul>
+<li>Can be Uniform (flat distribution) or Normal (bell curve)</li>
+<li>Affects how values are redistributed</li>
+<li>Depends on what your machine learning algorithm expects</li>
+</ul>
+<p>Uniform distribution:</p>
+<ul>
+<li>All value ranges have equal numbers of data points</li>
+<li>Values are spread evenly across the range</li>
+<li>Good for algorithms that don't assume any particular distribution</li>
+</ul>
+<p>Normal distribution:</p>
+<ul>
+<li>Creates a bell-shaped curve</li>
+<li>Most values cluster around the center</li>
+<li>Good for algorithms that work best with normally-distributed data</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_P_" data-uid="AiDotNet.Models.NormalizationParameters`1.P*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_P" data-uid="AiDotNet.Models.NormalizationParameters`1.P">
+  P
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L403"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a power parameter for certain normalization methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T P { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The power parameter, used for power transformations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_P_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores a power parameter that can be used for certain normalization methods, such as power transformations
+like Box-Cox or Yeo-Johnson transformations. These transformations can help make skewed data more normally distributed
+by raising values to a certain power. The optimal power parameter is typically determined during training to maximize
+the normality of the transformed data.
+</p>
+<p><b>For Beginners:</b> This stores a power value used for certain advanced normalization techniques.
+<p>The power parameter:</p>
+<ul>
+<li>Is used for power transformations like Box-Cox or Yeo-Johnson</li>
+<li>Helps make skewed data more normally distributed</li>
+<li>Can be optimized to find the best transformation</li>
+</ul>
+<p>For example, a value of 0.5 would correspond to a square root transformation,
+which can help normalize right-skewed data.</p>
+<p>This parameter is useful when:</p>
+<ul>
+<li>Your data has a skewed distribution</li>
+<li>You want to make the data more normally distributed</li>
+<li>Standard normalization methods don't work well</li>
+</ul>
+<p>Power transformations are more advanced techniques but can significantly
+improve model performance with certain types of data.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Quantiles_" data-uid="AiDotNet.Models.NormalizationParameters`1.Quantiles*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Quantiles" data-uid="AiDotNet.Models.NormalizationParameters`1.Quantiles">
+  Quantiles
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the quantile values used for quantile transformation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;T&gt; Quantiles { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;T&gt;</dt>
+    <dd><p>A list of quantile values representing the empirical distribution.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Quantiles_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the quantile values calculated from the training data for QuantileTransformer.
+These quantiles represent the empirical cumulative distribution function (CDF) of the data and are
+used to map values to either a uniform or normal distribution. The number of quantiles determines
+the granularity of the transformation.
+</p>
+<p><b>For Beginners:</b> This stores the distribution pattern learned from your training data.
+<p>The quantiles list:</p>
+<ul>
+<li>Is used for QuantileTransformer normalization</li>
+<li>Contains values that divide your data into equal-sized groups</li>
+<li>Helps map your data to a target distribution (uniform or normal)</li>
+</ul>
+<p>For example, with 100 quantiles:</p>
+<ul>
+<li>The 25th quantile is the value below which 25% of the data falls</li>
+<li>The 50th quantile is the median</li>
+<li>The 75th quantile is the value below which 75% of the data falls</li>
+</ul>
+<p>This approach is powerful because:</p>
+<ul>
+<li>It can handle any input distribution</li>
+<li>It's very robust to outliers</li>
+<li>It can transform data to match a desired distribution shape</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Scale_" data-uid="AiDotNet.Models.NormalizationParameters`1.Scale*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Scale" data-uid="AiDotNet.Models.NormalizationParameters`1.Scale">
+  Scale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the scale factor for custom normalization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Scale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The scale factor, used for custom normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Scale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores a custom scale factor for the feature or target variable. It is used for custom normalization, 
+where values are scaled by multiplying by this factor. Custom normalization allows for more flexibility in how the 
+data is scaled, but requires the scale factor to be specified explicitly rather than being calculated from the data.
+</p>
+<p><b>For Beginners:</b> This stores a custom multiplication factor for scaling.
+<p>The scale factor:</p>
+<ul>
+<li>Is used for custom normalization</li>
+<li>Represents how much to multiply each value by</li>
+<li>Allows for flexible, manual control of scaling</li>
+</ul>
+<p>For example, if you want to convert dollars to thousands of dollars,
+you might use a scale factor of 0.001.</p>
+<p>This parameter is useful when:</p>
+<ul>
+<li>You want more control over the normalization process</li>
+<li>You have domain knowledge about the appropriate scaling</li>
+<li>Standard methods don't fit your specific needs</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_Shift_" data-uid="AiDotNet.Models.NormalizationParameters`1.Shift*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_Shift" data-uid="AiDotNet.Models.NormalizationParameters`1.Shift">
+  Shift
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L281"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the shift value for custom normalization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T Shift { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The shift value, used for custom normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_Shift_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores a custom shift value for the feature or target variable. It is used for custom normalization, 
+where values are shifted by adding this value (typically after scaling). Custom normalization allows for more 
+flexibility in how the data is transformed, but requires the shift value to be specified explicitly rather than 
+being calculated from the data.
+</p>
+<p><b>For Beginners:</b> This stores a custom value to add after scaling.
+<p>The shift value:</p>
+<ul>
+<li>Is used for custom normalization</li>
+<li>Represents how much to add to each value after scaling</li>
+<li>Allows for flexible, manual control of normalization</li>
+</ul>
+<p>For example, if you want to shift temperatures from Celsius to Fahrenheit,
+you might use a scale of 1.8 and a shift of 32.</p>
+<p>This parameter is useful when:</p>
+<ul>
+<li>You want more control over the normalization process</li>
+<li>You have domain knowledge about the appropriate transformation</li>
+<li>Standard methods don't fit your specific needs</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_NormalizationParameters_1_StdDev_" data-uid="AiDotNet.Models.NormalizationParameters`1.StdDev*"></a>
+
+  <h3 id="AiDotNet_Models_NormalizationParameters_1_StdDev" data-uid="AiDotNet.Models.NormalizationParameters`1.StdDev">
+  StdDev
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L224"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the standard deviation of the data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T StdDev { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The standard deviation, used for z-score normalization.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_NormalizationParameters_1_StdDev_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property stores the standard deviation of the data for the feature or target variable. It is primarily used 
+for z-score normalization, where values are scaled by subtracting the mean and dividing by the standard deviation. 
+This scales the data to have a standard deviation of one. The standard deviation is typically calculated during 
+training based on the training data.
+</p>
+<p><b>For Beginners:</b> This stores how spread out the data values are.
+<p>The standard deviation:</p>
+<ul>
+<li>Is used primarily for z-score normalization</li>
+<li>Measures how dispersed the data is around the mean</li>
+<li>Is used as a divisor during z-score normalization</li>
+</ul>
+<p>For example, if house prices in your dataset typically vary by about $150,000 from the mean,
+this value would be approximately 150000.</p>
+<p>This parameter is important because:</p>
+<ul>
+<li>It defines the scale of variation in the data</li>
+<li>It's needed to properly scale new data points</li>
+<li>It helps ensure consistent normalization</li>
+</ul>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/NormalizationParameters.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,3784 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MultivectorOperations&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MultivectorOperations&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides numeric operations for Multivector{T} within a fixed Clifford algebra.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Tensors_NumericOperations_MultivectorOperations_1.md&amp;value=---%0Auid%3A%20AiDotNet.Tensors.NumericOperations.MultivectorOperations%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1">
+
+
+
+  <h1 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1" class="text-break">
+Class MultivectorOperations&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L11"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Tensors.html">Tensors</a>.<a class="xref" href="AiDotNet.Tensors.NumericOperations.html">NumericOperations</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.Tensors.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides numeric operations for Multivector{T} within a fixed Clifford algebra.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MultivectorOperations&lt;T&gt; : INumericOperations&lt;Multivector&lt;T&gt;&gt;, IVectorizedOperations&lt;Multivector&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MultivectorOperations&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Tensors.Interfaces.IVectorizedOperations-1.html">IVectorizedOperations</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1__ctor_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1__ctor" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.#ctor">
+  MultivectorOperations()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L16"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultivectorOperations()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1__ctor_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1__ctor_AiDotNet_Tensors_LinearAlgebra_CliffordAlgebra_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.#ctor(AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra)">
+  MultivectorOperations(CliffordAlgebra)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MultivectorOperations(CliffordAlgebra algebra)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>algebra</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.CliffordAlgebra.html">CliffordAlgebra</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MaxValue_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MaxValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MaxValue" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MaxValue">
+  MaxValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum possible value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; MaxValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MaxValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the largest number that can be represented in the current number type.
+For example, for a 32-bit integer, this would be 2,147,483,647.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MinValue_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MinValue*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MinValue" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MinValue">
+  MinValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the minimum possible value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; MinValue { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MinValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the smallest number that can be represented in the current number type.
+For example, for a 32-bit integer, this would be -2,147,483,648.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_One_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.One*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_One" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.One">
+  One
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the value of one for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; One { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_One_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides the value of one in the current number type.
+For example, 1 for integers, 1.0 for floating-point numbers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_PrecisionBits_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.PrecisionBits*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_PrecisionBits" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.PrecisionBits">
+  PrecisionBits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L274"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of bits used for precision in this numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PrecisionBits { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_PrecisionBits_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This tells you how many bits are used to store the number's precision.</p>
+<ul>
+<li>float (FP32): 32 bits</li>
+<li>Half (FP16): 16 bits</li>
+<li>double (FP64): 64 bits
+This is useful for mixed-precision training where different precisions are used.</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsCpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SupportsCpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsCpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SupportsCpuAcceleration">
+  SupportsCpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports SIMD/CPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsCpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsCpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> SIMD (Single Instruction Multiple Data) allows the CPU to perform
+the same operation on multiple values at once, making vector operations much faster.
+Types like float, double, int, and long typically support SIMD acceleration.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsGpuAcceleration_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SupportsGpuAcceleration*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsGpuAcceleration" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SupportsGpuAcceleration">
+  SupportsGpuAcceleration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L320"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether this numeric type supports GPU-accelerated operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SupportsGpuAcceleration { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SupportsGpuAcceleration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> GPU acceleration uses the graphics card to perform many calculations
+in parallel, which can be orders of magnitude faster for large datasets.
+Types like float, double, int, and long are typically supported on GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Zero_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Zero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Zero" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Zero">
+  Zero
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the zero value for the numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Zero { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Zero_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This provides the value of zero in the current number type.
+For example, 0 for integers, 0.0 for floating-point numbers.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Abs_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Abs(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Abs(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L99"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the absolute value of a number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Abs(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to calculate the absolute value of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The absolute value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Abs_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The absolute value is the distance of a number from zero,
+without considering its sign. For example, the absolute value of both 5 and -5 is 5.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Abs_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Abs*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Abs_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Abs(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Abs(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L386"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the absolute value of each element: destination[i] = |x[i]|.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Abs(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Add_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Add_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Add(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Add(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds two values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Add(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The sum of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Add_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Add*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Add_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Add(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Add(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L324"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise addition: destination[i] = x[i] + y[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Add(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_AddScalar_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.AddScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_AddScalar_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.AddScalar(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  AddScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L377"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a scalar to each element: destination[i] = x[i] + scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void AddScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; scalar, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scalar value to add.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Ceiling(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Ceiling(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the smallest integral value greater than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Ceiling(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to ceiling.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The smallest integral value greater than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ceiling rounds a number up to the nearest whole number.
+For example, Ceiling(3.2) = 4 and Ceiling(-2.7) = -2.
+Note that for negative numbers, ceiling rounds toward zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Ceiling*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Ceiling(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Ceiling(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L404"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the ceiling of each element: destination[i] = ceiling(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Ceiling(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Ceiling_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Ceiling returns the smallest integer greater than or equal to each value.
+For example, ceiling(3.2) = 4, ceiling(-2.7) = -2.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Clip_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Clip*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Clip_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Clip(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Clip(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L392"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clips (clamps) each element to a range: destination[i] = clamp(x[i], min, max).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Clip(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; min, Multivector&lt;T&gt; max, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>min</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The minimum value.</p>
+</dd>
+    <dt><code>max</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The maximum value.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Compare_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Compare*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Compare_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Compare(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Compare(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two values and returns an integer that indicates their relative order.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Compare(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A value less than zero if a is less than b;
+zero if a equals b;
+a value greater than zero if a is greater than b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Compare_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is like comparing two numbers to determine their ordering:</p>
+<ul>
+<li>If a is less than b, returns a negative number (-1)</li>
+<li>If a equals b, returns zero (0)</li>
+<li>If a is greater than b, returns a positive number (1)</li>
+</ul>
+<p>This is commonly used for sorting or determining relative positions of values.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Copy_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Copy*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Copy_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Copy(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Copy(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L398"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies elements from source to destination.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Copy(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; source, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Cos(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Cos(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L212"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Cos(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The cosine of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Cosine is a trigonometric function used in wave calculations,
+positional encoding, and signal processing. Input should be in radians.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Cos*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Cos(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Cos(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L413"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine of each element: destination[i] = cos(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Cos(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Cos_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Cosine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_CosineSimilarity_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.CosineSimilarity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_CosineSimilarity_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.CosineSimilarity(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  CosineSimilarity(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L366"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the cosine similarity between two vectors: dot(x, y) / (norm(x) * norm(y)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; CosineSimilarity(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The cosine similarity between the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_CosineSimilarity_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Cosine similarity measures how similar two vectors are based on
+their direction (angle), ignoring their magnitude. The result ranges from -1 (opposite)
+to 1 (identical direction), with 0 meaning orthogonal (perpendicular).
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Divide_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Divide(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Divide(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides the first value by the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Divide(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The dividend (value being divided).</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The divisor (value to divide by).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The result of dividing a by b.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Divide_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Divide*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Divide_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Divide(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Divide(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L333"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise division: destination[i] = x[i] / y[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Divide(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_DivideScalar_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.DivideScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_DivideScalar_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.DivideScalar(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  DivideScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L374"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Divides each element by a scalar: destination[i] = x[i] / scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void DivideScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; scalar, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scalar value to divide by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Dot_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Dot*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Dot_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Dot(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Dot(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the dot product (inner product) of two vectors: sum(x[i] * y[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Dot(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The dot product of the two vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ELU_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ELU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ELU(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  ELU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L443"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ELU (Exponential Linear Unit) element-wise: x if x &gt; 0, alpha * (exp(x) - 1) otherwise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ELU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; alpha, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scale factor for negative values (typically 1.0).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ELU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ELU is similar to ReLU for positive inputs but produces smooth
+negative values for negative inputs. This helps push mean activations closer to zero,
+speeding up learning.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, comparisons, and conditional selection
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Equals_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Equals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Equals_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Equals(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Equals(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L120"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether two values are equal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Equals(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the values are equal; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Exp_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Exp(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Exp(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L111"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the exponential function (e raised to the power of the value).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Exp(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The exponent value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value of e raised to the power of the specified value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Exp_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates &quot;e&quot; (a special mathematical constant, approximately 2.71828)
+raised to the power of the given value. For example, Exp(2) is e^ ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  7.389.</p>
+<p>The exponential function is commonly used in machine learning for:</p>
+<ul>
+<li>Neural network activation functions</li>
+<li>Probability calculations</li>
+<li>Growth and decay models</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Exp_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Exp*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Exp_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Exp(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Exp(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L348"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the exponential function element-wise: destination[i] = e^x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Exp(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Fill_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Fill*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Fill_System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Fill(System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Fill(Span&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L369"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Fills the destination span with a constant value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Fill(Span&lt;Multivector&lt;T&gt;&gt; destination, Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span to fill.</p>
+</dd>
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to fill with.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Floor(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Floor(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the largest integral value less than or equal to the specified value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Floor(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to floor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The largest integral value less than or equal to value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Floor rounds a number down to the nearest whole number.
+For example, Floor(3.7) = 3 and Floor(-2.3) = -3.
+Note that for negative numbers, floor rounds away from zero.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Floor*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Floor(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Floor(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L401"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the floor of each element: destination[i] = floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Floor(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Floor_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Floor returns the largest integer less than or equal to each value.
+For example, floor(3.7) = 3, floor(-2.3) = -3.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Frac(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Frac(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L194"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the fractional part of the specified value (value - floor(value)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Frac(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to get the fractional part of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The fractional part of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, Frac(3.7) = 0.7. Note that Frac(-2.3) = 0.7 (not -0.3),
+since frac is defined as x - floor(x).
+This is useful in hash encoding and periodic functions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Frac*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Frac(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Frac(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L407"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the fractional part of each element: destination[i] = x[i] - floor(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Frac(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Frac_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The fractional part is the portion after the decimal point.
+For example, frac(3.7) = 0.7, frac(-2.3) = 0.7 (not -0.3, since frac = x - floor(x)).
+This is useful in hash encoding and periodic functions.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromDouble_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromDouble_System_Double_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromDouble(System.Double)">
+  FromDouble(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L75"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a double value to the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; FromDouble(double value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The double value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromDouble_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a standard decimal number (double) to whatever
+number type this interface is working with.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloat_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloat_System_Single_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromFloat(System.Single)">
+  FromFloat(float)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L288"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a float (FP32) value to the current numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; FromFloat(float value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The float value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloat_System_Single__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a standard 32-bit floating-point number to the current numeric type.
+Used in mixed-precision training to cast between different numeric types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromFloatSpan(System.ReadOnlySpan{System.Single},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  FromFloatSpan(ReadOnlySpan&lt;float&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L422"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from float (FP32) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromFloatSpan(ReadOnlySpan&lt;float&gt; source, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The source span containing float values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromFloatSpan_System_ReadOnlySpan_System_Single__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 32-bit floating-point numbers back to
+another type (like double or int). This is commonly used when retrieving results from GPU
+processing and converting them back to the user's preferred type.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalf_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalf_System_Half_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromHalf(System.Half)">
+  FromHalf(Half)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a Half (FP16) value to the current numeric type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; FromHalf(Half value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The Half value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value converted to type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalf_System_Half__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a 16-bit half-precision floating-point number to the current numeric type.
+Used in mixed-precision training to cast between different numeric types.
+Note: Half type is only available in .NET 5.0 and later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.FromHalfSpan(System.ReadOnlySpan{System.Half},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  FromHalfSpan(ReadOnlySpan&lt;Half&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from Half (FP16) to type T: destination[i] = (T)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void FromHalfSpan(ReadOnlySpan&lt;Half&gt; source, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The source span containing Half values.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for values of type T.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_FromHalfSpan_System_ReadOnlySpan_System_Half__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of 16-bit half-precision floating-point
+numbers to another type (like float or double). This is commonly used when retrieving results
+from GPU processing that used half precision.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated on .NET 8+, providing significant
+speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GELU_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GELU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GELU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GELU(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  GELU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L434"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes GELU (Gaussian Error Linear Unit) element-wise.
+Uses approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void GELU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GELU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> GELU is a smooth activation function that approximates
+multiplying the input by a probability based on its value. It's used in
+Transformers (BERT, GPT) and provides smooth gradients for optimization.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized tanh, exp, and arithmetic operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GreaterThan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GreaterThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GreaterThan_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GreaterThan(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  GreaterThan(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is greater than the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThan(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is greater than b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GreaterThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GreaterThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_GreaterThanOrEquals_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.GreaterThanOrEquals(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  GreaterThanOrEquals(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L146"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is greater than or equal to the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GreaterThanOrEquals(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is greater than or equal to b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsInfinity_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.IsInfinity*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsInfinity_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.IsInfinity(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  IsInfinity(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L252"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified value is positive or negative infinity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsInfinity(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is positive or negative infinity; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsInfinity_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Infinity represents a value that is larger than any finite number.
+In computing, infinity can occur when:</p>
+<ul>
+<li>Dividing a number by zero</li>
+<li>A calculation results in a number too large to be represented</li>
+</ul>
+<p>There are two types of infinity:</p>
+<ul>
+<li>Positive infinity: A value greater than any other number</li>
+<li>Negative infinity: A value less than any other number</li>
+</ul>
+<p>In machine learning, checking for infinity is important because:</p>
+<ul>
+<li>Infinite values can cause algorithms to behave unexpectedly</li>
+<li>They often indicate numerical overflow or division by zero</li>
+<li>They can lead to incorrect predictions or model behavior</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsNaN_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.IsNaN*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsNaN_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.IsNaN(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  IsNaN(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the specified value is Not a Number (NaN).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsNaN(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to check.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the value is NaN; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_IsNaN_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> NaN (Not a Number) is a special value that represents an undefined or
+unrepresentable mathematical result. It occurs in situations like:</p>
+<ul>
+<li>Dividing zero by zero</li>
+<li>Taking the square root of a negative number</li>
+<li>Performing operations where the result cannot be expressed as a number</li>
+</ul>
+<p>In machine learning, checking for NaN values is important because:</p>
+<ul>
+<li>NaN values can cause algorithms to produce incorrect results</li>
+<li>They can silently propagate through calculations (any operation with NaN results in NaN)</li>
+<li>They often indicate a problem in your data or calculations that needs to be fixed</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LeakyReLU_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LeakyReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LeakyReLU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LeakyReLU(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  LeakyReLU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L431"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes LeakyReLU element-wise: destination[i] = x[i] &gt; 0 ? x[i] : alpha * x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void LeakyReLU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; alpha, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>alpha</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The negative slope coefficient (typically 0.01).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LeakyReLU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> LeakyReLU is a variant of ReLU that allows a small negative slope
+for negative inputs instead of zeroing them out. This helps prevent "dying neurons".
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using vectorized comparisons
+and conditional selection, providing 3-5x speedup over scalar loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LessThan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LessThan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LessThan_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LessThan(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  LessThan(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L92"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is less than the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThan(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is less than b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LessThanOrEquals_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LessThanOrEquals*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_LessThanOrEquals_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.LessThanOrEquals(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  LessThanOrEquals(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines whether the first value is less than or equal to the second value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LessThanOrEquals(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value to compare.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if a is less than or equal to b; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Log(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the natural logarithm (base e) of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Log(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to calculate the natural logarithm of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The natural logarithm of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The natural logarithm is the inverse of the exponential function.
+It answers the question: &quot;To what power must e be raised to get this value?&quot;
+For example, Log(7.389) ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  2 because e^ ÃƒÂ¢Ã¢â‚¬Â°Ã‹â€  7.389.</p>
+<p>Natural logarithms are commonly used in machine learning for:</p>
+<ul>
+<li>Converting multiplicative relationships to additive ones</li>
+<li>Working with probabilities (log-likelihood)</li>
+<li>Measuring information (entropy)</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Log(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L351"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the natural logarithm element-wise: destination[i] = ln(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log2_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log2*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Log2_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Log2(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Log2(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L360"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the base-2 logarithm element-wise: destination[i] = log2(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Log2(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Max_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Max*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Max_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Max(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Max(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L342"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the maximum value in the span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Max(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The maximum value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the span is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Min_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Min*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Min_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Min(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Min(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the minimum value in the span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Min(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The minimum value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the span is empty.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Mish_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Mish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Mish_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Mish(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Mish(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L437"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Mish activation element-wise: x * tanh(softplus(x)) = x * tanh(ln(1 + exp(x))).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Mish(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Mish_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Mish is a smooth, self-regularized activation function that
+often outperforms ReLU in practice. It's unbounded above, bounded below, smooth,
+and non-monotonic.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized exp, log, and tanh operations
+for 2-3x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Multiply_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Multiply(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Multiply(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L41"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies two values together.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Multiply(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The first value.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The second value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The product of the two values.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Multiply_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Multiply*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Multiply_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Multiply(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Multiply(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L330"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise multiplication: destination[i] = x[i] * y[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Multiply(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MultiplyAdd_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MultiplyAdd*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MultiplyAdd_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MultiplyAdd(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  MultiplyAdd(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L416"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes fused multiply-add: destination[i] = x[i] + y[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyAdd(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y, Multivector&lt;T&gt; scalar, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span (values to add to).</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span (values to multiply).</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scalar value to multiply y by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MultiplyAdd_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This operation multiplies each element of y by a scalar value,
+then adds it to the corresponding element of x. It's commonly used in matrix multiplication
+and neural network operations.
+</p>
+<p>
+<b>Performance:</b> When FMA (Fused Multiply-Add) hardware is available, this operation
+can be performed in a single instruction, providing better performance and precision
+than separate multiply and add operations.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MultiplyScalar_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MultiplyScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_MultiplyScalar_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.MultiplyScalar(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  MultiplyScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Multiplies each element by a scalar: destination[i] = x[i] * scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MultiplyScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; scalar, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scalar value to multiply by.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Negate_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Negate(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Negate(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates a value (changes its sign).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Negate(Multivector&lt;T&gt; a)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to negate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The negated value (positive becomes negative, negative becomes positive).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Negate_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Negate*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Negate_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Negate(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Negate(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L389"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Negates each element: destination[i] = -x[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Negate(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Pow_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Pow*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Pow_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Pow(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Pow(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L395"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power of each element: destination[i] = x[i]^power.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Pow(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; power, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>power</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The power to raise each element to.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Power_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Power*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Power_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Power(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Power(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Raises a value to the power of an exponent.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Power(Multivector&lt;T&gt; baseValue, Multivector&lt;T&gt; exponent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseValue</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The base value.</p>
+</dd>
+    <dt><code>exponent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The exponent value.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The base value raised to the power of the exponent.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Power_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This calculates the result of multiplying a number by itself a specific
+number of times. For example, Power(2, 3) means 2Ãƒâ€šÃ‚Â³ = 2 ÃƒÆ’Ã¢â‚¬â€ 2 ÃƒÆ’Ã¢â‚¬â€ 2 = 8.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ReLU_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ReLU*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ReLU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ReLU(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  ReLU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L446"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes ReLU (Rectified Linear Unit) element-wise: max(0, x).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ReLU(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ReLU_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> ReLU is the most common activation function in deep learning.
+It outputs the input directly if positive, otherwise outputs zero.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized maximum operation for 5-10x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Round_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Round*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Round_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Round(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Round(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L167"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Rounds a value to the nearest integral value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Round(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to round.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The rounded value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Round_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts a number with decimals to the nearest whole number.
+For example, Round(3.2) = 3 and Round(3.7) = 4.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sigmoid_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sigmoid*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sigmoid_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sigmoid(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Sigmoid(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L357"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sigmoid function element-wise: destination[i] = 1 / (1 + e^(-x[i])).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sigmoid(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SignOrZero_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SignOrZero*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SignOrZero_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SignOrZero(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  SignOrZero(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L263"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Returns the sign of the value (1 for positive, -1 for negative) or zero if the value is zero.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; SignOrZero(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to get the sign of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The sign of the value (1 for positive, -1 for negative) or zero if the value is zero.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SignOrZero_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method tells you about the direction or sign of a number:</p>
+<ul>
+<li>For positive numbers, it returns 1 (or the equivalent in type T)</li>
+<li>For negative numbers, it returns -1 (or the equivalent in type T)</li>
+<li>For zero, it returns 0 (or the equivalent in type T)</li>
+</ul>
+<p>This is useful in machine learning when:</p>
+<ul>
+<li>You need to know only the direction of a value, not its magnitude</li>
+<li>Implementing algorithms that behave differently based on whether values are positive, negative, or zero</li>
+<li>Normalizing or standardizing data</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sin(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Sin(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L203"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sine of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Sin(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The angle in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The sine of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Sine is a trigonometric function used in wave calculations,
+positional encoding, and signal processing. Input should be in radians.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sin*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sin(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Sin(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sine of each element: destination[i] = sin(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sin(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span (values in radians).</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sin_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Sine is a trigonometric function that maps angles to values between -1 and 1.
+Input values should be in radians. Used in positional encoding, spherical harmonics, and signal processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SoftMax_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SoftMax*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SoftMax_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SoftMax(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  SoftMax(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L363"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the softmax function: destination[i] = exp(x[i] - max) / sum(exp(x - max)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SoftMax(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SoftMax_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Softmax converts a vector of numbers into a probability distribution.
+All output values sum to 1, and each value represents the probability of that element.
+This is commonly used as the final layer in classification neural networks.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sqrt_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sqrt(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Sqrt(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L65"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square root of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Sqrt(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to calculate the square root of.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The square root of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sqrt_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The square root of a number is a value that, when multiplied by itself,
+gives the original number. For example, the square root of 9 is 3 because 3 ÃƒÆ’Ã¢â‚¬â€ 3 = 9.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sqrt_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sqrt*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sqrt_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sqrt(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Sqrt(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the square root of each element: destination[i] = sqrt(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Sqrt(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Square_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Square*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Square_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Square(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Square(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the square of a value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Square(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to square.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The square of the value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Square_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The square of a number is the result of multiplying the number by itself.
+For example, the square of 4 is 16 because 4 ÃƒÆ’Ã¢â‚¬â€ 4 = 16.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Subtract_AiDotNet_Tensors_LinearAlgebra_Multivector__0__AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Subtract(AiDotNet.Tensors.LinearAlgebra.Multivector{`0},AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  Subtract(Multivector&lt;T&gt;, Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L34"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts the second value from the first value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Subtract(Multivector&lt;T&gt; a, Multivector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to subtract from.</p>
+</dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to subtract.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The result of subtracting b from a.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Subtract_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Subtract*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Subtract_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Subtract(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Subtract(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs element-wise subtraction: destination[i] = x[i] - y[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Subtract(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; y, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first source span.</p>
+</dd>
+    <dt><code>y</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when spans have different lengths.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SubtractScalar_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SubtractScalar*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_SubtractScalar_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___AiDotNet_Tensors_LinearAlgebra_Multivector__0__System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.SubtractScalar(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},AiDotNet.Tensors.LinearAlgebra.Multivector{`0},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  SubtractScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Multivector&lt;T&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L380"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Subtracts a scalar from each element: destination[i] = x[i] - scalar.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SubtractScalar(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Multivector&lt;T&gt; scalar, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>scalar</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The scalar value to subtract.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sum_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sum*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Sum_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Sum(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Sum(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L339"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the sum of all elements in the span.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Multivector&lt;T&gt; Sum(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The sum of all elements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Swish_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Swish*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Swish_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Swish(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Swish(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L440"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes Swish/SiLU activation element-wise: x * sigmoid(x) = x / (1 + exp(-x)).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Swish(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Swish_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Swish (also called SiLU - Sigmoid Linear Unit) is a smooth,
+non-monotonic activation function that often outperforms ReLU. It allows negative
+values to pass through, helping with gradient flow.
+</p>
+<p>
+<b>Performance:</b> Uses SIMD-optimized sigmoid and multiplication operations
+for 2-4x speedup over scalar implementation.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Tanh_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Tanh*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_Tanh_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_AiDotNet_Tensors_LinearAlgebra_Multivector__0___" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.Tanh(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}})">
+  Tanh(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Multivector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L354"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the hyperbolic tangent element-wise: destination[i] = tanh(x[i]).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Tanh(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; x, Span&lt;Multivector&lt;T&gt;&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>x</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The destination span for results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToDouble_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToDouble*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToDouble_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToDouble(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  ToDouble(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to double (FP64) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ToDouble(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The value as a double.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToDouble_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a 64-bit double-precision floating-point number.
+Double precision provides maximum numerical accuracy but uses more memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloat_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToFloat*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloat_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToFloat(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  ToFloat(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to float (FP32) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public float ToFloat(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a></dt>
+    <dd><p>The value as a float.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloat_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a standard 32-bit floating-point number.
+Used in mixed-precision training to cast between different numeric types.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloatSpan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToFloatSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloatSpan_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_System_Single__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToFloatSpan(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{System.Single})">
+  ToFloatSpan(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;float&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L419"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to float (FP32): destination[i] = (float)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToFloatSpan(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; source, Span&lt;float&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.single">float</a>&gt;</dt>
+    <dd><p>The destination span for float results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToFloatSpan_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_System_Single___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers from one type (like double or int)
+to 32-bit floating-point numbers. This is commonly used when preparing data for GPU processing,
+which typically operates on float32 for optimal performance.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToSingle
+on .NET 8+, providing significant speedup over sequential conversion loops.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalf_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToHalf*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalf_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToHalf(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  ToHalf(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L291"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value to Half (FP16) precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Half ToHalf(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a></dt>
+    <dd><p>The value as a Half.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalf_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current numeric type to a 16-bit half-precision floating-point number.
+Half precision uses less memory and can be faster on modern GPUs with Tensor Cores.
+Used in mixed-precision training to reduce memory usage and increase speed.
+Note: Half type is only available in .NET 5.0 and later.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalfSpan_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToHalfSpan*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalfSpan_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_System_Half__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToHalfSpan(System.ReadOnlySpan{AiDotNet.Tensors.LinearAlgebra.Multivector{`0}},System.Span{System.Half})">
+  ToHalfSpan(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt;, Span&lt;Half&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L425"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts elements from type T to Half (FP16): destination[i] = (Half)source[i].</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ToHalfSpan(ReadOnlySpan&lt;Multivector&lt;T&gt;&gt; source, Span&lt;Half&gt; destination)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>source</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.readonlyspan-1">ReadOnlySpan</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The source span containing values of type T.</p>
+</dd>
+    <dt><code>destination</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.span-1">Span</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.half">Half</a>&gt;</dt>
+    <dd><p>The destination span for Half results.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToHalfSpan_System_ReadOnlySpan_AiDotNet_Tensors_LinearAlgebra_Multivector__0___System_Span_System_Half___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method converts an array of numbers to 16-bit half-precision
+floating-point numbers. Half precision uses less memory and can be faster on GPUs that
+support it, at the cost of reduced precision and range.
+</p>
+<p>
+<b>Performance:</b> This operation can be SIMD-accelerated using TensorPrimitives.ConvertToHalf
+on .NET 8+, providing significant speedup over sequential conversion loops. Critical for
+mixed-precision GPU operations where FP16 loads with FP32 accumulation provides 2x speedup.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToInt32_" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToInt32*"></a>
+
+  <h3 id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToInt32_AiDotNet_Tensors_LinearAlgebra_Multivector__0__" data-uid="AiDotNet.Tensors.NumericOperations.MultivectorOperations`1.ToInt32(AiDotNet.Tensors.LinearAlgebra.Multivector{`0})">
+  ToInt32(Multivector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts a value of type T to a 32-bit integer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ToInt32(Multivector&lt;T&gt; value)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>value</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Multivector-1.html">Multivector</a>&lt;T&gt;</dt>
+    <dd><p>The value to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The value converted to a 32-bit integer.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Tensors_NumericOperations_MultivectorOperations_1_ToInt32_AiDotNet_Tensors_LinearAlgebra_Multivector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This converts the current number type to a whole number (integer).
+If the original number has a decimal part, it will be truncated (removed).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/AiDotNet.Tensors/NumericOperations/MultivectorOperations.cs/#L11" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

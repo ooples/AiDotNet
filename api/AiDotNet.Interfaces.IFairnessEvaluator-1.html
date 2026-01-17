@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IFairnessEvaluator&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IFairnessEvaluator&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines an interface for evaluating fairness in machine learning models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IFairnessEvaluator_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IFairnessEvaluator%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IFairnessEvaluator_1" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1" class="text-break">
+Interface IFairnessEvaluator&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFairnessEvaluator.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines an interface for evaluating fairness in machine learning models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IFairnessEvaluator&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IFairnessEvaluator_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This interface helps measure how fair a machine learning model is.</p>
+<p>Fairness in machine learning means treating all groups of people equally. A fair model
+makes similar decisions for people with similar qualifications, regardless of sensitive
+attributes like race, gender, or age.</p>
+<p>This interface provides methods to:</p>
+<ul>
+<li>Evaluate how fair a model is across different groups</li>
+<li>Measure various aspects of fairness (demographic parity, equal opportunity, etc.)</li>
+<li>Compare different models to find which one is most equitable</li>
+</ul>
+<p>The fairness score measures how equitable the model is. Important points:</p>
+<ul>
+<li>Higher fairness scores can indicate more equitable treatment (depends on the metric)</li>
+<li>Multiple fairness metrics exist because fairness can be defined in different ways</li>
+<li>We can use these measurements to improve our models and ensure equal treatment</li>
+</ul>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsHigherFairnessBetter_" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.IsHigherFairnessBetter*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsHigherFairnessBetter" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.IsHigherFairnessBetter">
+  IsHigherFairnessBetter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFairnessEvaluator.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Indicates whether higher fairness scores represent better (more equitable) models.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsHigherFairnessBetter { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsHigherFairnessBetter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This property tells you whether bigger numbers mean fairer models.</p>
+<p>Different fairness metrics work in opposite ways:</p>
+<ul>
+<li>For some metrics like disparate impact ratio, higher values mean more fairness</li>
+<li>For other metrics like demographic parity difference, lower values mean more fairness</li>
+</ul>
+<p>This property returns:</p>
+<ul>
+<li>true: if higher scores mean fairer models</li>
+<li>false: if lower scores mean fairer models</li>
+</ul>
+<p>Note: This property indicates the general direction for the evaluator's primary metric.
+Individual fairness metrics within FairnessMetrics may have their own interpretations.</p>
+<p>Knowing this helps you correctly interpret and compare overall fairness scores.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IFairnessEvaluator_1_EvaluateFairness_" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.EvaluateFairness*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFairnessEvaluator_1_EvaluateFairness_AiDotNet_Interfaces_IFullModel__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.EvaluateFairness(AiDotNet.Interfaces.IFullModel{`0,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}},AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  EvaluateFairness(IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt;, Matrix&lt;T&gt;, int, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFairnessEvaluator.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates fairness of a model by analyzing its predictions across different groups.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">FairnessMetrics&lt;T&gt; EvaluateFairness(IFullModel&lt;T, Matrix&lt;T&gt;, Vector&lt;T&gt;&gt; model, Matrix&lt;T&gt; inputs, int sensitiveFeatureIndex, Vector&lt;T&gt;? actualLabels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>model</code> <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The model to evaluate for fairness.</p>
+</dd>
+    <dt><code>inputs</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>The input data containing features and sensitive attributes.</p>
+</dd>
+    <dt><code>sensitiveFeatureIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Index of the column containing the sensitive feature.</p>
+</dd>
+    <dt><code>actualLabels</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Optional actual labels for computing accuracy-based fairness metrics.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interpretability.FairnessMetrics-1.html">FairnessMetrics</a>&lt;T&gt;</dt>
+    <dd><p>A FairnessMetrics object containing comprehensive fairness measurements.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFairnessEvaluator_1_EvaluateFairness_AiDotNet_Interfaces_IFullModel__0_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method measures how fairly your model treats different groups.</p>
+<p>The input parameters:</p>
+<ul>
+<li>model: The machine learning model you want to evaluate</li>
+<li>inputs: The data containing both regular features and sensitive attributes (like age, gender)</li>
+<li>sensitiveFeatureIndex: Which column in your data represents the sensitive attribute</li>
+<li>actualLabels: The correct answers (optional, but enables more detailed fairness metrics)</li>
+</ul>
+<p>The method analyzes whether your model gives fair outcomes to all groups. For example,
+it might check if a loan approval model approves loans at similar rates for all age groups
+when other qualifications are equal.</p>
+<p>The result includes multiple fairness metrics:</p>
+<ul>
+<li>Demographic Parity: Are positive outcomes distributed equally?</li>
+<li>Equal Opportunity: Do qualified individuals have equal chances?</li>
+<li>Equalized Odds: Are both true and false positive rates similar?</li>
+<li>Predictive Parity: Is prediction accuracy similar across groups?</li>
+<li>And more...</li>
+</ul>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsBetterFairnessScore_" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.IsBetterFairnessScore*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsBetterFairnessScore__0__0_" data-uid="AiDotNet.Interfaces.IFairnessEvaluator`1.IsBetterFairnessScore(`0,`0)">
+  IsBetterFairnessScore(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFairnessEvaluator.cs/#L103"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two fairness scores and determines if the current score represents better (more equitable) performance.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool IsBetterFairnessScore(T currentFairness, T bestFairness)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>currentFairness</code> <span class="xref">T</span></dt>
+    <dd><p>The fairness score to evaluate.</p>
+</dd>
+    <dt><code>bestFairness</code> <span class="xref">T</span></dt>
+    <dd><p>The best (most equitable) fairness score found so far.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the current fairness score is better than the best fairness score; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IFairnessEvaluator_1_IsBetterFairnessScore__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This method compares two fairness scores and tells you which model is more equitable.</p>
+<p>When comparing models, you need to know which one treats people more fairly. This method
+handles the comparison logic for you, taking into account whether higher or lower scores
+indicate better fairness for the specific metric being used.</p>
+<p>The input parameters:</p>
+<ul>
+<li>currentFairness: The fairness score of a model you want to evaluate</li>
+<li>bestFairness: The best (most equitable) score you've seen so far</li>
+</ul>
+<p>The method returns:</p>
+<ul>
+<li>true: if the current model is more fair than the best model so far</li>
+<li>false: if the current model is less fair than or equal to the best model</li>
+</ul>
+<p>This is particularly useful when testing many different models to find the most equitable one.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IFairnessEvaluator.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

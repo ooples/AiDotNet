@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class PromptOptimizerBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class PromptOptimizerBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for prompt optimizer implementations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1" class="text-break">
+Class PromptOptimizerBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L27"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Optimization.html">Optimization</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for prompt optimizer implementations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class PromptOptimizerBase&lt;T&gt; : IPromptOptimizer&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The type of numeric data used for scoring.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">PromptOptimizerBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptOptimizer-1.html">IPromptOptimizer</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.BeamSearchOptimizer-1.html">BeamSearchOptimizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.DiscreteSearchOptimizer-1.html">DiscreteSearchOptimizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.EnsembleOptimizer-1.html">EnsembleOptimizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.GeneticOptimizer-1.html">GeneticOptimizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.GreedyHillClimbingOptimizer-1.html">GreedyHillClimbingOptimizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Optimization.SimulatedAnnealingOptimizer-1.html">SimulatedAnnealingOptimizer&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This base class provides common functionality for prompt optimizers including history tracking
+and validation. Derived classes implement the specific optimization strategy.
+</p>
+<p><b>For Beginners:</b> This is the foundation for all prompt optimizers.
+<p>It handles:</p>
+<ul>
+<li>Tracking optimization history</li>
+<li>Validation</li>
+<li>Converting prompts to templates</li>
+<li>Providing numeric operations for comparisons</li>
+</ul>
+<p>Derived classes implement the optimization algorithm!</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1__ctor_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1__ctor" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.#ctor">
+  PromptOptimizerBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the PromptOptimizerBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected PromptOptimizerBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1__ctor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Creates a new optimizer with an empty optimization history.
+</p>
+<p>
+<b>For Beginners:</b>
+This constructor sets up the basic infrastructure that all prompt optimizers need,
+like the history tracking list.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_History" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.History">
+  History
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>History of optimization iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly List&lt;OptimizationHistoryEntry&lt;T&gt;&gt; History</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Interfaces.OptimizationHistoryEntry-1.html">OptimizationHistoryEntry</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_History_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Stores a record of each iteration during optimization, including the prompt tried,
+the score achieved, and when it happened.
+</p>
+<p>
+<b>For Beginners:</b>
+This list keeps track of every prompt variation we've tried and how well it performed.
+You can use GetOptimizationHistory() to see this log after optimization completes.
+</p>
+</div>
+
+
+
+
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_NumOps" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L46"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Provides numeric operations for the specific type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_NumOps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property provides mathematical operations appropriate for the generic type T,
+allowing the algorithm to work consistently with different numeric types like
+float, double, or decimal.
+</p>
+<p>
+<b>For Beginners:</b>
+This is a helper that knows how to do math (addition, multiplication, comparisons, etc.) with
+your specific number type, whether that's a regular double, a precise decimal value,
+or something else. It allows the optimizer to work with different types of numbers
+without changing its core logic.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_GetOptimizationHistory_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.GetOptimizationHistory*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_GetOptimizationHistory" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.GetOptimizationHistory">
+  GetOptimizationHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the optimization history from the most recent optimization run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;OptimizationHistoryEntry&lt;T&gt;&gt; GetOptimizationHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.OptimizationHistoryEntry-1.html">OptimizationHistoryEntry</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A read-only list of history entries.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_GetOptimizationHistory_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Returns the history of all iterations from the most recent optimization,
+including scores and timestamps.
+</p>
+<p>
+<b>For Beginners:</b>
+Call this after optimization to see what prompts were tried and how they scored.
+Useful for understanding how the optimizer found the best prompt.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_Optimize_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.Optimize*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_Optimize_System_String_System_Func_System_String__0__System_Int32_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.Optimize(System.String,System.Func{System.String,`0},System.Int32)">
+  Optimize(string, Func&lt;string, T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes a prompt for a specific task using the provided evaluation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPromptTemplate Optimize(string initialPrompt, Func&lt;string, T&gt; evaluationFunction, int maxIterations = 100)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting prompt to optimize.</p>
+</dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A function that evaluates prompts and returns a score.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of optimization iterations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></dt>
+    <dd><p>The best-performing prompt template found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_Optimize_System_String_System_Func_System_String__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method validates inputs, clears any existing history, and delegates to OptimizeCore.
+</p>
+<p>
+<b>For Beginners:</b>
+Call this method to start optimizing your prompt. The optimizer will try different
+variations and use your evaluation function to score each one, returning the best.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when initialPrompt is empty or maxIterations is not positive.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when evaluationFunction is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeAsync_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeAsync(System.String,System.Func{System.String,System.Threading.Tasks.Task{`0}},System.Int32,System.Threading.CancellationToken)">
+  OptimizeAsync(string, Func&lt;string, Task&lt;T&gt;&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L145"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Optimizes a prompt asynchronously for a specific task using the provided evaluation function.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Task&lt;IPromptTemplate&gt; OptimizeAsync(string initialPrompt, Func&lt;string, Task&lt;T&gt;&gt; evaluationFunction, int maxIterations = 100, CancellationToken cancellationToken = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting prompt to optimize.</p>
+</dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An async function that evaluates prompts and returns a score.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of optimization iterations.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a>&gt;</dt>
+    <dd><p>The best-performing prompt template found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method validates inputs, clears any existing history, and delegates to OptimizeCoreAsync.
+</p>
+<p>
+<b>For Beginners:</b>
+Use this method when your evaluation function is asynchronous (e.g., calls an API).
+It works the same as Optimize but supports async operations and cancellation.
+</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when initialPrompt is empty or maxIterations is not positive.</p>
+</dd>
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentnullexception">ArgumentNullException</a></dt>
+    <dd><p>Thrown when evaluationFunction is null.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCore_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCore_System_String_System_Func_System_String__0__System_Int32_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeCore(System.String,System.Func{System.String,`0},System.Int32)">
+  OptimizeCore(string, Func&lt;string, T&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L209"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core optimization logic to be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract IPromptTemplate OptimizeCore(string initialPrompt, Func&lt;string, T&gt; evaluationFunction, int maxIterations)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting prompt to optimize.</p>
+</dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, T&gt;</dt>
+    <dd><p>A function that evaluates prompts and returns a score.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of optimization iterations.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></dt>
+    <dd><p>The best-performing prompt template found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCore_System_String_System_Func_System_String__0__System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes implement this method with their specific optimization strategy.
+Use NumOps.GreaterThan for comparing scores.
+</p>
+<p>
+<b>For Beginners:</b>
+If you're creating a custom optimizer, this is where you put your optimization logic.
+Use NumOps for numeric comparisons (e.g., NumOps.GreaterThan(score1, score2)).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCoreAsync_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeCoreAsync*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCoreAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.OptimizeCoreAsync(System.String,System.Func{System.String,System.Threading.Tasks.Task{`0}},System.Int32,System.Threading.CancellationToken)">
+  OptimizeCoreAsync(string, Func&lt;string, Task&lt;T&gt;&gt;, int, CancellationToken)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Core async optimization logic to be implemented by derived classes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract Task&lt;IPromptTemplate&gt; OptimizeCoreAsync(string initialPrompt, Func&lt;string, Task&lt;T&gt;&gt; evaluationFunction, int maxIterations, CancellationToken cancellationToken)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>initialPrompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The starting prompt to optimize.</p>
+</dd>
+    <dt><code>evaluationFunction</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;T&gt;&gt;</dt>
+    <dd><p>An async function that evaluates prompts and returns a score.</p>
+</dd>
+    <dt><code>maxIterations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of optimization iterations.</p>
+</dd>
+    <dt><code>cancellationToken</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a></dt>
+    <dd><p>Token to cancel the operation.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a>&gt;</dt>
+    <dd><p>The best-performing prompt template found.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_OptimizeCoreAsync_System_String_System_Func_System_String_System_Threading_Tasks_Task__0___System_Int32_System_Threading_CancellationToken__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Derived classes implement this method with their specific async optimization strategy.
+Use NumOps.GreaterThan for comparing scores.
+</p>
+<p>
+<b>For Beginners:</b>
+If you're creating a custom optimizer, this is where you put your async optimization logic.
+Check cancellationToken periodically and use ConfigureAwait(false) on awaits.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_RecordIteration_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.RecordIteration*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_RecordIteration_System_Int32_System_String__0_" data-uid="AiDotNet.PromptEngineering.Optimization.PromptOptimizerBase`1.RecordIteration(System.Int32,System.String,`0)">
+  RecordIteration(int, string, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L255"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Records an iteration in the history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected void RecordIteration(int iteration, string prompt, T score)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iteration</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The iteration number (0-based).</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The prompt that was evaluated.</p>
+</dd>
+    <dt><code>score</code> <span class="xref">T</span></dt>
+    <dd><p>The score achieved by the prompt.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_PromptEngineering_Optimization_PromptOptimizerBase_1_RecordIteration_System_Int32_System_String__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Call this method during optimization to record each prompt variation tried.
+</p>
+<p>
+<b>For Beginners:</b>
+Derived classes should call this for each prompt variation they evaluate.
+This creates the history that can be retrieved via GetOptimizationHistory().
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Optimization/PromptOptimizerBase.cs/#L27" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

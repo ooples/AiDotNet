@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum OnnxExecutionProvider | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum OnnxExecutionProvider | AiDotNet Documentation ">
+      
+      <meta name="description" content="Specifies the execution provider (hardware accelerator) for ONNX model inference.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Onnx_OnnxExecutionProvider.md&amp;value=---%0Auid%3A%20AiDotNet.Onnx.OnnxExecutionProvider%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Onnx.OnnxExecutionProvider">
+
+
+
+
+  <h1 id="AiDotNet_Onnx_OnnxExecutionProvider" data-uid="AiDotNet.Onnx.OnnxExecutionProvider" class="text-break">
+Enum OnnxExecutionProvider  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxExecutionProvider.cs/#L21"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Onnx.html">Onnx</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Specifies the execution provider (hardware accelerator) for ONNX model inference.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum OnnxExecutionProvider</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_Auto"><code>Auto = 100</code></dt>
+  
+  <dd><p>Automatically select the best available provider.
+Falls back through: TensorRT → CUDA → DirectML → CPU</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_CoreML"><code>CoreML = 4</code></dt>
+  
+  <dd><p>Apple CoreML execution provider for Apple Silicon.
+Optimized for M1/M2/M3 chips on macOS.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_Cpu"><code>Cpu = 0</code></dt>
+  
+  <dd><p>CPU execution provider (default, always available).</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_Cuda"><code>Cuda = 1</code></dt>
+  
+  <dd><p>NVIDIA CUDA execution provider for GPU acceleration.
+Requires CUDA toolkit and compatible NVIDIA GPU.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_DirectML"><code>DirectML = 3</code></dt>
+  
+  <dd><p>DirectML execution provider for Windows GPU acceleration.
+Works with AMD, Intel, and NVIDIA GPUs on Windows.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_NNAPI"><code>NNAPI = 7</code></dt>
+  
+  <dd><p>NNAPI execution provider for Android devices.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_OpenVINO"><code>OpenVINO = 5</code></dt>
+  
+  <dd><p>OpenVINO execution provider for Intel hardware.
+Optimized for Intel CPUs and integrated graphics.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_ROCm"><code>ROCm = 6</code></dt>
+  
+  <dd><p>ROCm execution provider for AMD GPUs.</p>
+</dd>
+    <dt id="AiDotNet_Onnx_OnnxExecutionProvider_TensorRT"><code>TensorRT = 2</code></dt>
+  
+  <dd><p>NVIDIA TensorRT execution provider for optimized GPU inference.
+Provides additional optimizations on top of CUDA.</p>
+</dd>
+  </dl>
+
+
+  <h2 id="AiDotNet_Onnx_OnnxExecutionProvider_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Execution providers allow ONNX models to run on different hardware accelerators.
+The order of fallback is typically: CUDA/TensorRT → DirectML → CPU.
+</p>
+<p><b>For Beginners:</b> Think of execution providers as different engines:
+<ul><li><b>CPU</b>: Works everywhere, slowest but most compatible</li><li><b>CUDA</b>: NVIDIA GPUs, much faster than CPU</li><li><b>TensorRT</b>: NVIDIA GPUs with extra optimizations, fastest for NVIDIA</li><li><b>DirectML</b>: Windows GPUs (AMD, Intel, NVIDIA), good cross-vendor support</li><li><b>CoreML</b>: Apple Silicon (M1/M2/M3), fastest on Mac</li></ul>
+
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Onnx/OnnxExecutionProvider.cs/#L21" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

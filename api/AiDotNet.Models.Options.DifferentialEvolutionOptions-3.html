@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Differential Evolution optimization, a powerful variant of genetic algorithms that is particularly effective for continuous optimization problems.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_DifferentialEvolutionOptions_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.DifferentialEvolutionOptions%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3" class="text-break">
+Class DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DifferentialEvolutionOptions.cs/#L19"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Differential Evolution optimization, a powerful variant of genetic algorithms
+that is particularly effective for continuous optimization problems.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt; : GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+    <dt><code>TInput</code></dt>
+    <dd></dd>
+    <dt><code>TOutput</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html">OptimizationAlgorithmOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html">GeneticAlgorithmOptimizerOptions</a>&lt;T, TInput, TOutput&gt;</div>
+      <div><span class="xref">DifferentialEvolutionOptions&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxGenerations">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxGenerations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_PopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.PopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinPopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinPopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxPopulationSize">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxPopulationSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateDecay">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_CrossoverRateIncrease">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.CrossoverRateIncrease</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinCrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinCrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxCrossoverRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxCrossoverRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateDecay">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MutationRateIncrease">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MutationRateIncrease</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MinMutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MinMutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions-3.html#AiDotNet_Models_Options_GeneticAlgorithmOptimizerOptions_3_MaxMutationRate">GeneticAlgorithmOptimizerOptions&lt;T, TInput, TOutput&gt;.MaxMutationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxIterations">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxIterations</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseEarlyStopping">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseEarlyStopping</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_EarlyStoppingPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.EarlyStoppingPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_BadFitPatience">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.BadFitPatience</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinimumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinimumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaximumFeatures">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaximumFeatures</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseExpressionTrees">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseExpressionTrees</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_LearningRateDecay">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.LearningRateDecay</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxLearningRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxLearningRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_UseAdaptiveMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.UseAdaptiveMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_InitialMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.InitialMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumIncreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumIncreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MomentumDecreaseFactor">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MomentumDecreaseFactor</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxMomentum">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxMomentum</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MinExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MinExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_MaxExplorationRate">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.MaxExplorationRate</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_Tolerance">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.Tolerance</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_OptimizationMode">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.OptimizationMode</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentScale">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentScale</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_SignFlipProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.SignFlipProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FeatureSelectionProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FeatureSelectionProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ParameterAdjustmentProbability">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ParameterAdjustmentProbability</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_PredictionOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.PredictionOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelStatsOptions">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelStatsOptions</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelEvaluator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelEvaluator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitDetector">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitDetector</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_FitnessCalculator">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.FitnessCalculator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_ModelCache">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.ModelCache</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.OptimizationAlgorithmOptions-3.html#AiDotNet_Models_Options_OptimizationAlgorithmOptions_3_CreateDefaults_AiDotNet_Enums_OptimizerType_">OptimizationAlgorithmOptions&lt;T, TInput, TOutput&gt;.CreateDefaults(OptimizerType)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Differential Evolution is a population-based optimization algorithm that uses vector differences for
+mutation operations. It's known for its robustness, simplicity, and effectiveness in solving complex
+optimization problems, especially those with real-valued parameters.
+</p>
+<p><b>For Beginners:</b> Differential Evolution is like a more sophisticated version of genetic algorithms.
+Instead of random mutations, it creates new solutions by calculating the difference between existing solutions
+and using that difference to guide the search. Think of it as learning from the "distance" between good solutions
+to find even better ones. It's particularly good at finding optimal values for problems with continuous variables
+(like finding the best temperature, pressure, or other numeric values).</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_CrossoverRate_" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.CrossoverRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_CrossoverRate" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.CrossoverRate">
+  CrossoverRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DifferentialEvolutionOptions.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the crossover rate for Differential Evolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double CrossoverRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The crossover rate, defaulting to 0.5.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_CrossoverRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In Differential Evolution, the crossover rate determines the probability of accepting components from
+the mutated vector rather than the original vector when creating trial solutions. A value of 0.5 means
+there's an equal chance of selecting components from either vector.
+</p>
+<p><b>For Beginners:</b> This controls how much mixing happens between the original solution and the
+newly created one. With the default value of 0.5, there's a 50% chance that each part of the new solution
+will come from the modified version rather than the original. Unlike regular genetic algorithms, in
+Differential Evolution this mixing happens between an existing solution and its modified version, not
+between two different solutions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_MutationRate_" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.MutationRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_MutationRate" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.MutationRate">
+  MutationRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DifferentialEvolutionOptions.cs/#L55"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mutation rate (also known as the differential weight or F) for Differential Evolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MutationRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The mutation rate, defaulting to 0.8.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_MutationRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+In Differential Evolution, the mutation rate (F) scales the difference vector when creating mutant vectors.
+It controls the amplification of the differential variation. Values between 0.5 and 1.0 are commonly used,
+with 0.8 being a good general-purpose value.
+</p>
+<p><b>For Beginners:</b> This controls how strongly the algorithm uses the differences between existing
+solutions to create new ones. With the default value of 0.8, the algorithm takes 80% of the difference
+between solutions when creating variations. Think of it as determining how bold or conservative the algorithm
+is when exploring new possibilities. Higher values make bigger jumps in the solution space, while lower
+values make smaller, more careful adjustments.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_PopulationSize_" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.PopulationSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_PopulationSize" data-uid="AiDotNet.Models.Options.DifferentialEvolutionOptions`3.PopulationSize">
+  PopulationSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DifferentialEvolutionOptions.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the size of the population for Differential Evolution.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PopulationSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The population size, defaulting to 50.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_DifferentialEvolutionOptions_3_PopulationSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The population size determines how many individual solutions are maintained in each generation.
+For Differential Evolution, smaller population sizes (like 50) are often sufficient compared to
+traditional genetic algorithms, as the algorithm is more efficient at exploring the solution space.
+</p>
+<p><b>For Beginners:</b> This controls how many different solutions the algorithm works with at once.
+Differential Evolution typically needs fewer solutions than regular genetic algorithms to find good answers,
+which is why the default is 50 instead of 100. Having the right number of solutions helps balance between
+finding good answers (which needs diversity) and computing efficiently (which favors fewer solutions).</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/DifferentialEvolutionOptions.cs/#L19" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

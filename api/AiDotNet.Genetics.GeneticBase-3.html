@@ -1,0 +1,2418 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class GeneticBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class GeneticBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Provides a base implementation of IGeneticModel that handles common genetic algorithm operations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Genetics_GeneticBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.Genetics.GeneticBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Genetics.GeneticBase`3">
+
+
+
+  <h1 id="AiDotNet_Genetics_GeneticBase_3" data-uid="AiDotNet.Genetics.GeneticBase`3" class="text-break">
+Class GeneticBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Genetics.html">Genetics</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Provides a base implementation of IGeneticModel that handles common genetic algorithm operations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class GeneticBase&lt;T, TInput, TOutput&gt; : IGeneticAlgorithm&lt;T, TInput, TOutput, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelParameterGene&lt;T&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., double, float).</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The type of input data for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The type of output data produced by the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">GeneticBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGeneticAlgorithm-5.html">IGeneticAlgorithm</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Genetics.StandardGeneticAlgorithm-3.html">StandardGeneticAlgorithm&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Genetics_GeneticBase_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This abstract base class implements the IGeneticModel interface, providing standard
+implementations for common genetic algorithm operations while allowing derived classes
+to customize behavior specific to their genetic model type.
+</p>
+<p><b>For Beginners:</b>
+This class provides a ready-to-use foundation for genetic algorithm models.
+It handles:
+<ul>
+<li>Managing a population of candidate solutions</li>
+<li>Evolving the population through selection, crossover, and mutation</li>
+<li>Tracking statistics about the evolutionary process</li>
+<li>Saving and loading populations</li>
+</ul>
+<p>When creating your own genetic model, you can inherit from this class and focus
+on the specific implementation details of your model type rather than reimplementing
+the entire genetic algorithm framework.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3__ctor_" data-uid="AiDotNet.Genetics.GeneticBase`3.#ctor*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3__ctor_AiDotNet_Interfaces_IFitnessCalculator__0__1__2__AiDotNet_Interfaces_IModelEvaluator__0__1__2__" data-uid="AiDotNet.Genetics.GeneticBase`3.#ctor(AiDotNet.Interfaces.IFitnessCalculator{`0,`1,`2},AiDotNet.Interfaces.IModelEvaluator{`0,`1,`2})">
+  GeneticBase(IFitnessCalculator&lt;T, TInput, TOutput&gt;, IModelEvaluator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the GeneticModelBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected GeneticBase(IFitnessCalculator&lt;T, TInput, TOutput&gt; fitnessCalculator, IModelEvaluator&lt;T, TInput, TOutput&gt; modelEvaluator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitnessCalculator</code> <a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fitness calculator to use.</p>
+</dd>
+    <dt><code>modelEvaluator</code> <a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_BestIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.BestIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_BestIndividual" data-uid="AiDotNet.Genetics.GeneticBase`3.BestIndividual">
+  BestIndividual
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The best individual found so far.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;? BestIndividual { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CrossoverOperators_" data-uid="AiDotNet.Genetics.GeneticBase`3.CrossoverOperators*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CrossoverOperators" data-uid="AiDotNet.Genetics.GeneticBase`3.CrossoverOperators">
+  CrossoverOperators
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L67"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A dictionary mapping crossover operator names to implementations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;&gt;&gt; CrossoverOperators { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-4">Func</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CurrentStats_" data-uid="AiDotNet.Genetics.GeneticBase`3.CurrentStats*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CurrentStats" data-uid="AiDotNet.Genetics.GeneticBase`3.CurrentStats">
+  CurrentStats
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The current evolution statistics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected EvolutionStats&lt;T, TInput, TOutput&gt; CurrentStats { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.EvolutionStats-3.html">EvolutionStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_EvolutionStopwatch_" data-uid="AiDotNet.Genetics.GeneticBase`3.EvolutionStopwatch*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_EvolutionStopwatch" data-uid="AiDotNet.Genetics.GeneticBase`3.EvolutionStopwatch">
+  EvolutionStopwatch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L77"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A stopwatch for tracking evolution time.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Stopwatch EvolutionStopwatch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.diagnostics.stopwatch">Stopwatch</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_FitnessCalculator_" data-uid="AiDotNet.Genetics.GeneticBase`3.FitnessCalculator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_FitnessCalculator" data-uid="AiDotNet.Genetics.GeneticBase`3.FitnessCalculator">
+  FitnessCalculator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The fitness calculator used to evaluate individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IFitnessCalculator&lt;T, TInput, TOutput&gt; FitnessCalculator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GeneticParams_" data-uid="AiDotNet.Genetics.GeneticBase`3.GeneticParams*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GeneticParams" data-uid="AiDotNet.Genetics.GeneticBase`3.GeneticParams">
+  GeneticParams
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The parameters for the genetic algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected GeneticParameters GeneticParams { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.GeneticParameters.html">GeneticParameters</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_ModelEvaluator_" data-uid="AiDotNet.Genetics.GeneticBase`3.ModelEvaluator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_ModelEvaluator" data-uid="AiDotNet.Genetics.GeneticBase`3.ModelEvaluator">
+  ModelEvaluator
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The fitness calculator used to evaluate individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected IModelEvaluator&lt;T, TInput, TOutput&gt; ModelEvaluator { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IModelEvaluator-3.html">IModelEvaluator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_MutationOperators_" data-uid="AiDotNet.Genetics.GeneticBase`3.MutationOperators*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_MutationOperators" data-uid="AiDotNet.Genetics.GeneticBase`3.MutationOperators">
+  MutationOperators
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L72"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>A dictionary mapping mutation operator names to implementations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Dictionary&lt;string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;&gt; MutationOperators { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_NumOps_" data-uid="AiDotNet.Genetics.GeneticBase`3.NumOps*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_NumOps" data-uid="AiDotNet.Genetics.GeneticBase`3.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L84"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected INumericOperations&lt;T&gt; NumOps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Population_" data-uid="AiDotNet.Genetics.GeneticBase`3.Population*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Population" data-uid="AiDotNet.Genetics.GeneticBase`3.Population">
+  Population
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L37"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The current population of individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected List&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; Population { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Random_" data-uid="AiDotNet.Genetics.GeneticBase`3.Random*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Random" data-uid="AiDotNet.Genetics.GeneticBase`3.Random">
+  Random
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>The random number generator used for stochastic operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Random Random { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.random">Random</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_AddCrossoverOperator_" data-uid="AiDotNet.Genetics.GeneticBase`3.AddCrossoverOperator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_AddCrossoverOperator_System_String_System_Func_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_System_Collections_Generic_ICollection_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0_____" data-uid="AiDotNet.Genetics.GeneticBase`3.AddCrossoverOperator(System.String,System.Func{AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},System.Double,System.Collections.Generic.ICollection{AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}}}})">
+  AddCrossoverOperator(string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1210"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom crossover operator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void AddCrossoverOperator(string name, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;&gt; crossoverOperator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the crossover operator.</p>
+</dd>
+    <dt><code>crossoverOperator</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-4">Func</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;&gt;</dt>
+    <dd><p>The crossover function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_AddDefaultCrossoverOperators_" data-uid="AiDotNet.Genetics.GeneticBase`3.AddDefaultCrossoverOperators*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_AddDefaultCrossoverOperators" data-uid="AiDotNet.Genetics.GeneticBase`3.AddDefaultCrossoverOperators">
+  AddDefaultCrossoverOperators()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds default crossover operators.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void AddDefaultCrossoverOperators()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_AddDefaultMutationOperators_" data-uid="AiDotNet.Genetics.GeneticBase`3.AddDefaultMutationOperators*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_AddDefaultMutationOperators" data-uid="AiDotNet.Genetics.GeneticBase`3.AddDefaultMutationOperators">
+  AddDefaultMutationOperators()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds default mutation operators.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void AddDefaultMutationOperators()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_AddMutationOperator_" data-uid="AiDotNet.Genetics.GeneticBase`3.AddMutationOperator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_AddMutationOperator_System_String_System_Func_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0____" data-uid="AiDotNet.Genetics.GeneticBase`3.AddMutationOperator(System.String,System.Func{AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},System.Double,AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}}})">
+  AddMutationOperator(string, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1230"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds a custom mutation operator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void AddMutationOperator(string name, Func&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; mutationOperator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>name</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The name of the mutation operator.</p>
+</dd>
+    <dt><code>mutationOperator</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>, <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The mutation function.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CalculateDiversity_" data-uid="AiDotNet.Genetics.GeneticBase`3.CalculateDiversity*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CalculateDiversity" data-uid="AiDotNet.Genetics.GeneticBase`3.CalculateDiversity">
+  CalculateDiversity()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L679"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the genetic diversity of the population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T CalculateDiversity()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A measure of genetic diversity.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CalculateGeneticDistance_" data-uid="AiDotNet.Genetics.GeneticBase`3.CalculateGeneticDistance*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CalculateGeneticDistance_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.GeneticBase`3.CalculateGeneticDistance(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}})">
+  CalculateGeneticDistance(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L707"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the genetic distance between two individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T CalculateGeneticDistance(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual1, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual2)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual1</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first individual.</p>
+</dd>
+    <dt><code>individual2</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second individual.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>A measure of genetic distance.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_ConfigureGeneticParameters_" data-uid="AiDotNet.Genetics.GeneticBase`3.ConfigureGeneticParameters*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_ConfigureGeneticParameters_AiDotNet_Interfaces_GeneticParameters_" data-uid="AiDotNet.Genetics.GeneticBase`3.ConfigureGeneticParameters(AiDotNet.Interfaces.GeneticParameters)">
+  ConfigureGeneticParameters(GeneticParameters)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Configures the genetic algorithm parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void ConfigureGeneticParameters(GeneticParameters parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Interfaces.GeneticParameters.html">GeneticParameters</a></dt>
+    <dd><p>The genetic algorithm parameters to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CreateIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.CreateIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CreateIndividual_System_Collections_Generic_ICollection_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.GeneticBase`3.CreateIndividual(System.Collections.Generic.ICollection{AiDotNet.Genetics.ModelParameterGene{`0}})">
+  CreateIndividual(ICollection&lt;ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new individual with the specified genes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; CreateIndividual(ICollection&lt;ModelParameterGene&lt;T&gt;&gt; genes)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>genes</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The genes to include in the individual.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>A new individual with the specified genes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_CreateNextGeneration_" data-uid="AiDotNet.Genetics.GeneticBase`3.CreateNextGeneration*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_CreateNextGeneration__1__2__1__2_" data-uid="AiDotNet.Genetics.GeneticBase`3.CreateNextGeneration(`1,`2,`1,`2)">
+  CreateNextGeneration(TInput, TOutput, TInput?, TOutput?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L523"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates the next generation of individuals through selection, crossover, and mutation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; CreateNextGeneration(TInput trainingInput, TOutput trainingOutput, TInput? validationInput = default, TOutput? validationOutput = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainingInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input training data.</p>
+</dd>
+    <dt><code>trainingOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output for training.</p>
+</dd>
+    <dt><code>validationInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>Optional validation input data.</p>
+</dd>
+    <dt><code>validationOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Optional validation output data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The new population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Crossover_" data-uid="AiDotNet.Genetics.GeneticBase`3.Crossover*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Crossover_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_" data-uid="AiDotNet.Genetics.GeneticBase`3.Crossover(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},System.Double)">
+  Crossover(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L770"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs crossover between two parent individuals to produce offspring.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; Crossover(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; parent1, ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; parent2, double crossoverRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parent1</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The first parent individual.</p>
+</dd>
+    <dt><code>parent2</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The second parent individual.</p>
+</dd>
+    <dt><code>crossoverRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of crossover occurring.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>One or more offspring produced by crossover.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Deserialize_" data-uid="AiDotNet.Genetics.GeneticBase`3.Deserialize*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Deserialize_System_Byte___" data-uid="AiDotNet.Genetics.GeneticBase`3.Deserialize(System.Byte[])">
+  Deserialize(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1373"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes the model from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void Deserialize(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_DeserializeIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializeIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_DeserializeIndividual_System_Byte___" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializeIndividual(System.Byte[])">
+  DeserializeIndividual(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1412"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes an individual from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; DeserializeIndividual(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized individual.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The deserialized individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_DeserializeModelData_" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializeModelData*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_DeserializeModelData_System_Byte___" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializeModelData(System.Byte[])">
+  DeserializeModelData(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes model-specific data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract void DeserializeModelData(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_DeserializePopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_DeserializePopulation_System_Byte___" data-uid="AiDotNet.Genetics.GeneticBase`3.DeserializePopulation(System.Byte[])">
+  DeserializePopulation(byte[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1292"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Deserializes a population from a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; DeserializePopulation(byte[] data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>The byte array containing the serialized population.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The deserialized population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_EvaluateIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.EvaluateIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_EvaluateIndividual_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0____1__2__1__2_" data-uid="AiDotNet.Genetics.GeneticBase`3.EvaluateIndividual(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},`1,`2,`1,`2)">
+  EvaluateIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, TInput, TOutput, TInput?, TOutput?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L366"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates an individual by converting it to a model and generating evaluation data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T EvaluateIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual, TInput trainingInput, TOutput trainingOutput, TInput? validationInput = default, TOutput? validationOutput = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to evaluate.</p>
+</dd>
+    <dt><code>trainingInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input training data.</p>
+</dd>
+    <dt><code>trainingOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output for training.</p>
+</dd>
+    <dt><code>validationInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>Optional validation input data.</p>
+</dd>
+    <dt><code>validationOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Optional validation output data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated fitness score for the individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_EvaluatePopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.EvaluatePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_EvaluatePopulation__1__2__1__2_" data-uid="AiDotNet.Genetics.GeneticBase`3.EvaluatePopulation(`1,`2,`1,`2)">
+  EvaluatePopulation(TInput, TOutput, TInput?, TOutput?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L592"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evaluates all individuals in the population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void EvaluatePopulation(TInput trainingInput, TOutput trainingOutput, TInput? validationInput = default, TOutput? validationOutput = default)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainingInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input training data.</p>
+</dd>
+    <dt><code>trainingOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output for training.</p>
+</dd>
+    <dt><code>validationInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>Optional validation input data.</p>
+</dd>
+    <dt><code>validationOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Optional validation output data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Evolve_" data-uid="AiDotNet.Genetics.GeneticBase`3.Evolve*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Evolve_System_Int32__1__2__1__2_System_Func_AiDotNet_Statistics_EvolutionStats__0__1__2__System_Boolean__" data-uid="AiDotNet.Genetics.GeneticBase`3.Evolve(System.Int32,`1,`2,`1,`2,System.Func{AiDotNet.Statistics.EvolutionStats{`0,`1,`2},System.Boolean})">
+  Evolve(int, TInput, TOutput, TInput?, TOutput?, Func&lt;EvolutionStats&lt;T, TInput, TOutput&gt;, bool&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L418"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Evolves the population for a specified number of generations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual EvolutionStats&lt;T, TInput, TOutput&gt; Evolve(int generations, TInput trainingInput, TOutput trainingOutput, TInput? validationInput = default, TOutput? validationOutput = default, Func&lt;EvolutionStats&lt;T, TInput, TOutput&gt;, bool&gt;? stopCriteria = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>generations</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of generations to evolve.</p>
+</dd>
+    <dt><code>trainingInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input training data used for fitness evaluation.</p>
+</dd>
+    <dt><code>trainingOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>The expected output for training used for fitness evaluation.</p>
+</dd>
+    <dt><code>validationInput</code> <span class="xref">TInput</span></dt>
+    <dd><p>Optional validation input data.</p>
+</dd>
+    <dt><code>validationOutput</code> <span class="xref">TOutput</span></dt>
+    <dd><p>Optional validation output data.</p>
+</dd>
+    <dt><code>stopCriteria</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Statistics.EvolutionStats-3.html">EvolutionStats</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd><p>Optional function that determines when to stop evolution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.EvolutionStats-3.html">EvolutionStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Statistics about the evolutionary process.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_FindBestIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.FindBestIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_FindBestIndividual" data-uid="AiDotNet.Genetics.GeneticBase`3.FindBestIndividual">
+  FindBestIndividual()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L668"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds the best individual in the current population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; FindBestIndividual()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual with the best fitness.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetBestIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetBestIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetBestIndividual" data-uid="AiDotNet.Genetics.GeneticBase`3.GetBestIndividual">
+  GetBestIndividual()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the best individual from the current population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; GetBestIndividual()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual with the highest fitness, or throws an exception if no best individual exists.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetElites_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetElites*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetElites_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetElites(System.Int32)">
+  GetElites(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L575"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the elite individuals (best performers) from the population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; GetElites(int count)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>count</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of elite individuals to get.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The elite individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetEvolutionStats_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetEvolutionStats*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetEvolutionStats_AiDotNet_Interfaces_IFitnessCalculator__0__1__2__" data-uid="AiDotNet.Genetics.GeneticBase`3.GetEvolutionStats(AiDotNet.Interfaces.IFitnessCalculator{`0,`1,`2})">
+  GetEvolutionStats(IFitnessCalculator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets statistics about the current evolutionary state.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual EvolutionStats&lt;T, TInput, TOutput&gt; GetEvolutionStats(IFitnessCalculator&lt;T, TInput, TOutput&gt; fitnessCalculator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitnessCalculator</code> <a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Statistics.EvolutionStats-3.html">EvolutionStats</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>Statistics about the current evolutionary state.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetFitnessCalculator_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetFitnessCalculator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetFitnessCalculator" data-uid="AiDotNet.Genetics.GeneticBase`3.GetFitnessCalculator">
+  GetFitnessCalculator()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the fitness calculator used to evaluate individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFitnessCalculator&lt;T, TInput, TOutput&gt; GetFitnessCalculator()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fitness calculator instance used by this genetic model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetGeneticParameters_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetGeneticParameters*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetGeneticParameters" data-uid="AiDotNet.Genetics.GeneticBase`3.GetGeneticParameters">
+  GetGeneticParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1200"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current genetic algorithm parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual GeneticParameters GetGeneticParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.GeneticParameters.html">GeneticParameters</a></dt>
+    <dd><p>The current genetic algorithm parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetMetaData_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetMetaData*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetMetaData" data-uid="AiDotNet.Genetics.GeneticBase`3.GetMetaData">
+  GetMetaData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1318"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the metadata for the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ModelMetadata&lt;T&gt; GetMetaData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;</dt>
+    <dd><p>The model metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_GetPopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.GetPopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_GetPopulation" data-uid="AiDotNet.Genetics.GeneticBase`3.GetPopulation">
+  GetPopulation()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L338"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current population of individuals in the genetic model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; GetPopulation()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>A collection of individuals representing the current population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_IndividualToModel_" data-uid="AiDotNet.Genetics.GeneticBase`3.IndividualToModel*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_IndividualToModel_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.GeneticBase`3.IndividualToModel(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}})">
+  IndividualToModel(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1174"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts an individual to a trained model that can make predictions.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract IFullModel&lt;T, TInput, TOutput&gt; IndividualToModel(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to convert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>A model capable of making predictions based on the individual's genes.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_InitializePopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.InitializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_InitializePopulation_System_Int32_AiDotNet_Enums_InitializationMethod_" data-uid="AiDotNet.Genetics.GeneticBase`3.InitializePopulation(System.Int32,AiDotNet.Enums.InitializationMethod)">
+  InitializePopulation(int, InitializationMethod)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new population with random individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; InitializePopulation(int populationSize, InitializationMethod initializationMethod)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>populationSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The size of the population to create.</p>
+</dd>
+    <dt><code>initializationMethod</code> <a class="xref" href="AiDotNet.Enums.InitializationMethod.html">InitializationMethod</a></dt>
+    <dd><p>The method to use for initialization.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The newly created population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_InvertFitness_" data-uid="AiDotNet.Genetics.GeneticBase`3.InvertFitness*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_InvertFitness__0_" data-uid="AiDotNet.Genetics.GeneticBase`3.InvertFitness(`0)">
+  InvertFitness(T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L739"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Inverts a fitness score for use in comparisons.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T InvertFitness(T fitness)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitness</code> <span class="xref">T</span></dt>
+    <dd><p>The fitness score to invert.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The inverted fitness score.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_IsBetterFitness_" data-uid="AiDotNet.Genetics.GeneticBase`3.IsBetterFitness*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_IsBetterFitness__0__0_" data-uid="AiDotNet.Genetics.GeneticBase`3.IsBetterFitness(`0,`0)">
+  IsBetterFitness(T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L750"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Determines if one fitness score is better than another.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual bool IsBetterFitness(T fitnessA, T fitnessB)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitnessA</code> <span class="xref">T</span></dt>
+    <dd><p>The first fitness score.</p>
+</dd>
+    <dt><code>fitnessB</code> <span class="xref">T</span></dt>
+    <dd><p>The second fitness score.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if fitnessA is better than fitnessB; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_LoadPopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.LoadPopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_LoadPopulation_System_String_" data-uid="AiDotNet.Genetics.GeneticBase`3.LoadPopulation(System.String)">
+  LoadPopulation(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1268"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Loads a population from a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; LoadPopulation(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path from which to load the population.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The loaded population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Mutate_" data-uid="AiDotNet.Genetics.GeneticBase`3.Mutate*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Mutate_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___System_Double_" data-uid="AiDotNet.Genetics.GeneticBase`3.Mutate(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}},System.Double)">
+  Mutate(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L789"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies mutation to an individual.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; Mutate(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual, double mutationRate)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to mutate.</p>
+</dd>
+    <dt><code>mutationRate</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The probability of each gene mutating.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The mutated individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_MutateGene_" data-uid="AiDotNet.Genetics.GeneticBase`3.MutateGene*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_MutateGene_AiDotNet_Genetics_ModelParameterGene__0__" data-uid="AiDotNet.Genetics.GeneticBase`3.MutateGene(AiDotNet.Genetics.ModelParameterGene{`0})">
+  MutateGene(ModelParameterGene&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L304"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a mutated version of a gene.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract ModelParameterGene&lt;T&gt; MutateGene(ModelParameterGene&lt;T&gt; gene)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gene</code> <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>The gene to mutate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>A mutated copy of the gene.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_MutateGeneGaussian_" data-uid="AiDotNet.Genetics.GeneticBase`3.MutateGeneGaussian*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_MutateGeneGaussian_AiDotNet_Genetics_ModelParameterGene__0__" data-uid="AiDotNet.Genetics.GeneticBase`3.MutateGeneGaussian(AiDotNet.Genetics.ModelParameterGene{`0})">
+  MutateGeneGaussian(ModelParameterGene&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L311"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a mutated version of a gene using Gaussian noise.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract ModelParameterGene&lt;T&gt; MutateGeneGaussian(ModelParameterGene&lt;T&gt; gene)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>gene</code> <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>The gene to mutate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;</dt>
+    <dd><p>A mutated copy of the gene.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Predict_" data-uid="AiDotNet.Genetics.GeneticBase`3.Predict*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Predict__1_" data-uid="AiDotNet.Genetics.GeneticBase`3.Predict(`1)">
+  Predict(TInput)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1303"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Makes a prediction using the current best model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual TOutput Predict(TInput input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <span class="xref">TInput</span></dt>
+    <dd><p>The input data.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">TOutput</span></dt>
+    <dd><p>The predicted output.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_RankSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.RankSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_RankSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.RankSelection(System.Int32)">
+  RankSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using rank selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; RankSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_RouletteWheelSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.RouletteWheelSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_RouletteWheelSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.RouletteWheelSelection(System.Int32)">
+  RouletteWheelSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1012"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using roulette wheel selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; RouletteWheelSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_SavePopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.SavePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_SavePopulation_System_String_" data-uid="AiDotNet.Genetics.GeneticBase`3.SavePopulation(System.String)">
+  SavePopulation(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1248"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves the current population to a file.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual void SavePopulation(string filePath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>filePath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The path where the population should be saved.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Select_" data-uid="AiDotNet.Genetics.GeneticBase`3.Select*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Select_System_Int32_AiDotNet_Enums_SelectionMethod_" data-uid="AiDotNet.Genetics.GeneticBase`3.Select(System.Int32,AiDotNet.Enums.SelectionMethod)">
+  Select(int, SelectionMethod)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L807"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals from the population for reproduction.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; Select(int selectionSize, SelectionMethod selectionMethod)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+    <dt><code>selectionMethod</code> <a class="xref" href="AiDotNet.Enums.SelectionMethod.html">SelectionMethod</a></dt>
+    <dd><p>The method to use for selection (e.g., tournament, roulette wheel).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_Serialize_" data-uid="AiDotNet.Genetics.GeneticBase`3.Serialize*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_Serialize" data-uid="AiDotNet.Genetics.GeneticBase`3.Serialize">
+  Serialize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1324"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the model to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public virtual byte[] Serialize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_SerializeIndividual_" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializeIndividual*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_SerializeIndividual_AiDotNet_Genetics_ModelIndividual__0__1__2_AiDotNet_Genetics_ModelParameterGene__0___" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializeIndividual(AiDotNet.Genetics.ModelIndividual{`0,`1,`2,AiDotNet.Genetics.ModelParameterGene{`0}})">
+  SerializeIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1361"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes an individual to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract byte[] SerializeIndividual(ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt; individual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>individual</code> <a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;</dt>
+    <dd><p>The individual to serialize.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized individual.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_SerializeModelData_" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializeModelData*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_SerializeModelData" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializeModelData">
+  SerializeModelData()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1367"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes model-specific data.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract byte[] SerializeModelData()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized model data.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_SerializePopulation_" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializePopulation*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_SerializePopulation" data-uid="AiDotNet.Genetics.GeneticBase`3.SerializePopulation">
+  SerializePopulation()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L1261"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Serializes the population to a byte array.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected abstract byte[] SerializePopulation()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.byte">byte</a>[]</dt>
+    <dd><p>A byte array containing the serialized population.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_SetFitnessCalculator_" data-uid="AiDotNet.Genetics.GeneticBase`3.SetFitnessCalculator*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_SetFitnessCalculator_AiDotNet_Interfaces_IFitnessCalculator__0__1__2__" data-uid="AiDotNet.Genetics.GeneticBase`3.SetFitnessCalculator(AiDotNet.Interfaces.IFitnessCalculator{`0,`1,`2})">
+  SetFitnessCalculator(IFitnessCalculator&lt;T, TInput, TOutput&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the fitness calculator to be used for evaluating individuals.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetFitnessCalculator(IFitnessCalculator&lt;T, TInput, TOutput&gt; fitnessCalculator)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fitnessCalculator</code> <a class="xref" href="AiDotNet.Interfaces.IFitnessCalculator-3.html">IFitnessCalculator</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd><p>The fitness calculator to use.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_StochasticUniversalSamplingSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.StochasticUniversalSamplingSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_StochasticUniversalSamplingSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.StochasticUniversalSamplingSelection(System.Int32)">
+  StochasticUniversalSamplingSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L872"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using stochastic universal sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; StochasticUniversalSamplingSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_TournamentSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.TournamentSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_TournamentSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.TournamentSelection(System.Int32)">
+  TournamentSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L962"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using tournament selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; TournamentSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_TruncationSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.TruncationSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_TruncationSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.TruncationSelection(System.Int32)">
+  TruncationSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L827"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using truncation selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; TruncationSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_UniformSelection_" data-uid="AiDotNet.Genetics.GeneticBase`3.UniformSelection*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_UniformSelection_System_Int32_" data-uid="AiDotNet.Genetics.GeneticBase`3.UniformSelection(System.Int32)">
+  UniformSelection(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L843"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Selects individuals using uniform selection (all individuals have equal probability).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual ICollection&lt;ModelIndividual&lt;T, TInput, TOutput, ModelParameterGene&lt;T&gt;&gt;&gt; UniformSelection(int selectionSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectionSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The number of individuals to select.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.icollection-1">ICollection</a>&lt;<a class="xref" href="AiDotNet.Genetics.ModelIndividual-4.html">ModelIndividual</a>&lt;T, TInput, TOutput, <a class="xref" href="AiDotNet.Genetics.ModelParameterGene-1.html">ModelParameterGene</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>The selected individuals.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Genetics_GeneticBase_3_UpdateEvolutionStats_" data-uid="AiDotNet.Genetics.GeneticBase`3.UpdateEvolutionStats*"></a>
+
+  <h3 id="AiDotNet_Genetics_GeneticBase_3_UpdateEvolutionStats" data-uid="AiDotNet.Genetics.GeneticBase`3.UpdateEvolutionStats">
+  UpdateEvolutionStats()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L617"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the evolution statistics based on the current population.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual void UpdateEvolutionStats()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Genetics/GeneticBase.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

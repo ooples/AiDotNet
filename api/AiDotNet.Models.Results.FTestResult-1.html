@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class FTestResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class FTestResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents the results of an F-test, which is used to compare the variances of two populations.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Results_FTestResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Results.FTestResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Results.FTestResult`1">
+
+
+
+  <h1 id="AiDotNet_Models_Results_FTestResult_1" data-uid="AiDotNet.Models.Results.FTestResult`1" class="text-break">
+Class FTestResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents the results of an F-test, which is used to compare the variances of two populations.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class FTestResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for statistical values, typically float or double.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">FTestResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Results_FTestResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The F-test is a statistical test used to determine whether two populations have equal variances. It is based on 
+the ratio of two sample variances. This class stores the results of such a test, including the F-statistic, 
+p-value, degrees of freedom, the variances being compared, confidence intervals, and whether the result is 
+statistically significant. The F-test is commonly used in analysis of variance (ANOVA) and as a preliminary 
+test before applying other statistical tests that assume equal variances. The class uses generic type parameter 
+T to support different numeric types for the statistical values, such as float, double, or decimal.
+</p>
+<p><b>For Beginners:</b> The F-test helps determine if two groups have similar or different amounts of variability.
+<p>For example, you might use this test to answer questions like:</p>
+<ul>
+<li>Do men and women have the same variability in test scores?</li>
+<li>Is the precision of one measurement method better than another?</li>
+<li>Are the variances in two manufacturing processes comparable?</li>
+</ul>
+<p>The test works by:</p>
+<ol>
+<li>Calculating the ratio of the two sample variances</li>
+<li>Comparing this ratio to what would be expected if the population variances were equal</li>
+<li>Determining if the difference is statistically significant</li>
+</ol>
+<p>This class stores all the information about the test results, helping you interpret whether
+the observed difference in variability is likely due to chance or represents a real difference.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1__ctor_" data-uid="AiDotNet.Models.Results.FTestResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1__ctor__0__0_System_Int32_System_Int32__0__0__0__0__0_" data-uid="AiDotNet.Models.Results.FTestResult`1.#ctor(`0,`0,System.Int32,System.Int32,`0,`0,`0,`0,`0)">
+  FTestResult(T, T, int, int, T, T, T, T, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L345"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the FTestResult class with the specified test statistics and parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FTestResult(T fStatistic, T pValue, int numeratorDf, int denominatorDf, T leftVariance, T rightVariance, T lowerCI, T upperCI, T significanceLevel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>fStatistic</code> <span class="xref">T</span></dt>
+    <dd><p>The F-statistic value.</p>
+</dd>
+    <dt><code>pValue</code> <span class="xref">T</span></dt>
+    <dd><p>The p-value associated with the F-test.</p>
+</dd>
+    <dt><code>numeratorDf</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The degrees of freedom for the numerator.</p>
+</dd>
+    <dt><code>denominatorDf</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The degrees of freedom for the denominator.</p>
+</dd>
+    <dt><code>leftVariance</code> <span class="xref">T</span></dt>
+    <dd><p>The variance of the left (or first) sample.</p>
+</dd>
+    <dt><code>rightVariance</code> <span class="xref">T</span></dt>
+    <dd><p>The variance of the right (or second) sample.</p>
+</dd>
+    <dt><code>lowerCI</code> <span class="xref">T</span></dt>
+    <dd><p>The lower bound of the confidence interval for the ratio of population variances.</p>
+</dd>
+    <dt><code>upperCI</code> <span class="xref">T</span></dt>
+    <dd><p>The upper bound of the confidence interval for the ratio of population variances.</p>
+</dd>
+    <dt><code>significanceLevel</code> <span class="xref">T</span></dt>
+    <dd><p>The significance level used for the test.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1__ctor__0__0_System_Int32_System_Int32__0__0__0__0__0__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This constructor creates a new FTestResult instance with the specified test statistics and parameters. It initializes 
+all properties of the class and calculates the IsSignificant property by comparing the p-value to the significance 
+level. The IsSignificant property is set to true if the p-value is less than the significance level, indicating that 
+the test result is statistically significant. This constructor provides a convenient way to create a complete 
+FTestResult object in a single step after performing an F-test.
+</p>
+<p><b>For Beginners:</b> This constructor creates a new result object with all the F-test statistics and parameters.
+<p>When a new FTestResult is created with this constructor:</p>
+<ul>
+<li>All the test statistics and parameters are set to the values you provide</li>
+<li>The IsSignificant property is automatically calculated by comparing the p-value to the significance level</li>
+</ul>
+<p>This constructor is useful because:</p>
+<ul>
+<li>It creates a complete result object in one step</li>
+<li>It automatically determines statistical significance</li>
+<li>It ensures all the related test information is kept together</li>
+</ul>
+<p>The IsSignificant calculation uses MathHelper to compare the p-value to the significance level,
+which works regardless of what numeric type T is (float, double, decimal, etc.).</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_DenominatorDegreesOfFreedom_" data-uid="AiDotNet.Models.Results.FTestResult`1.DenominatorDegreesOfFreedom*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_DenominatorDegreesOfFreedom" data-uid="AiDotNet.Models.Results.FTestResult`1.DenominatorDegreesOfFreedom">
+  DenominatorDegreesOfFreedom
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L136"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degrees of freedom for the denominator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int DenominatorDegreesOfFreedom { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the denominator degrees of freedom.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_DenominatorDegreesOfFreedom_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the degrees of freedom for the denominator of the F-statistic, which is typically one 
+less than the sample size of the second group (n2 - 1). The denominator degrees of freedom is one of the 
+parameters of the F-distribution used to calculate the p-value. It affects the shape of the F-distribution and 
+thus the interpretation of the F-statistic.
+</p>
+<p><b>For Beginners:</b> This value is related to the sample size of the second group.
+<p>The denominator degrees of freedom:</p>
+<ul>
+<li>Is typically calculated as (n2 - 1), where n2 is the sample size of the second group</li>
+<li>Is a parameter needed to interpret the F-statistic</li>
+<li>Helps determine the shape of the F-distribution used to calculate the p-value</li>
+</ul>
+<p>For example, if your second sample has 15 observations, the denominator degrees of freedom would be 14.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_FStatistic_" data-uid="AiDotNet.Models.Results.FTestResult`1.FStatistic*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_FStatistic" data-uid="AiDotNet.Models.Results.FTestResult`1.FStatistic">
+  FStatistic
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the F-statistic value.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FStatistic { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated F-statistic.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_FStatistic_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the F-statistic, which is the ratio of the larger sample variance to the smaller 
+sample variance. An F-statistic close to 1 suggests that the two populations have similar variances, while 
+values much larger than 1 suggest that the variances are different. The F-statistic follows an F-distribution 
+with degrees of freedom determined by the sample sizes. This statistic is used in conjunction with the degrees 
+of freedom to calculate the p-value, which determines statistical significance.
+</p>
+<p><b>For Beginners:</b> This value is the ratio of the larger variance to the smaller variance.
+<p>The F-statistic:</p>
+<ul>
+<li>Is calculated as the ratio of two sample variances</li>
+<li>Is always positive</li>
+<li>A value close to 1 suggests similar variances</li>
+<li>Values much larger than 1 suggest different variances</li>
+</ul>
+<p>For example, an F-statistic of 1.05 suggests the variances are very similar,
+while a value of 4.75 suggests one group has much more variability than the other.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_IsSignificant_" data-uid="AiDotNet.Models.Results.FTestResult`1.IsSignificant*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_IsSignificant" data-uid="AiDotNet.Models.Results.FTestResult`1.IsSignificant">
+  IsSignificant
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a value indicating whether the F-test result is statistically significant.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsSignificant { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if the result is statistically significant; otherwise, false.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_IsSignificant_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates whether the F-test result is statistically significant at the specified significance 
+level. A result is considered significant if the p-value is less than or equal to the significance level. 
+Statistical significance suggests that the observed difference between the sample variances is unlikely to 
+have occurred by chance alone, leading to the rejection of the null hypothesis that the population variances 
+are equal. This property provides a convenient boolean indicator of significance without requiring the user 
+to compare the p-value to the significance level.
+</p>
+<p><b>For Beginners:</b> This tells you whether your result is statistically significant or not.
+<p>The significance indicator:</p>
+<ul>
+<li>Provides a simple yes/no answer about statistical significance</li>
+<li>True means the variances are significantly different</li>
+<li>False means the difference in variances could reasonably be due to random chance</li>
+</ul>
+<p>This is determined by:</p>
+<ul>
+<li>Comparing the p-value to the significance level</li>
+</ul>
+<p>This value makes it easy to interpret your results without having to manually
+check if the p-value is below the significance threshold. It's particularly
+useful when automating analysis or presenting results to non-statisticians.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_LeftVariance_" data-uid="AiDotNet.Models.Results.FTestResult`1.LeftVariance*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_LeftVariance" data-uid="AiDotNet.Models.Results.FTestResult`1.LeftVariance">
+  LeftVariance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the variance of the left (or first) sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T LeftVariance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated variance of the left sample.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_LeftVariance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the variance of the left (or first) sample, which is a measure of the spread or 
+dispersion of the data points around their mean. The variance is calculated as the average of the squared 
+differences from the mean. This is one of the two variances being compared in the F-test. In the context of 
+the F-test, the left variance is often the numerator in the F-statistic calculation, especially if it's the 
+larger of the two variances.
+</p>
+<p><b>For Beginners:</b> This value measures how spread out the data is in the first group.
+<p>The left variance:</p>
+<ul>
+<li>Quantifies the variability or dispersion in the first sample</li>
+<li>Higher values indicate more spread-out data</li>
+<li>Is one of the two variances being compared in the F-test</li>
+</ul>
+<p>For example, if measuring test scores, a variance of 100 means the scores are more
+spread out than a variance of 25.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_LowerConfidenceInterval_" data-uid="AiDotNet.Models.Results.FTestResult`1.LowerConfidenceInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_LowerConfidenceInterval" data-uid="AiDotNet.Models.Results.FTestResult`1.LowerConfidenceInterval">
+  LowerConfidenceInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lower bound of the confidence interval for the ratio of population variances.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T LowerConfidenceInterval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The lower bound of the confidence interval.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_LowerConfidenceInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the lower bound of the confidence interval for the ratio of the two population variances. 
+The confidence interval provides a range of plausible values for the true ratio of population variances, given 
+the observed sample data. If this interval includes 1, then the null hypothesis that the population variances 
+are equal cannot be rejected at the specified significance level. The width of the confidence interval depends 
+on the significance level and the sample sizes.
+</p>
+<p><b>For Beginners:</b> This value is the lower end of the range where the true variance ratio likely falls.
+<p>The lower confidence interval:</p>
+<ul>
+<li>Forms the lower bound of a range that likely contains the true ratio of population variances</li>
+<li>Is calculated based on the F-statistic, degrees of freedom, and significance level</li>
+<li>Helps assess the precision of your variance ratio estimate</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>If the interval includes 1, the variances might be equal</li>
+<li>If both the lower and upper bounds are above 1, the first population likely has higher variance</li>
+<li>If both bounds are below 1, the second population likely has higher variance</li>
+</ul>
+<p>For example, a lower bound of 1.2 suggests that the first population's variance is
+at least 1.2 times the second population's variance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_NumeratorDegreesOfFreedom_" data-uid="AiDotNet.Models.Results.FTestResult`1.NumeratorDegreesOfFreedom*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_NumeratorDegreesOfFreedom" data-uid="AiDotNet.Models.Results.FTestResult`1.NumeratorDegreesOfFreedom">
+  NumeratorDegreesOfFreedom
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L113"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the degrees of freedom for the numerator.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumeratorDegreesOfFreedom { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>An integer representing the numerator degrees of freedom.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_NumeratorDegreesOfFreedom_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the degrees of freedom for the numerator of the F-statistic, which is typically one 
+less than the sample size of the first group (n1 - 1). The numerator degrees of freedom is one of the parameters 
+of the F-distribution used to calculate the p-value. It affects the shape of the F-distribution and thus the 
+interpretation of the F-statistic.
+</p>
+<p><b>For Beginners:</b> This value is related to the sample size of the first group.
+<p>The numerator degrees of freedom:</p>
+<ul>
+<li>Is typically calculated as (n1 - 1), where n1 is the sample size of the first group</li>
+<li>Is a parameter needed to interpret the F-statistic</li>
+<li>Helps determine the shape of the F-distribution used to calculate the p-value</li>
+</ul>
+<p>For example, if your first sample has 20 observations, the numerator degrees of freedom would be 19.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_PValue_" data-uid="AiDotNet.Models.Results.FTestResult`1.PValue*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_PValue" data-uid="AiDotNet.Models.Results.FTestResult`1.PValue">
+  PValue
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the p-value associated with the F-test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T PValue { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated p-value.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_PValue_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the p-value of the F-test, which is the probability of observing an F-statistic as 
+extreme as, or more extreme than, the one calculated from the sample data, assuming the null hypothesis is true. 
+The null hypothesis typically states that the two populations have equal variances. A small p-value (typically 
+= 0.05) suggests that the observed data is unlikely under the null hypothesis, leading to its rejection in favor 
+of the alternative hypothesis that the variances are different. The p-value is calculated from the F-statistic 
+and the degrees of freedom using the cumulative distribution function of the F-distribution.
+</p>
+<p><b>For Beginners:</b> This value tells you how likely your results could occur by random chance.
+<p>The p-value:</p>
+<ul>
+<li>Ranges from 0 to 1</li>
+<li>Smaller values indicate stronger evidence against the null hypothesis</li>
+<li>Represents the probability of seeing your results (or more extreme) if the variances are actually equal</li>
+</ul>
+<p>Common interpretation:</p>
+<ul>
+<li>p = 0.05: Results are statistically significant (commonly used threshold)</li>
+<li>p = 0.01: Results are highly significant</li>
+<li>p &gt; 0.05: Results are not statistically significant</li>
+</ul>
+<p>For example, a p-value of 0.02 means there's only a 2% chance of seeing your results
+if the variances are truly equal, suggesting the difference in variability
+is likely real and not due to random chance.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_RightVariance_" data-uid="AiDotNet.Models.Results.FTestResult`1.RightVariance*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_RightVariance" data-uid="AiDotNet.Models.Results.FTestResult`1.RightVariance">
+  RightVariance
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the variance of the right (or second) sample.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T RightVariance { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The calculated variance of the right sample.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_RightVariance_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the variance of the right (or second) sample, which is a measure of the spread or 
+dispersion of the data points around their mean. The variance is calculated as the average of the squared 
+differences from the mean. This is one of the two variances being compared in the F-test. In the context of 
+the F-test, the right variance is often the denominator in the F-statistic calculation, especially if it's 
+the smaller of the two variances.
+</p>
+<p><b>For Beginners:</b> This value measures how spread out the data is in the second group.
+<p>The right variance:</p>
+<ul>
+<li>Quantifies the variability or dispersion in the second sample</li>
+<li>Higher values indicate more spread-out data</li>
+<li>Is one of the two variances being compared in the F-test</li>
+</ul>
+<p>For example, if measuring reaction times, a variance of 0.5 means the times are more
+consistent than a variance of 2.0.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_SignificanceLevel_" data-uid="AiDotNet.Models.Results.FTestResult`1.SignificanceLevel*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_SignificanceLevel" data-uid="AiDotNet.Models.Results.FTestResult`1.SignificanceLevel">
+  SignificanceLevel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L308"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the significance level used for the test.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SignificanceLevel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The significance level, typically 0.05.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_SignificanceLevel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the significance level used for the F-test, which is the threshold p-value below which 
+the result is considered statistically significant. Common values are 0.05 (5%), 0.01 (1%), and 0.001 (0.1%). 
+The significance level represents the probability of rejecting the null hypothesis when it is actually true 
+(Type I error). A lower significance level reduces the risk of Type I errors but increases the risk of Type II 
+errors (failing to reject a false null hypothesis). The significance level also determines the width of the 
+confidence interval, with lower significance levels resulting in wider intervals.
+</p>
+<p><b>For Beginners:</b> This value is the threshold that determines when a result is considered statistically significant.
+<p>The significance level:</p>
+<ul>
+<li>Is typically set to 0.05 (5%) by convention</li>
+<li>Represents your tolerance for false positives</li>
+<li>Lower values (like 0.01) make the test more conservative</li>
+<li>Higher values (like 0.10) make the test more lenient</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>It directly determines whether a result is considered &quot;significant&quot;</li>
+<li>It affects the width of the confidence interval</li>
+<li>It represents the risk you're willing to take of finding a difference when none exists</li>
+</ul>
+<p>For example, with a significance level of 0.05, you're accepting a 5% chance of
+incorrectly concluding the variances are different when they're actually equal.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Results_FTestResult_1_UpperConfidenceInterval_" data-uid="AiDotNet.Models.Results.FTestResult`1.UpperConfidenceInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Results_FTestResult_1_UpperConfidenceInterval" data-uid="AiDotNet.Models.Results.FTestResult`1.UpperConfidenceInterval">
+  UpperConfidenceInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the upper bound of the confidence interval for the ratio of population variances.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T UpperConfidenceInterval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The upper bound of the confidence interval.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Results_FTestResult_1_UpperConfidenceInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property represents the upper bound of the confidence interval for the ratio of the two population variances. 
+The confidence interval provides a range of plausible values for the true ratio of population variances, given 
+the observed sample data. If this interval includes 1, then the null hypothesis that the population variances 
+are equal cannot be rejected at the specified significance level. The width of the confidence interval depends 
+on the significance level and the sample sizes.
+</p>
+<p><b>For Beginners:</b> This value is the upper end of the range where the true variance ratio likely falls.
+<p>The upper confidence interval:</p>
+<ul>
+<li>Forms the upper bound of a range that likely contains the true ratio of population variances</li>
+<li>Is calculated based on the F-statistic, degrees of freedom, and significance level</li>
+<li>Helps assess the precision of your variance ratio estimate</li>
+</ul>
+<p>This value is important because:</p>
+<ul>
+<li>If the interval includes 1, the variances might be equal</li>
+<li>A very high upper bound suggests uncertainty about how much larger the first variance might be</li>
+<li>Together with the lower bound, it shows the precision of your estimate</li>
+</ul>
+<p>For example, an upper bound of 3.5 suggests that the first population's variance could
+be as much as 3.5 times the second population's variance.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Results/FTestResult.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

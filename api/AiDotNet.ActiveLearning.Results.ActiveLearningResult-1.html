@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ActiveLearningResult&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ActiveLearningResult&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Final result from the complete active learning process.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ActiveLearning_Results_ActiveLearningResult_1.md&amp;value=---%0Auid%3A%20AiDotNet.ActiveLearning.Results.ActiveLearningResult%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1">
+
+
+
+  <h1 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1" class="text-break">
+Class ActiveLearningResult&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L129"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ActiveLearning.html">ActiveLearning</a>.<a class="xref" href="AiDotNet.ActiveLearning.Results.html">Results</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Final result from the complete active learning process.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ActiveLearningResult&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ActiveLearningResult&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> This class summarizes the entire active learning process,
+including the learning curve, final performance, and efficiency metrics.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1__ctor_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1__ctor_AiDotNet_Tensors_Interfaces_INumericOperations__0__" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.#ctor(AiDotNet.Tensors.Interfaces.INumericOperations{`0})">
+  ActiveLearningResult(INumericOperations&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with default values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ActiveLearningResult(INumericOperations&lt;T&gt;? numOps = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numOps</code> <a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd><p>Optional numeric operations provider. If null, a default provider will be used.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_AreaUnderLearningCurve_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.AreaUnderLearningCurve*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_AreaUnderLearningCurve" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.AreaUnderLearningCurve">
+  AreaUnderLearningCurve
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L259"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Area Under the Learning Curve (AULC).
+Higher is better - measures overall learning efficiency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T AreaUnderLearningCurve { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_BatchStrategyName_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.BatchStrategyName*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_BatchStrategyName" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.BatchStrategyName">
+  BatchStrategyName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L251"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch strategy used (if any).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? BatchStrategyName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_BudgetUsed_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.BudgetUsed*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_BudgetUsed" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.BudgetUsed">
+  BudgetUsed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the labeling budget used as a fraction of maximum.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T BudgetUsed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTestAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTestAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTestAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTestAccuracy">
+  FinalTestAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L201"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final test accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalTestAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTestLoss_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTestLoss*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTestLoss" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTestLoss">
+  FinalTestLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L211"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final test loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalTestLoss { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTrainingAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTrainingAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTrainingAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTrainingAccuracy">
+  FinalTrainingAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L176"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final training accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalTrainingAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTrainingLoss_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTrainingLoss*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalTrainingLoss" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalTrainingLoss">
+  FinalTrainingLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final training loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalTrainingLoss { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalValidationAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalValidationAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalValidationAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalValidationAccuracy">
+  FinalValidationAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L186"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final validation accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalValidationAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalValidationLoss_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalValidationLoss*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_FinalValidationLoss" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.FinalValidationLoss">
+  FinalValidationLoss
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L196"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the final validation loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T FinalValidationLoss { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasAULC_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasAULC*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasAULC" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasAULC">
+  HasAULC
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L264"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether AULC was calculated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasAULC { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasQueryEfficiencyRatio_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasQueryEfficiencyRatio*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasQueryEfficiencyRatio" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasQueryEfficiencyRatio">
+  HasQueryEfficiencyRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether query efficiency ratio was calculated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasQueryEfficiencyRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasSampleEfficiency_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasSampleEfficiency*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasSampleEfficiency" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasSampleEfficiency">
+  HasSampleEfficiency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L285"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether sample efficiency was calculated.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasSampleEfficiency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasTargetAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasTargetAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasTargetAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasTargetAccuracy">
+  HasTargetAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L300"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether target accuracy was set.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasTargetAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasTest_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasTest*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasTest" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasTest">
+  HasTest
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L206"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether test data was provided.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasTest { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasValidation_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasValidation*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_HasValidation" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.HasValidation">
+  HasValidation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L191"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether validation data was available.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool HasValidation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_InitialLabeledSamples_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.InitialLabeledSamples*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_InitialLabeledSamples" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.InitialLabeledSamples">
+  InitialLabeledSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial number of labeled samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int InitialLabeledSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_IterationResults_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.IterationResults*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_IterationResults" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.IterationResults">
+  IterationResults
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the results from each iteration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public List&lt;ActiveLearningIterationResult&lt;T&gt;&gt; IterationResults { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ActiveLearning.Results.ActiveLearningIterationResult-1.html">ActiveLearningIterationResult</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_LearningCurve_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.LearningCurve*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_LearningCurve" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.LearningCurve">
+  LearningCurve
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L216"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning curve showing performance vs. labeled samples.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LearningCurve&lt;T&gt; LearningCurve { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ActiveLearning.Interfaces.LearningCurve-1.html">LearningCurve</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_QueryEfficiencyRatio_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.QueryEfficiencyRatio*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_QueryEfficiencyRatio" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.QueryEfficiencyRatio">
+  QueryEfficiencyRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L270"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the query efficiency ratio.
+Compares performance to random sampling baseline.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T QueryEfficiencyRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_QueryStrategyName_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.QueryStrategyName*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_QueryStrategyName" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.QueryStrategyName">
+  QueryStrategyName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L246"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the query strategy used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string QueryStrategyName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_SampleEfficiency_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.SampleEfficiency*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_SampleEfficiency" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.SampleEfficiency">
+  SampleEfficiency
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L280"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the sample efficiency (accuracy gain per sample).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T SampleEfficiency { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_SamplesToTargetAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.SamplesToTargetAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_SamplesToTargetAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.SamplesToTargetAccuracy">
+  SamplesToTargetAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L290"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of samples needed to reach target accuracy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? SamplesToTargetAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_StoppingReason_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.StoppingReason*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_StoppingReason" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.StoppingReason">
+  StoppingReason
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L226"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reason why learning stopped.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string StoppingReason { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TargetAccuracy_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TargetAccuracy*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TargetAccuracy" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TargetAccuracy">
+  TargetAccuracy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L295"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the target accuracy used for efficiency calculations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T TargetAccuracy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalIterations_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalIterations*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalIterations" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalIterations">
+  TotalIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L156"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of iterations completed.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalSamplesLabeled_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalSamplesLabeled*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalSamplesLabeled" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalSamplesLabeled">
+  TotalSamplesLabeled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total number of samples labeled.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int TotalSamplesLabeled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalSelectionTime_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalSelectionTime*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalSelectionTime" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalSelectionTime">
+  TotalSelectionTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total time spent on sample selection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TotalSelectionTime { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalTime_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalTime*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalTime" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalTime">
+  TotalTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L231"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total time for the active learning process.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TotalTime { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalTrainingTime_" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalTrainingTime*"></a>
+
+  <h3 id="AiDotNet_ActiveLearning_Results_ActiveLearningResult_1_TotalTrainingTime" data-uid="AiDotNet.ActiveLearning.Results.ActiveLearningResult`1.TotalTrainingTime">
+  TotalTrainingTime
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L236"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the total time spent training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan TotalTrainingTime { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ActiveLearning/Results/ActiveLearningResult.cs/#L129" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

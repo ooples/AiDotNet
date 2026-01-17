@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IGraphConvolutionLayer&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IGraphConvolutionLayer&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for graph convolutional layers that process graph-structured data.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IGraphConvolutionLayer_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IGraphConvolutionLayer%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1" class="text-break">
+Interface IGraphConvolutionLayer&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for graph convolutional layers that process graph-structured data.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IGraphConvolutionLayer&lt;T&gt; : ILayer&lt;T&gt;, IJitCompilable&lt;T&gt;, IDiagnosticsProvider, IWeightLoadable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations, typically float or double.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetInputShape">ILayer&lt;T&gt;.GetInputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetOutputShape">ILayer&lt;T&gt;.GetOutputShape()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetWeights">ILayer&lt;T&gt;.GetWeights()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetBiases">ILayer&lt;T&gt;.GetBiases()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ILayer&lt;T&gt;.Forward(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ForwardGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0____">ILayer&lt;T&gt;.ForwardGpu(params IGpuTensor&lt;T&gt;[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_CanExecuteOnGpu">ILayer&lt;T&gt;.CanExecuteOnGpu</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_Backward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">ILayer&lt;T&gt;.Backward(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_UpdateParameters__0_">ILayer&lt;T&gt;.UpdateParameters(T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_UpdateParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ILayer&lt;T&gt;.UpdateParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ParameterCount">ILayer&lt;T&gt;.ParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_Serialize_System_IO_BinaryWriter_">ILayer&lt;T&gt;.Serialize(BinaryWriter)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_Deserialize_System_IO_BinaryReader_">ILayer&lt;T&gt;.Deserialize(BinaryReader)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetActivationTypes">ILayer&lt;T&gt;.GetActivationTypes()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetParameters">ILayer&lt;T&gt;.GetParameters()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_SupportsTraining">ILayer&lt;T&gt;.SupportsTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_SetTrainingMode_System_Boolean_">ILayer&lt;T&gt;.SetTrainingMode(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_GetParameterGradients">ILayer&lt;T&gt;.GetParameterGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ClearGradients">ILayer&lt;T&gt;.ClearGradients()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">ILayer&lt;T&gt;.SetParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ResetState">ILayer&lt;T&gt;.ResetState()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_SupportsGpuTraining">ILayer&lt;T&gt;.SupportsGpuTraining</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_UpdateParametersGpu_AiDotNet_Interfaces_IGpuOptimizerConfig_">ILayer&lt;T&gt;.UpdateParametersGpu(IGpuOptimizerConfig)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_UploadWeightsToGpu">ILayer&lt;T&gt;.UploadWeightsToGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_DownloadWeightsFromGpu">ILayer&lt;T&gt;.DownloadWeightsFromGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.ILayer-1.html#AiDotNet_Interfaces_ILayer_1_ZeroGradientsGpu">ILayer&lt;T&gt;.ZeroGradientsGpu()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">IJitCompilable&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html#AiDotNet_Interfaces_IJitCompilable_1_SupportsJitCompilation">IJitCompilable&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IDiagnosticsProvider.html#AiDotNet_Interfaces_IDiagnosticsProvider_GetDiagnostics">IDiagnosticsProvider.GetDiagnostics()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_GetParameterNames">IWeightLoadable&lt;T&gt;.GetParameterNames()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_TryGetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___">IWeightLoadable&lt;T&gt;.TryGetParameter(string, out Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_SetParameter_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">IWeightLoadable&lt;T&gt;.SetParameter(string, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_GetParameterShape_System_String_">IWeightLoadable&lt;T&gt;.GetParameterShape(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_NamedParameterCount">IWeightLoadable&lt;T&gt;.NamedParameterCount</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_ValidateWeights_System_Collections_Generic_IEnumerable_System_String__System_Func_System_String_System_String__">IWeightLoadable&lt;T&gt;.ValidateWeights(IEnumerable&lt;string&gt;, Func&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IWeightLoadable-1.html#AiDotNet_Interfaces_IWeightLoadable_1_LoadWeights_System_Collections_Generic_Dictionary_System_String_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Func_System_String_System_String__System_Boolean_">IWeightLoadable&lt;T&gt;.LoadWeights(Dictionary&lt;string, Tensor&lt;T&gt;&gt;, Func&lt;string, string&gt;, bool)</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Graph convolutional layers process data that is organized as graphs (nodes and edges).
+This interface extends the base layer interface with graph-specific functionality,
+particularly the ability to work with adjacency matrices that define graph structure.
+</p>
+<p><b>For Beginners:</b> This interface defines what all graph layers must be able to do.
+<p>Graph layers are special because they work with data that has connections:</p>
+<ul>
+<li>Social networks (people connected to friends)</li>
+<li>Molecules (atoms connected by bonds)</li>
+<li>Transportation networks (cities connected by roads)</li>
+<li>Knowledge graphs (concepts connected by relationships)</li>
+</ul>
+<p>The key difference from regular layers is that graph layers need to know
+which nodes are connected to which other nodes. That's what the adjacency matrix provides.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_InputFeatures_" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.InputFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_InputFeatures" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.InputFeatures">
+  InputFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L93"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of input features per node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int InputFeatures { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_InputFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates how many features each node in the graph has as input.
+For example, in a molecular graph, this might be properties of each atom.
+</p>
+<p><b>For Beginners:</b> This tells you how many pieces of information each node starts with.
+<p>Examples:</p>
+<ul>
+<li>In a social network: age, location, interests (3 features)</li>
+<li>In a molecule: atomic number, charge, mass (3 features)</li>
+<li>In a citation network: word embeddings (300 features)</li>
+</ul>
+<p>Each node has the same number of input features.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_OutputFeatures_" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.OutputFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_OutputFeatures" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.OutputFeatures">
+  OutputFeatures
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L115"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of output features per node.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int OutputFeatures { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_OutputFeatures_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property indicates how many features each node will have after processing through this layer.
+The layer transforms each node's input features into output features through learned transformations.
+</p>
+<p><b>For Beginners:</b> This tells you how many pieces of information each node will have after processing.
+<p>The layer learns to:</p>
+<ul>
+<li>Combine input features in useful ways</li>
+<li>Extract important patterns</li>
+<li>Create new representations that are better for the task</li>
+</ul>
+<p>For example, if you start with 10 features per node and the layer has 16 output features,
+each node's 10 numbers will be transformed into 16 numbers that hopefully capture
+more useful information for your specific task.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_GetAdjacencyMatrix_" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.GetAdjacencyMatrix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_GetAdjacencyMatrix" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.GetAdjacencyMatrix">
+  GetAdjacencyMatrix()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the adjacency matrix currently being used by this layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt;? GetAdjacencyMatrix()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The adjacency matrix tensor, or null if not set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_GetAdjacencyMatrix_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method retrieves the adjacency matrix that was set using SetAdjacencyMatrix.
+It may return null if the adjacency matrix has not been set yet.
+</p>
+<p><b>For Beginners:</b> This method lets you check what graph structure the layer is using.
+<p>This can be useful for:</p>
+<ul>
+<li>Verifying the correct graph was loaded</li>
+<li>Debugging graph connectivity issues</li>
+<li>Visualizing the graph structure</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_SetAdjacencyMatrix_" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.SetAdjacencyMatrix*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_SetAdjacencyMatrix_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.IGraphConvolutionLayer`1.SetAdjacencyMatrix(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  SetAdjacencyMatrix(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the adjacency matrix that defines the graph structure.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void SetAdjacencyMatrix(Tensor&lt;T&gt; adjacencyMatrix)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>adjacencyMatrix</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The adjacency matrix tensor representing node connections.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IGraphConvolutionLayer_1_SetAdjacencyMatrix_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The adjacency matrix is a square matrix where element [i,j] indicates whether and how strongly
+node i is connected to node j. Common formats include:
+- Binary adjacency: 1 if connected, 0 otherwise
+- Weighted adjacency: connection strength as a value
+- Normalized adjacency: preprocessed for better training
+</p>
+<p><b>For Beginners:</b> This method tells the layer how nodes in the graph are connected.
+<p>Think of the adjacency matrix as a map:</p>
+<ul>
+<li>Each row represents a node</li>
+<li>Each column represents a potential connection</li>
+<li>The value at position [i,j] tells if node i connects to node j</li>
+</ul>
+<p>For example, in a social network:</p>
+<ul>
+<li>adjacencyMatrix[Alice, Bob] = 1 means Alice is friends with Bob</li>
+<li>adjacencyMatrix[Alice, Charlie] = 0 means Alice is not friends with Charlie</li>
+</ul>
+<p>This connectivity information is crucial for graph neural networks to propagate
+information between connected nodes.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IGraphConvolutionLayer.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

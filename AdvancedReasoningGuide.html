@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Advanced Reasoning and Chain-of-Thought Implementation Guide | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Advanced Reasoning and Chain-of-Thought Implementation Guide | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="favicon.ico">
+      <link rel="stylesheet" href="public/docfx.min.css">
+      <link rel="stylesheet" href="public/main.css">
+      <meta name="docfx:navrel" content="toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/blob/master/docs/AdvancedReasoningGuide.md/#L1">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="index.html">
+            <img id="logo" class="svg" src="logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+
+      <div class="content">
+        <div class="actionbar">
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="">
+<h1 id="advanced-reasoning-and-chain-of-thought-implementation-guide">Advanced Reasoning and Chain-of-Thought Implementation Guide</h1>
+
+<p>This guide covers the advanced reasoning capabilities implemented in AiDotNet, including Chain-of-Thought, Tree-of-Thoughts, Verified Reasoning, Multi-Step Reasoning, and Tool-Augmented Reasoning.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#overview">Overview</a></li>
+<li><a href="#chain-of-thought-cot">Chain-of-Thought (CoT)</a></li>
+<li><a href="#tree-of-thoughts-tot">Tree-of-Thoughts (ToT)</a></li>
+<li><a href="#verified-reasoning">Verified Reasoning</a></li>
+<li><a href="#multi-step-reasoning">Multi-Step Reasoning</a></li>
+<li><a href="#tool-augmented-reasoning">Tool-Augmented Reasoning</a></li>
+<li><a href="#best-practices">Best Practices</a></li>
+<li><a href="#performance-considerations">Performance Considerations</a></li>
+</ol>
+<h2 id="overview">Overview</h2>
+<p>The advanced reasoning system provides several sophisticated patterns for improving retrieval and reasoning quality:</p>
+<ul>
+<li><strong>Chain-of-Thought (CoT)</strong>: Breaks down complex queries into sequential reasoning steps</li>
+<li><strong>Tree-of-Thoughts (ToT)</strong>: Explores multiple reasoning paths in a tree structure</li>
+<li><strong>Verified Reasoning</strong>: Validates each reasoning step with critic models</li>
+<li><strong>Multi-Step Reasoning</strong>: Adapts reasoning based on previous step findings</li>
+<li><strong>Tool-Augmented Reasoning</strong>: Incorporates external tools (calculators, code execution) into reasoning</li>
+</ul>
+<h2 id="chain-of-thought-cot">Chain-of-Thought (CoT)</h2>
+<h3 id="basic-usage">Basic Usage</h3>
+<pre><code class="lang-csharp">using AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+// Setup
+var generator = new StubGenerator&lt;double&gt;(); // Replace with real LLM in production
+var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+// Create Chain-of-Thought retriever
+var cotRetriever = new ChainOfThoughtRetriever&lt;double&gt;(
+    generator,
+    baseRetriever
+);
+
+// Retrieve with reasoning
+var documents = cotRetriever.Retrieve(
+    &quot;What are the economic impacts of renewable energy adoption?&quot;,
+    topK: 10
+);
+</code></pre>
+<h3 id="self-consistency-mode">Self-Consistency Mode</h3>
+<p>For improved robustness, generate multiple reasoning paths:</p>
+<pre><code class="lang-csharp">var documents = cotRetriever.RetrieveWithSelfConsistency(
+    &quot;What are the economic impacts of renewable energy adoption?&quot;,
+    topK: 10,
+    numPaths: 3  // Generate 3 different reasoning paths
+);
+</code></pre>
+<h3 id="few-shot-examples">Few-Shot Examples</h3>
+<p>Provide examples to guide reasoning quality:</p>
+<pre><code class="lang-csharp">var fewShotExamples = new List&lt;string&gt;
+{
+    @&quot;Question: How does photosynthesis affect climate?
+    Step 1: Understand photosynthesis process
+    Step 2: Identify CO2 absorption mechanism
+    Step 3: Connect to climate change impact&quot;,
+
+    @&quot;Question: What are the benefits of exercise?
+    Step 1: Identify physical health benefits
+    Step 2: Explore mental health aspects
+    Step 3: Consider long-term wellness outcomes&quot;
+};
+
+var cotRetriever = new ChainOfThoughtRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    fewShotExamples
+);
+</code></pre>
+<h2 id="tree-of-thoughts-tot">Tree-of-Thoughts (ToT)</h2>
+<h3 id="basic-usage-1">Basic Usage</h3>
+<pre><code class="lang-csharp">using AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
+
+var totRetriever = new TreeOfThoughtsRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxDepth: 3,           // Explore 3 levels deep
+    branchingFactor: 3     // Generate 3 alternatives at each level
+);
+
+var documents = totRetriever.Retrieve(
+    &quot;What are the applications of quantum computing?&quot;,
+    topK: 15,
+    TreeOfThoughtsRetriever&lt;double&gt;.TreeSearchStrategy.BestFirst
+);
+</code></pre>
+<h3 id="search-strategies">Search Strategies</h3>
+<p><strong>Breadth-First Search</strong>: Explores all nodes at each level before going deeper</p>
+<pre><code class="lang-csharp">var documents = totRetriever.Retrieve(
+    query,
+    topK: 15,
+    TreeOfThoughtsRetriever&lt;double&gt;.TreeSearchStrategy.BreadthFirst
+);
+</code></pre>
+<p><strong>Depth-First Search</strong>: Explores one branch fully before backtracking</p>
+<pre><code class="lang-csharp">var documents = totRetriever.Retrieve(
+    query,
+    topK: 15,
+    TreeOfThoughtsRetriever&lt;double&gt;.TreeSearchStrategy.DepthFirst
+);
+</code></pre>
+<p><strong>Best-First Search</strong>: Always explores the highest-scored node next (recommended)</p>
+<pre><code class="lang-csharp">var documents = totRetriever.Retrieve(
+    query,
+    topK: 15,
+    TreeOfThoughtsRetriever&lt;double&gt;.TreeSearchStrategy.BestFirst
+);
+</code></pre>
+<h3 id="when-to-use-tot">When to Use ToT</h3>
+<ul>
+<li>Multiple valid reasoning approaches exist</li>
+<li>Comprehensive topic coverage needed</li>
+<li>Exploring alternative solution paths</li>
+<li>Complex problem spaces requiring systematic exploration</li>
+</ul>
+<h2 id="verified-reasoning">Verified Reasoning</h2>
+<h3 id="basic-usage-2">Basic Usage</h3>
+<pre><code class="lang-csharp">var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    verificationThreshold: 0.7,  // Minimum score to accept a step
+    maxRefinementAttempts: 2      // Try to refine weak steps up to 2 times
+);
+
+var result = verifiedRetriever.RetrieveWithVerification(
+    &quot;What are the safety considerations for gene therapy?&quot;,
+    topK: 10
+);
+
+// Access results
+Console.WriteLine($&quot;Average Verification Score: {result.AverageVerificationScore}&quot;);
+Console.WriteLine($&quot;Steps Refined: {result.RefinedStepsCount}&quot;);
+
+foreach (var step in result.VerifiedSteps)
+{
+    Console.WriteLine($&quot;Step: {step.Statement}&quot;);
+    Console.WriteLine($&quot;Verified: {step.IsVerified}&quot;);
+    Console.WriteLine($&quot;Score: {step.VerificationScore}&quot;);
+    Console.WriteLine($&quot;Feedback: {step.CritiqueFeedback}&quot;);
+    Console.WriteLine();
+}
+</code></pre>
+<h3 id="configuration">Configuration</h3>
+<p><strong>High Precision Mode</strong> (strict verification):</p>
+<pre><code class="lang-csharp">var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    verificationThreshold: 0.9,   // Very strict
+    maxRefinementAttempts: 3       // More refinement attempts
+);
+</code></pre>
+<p><strong>Balanced Mode</strong> (recommended):</p>
+<pre><code class="lang-csharp">var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    verificationThreshold: 0.7,   // Balanced
+    maxRefinementAttempts: 2       // Reasonable refinement
+);
+</code></pre>
+<h3 id="when-to-use-verified-reasoning">When to Use Verified Reasoning</h3>
+<ul>
+<li>Accuracy is critical (medical, legal, scientific domains)</li>
+<li>Need to avoid hallucinations</li>
+<li>Require transparent, auditable reasoning</li>
+<li>Working with high-stakes decisions</li>
+</ul>
+<h2 id="multi-step-reasoning">Multi-Step Reasoning</h2>
+<h3 id="basic-usage-3">Basic Usage</h3>
+<pre><code class="lang-csharp">var multiStepRetriever = new MultiStepReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxSteps: 5  // Allow up to 5 reasoning steps
+);
+
+var result = multiStepRetriever.RetrieveMultiStep(
+    &quot;What are the environmental and economic impacts of solar energy adoption?&quot;,
+    topK: 15
+);
+
+// Access results
+Console.WriteLine($&quot;Total Steps: {result.TotalSteps}&quot;);
+Console.WriteLine($&quot;Converged: {result.Converged}&quot;);
+Console.WriteLine(&quot;\nReasoning Trace:&quot;);
+Console.WriteLine(result.ReasoningTrace);
+
+foreach (var step in result.StepResults)
+{
+    Console.WriteLine($&quot;\nStep {step.StepNumber}: {step.StepQuery}&quot;);
+    Console.WriteLine($&quot;Summary: {step.StepSummary}&quot;);
+    Console.WriteLine($&quot;Documents Found: {step.Documents.Count}&quot;);
+}
+</code></pre>
+<h3 id="adaptive-reasoning">Adaptive Reasoning</h3>
+<p>Multi-step reasoning adapts based on what it learns:</p>
+<pre><code class="lang-csharp">// The retriever will:
+// 1. Start with the initial query
+// 2. Based on findings, determine the next step
+// 3. Each step builds on previous knowledge
+// 4. Stop when sufficient information is gathered or max steps reached
+</code></pre>
+<h3 id="when-to-use-multi-step-reasoning">When to Use Multi-Step Reasoning</h3>
+<ul>
+<li>Answers require building knowledge progressively</li>
+<li>Later steps depend on earlier findings</li>
+<li>Need to adapt search strategy based on discoveries</li>
+<li>Complex research-style queries</li>
+</ul>
+<h2 id="tool-augmented-reasoning">Tool-Augmented Reasoning</h2>
+<h3 id="basic-usage-4">Basic Usage</h3>
+<pre><code class="lang-csharp">var toolRetriever = new ToolAugmentedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever
+);
+
+// Default tools: calculator, text_analyzer
+
+var result = toolRetriever.RetrieveWithTools(
+    &quot;What is the compound annual growth rate of solar installations from 2015 to 2023?&quot;,
+    topK: 10
+);
+
+// Access results
+Console.WriteLine(&quot;Tool Invocations:&quot;);
+foreach (var invocation in result.ToolInvocations)
+{
+    Console.WriteLine($&quot;Tool: {invocation.ToolName}&quot;);
+    Console.WriteLine($&quot;Input: {invocation.Input}&quot;);
+    Console.WriteLine($&quot;Output: {invocation.Output}&quot;);
+    Console.WriteLine($&quot;Success: {invocation.Success}&quot;);
+}
+</code></pre>
+<h3 id="custom-tools">Custom Tools</h3>
+<p>Register custom tools for domain-specific tasks:</p>
+<pre><code class="lang-csharp">// Register a unit converter tool
+toolRetriever.RegisterTool(&quot;unit_converter&quot;, input =&gt;
+{
+    // Parse input like &quot;100 celsius to fahrenheit&quot;
+    // Return conversion result
+    return &quot;212 fahrenheit&quot;;
+});
+
+// Register a data lookup tool
+toolRetriever.RegisterTool(&quot;database_lookup&quot;, input =&gt;
+{
+    // Query database based on input
+    var result = database.Query(input);
+    return result.ToString();
+});
+
+// Register a code execution tool
+toolRetriever.RegisterTool(&quot;python_executor&quot;, input =&gt;
+{
+    // Execute Python code safely
+    var output = pythonEngine.Execute(input);
+    return output;
+});
+</code></pre>
+<h3 id="when-to-use-tool-augmented-reasoning">When to Use Tool-Augmented Reasoning</h3>
+<ul>
+<li>Queries require calculations</li>
+<li>Need to execute code or scripts</li>
+<li>Require data transformations</li>
+<li>Need to access external APIs or databases</li>
+</ul>
+<h2 id="best-practices">Best Practices</h2>
+<h3 id="1-choose-the-right-pattern">1. Choose the Right Pattern</h3>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Best For</th>
+<th>Complexity</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chain-of-Thought</td>
+<td>General complex queries</td>
+<td>Low</td>
+<td>Low</td>
+</tr>
+<tr>
+<td>CoT + Self-Consistency</td>
+<td>Robustness needed</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Tree-of-Thoughts</td>
+<td>Comprehensive exploration</td>
+<td>High</td>
+<td>High</td>
+</tr>
+<tr>
+<td>Verified Reasoning</td>
+<td>High-stakes accuracy</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Multi-Step</td>
+<td>Progressive knowledge building</td>
+<td>Medium</td>
+<td>Medium</td>
+</tr>
+<tr>
+<td>Tool-Augmented</td>
+<td>Computational tasks</td>
+<td>Low-Medium</td>
+<td>Low-Medium</td>
+</tr>
+</tbody>
+</table>
+<h3 id="2-combine-patterns">2. Combine Patterns</h3>
+<p>Patterns can be combined for enhanced capabilities:</p>
+<pre><code class="lang-csharp">// Use Tree-of-Thoughts with Verified Reasoning
+// 1. Explore multiple paths with ToT
+// 2. Verify each path with VerifiedReasoningRetriever
+// This requires custom integration but provides maximum quality
+</code></pre>
+<h3 id="3-optimize-for-production">3. Optimize for Production</h3>
+<p><strong>Use Real LLM Generators</strong>:</p>
+<pre><code class="lang-csharp">// Replace StubGenerator with real LLM
+var generator = new OpenAIGenerator&lt;double&gt;(apiKey, model: &quot;gpt-4&quot;);
+// Note: OpenAIGenerator and AnthropicGenerator are placeholder examples
+// Use actual LLM integration libraries like Azure.AI.OpenAI or Anthropic SDK
+// or
+var generator = new AnthropicGenerator&lt;double&gt;(apiKey, model: &quot;claude-3-opus&quot;);
+</code></pre>
+<p><strong>Configure Caching</strong>:</p>
+<pre><code class="lang-csharp">// Implement caching for repeated queries
+var cache = new RedisReasoningCache&lt;double&gt;(redisConnection);
+// Note: RedisReasoningCache is a placeholder example
+// Use actual caching libraries like StackExchange.Redis or Microsoft.Extensions.Caching
+// Check cache before expensive reasoning operations
+</code></pre>
+<p><strong>Monitor Costs</strong>:</p>
+<pre><code class="lang-csharp">// Track LLM API calls
+// Chain-of-Thought: ~2-5 calls per query
+// Tree-of-Thoughts: ~10-30 calls per query (depth * branching factor)
+// Verified Reasoning: ~5-15 calls per query (depends on refinements)
+</code></pre>
+<h3 id="4-error-handling">4. Error Handling</h3>
+<pre><code class="lang-csharp">try
+{
+    var result = cotRetriever.Retrieve(query, topK: 10);
+}
+catch (ArgumentException ex)
+{
+    // Handle invalid input
+    Console.WriteLine($&quot;Invalid query: {ex.Message}&quot;);
+}
+catch (Exception ex)
+{
+    // Handle LLM failures, network issues, etc.
+    Console.WriteLine($&quot;Reasoning failed: {ex.Message}&quot;);
+    // Fallback to simple retrieval
+    var fallbackResults = baseRetriever.Retrieve(query, topK: 10);
+}
+</code></pre>
+<h2 id="performance-considerations">Performance Considerations</h2>
+<h3 id="latency">Latency</h3>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Typical Latency</th>
+<th>LLM Calls</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chain-of-Thought</td>
+<td>2-5 seconds</td>
+<td>2-5</td>
+</tr>
+<tr>
+<td>CoT + Self-Consistency (3 paths)</td>
+<td>5-10 seconds</td>
+<td>6-15</td>
+</tr>
+<tr>
+<td>Tree-of-Thoughts (depth=3, branch=3)</td>
+<td>10-30 seconds</td>
+<td>10-30</td>
+</tr>
+<tr>
+<td>Verified Reasoning</td>
+<td>5-15 seconds</td>
+<td>5-15</td>
+</tr>
+<tr>
+<td>Multi-Step (max 5 steps)</td>
+<td>5-20 seconds</td>
+<td>5-20</td>
+</tr>
+<tr>
+<td>Tool-Augmented</td>
+<td>3-8 seconds</td>
+<td>3-8</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cost-optimization">Cost Optimization</h3>
+<p><strong>Reduce Tree Depth/Branching</strong>:</p>
+<pre><code class="lang-csharp">// Instead of maxDepth=5, branchingFactor=5
+var totRetriever = new TreeOfThoughtsRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxDepth: 2,           // Reduced from 5
+    branchingFactor: 2     // Reduced from 5
+);
+</code></pre>
+<p><strong>Lower Verification Threshold</strong>:</p>
+<pre><code class="lang-csharp">// Accept more steps without refinement
+var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    verificationThreshold: 0.5,  // Lower threshold
+    maxRefinementAttempts: 1      // Fewer attempts
+);
+</code></pre>
+<p><strong>Use Smaller Models for Sub-Tasks</strong>:</p>
+<pre><code class="lang-csharp">// Use GPT-3.5 for reasoning, GPT-4 only for verification
+var reasoningGenerator = new OpenAIGenerator&lt;double&gt;(apiKey, &quot;gpt-3.5-turbo&quot;);
+var verificationGenerator = new OpenAIGenerator&lt;double&gt;(apiKey, &quot;gpt-4&quot;);
+</code></pre>
+<h2 id="example-complete-workflow">Example: Complete Workflow</h2>
+<pre><code class="lang-csharp">using AiDotNet.RetrievalAugmentedGeneration.AdvancedPatterns;
+using AiDotNet.RetrievalAugmentedGeneration.Generators;
+using AiDotNet.RetrievalAugmentedGeneration.Retrievers;
+
+// Setup components
+var generator = new StubGenerator&lt;double&gt;(); // Use real LLM in production
+var embeddingModel = new SentenceTransformerEmbedding&lt;double&gt;();
+var documentStore = new InMemoryDocumentStore&lt;double&gt;();
+var baseRetriever = new DenseRetriever&lt;double&gt;(embeddingModel, documentStore);
+
+// Example 1: Simple Chain-of-Thought
+var cotRetriever = new ChainOfThoughtRetriever&lt;double&gt;(generator, baseRetriever);
+var cotResults = cotRetriever.Retrieve(
+    &quot;How does climate change affect biodiversity?&quot;,
+    topK: 10
+);
+
+// Example 2: Tree-of-Thoughts for comprehensive exploration
+var totRetriever = new TreeOfThoughtsRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxDepth: 3,
+    branchingFactor: 3
+);
+var totResults = totRetriever.Retrieve(
+    &quot;What are all the potential applications of CRISPR gene editing?&quot;,
+    topK: 20,
+    TreeOfThoughtsRetriever&lt;double&gt;.TreeSearchStrategy.BestFirst
+);
+
+// Example 3: Verified Reasoning for high-stakes query
+var verifiedRetriever = new VerifiedReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    verificationThreshold: 0.8,
+    maxRefinementAttempts: 2
+);
+var verifiedResult = verifiedRetriever.RetrieveWithVerification(
+    &quot;What are the approved treatments for stage 4 melanoma?&quot;,
+    topK: 10
+);
+
+// Example 4: Multi-Step for research query
+var multiStepRetriever = new MultiStepReasoningRetriever&lt;double&gt;(
+    generator,
+    baseRetriever,
+    maxSteps: 5
+);
+var multiStepResult = multiStepRetriever.RetrieveMultiStep(
+    &quot;Trace the historical development of quantum mechanics from 1900 to 1930&quot;,
+    topK: 15
+);
+
+// Example 5: Tool-Augmented for computational query
+var toolRetriever = new ToolAugmentedReasoningRetriever&lt;double&gt;(generator, baseRetriever);
+toolRetriever.RegisterTool(&quot;statistics&quot;, input =&gt;
+{
+    // Custom statistical calculations
+    return &quot;Mean: 42.5, Std Dev: 12.3&quot;;
+});
+
+var toolResult = toolRetriever.RetrieveWithTools(
+    &quot;Calculate the average and standard deviation of solar panel efficiency from 2010 to 2020&quot;,
+    topK: 10
+);
+</code></pre>
+<h2 id="conclusion">Conclusion</h2>
+<p>The advanced reasoning system provides powerful tools for improving retrieval quality in complex scenarios. Choose the appropriate pattern based on your requirements for accuracy, comprehensiveness, and computational cost.</p>
+<p>For more information, see:</p>
+<ul>
+<li><a href="https://arxiv.org/abs/2201.11903">Chain-of-Thought paper</a></li>
+<li><a href="https://arxiv.org/abs/2305.10601">Tree-of-Thoughts paper</a></li>
+<li><a href="https://arxiv.org/abs/2203.11171">Self-Consistency paper</a></li>
+</ul>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/docs/AdvancedReasoningGuide.md/#L1" class="edit-link">Edit this page</a>
+        </div>
+
+        <div class="next-article d-print-none border-top" id="nextArticle"></div>
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

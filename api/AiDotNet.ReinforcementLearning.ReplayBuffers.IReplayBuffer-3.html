@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IReplayBuffer&lt;T, TState, TAction&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IReplayBuffer&lt;T, TState, TAction&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Interface for experience replay buffers used in reinforcement learning.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3.md&amp;value=---%0Auid%3A%20AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3">
+
+
+
+  <h1 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3" class="text-break">
+Interface IReplayBuffer&lt;T, TState, TAction&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L32"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.html">ReinforcementLearning</a>.<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.html">ReplayBuffers</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Interface for experience replay buffers used in reinforcement learning.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IReplayBuffer&lt;T, TState, TAction&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+    <dt><code>TState</code></dt>
+    <dd><p>The type representing the state observation (e.g., Vector&lt;T&gt;, Tensor&lt;T&gt;).</p>
+</dd>
+    <dt><code>TAction</code></dt>
+    <dd><p>The type representing the action (e.g., Vector&lt;T&gt; for continuous, int for discrete).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Experience replay is a technique where the agent stores past experiences and learns from them
+multiple times. This breaks temporal correlations and improves sample efficiency. The replay
+buffer stores experience tuples (state, action, reward, next_state, done) and provides random
+sampling for training.
+</p>
+<p><b>For Beginners:</b>
+A replay buffer is like a memory bank for the agent. Instead of learning only from the most
+recent experience, the agent stores experiences and learns from random samples of past experiences.
+This makes learning more stable and efficient.
+<p>Think of it like studying for an exam:</p>
+<ul>
+<li>You don't just study the most recent lesson</li>
+<li>You review random material from throughout the course</li>
+<li>This helps you learn connections between different topics</li>
+<li>And prevents forgetting older material</li>
+</ul>
+<p><strong>Common Buffer Types:</strong></p>
+<ul>
+<li><strong>Uniform</strong>: All experiences sampled with equal probability</li>
+<li><strong>Prioritized</strong>: Important experiences (big errors) sampled more often</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Capacity_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Capacity*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Capacity" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Capacity">
+  Capacity
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum capacity of the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Capacity { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Capacity_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is the maximum number of experiences the buffer can hold.
+Once full, old experiences are typically replaced with new ones (FIFO).
+Common values: 10,000 to 1,000,000 depending on available memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Count_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Count*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Count" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Count">
+  Count
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current number of experiences in the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int Count { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Count_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> How many experiences are currently stored.
+Training usually starts only when the buffer has enough experiences (e.g., Count &gt;= BatchSize).</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Add_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Add*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Add_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0__1__2__" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Add(AiDotNet.ReinforcementLearning.ReplayBuffers.Experience{`0,`1,`2})">
+  Add(Experience&lt;T, TState, TAction&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L62"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Adds an experience to the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Add(Experience&lt;T, TState, TAction&gt; experience)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>experience</code> <a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, TState, TAction&gt;</dt>
+    <dd><p>The experience to add.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Add_AiDotNet_ReinforcementLearning_ReplayBuffers_Experience__0__1__2___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this after each step in the environment to store
+what happened for later learning. If the buffer is full, the oldest experience
+is typically removed to make room.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_CanSample_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.CanSample*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_CanSample_System_Int32_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.CanSample(System.Int32)">
+  CanSample(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Checks if the buffer has enough experiences to sample a batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">bool CanSample(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>The desired batch size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>True if buffer contains at least batchSize experiences.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_CanSample_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Check this before sampling to avoid errors.
+Training should wait until CanSample(batchSize) returns true.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Clear_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Clear*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Clear" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Clear">
+  Clear()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Clears all experiences from the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">void Clear()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Clear_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Removes all stored experiences. Use this when starting
+fresh training or when the environment changes significantly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Sample_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Sample*"></a>
+
+  <h3 id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Sample_System_Int32_" data-uid="AiDotNet.ReinforcementLearning.ReplayBuffers.IReplayBuffer`3.Sample(System.Int32)">
+  Sample(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L74"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Samples a batch of experiences from the buffer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">List&lt;Experience&lt;T, TState, TAction&gt;&gt; Sample(int batchSize)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>batchSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of experiences to sample.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.list-1">List</a>&lt;<a class="xref" href="AiDotNet.ReinforcementLearning.ReplayBuffers.Experience-3.html">Experience</a>&lt;T, TState, TAction&gt;&gt;</dt>
+    <dd><p>List of sampled experiences.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_ReinforcementLearning_ReplayBuffers_IReplayBuffer_3_Sample_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Randomly selects experiences for training.
+Random sampling breaks temporal correlations (nearby experiences being similar)
+which helps the neural network learn more stable patterns.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/ReinforcementLearning/ReplayBuffers/IReplayBuffer.cs/#L32" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

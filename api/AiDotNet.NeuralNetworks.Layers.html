@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Namespace AiDotNet.NeuralNetworks.Layers | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Namespace AiDotNet.NeuralNetworks.Layers | AiDotNet Documentation ">
+      
+      
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.NeuralNetworks.Layers">
+
+  <h1 id="AiDotNet_NeuralNetworks_Layers" data-uid="AiDotNet.NeuralNetworks.Layers" class="text-break">Namespace AiDotNet.NeuralNetworks.Layers</h1>
+  <div class="markdown level0 summary"></div>
+  <div class="markdown level0 conceptual"></div>
+  <div class="markdown level0 remarks"></div>
+
+    <h3 id="classes">
+Classes
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ActivationLayer-1.html">ActivationLayer&lt;T&gt;</a></dt>
+      <dd><p>A layer that applies an activation function to transform the input data.</p>
+<p>
+Activation functions introduce non-linearity to neural networks. Non-linearity means the output isn't 
+simply proportional to the input (like y = 2x). Instead, it can follow curves or more complex patterns.
+severely limiting what it can learn.
+</p>
+<p>
+Common activation functions include:
+- ReLU: Returns 0 for negative inputs, or the input value for positive inputs
+- Sigmoid: Squashes values between 0 and 1, useful for probabilities
+- Tanh: Similar to sigmoid but outputs values between -1 and 1
+</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer-1.html">AdaptiveAveragePoolingLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements adaptive average pooling that outputs a fixed spatial size regardless of input dimensions.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AddLayer-1.html">AddLayer&lt;T&gt;</a></dt>
+      <dd><p>A layer that adds multiple input tensors element-wise and optionally applies an activation function.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AnomalyDetectorLayer-1.html">AnomalyDetectorLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that detects anomalies by comparing predictions with actual inputs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AttentionLayer-1.html">AttentionLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an Attention Layer for focusing on relevant parts of input sequences.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AveragePoolingLayer-1.html">AveragePoolingLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements an average pooling layer for neural networks, which reduces the spatial dimensions
+of the input by taking the average value in each pooling window.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.BasicBlock-1.html">BasicBlock&lt;T&gt;</a></dt>
+      <dd><p>Implements the BasicBlock used in ResNet18 and ResNet34 architectures.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer-1.html">BatchNormalizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements batch normalization for neural networks, which normalizes the inputs across a mini-batch.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.BidirectionalLayer-1.html">BidirectionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a bidirectional layer that processes input sequences in both forward and backward directions.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.BilinearGLUFeedForwardLayer-1.html">BilinearGLUFeedForwardLayer&lt;T&gt;</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.BottleneckBlock-1.html">BottleneckBlock&lt;T&gt;</a></dt>
+      <dd><p>Implements the BottleneckBlock used in ResNet50, ResNet101, and ResNet152 architectures.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.CapsuleLayer-1.html">CapsuleLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a capsule neural network layer that encapsulates groups of neurons to better preserve spatial information.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ConcatenateLayer-1.html">ConcatenateLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a neural network layer that concatenates multiple inputs along a specified axis.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ConditionalRandomFieldLayer-1.html">ConditionalRandomFieldLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Conditional Random Field (CRF) layer for sequence labeling tasks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ContinuumMemorySystemLayer-1.html">ContinuumMemorySystemLayer&lt;T&gt;</a></dt>
+      <dd><p>Continuum Memory System (CMS) layer for neural networks.
+Implements a sequential chain of MLP blocks with different update frequencies.
+Based on Equations 30-31 from &quot;Nested Learning&quot; paper.
+yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.Conv3DLayer-1.html">Conv3DLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a 3D convolutional layer for processing volumetric data like voxel grids.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ConvLSTMLayer-1.html">ConvLSTMLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a Convolutional Long Short-Term Memory (ConvLSTM) layer for processing sequential spatial data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer-1.html">ConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a convolutional layer in a neural network that applies filters to input data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.CroppingLayer-1.html">CroppingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a cropping layer that removes portions of input tensors from the edges.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.CrossAttentionLayer-1.html">CrossAttentionLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements cross-attention for conditioning diffusion models on text or other context.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DecoderLayer-1.html">DecoderLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Decoder Layer in a Transformer architecture.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DeconvolutionalLayer-1.html">DeconvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a deconvolutional layer (also known as transposed convolution) in a neural network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DeformableConvolutionalLayer-1.html">DeformableConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Deformable Convolutional Layer that learns spatial sampling offsets.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DenseBlock-1.html">DenseBlock&lt;T&gt;</a></dt>
+      <dd><p>Implements a Dense Block from the DenseNet architecture.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DenseLayer-1.html">DenseLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected (dense) layer in a neural network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DepthwiseSeparableConvolutionalLayer-1.html">DepthwiseSeparableConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a depthwise separable convolutional layer that performs convolution as two separate operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DiffusionConvLayer-1.html">DiffusionConvLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements diffusion convolution for mesh surface processing using the heat diffusion equation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DigitCapsuleLayer-1.html">DigitCapsuleLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a digit capsule layer that implements the dynamic routing algorithm between capsules.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DilatedConvolutionalLayer-1.html">DilatedConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a dilated convolutional layer for neural networks that applies filters with gaps between filter elements.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DirectionalGraphLayer-1.html">DirectionalGraphLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Directional Graph Networks for directed graph processing with separate in/out aggregations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.DropoutLayer-1.html">DropoutLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a dropout layer for neural networks to prevent overfitting.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.EdgeConditionalConvolutionalLayer-1.html">EdgeConditionalConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Edge-Conditioned Convolution for incorporating edge features in graph convolutions.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.EmbeddingLayer-1.html">EmbeddingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an embedding layer that converts discrete token indices into dense vector representations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ExpertLayer-1.html">ExpertLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an expert module in a Mixture-of-Experts architecture, containing a sequence of layers.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.FeedForwardLayer-1.html">FeedForwardLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected (dense) feed-forward layer in a neural network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.FlattenLayer-1.html">FlattenLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a flatten layer that reshapes multi-dimensional input data into a 1D vector.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer-1.html">FullyConnectedLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected layer in a neural network where every input neuron connects to every output neuron.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GRULayer-1.html">GRULayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Gated Recurrent Unit (GRU) layer for processing sequential data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GatedLinearUnitLayer-1.html">GatedLinearUnitLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Gated Linear Unit (GLU) layer in a neural network that combines linear transformation with multiplicative gating.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GaussianNoiseLayer-1.html">GaussianNoiseLayer&lt;T&gt;</a></dt>
+      <dd><p>A neural network layer that adds random Gaussian noise to inputs during training.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GeGLUFeedForwardLayer-1.html">GeGLUFeedForwardLayer&lt;T&gt;</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GlobalPoolingLayer-1.html">GlobalPoolingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a global pooling layer that reduces spatial dimensions to a single value per channel.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GraphAttentionLayer-1.html">GraphAttentionLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Graph Attention Network (GAT) layer for processing graph-structured data with attention mechanisms.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GraphConvolutionalLayer-1.html">GraphConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Graph Convolutional Network (GCN) layer for processing graph-structured data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GraphIsomorphismLayer-1.html">GraphIsomorphismLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Graph Isomorphism Network (GIN) layer for powerful graph representation learning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GraphSAGELayer-1.html">GraphSAGELayer&lt;T&gt;</a></dt>
+      <dd><p>Implements GraphSAGE (Graph Sample and Aggregate) layer for inductive learning on graphs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GraphTransformerLayer-1.html">GraphTransformerLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Graph Transformer layer using self-attention mechanisms on graph-structured data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GroupNormalizationLayer-1.html">GroupNormalizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Group Normalization layer that normalizes inputs across groups of channels.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphLayer-1.html">HeterogeneousGraphLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Heterogeneous Graph Neural Network layer for graphs with multiple node and edge types.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.HeterogeneousGraphMetadata.html">HeterogeneousGraphMetadata</a></dt>
+      <dd><p>Represents metadata for heterogeneous graphs with multiple node and edge types.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.HighwayLayer-1.html">HighwayLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Highway Neural Network layer that allows information to flow unchanged through the network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.HyperbolicLinearLayer-1.html">HyperbolicLinearLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected layer operating in hyperbolic (Poincare ball) space.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.InputLayer-1.html">InputLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an input layer that passes input data through unchanged to the next layer in the neural network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.InstanceNormalizationLayer-1.html">InstanceNormalizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an Instance Normalization layer that normalizes each channel independently across spatial dimensions.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.InvertedResidualBlock-1.html">InvertedResidualBlock&lt;T&gt;</a></dt>
+      <dd><p>Implements an Inverted Residual Block (MBConv) used in MobileNetV2 and MobileNetV3.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LSTMLayer-1.html">LSTMLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Long Short-Term Memory (LSTM) layer for processing sequential data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LambdaLayer-1.html">LambdaLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a customizable layer that applies user-defined functions for both forward and backward passes.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerBase-1.html">LayerBase&lt;T&gt;</a></dt>
+      <dd><p>Represents the base class for all neural network layers, providing common functionality and interfaces.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LayerNormalizationLayer-1.html">LayerNormalizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Layer Normalization layer that normalizes inputs across the feature dimension.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LocallyConnectedLayer-1.html">LocallyConnectedLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Locally Connected layer which applies different filters to different regions of the input, unlike a convolutional layer which shares filters.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.LogVarianceLayer-1.html">LogVarianceLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that computes the logarithm of variance along a specified axis in the input tensor.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MaskingLayer-1.html">MaskingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that masks specified values in the input tensor, typically used to ignore padding in sequential data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MaxPool3DLayer-1.html">MaxPool3DLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a 3D max pooling layer for downsampling volumetric data.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MaxPoolingLayer-1.html">MaxPoolingLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a max pooling layer for neural networks, which reduces the spatial dimensions
+of the input by taking the maximum value in each pooling window.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MeanLayer-1.html">MeanLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that computes the mean (average) of input values along a specified axis.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MeasurementLayer-1.html">MeasurementLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that performs quantum measurement operations on complex-valued input tensors.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MemoryReadLayer-1.html">MemoryReadLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that reads from a memory tensor using an attention mechanism.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MemoryWriteLayer-1.html">MemoryWriteLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that writes to a memory tensor using an attention mechanism.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MeshEdgeConvLayer-1.html">MeshEdgeConvLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements edge convolution for mesh-based neural networks (MeshCNN style).</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MeshPoolLayer-1.html">MeshPoolLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements mesh pooling via edge collapse for MeshCNN-style networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MessagePassingLayer-1.html">MessagePassingLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a general Message Passing Neural Network (MPNN) layer.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsBuilder-1.html">MixtureOfExpertsBuilder&lt;T&gt;</a></dt>
+      <dd><p>A builder class that helps create and configure Mixture-of-Experts layers with sensible defaults.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MixtureOfExpertsLayer-1.html">MixtureOfExpertsLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a Mixture-of-Experts (MoE) layer that routes inputs through multiple expert networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer-1.html">MultiHeadAttentionLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a multi-head attention layer for neural networks, a key component in transformer architectures.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MultiplyLayer-1.html">MultiplyLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that performs element-wise multiplication of multiple input tensors.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.OctonionLinearLayer-1.html">OctonionLinearLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected layer using octonion-valued weights and inputs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PaddingLayer-1.html">PaddingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that adds padding to the input tensor.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PatchEmbeddingLayer-1.html">PatchEmbeddingLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a patch embedding layer for Vision Transformer (ViT) architecture.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PixelShuffleLayer-1.html">PixelShuffleLayer&lt;T&gt;</a></dt>
+      <dd><p>Pixel shuffle (sub-pixel convolution) layer for efficient spatial upsampling.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PoolingLayer-1.html">PoolingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that performs pooling operations on input tensors.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PositionalEncodingLayer-1.html">PositionalEncodingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that adds positional encodings to input sequences.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PrimaryCapsuleLayer-1.html">PrimaryCapsuleLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a primary capsule layer for capsule networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.PrincipalNeighbourhoodAggregationLayer-1.html">PrincipalNeighbourhoodAggregationLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements Principal Neighbourhood Aggregation (PNA) layer for powerful graph representation learning.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.QuantumLayer-1.html">QuantumLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a neural network layer that uses quantum computing principles for processing inputs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RBFLayer-1.html">RBFLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Radial Basis Function (RBF) layer for neural networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RBMLayer-1.html">RBMLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Restricted Boltzmann Machine (RBM) layer for neural networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RRDBLayer-1.html">RRDBLayer&lt;T&gt;</a></dt>
+      <dd><p>Residual in Residual Dense Block (RRDB) - the core building block of ESRGAN and Real-ESRGAN generators.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RRDBNetGenerator-1.html">RRDBNetGenerator&lt;T&gt;</a></dt>
+      <dd><p>RRDBNet Generator - the full generator architecture from ESRGAN and Real-ESRGAN.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ReGLUFeedForwardLayer-1.html">ReGLUFeedForwardLayer&lt;T&gt;</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ReadoutLayer-1.html">ReadoutLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a readout layer that performs the final mapping from features to output in a neural network.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ReconstructionLayer-1.html">ReconstructionLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a reconstruction layer that uses multiple fully connected layers to transform inputs into outputs.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RecurrentLayer-1.html">RecurrentLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a recurrent neural network layer that processes sequential data by maintaining a hidden state.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.RepParameterizationLayer-1.html">RepParameterizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a reparameterization layer used in variational autoencoders (VAEs) to enable backpropagation through random sampling.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ReservoirLayer-1.html">ReservoirLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a reservoir layer used in Echo State Networks (ESNs) for processing sequential data with fixed random weights.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ReshapeLayer-1.html">ReshapeLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a reshape layer that transforms the dimensions of input data without changing its content.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ResidualDenseBlock-1.html">ResidualDenseBlock&lt;T&gt;</a></dt>
+      <dd><p>Residual Dense Block (RDB) as used in ESRGAN and Real-ESRGAN generators.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.ResidualLayer-1.html">ResidualLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a residual layer that adds the identity mapping (input) to the output of an inner layer.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SelfAttentionLayer-1.html">SelfAttentionLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a self-attention layer that allows a sequence to attend to itself, capturing relationships between elements.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SeparableConvolutionalLayer-1.html">SeparableConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a separable convolutional layer that decomposes standard convolution into depthwise and pointwise operations.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SequenceLastLayer-1.html">SequenceLastLayer&lt;T&gt;</a></dt>
+      <dd><p>A layer that extracts the last timestep from a sequence.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SparseLinearLayer-1.html">SparseLinearLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a fully connected layer with sparse weight matrix for efficient computation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpatialPoolerLayer-1.html">SpatialPoolerLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a spatial pooler layer inspired by hierarchical temporal memory (HTM) principles.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpatialTransformerLayer-1.html">SpatialTransformerLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a spatial transformer layer that enables spatial manipulations of data via a learnable transformation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpectralNormalizationLayer-1.html">SpectralNormalizationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a spectral normalization layer that normalizes the weights of a layer by their spectral norm.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpikingLayer-1.html">SpikingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer of spiking neurons that model the biological dynamics of neural activity.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpiralConvLayer-1.html">SpiralConvLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements spiral convolution for mesh vertex processing.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SplitLayer-1.html">SplitLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a layer that splits the input tensor along a specific dimension into multiple equal parts.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpyNetLayer-1.html">SpyNetLayer&lt;T&gt;</a></dt>
+      <dd><p>SPyNet (Spatial Pyramid Network) layer for optical flow estimation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SqueezeAndExcitationLayer-1.html">SqueezeAndExcitationLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a Squeeze-and-Excitation layer that recalibrates channel-wise feature responses adaptively.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SubpixelConvolutionalLayer-1.html">SubpixelConvolutionalLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a subpixel convolutional layer that performs convolution followed by pixel shuffling for upsampling.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SwiGLUFeedForwardLayer-1.html">SwiGLUFeedForwardLayer&lt;T&gt;</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SwinPatchEmbeddingLayer-1.html">SwinPatchEmbeddingLayer&lt;T&gt;</a></dt>
+      <dd><p>Patch embedding layer for Swin Transformer that converts images to patch sequences.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SwinPatchMergingLayer-1.html">SwinPatchMergingLayer&lt;T&gt;</a></dt>
+      <dd><p>Patch merging layer for Swin Transformer that performs downsampling between stages.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SwinTransformerBlockLayer-1.html">SwinTransformerBlockLayer&lt;T&gt;</a></dt>
+      <dd><p>Swin Transformer block layer with windowed multi-head self-attention.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SynapticPlasticityLayer-1.html">SynapticPlasticityLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a synaptic plasticity layer that models biological learning mechanisms through spike-timing-dependent plasticity.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TemporalMemoryLayer-1.html">TemporalMemoryLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a temporal memory layer that models sequence learning through hierarchical temporal memory concepts.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TimeDistributedLayer-1.html">TimeDistributedLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a wrapper layer that applies an inner layer to each time step of a sequence independently.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TimeEmbeddingLayer-1.html">TimeEmbeddingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a time embedding layer that encodes timesteps using sinusoidal embeddings for diffusion models.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer-1.html">TransformerDecoderLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a transformer decoder layer that processes sequences using self-attention, cross-attention, and feed-forward networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TransformerEncoderLayer-1.html">TransformerEncoderLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a transformer encoder layer that processes sequences using self-attention and feed-forward networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.TransitionLayer-1.html">TransitionLayer&lt;T&gt;</a></dt>
+      <dd><p>Implements a Transition Layer from the DenseNet architecture.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.UNetDiscriminator-1.html">UNetDiscriminator&lt;T&gt;</a></dt>
+      <dd><p>U-Net Discriminator as used in Real-ESRGAN for improved perceptual quality.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.Upsample3DLayer-1.html">Upsample3DLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents a 3D upsampling layer that increases the spatial dimensions of volumetric data using nearest-neighbor interpolation.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.UpsamplingLayer-1.html">UpsamplingLayer&lt;T&gt;</a></dt>
+      <dd><p>Represents an upsampling layer that increases the spatial dimensions of input tensors using nearest-neighbor interpolation.</p>
+</dd>
+    </dl>
+    <h3 id="enums">
+Enums
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.EmbeddingInputMode.html">EmbeddingInputMode</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.GLUGateType.html">GLUGateType</a></dt>
+      <dd></dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.SpatialTransformerDataFormat.html">SpatialTransformerDataFormat</a></dt>
+      <dd></dd>
+    </dl>
+    <h3 id="delegates">
+Delegates
+</h3>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.AggregationFunction-1.html">AggregationFunction&lt;T&gt;</a></dt>
+      <dd><p>Defines the aggregation function type for combining messages.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.MessageFunction-1.html">MessageFunction&lt;T&gt;</a></dt>
+      <dd><p>Defines the message function type for message passing neural networks.</p>
+</dd>
+    </dl>
+    <dl class="jumplist">
+      <dt><a class="xref" href="AiDotNet.NeuralNetworks.Layers.UpdateFunction-1.html">UpdateFunction&lt;T&gt;</a></dt>
+      <dd><p>Defines the update function type for updating node features.</p>
+</dd>
+    </dl>
+
+
+</article>
+
+        <div class="contribution d-print-none">
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

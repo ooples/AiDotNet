@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ShortTimeFourierTransform&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ShortTimeFourierTransform&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Short-Time Fourier Transform (STFT) for analyzing audio signals over time.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.Audio.ShortTimeFourierTransform%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1" class="text-break">
+Class ShortTimeFourierTransform&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.Audio.html">Audio</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Short-Time Fourier Transform (STFT) for analyzing audio signals over time.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ShortTimeFourierTransform&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">ShortTimeFourierTransform&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The STFT breaks a signal into short overlapping segments and computes the
+Fourier transform of each segment. This reveals how the frequency content
+of a signal changes over time.
+</p>
+<p>
+<b>For Beginners:</b> Audio signals like music or speech change over time.
+While a regular FFT tells you which frequencies are in the entire signal,
+it doesn't tell you WHEN those frequencies occur.
+<p>The STFT solves this by:</p>
+<ol>
+<li>Cutting the audio into small overlapping pieces (frames)</li>
+<li>Applying a window function to each frame (reduces edge artifacts)</li>
+<li>Computing FFT on each windowed frame</li>
+<li>Stacking the results to form a spectrogram (time vs. frequency)</li>
+</ol>
+<p>Usage:</p>
+<pre><code class="lang-csharp">var stft = new ShortTimeFourierTransform&lt;float&gt;(nFft: 2048, hopLength: 512);
+var spectrogram = stft.Forward(audioSignal);
+// spectrogram.Shape = [numFrames, nFft/2 + 1] (complex values)
+
+// To reconstruct audio from spectrogram:
+var reconstructed = stft.Inverse(spectrogram);
+</code></pre>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1__ctor_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1__ctor_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__AiDotNet_Interfaces_IWindowFunction__0__System_Boolean_AiDotNet_Diffusion_Audio_PaddingMode_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.#ctor(System.Int32,System.Nullable{System.Int32},System.Nullable{System.Int32},AiDotNet.Interfaces.IWindowFunction{`0},System.Boolean,AiDotNet.Diffusion.Audio.PaddingMode)">
+  ShortTimeFourierTransform(int, int?, int?, IWindowFunction&lt;T&gt;?, bool, PaddingMode)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new STFT processor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ShortTimeFourierTransform(int nFft = 2048, int? hopLength = null, int? windowLength = null, IWindowFunction&lt;T&gt;? windowFunction = null, bool center = true, PaddingMode padMode = PaddingMode.Reflect)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>nFft</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>FFT size (default: 2048). Should be a power of 2.</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Hop length between frames (default: nFft/4).</p>
+</dd>
+    <dt><code>windowLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Window length (default: nFft).</p>
+</dd>
+    <dt><code>windowFunction</code> <a class="xref" href="AiDotNet.Interfaces.IWindowFunction-1.html">IWindowFunction</a>&lt;T&gt;</dt>
+    <dd><p>Window function to use (default: HanningWindow - industry standard for audio).</p>
+</dd>
+    <dt><code>center</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to pad signal so frames are centered (default: true).</p>
+</dd>
+    <dt><code>padMode</code> <a class="xref" href="AiDotNet.Diffusion.Audio.PaddingMode.html">PaddingMode</a></dt>
+    <dd><p>Padding mode when centering (default: Reflect).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1__ctor_System_Int32_System_Nullable_System_Int32__System_Nullable_System_Int32__AiDotNet_Interfaces_IWindowFunction__0__System_Boolean_AiDotNet_Diffusion_Audio_PaddingMode__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b>
+- nFft: Determines frequency resolution. Larger = more frequency detail but less time detail
+- hopLength: How much to slide between frames. Smaller = more overlap = smoother output
+  Common: hopLength = nFft/4 gives 75% overlap
+- windowFunction: Reduces spectral leakage. Hann (default) is the industry standard for audio.
+  Other options: HammingWindow, BlackmanWindow, KaiserWindow, etc.
+</p>
+<p>
+<b>GPU Acceleration:</b> This class automatically uses GPU-accelerated FFT operations
+when available through AiDotNetEngine.Current.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_HopLength_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.HopLength*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_HopLength" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.HopLength">
+  HopLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L100"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the hop length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int HopLength { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_NFft_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.NFft*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_NFft" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.NFft">
+  NFft
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L95"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the FFT size.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NFft { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_NumFrequencyBins_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.NumFrequencyBins*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_NumFrequencyBins" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.NumFrequencyBins">
+  NumFrequencyBins
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of frequency bins (nFft / 2 + 1).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumFrequencyBins { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_WindowTensor_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.WindowTensor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_WindowTensor" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.WindowTensor">
+  WindowTensor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L110"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the window tensor for GPU operations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt;? WindowTensor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_CalculateNumFrames_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.CalculateNumFrames*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_CalculateNumFrames_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.CalculateNumFrames(System.Int32)">
+  CalculateNumFrames(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L675"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the number of frames for a given signal length.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CalculateNumFrames(int signalLength)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signalLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Length of the input signal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of STFT frames.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_CalculateSignalLength_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.CalculateSignalLength*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_CalculateSignalLength_System_Int32_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.CalculateSignalLength(System.Int32)">
+  CalculateSignalLength(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L687"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates signal length from number of frames.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CalculateSignalLength(int numFrames)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>numFrames</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of STFT frames.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Approximate signal length.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_ExtractPhase_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.ExtractPhase*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_ExtractPhase_AiDotNet_Tensors_LinearAlgebra_Tensor_AiDotNet_Tensors_LinearAlgebra_Complex__0___" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.ExtractPhase(AiDotNet.Tensors.LinearAlgebra.Tensor{AiDotNet.Tensors.LinearAlgebra.Complex{`0}})">
+  ExtractPhase(Tensor&lt;Complex&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L558"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts phase from complex spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;T&gt; ExtractPhase(Tensor&lt;Complex&lt;T&gt;&gt; complex)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>complex</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Complex spectrogram.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Phase tensor in radians.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Forward_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Forward*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Forward(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L195"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Short-Time Fourier Transform of a signal.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;Complex&lt;T&gt;&gt; Forward(Tensor&lt;T&gt; signal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input signal as a tensor [length] or [batch, length].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Complex spectrogram tensor [numFrames, numFreqs] or [batch, numFrames, numFreqs].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Forward_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method takes your audio waveform and produces a spectrogram
+showing which frequencies are present at each point in time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Inverse_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Inverse*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Inverse_AiDotNet_Tensors_LinearAlgebra_Tensor_AiDotNet_Tensors_LinearAlgebra_Complex__0___System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Inverse(AiDotNet.Tensors.LinearAlgebra.Tensor{AiDotNet.Tensors.LinearAlgebra.Complex{`0}},System.Nullable{System.Int32})">
+  Inverse(Tensor&lt;Complex&lt;T&gt;&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L315"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the Inverse Short-Time Fourier Transform (overlap-add reconstruction).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Inverse(Tensor&lt;Complex&lt;T&gt;&gt; spectrogram, int? length = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>spectrogram</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Complex spectrogram [numFrames, numFreqs] or [batch, numFrames, numFreqs].</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Expected output length (optional, otherwise computed from spectrogram).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Reconstructed signal tensor.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Inverse_AiDotNet_Tensors_LinearAlgebra_Tensor_AiDotNet_Tensors_LinearAlgebra_Complex__0___System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This method takes a spectrogram and converts it back to an audio waveform.
+It uses the "overlap-add" method, where each frame is inverse-FFT'd and the overlapping
+portions are added together.
+<p>Note: Perfect reconstruction requires the same STFT parameters used for analysis.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_InverseFromMagnitudeAndPhase_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.InverseFromMagnitudeAndPhase*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_InverseFromMagnitudeAndPhase_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.InverseFromMagnitudeAndPhase(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Nullable{System.Int32})">
+  InverseFromMagnitudeAndPhase(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L604"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Reconstructs audio signal from magnitude and phase spectrograms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; InverseFromMagnitudeAndPhase(Tensor&lt;T&gt; magnitude, Tensor&lt;T&gt; phase, int? length = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>magnitude</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Magnitude spectrogram.</p>
+</dd>
+    <dt><code>phase</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Phase spectrogram in radians.</p>
+</dd>
+    <dt><code>length</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Expected output length (optional).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Reconstructed audio signal.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_InverseFromMagnitudeAndPhase_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>GPU Acceleration:</b> This method uses IEngine.ISTFT for hardware-accelerated
+audio reconstruction when GPU is available.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Magnitude_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Magnitude*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Magnitude_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Magnitude(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Magnitude(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L459"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the magnitude spectrogram.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Magnitude(Tensor&lt;T&gt; signal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input signal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Magnitude spectrogram [numFrames, numFreqs].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Magnitude_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> The magnitude spectrogram shows how loud each frequency is
+at each time, discarding phase information. This is often used for visualization
+and audio processing where phase isn't needed.
+</p>
+<p>
+<b>GPU Acceleration:</b> When GPU is available, this method uses hardware-accelerated
+STFT operations through IEngine for significantly faster processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_MagnitudeAndPhase_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.MagnitudeAndPhase*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_MagnitudeAndPhase_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0___" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.MagnitudeAndPhase(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0}@,AiDotNet.Tensors.LinearAlgebra.Tensor{`0}@)">
+  MagnitudeAndPhase(Tensor&lt;T&gt;, out Tensor&lt;T&gt;, out Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L516"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes magnitude and phase spectrograms simultaneously.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void MagnitudeAndPhase(Tensor&lt;T&gt; signal, out Tensor&lt;T&gt; magnitude, out Tensor&lt;T&gt; phase)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input signal.</p>
+</dd>
+    <dt><code>magnitude</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Output magnitude spectrogram.</p>
+</dd>
+    <dt><code>phase</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Output phase spectrogram in radians.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_MagnitudeAndPhase_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0___AiDotNet_Tensors_LinearAlgebra_Tensor__0____remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>GPU Acceleration:</b> This method uses IEngine.STFT directly for optimal
+GPU utilization, returning both magnitude and phase in a single pass.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_PolarToComplex_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.PolarToComplex*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_PolarToComplex_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.PolarToComplex(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  PolarToComplex(Tensor&lt;T&gt;, Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L576"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates complex spectrogram from magnitude and phase.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static Tensor&lt;Complex&lt;T&gt;&gt; PolarToComplex(Tensor&lt;T&gt; magnitude, Tensor&lt;T&gt; phase)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>magnitude</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Magnitude tensor.</p>
+</dd>
+    <dt><code>phase</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Phase tensor in radians.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Complex-1.html">Complex</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Complex spectrogram.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Power_" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Power*"></a>
+
+  <h3 id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Power_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.Audio.ShortTimeFourierTransform`1.Power(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Power(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L491"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the power spectrogram (magnitude squared).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Power(Tensor&lt;T&gt; signal)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Input signal.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Power spectrogram [numFrames, numFreqs].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_Audio_ShortTimeFourierTransform_1_Power_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>GPU Acceleration:</b> When GPU is available, this method uses hardware-accelerated
+STFT operations through IEngine for significantly faster processing.
+</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/Audio/ShortTimeFourierTransform.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Enum WeightFunction | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Enum WeightFunction | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines different weight functions used in robust statistical methods and machine learning algorithms.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Enums_WeightFunction.md&amp;value=---%0Auid%3A%20AiDotNet.Enums.WeightFunction%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Enums.WeightFunction">
+
+
+
+
+  <h1 id="AiDotNet_Enums_WeightFunction" data-uid="AiDotNet.Enums.WeightFunction" class="text-break">
+Enum WeightFunction  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/WeightFunction.cs/#L25"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Enums.html">Enums</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines different weight functions used in robust statistical methods and machine learning algorithms.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public enum WeightFunction</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h2 id="fields">Fields
+</h2>
+  <dl class="parameters">
+    <dt id="AiDotNet_Enums_WeightFunction_Andrews"><code>Andrews = 2</code></dt>
+  <dd><p>The Andrews weight function, which uses a sine wave to handle outliers.</p>
+<p><b>For Beginners:</b> The Andrews function uses a wave-like pattern (specifically, a sine wave)
+to determine how much weight to give to different data points.</p>
+<p>How it works:</p>
+<ul>
+<li>For data points close to the expected pattern, it gives them nearly full weight</li>
+<li>As data points get farther from the pattern, their weight oscillates (goes up and down)
+but generally decreases</li>
+<li>For very extreme outliers, it gives them zero weight</li>
+</ul>
+<p>Think of Andrews as a &quot;nuanced&quot; approach - it doesn't just gradually reduce weight like Huber,
+or cut off outliers like Bisquare. Instead, it has a more complex pattern of weighting that can
+sometimes preserve more information from the data.</p>
+<p>When to use Andrews:</p>
+<ul>
+<li>In specialized statistical applications where you need the specific mathematical properties
+of the sine function</li>
+<li>When dealing with periodic data or data with wave-like patterns</li>
+<li>When recommended by a statistical expert for your specific application</li>
+</ul>
+<p>The Andrews function is less commonly used than Huber or Bisquare but has useful properties
+in certain specialized applications.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WeightFunction_Bisquare"><code>Bisquare = 1</code></dt>
+  <dd><p>The Bisquare (also known as Tukey's biweight) weight function, which completely downweights extreme outliers.</p>
+<p><b>For Beginners:</b> The Bisquare function is more aggressive in handling outliers than Huber.</p>
+<p>How it works:</p>
+<ul>
+<li>For data points close to the expected pattern, it treats them normally (with full weight)</li>
+<li>As data points get farther from the expected pattern, it reduces their weight more quickly than Huber</li>
+<li>Beyond a certain threshold, it gives zero weight to extreme outliers (completely ignores them)</li>
+</ul>
+<p>Think of Bisquare as a &quot;strict&quot; approach - it's willing to completely ignore data points that
+seem too unusual. It's like saying &quot;If your opinion is too extreme, I'm not going to consider it at all.&quot;</p>
+<p>When to use Bisquare:</p>
+<ul>
+<li>When you know your data contains significant outliers that should have no influence</li>
+<li>When you want to ensure extreme values don't affect your model</li>
+<li>In situations where you need high robustness against outliers</li>
+</ul>
+<p>The Bisquare function has a tuning parameter that determines the threshold beyond which
+outliers are completely ignored.</p>
+</dd>
+  
+    <dt id="AiDotNet_Enums_WeightFunction_Huber"><code>Huber = 0</code></dt>
+  <dd><p>The Huber weight function, which provides a balance between efficiency and robustness.</p>
+<p><b>For Beginners:</b> The Huber function is like a &quot;middle ground&quot; approach to handling outliers.</p>
+<p>How it works:</p>
+<ul>
+<li>For data points that are close to the expected pattern, it treats them normally (with full weight)</li>
+<li>For data points that are far from the expected pattern, it reduces their importance (weight)
+gradually as they get more extreme</li>
+</ul>
+<p>Think of Huber as a &quot;diplomatic&quot; approach - it doesn't completely ignore outliers, but it doesn't
+let them dominate either. It's like saying &quot;I'll listen to unusual opinions, but I won't let them
+completely change my mind.&quot;</p>
+<p>When to use Huber:</p>
+<ul>
+<li>When you expect some outliers in your data but don't want to be too aggressive in removing their influence</li>
+<li>When you want a good balance between accuracy and robustness</li>
+<li>As a safe default choice when you're not sure which weight function to use</li>
+</ul>
+<p>The Huber function has a tuning parameter that controls how quickly it starts to downweight outliers.</p>
+</dd>
+  
+  </dl>
+
+
+  <h2 id="AiDotNet_Enums_WeightFunction_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> Weight functions are special mathematical formulas that help AI models handle unusual
+or extreme data points (outliers).</p>
+<p>In regular statistics, outliers can significantly throw off your results. For example, if you're
+calculating the average income in a neighborhood and one billionaire lives there, the average
+would be misleadingly high.</p>
+<p>Weight functions solve this problem by automatically giving less importance (lower weight) to data
+points that seem unusual or extreme. This makes your AI models more robust and reliable when
+dealing with real-world data that might contain errors or unusual values.</p>
+<p>Each weight function has different characteristics that make it suitable for different situations:</p>
+<ul>
+<li>Some are gentler with outliers (like Huber)</li>
+<li>Others are more aggressive in downweighting extreme values (like Bisquare)</li>
+</ul>
+<p>Choosing the right weight function depends on how much you expect your data to contain outliers
+and how you want to handle them.</p>
+</div>
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Enums/WeightFunction.cs/#L25" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

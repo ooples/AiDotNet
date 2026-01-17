@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RobustFullModelAggregationStrategyBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RobustFullModelAggregationStrategyBase&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for robust aggregation strategies operating on  parameters.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3.md&amp;value=---%0Auid%3A%20AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3">
+
+
+
+  <h1 id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3" class="text-break">
+Class RobustFullModelAggregationStrategyBase&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L12"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.FederatedLearning.html">FederatedLearning</a>.<a class="xref" href="AiDotNet.FederatedLearning.Aggregators.html">Aggregators</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for robust aggregation strategies operating on <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel&lt;T, TInput, TOutput&gt;</a> parameters.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class RobustFullModelAggregationStrategyBase&lt;T, TInput, TOutput&gt; : AggregationStrategyBase&lt;IFullModel&lt;T, TInput, TOutput&gt;, T&gt;, IAggregationStrategy&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>Numeric type.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>Model input type.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>Model output type.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html">FederatedLearningComponentBase</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html">AggregationStrategyBase</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;, T&gt;</div>
+      <div><span class="xref">RobustFullModelAggregationStrategyBase&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IAggregationStrategy-1.html">IAggregationStrategy</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</div>
+    </dd>
+  </dl>
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.BulyanFullModelAggregationStrategy-3.html">BulyanFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.KrumFullModelAggregationStrategy-3.html">KrumFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.MedianFullModelAggregationStrategy-3.html">MedianFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.MultiKrumFullModelAggregationStrategy-3.html">MultiKrumFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.RfaFullModelAggregationStrategy-3.html">RfaFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.TrimmedMeanFullModelAggregationStrategy-3.html">TrimmedMeanFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.FederatedLearning.Aggregators.WinsorizedMeanFullModelAggregationStrategy-3.html">WinsorizedMeanFullModelAggregationStrategy&lt;T, TInput, TOutput&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_Aggregate_System_Collections_Generic_Dictionary_System_Int32__0__System_Collections_Generic_Dictionary_System_Int32_System_Double__">AggregationStrategyBase&lt;IFullModel&lt;T, TInput, TOutput&gt;, T&gt;.Aggregate(Dictionary&lt;int, IFullModel&lt;T, TInput, TOutput&gt;&gt;, Dictionary&lt;int, double&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetStrategyName">AggregationStrategyBase&lt;IFullModel&lt;T, TInput, TOutput&gt;, T&gt;.GetStrategyName()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Aggregators.AggregationStrategyBase-2.html#AiDotNet_FederatedLearning_Aggregators_AggregationStrategyBase_2_GetTotalWeightOrThrow_System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Collections_Generic_IEnumerable_System_Int32__System_String_">AggregationStrategyBase&lt;IFullModel&lt;T, TInput, TOutput&gt;, T&gt;.GetTotalWeightOrThrow(Dictionary&lt;int, double&gt;, IEnumerable&lt;int&gt;, string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.FederatedLearning.Infrastructure.FederatedLearningComponentBase-1.html#AiDotNet_FederatedLearning_Infrastructure_FederatedLearningComponentBase_1_NumOps">FederatedLearningComponentBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_ComputeSquaredL2Distance_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.ComputeSquaredL2Distance*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_ComputeSquaredL2Distance_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.ComputeSquaredL2Distance(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeSquaredL2Distance(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double ComputeSquaredL2Distance(Vector&lt;T&gt; a, Vector&lt;T&gt; b)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>a</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+    <dt><code>b</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_GetClientParametersOrThrow_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.GetClientParametersOrThrow*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_GetClientParametersOrThrow_System_Collections_Generic_Dictionary_System_Int32_AiDotNet_Interfaces_IFullModel__0__1__2___System_Int32_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.GetClientParametersOrThrow(System.Collections.Generic.Dictionary{System.Int32,AiDotNet.Interfaces.IFullModel{`0,`1,`2}},System.Int32)">
+  GetClientParametersOrThrow(Dictionary&lt;int, IFullModel&lt;T, TInput, TOutput&gt;&gt;, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static Dictionary&lt;int, Vector&lt;T&gt;&gt; GetClientParametersOrThrow(Dictionary&lt;int, IFullModel&lt;T, TInput, TOutput&gt;&gt; clientModels, int expectedParameterCount)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clientModels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>expectedParameterCount</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_GetReferenceModelOrThrow_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.GetReferenceModelOrThrow*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_GetReferenceModelOrThrow_System_Collections_Generic_Dictionary_System_Int32_AiDotNet_Interfaces_IFullModel__0__1__2___" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.GetReferenceModelOrThrow(System.Collections.Generic.Dictionary{System.Int32,AiDotNet.Interfaces.IFullModel{`0,`1,`2}})">
+  GetReferenceModelOrThrow(Dictionary&lt;int, IFullModel&lt;T, TInput, TOutput&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L15"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected static (IFullModel&lt;T, TInput, TOutput&gt; ReferenceModel, int ParameterCount) GetReferenceModelOrThrow(Dictionary&lt;int, IFullModel&lt;T, TInput, TOutput&gt;&gt; clientModels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>clientModels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.ifullmodel--0,-1,-2-,system.int32-.referencemodel">ReferenceModel</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.interfaces.ifullmodel--0,-1,-2-,system.int32-.parametercount">ParameterCount</a>)</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_WeightedAverageOrUnweightedAverage_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.WeightedAverageOrUnweightedAverage*"></a>
+
+  <h3 id="AiDotNet_FederatedLearning_Aggregators_RobustFullModelAggregationStrategyBase_3_WeightedAverageOrUnweightedAverage_System_Collections_Generic_IReadOnlyList_System_Int32__System_Collections_Generic_Dictionary_System_Int32_AiDotNet_Tensors_LinearAlgebra_Vector__0___System_Collections_Generic_Dictionary_System_Int32_System_Double__System_Boolean_" data-uid="AiDotNet.FederatedLearning.Aggregators.RobustFullModelAggregationStrategyBase`3.WeightedAverageOrUnweightedAverage(System.Collections.Generic.IReadOnlyList{System.Int32},System.Collections.Generic.Dictionary{System.Int32,AiDotNet.Tensors.LinearAlgebra.Vector{`0}},System.Collections.Generic.Dictionary{System.Int32,System.Double},System.Boolean)">
+  WeightedAverageOrUnweightedAverage(IReadOnlyList&lt;int&gt;, Dictionary&lt;int, Vector&lt;T&gt;&gt;, Dictionary&lt;int, double&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"></div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected Vector&lt;T&gt; WeightedAverageOrUnweightedAverage(IReadOnlyList&lt;int&gt; selectedClientIds, Dictionary&lt;int, Vector&lt;T&gt;&gt; clientParameters, Dictionary&lt;int, double&gt; clientWeights, bool useClientWeights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>selectedClientIds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>clientParameters</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+    <dt><code>clientWeights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+    <dt><code>useClientWeights</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/FederatedLearning/Aggregators/RobustFullModelAggregationStrategyBase.cs/#L12" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface IChunkingStrategy | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface IChunkingStrategy | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for text chunking strategies that split documents into smaller segments.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_IChunkingStrategy.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.IChunkingStrategy%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.IChunkingStrategy">
+
+
+
+  <h1 id="AiDotNet_Interfaces_IChunkingStrategy" data-uid="AiDotNet.Interfaces.IChunkingStrategy" class="text-break">
+Interface IChunkingStrategy  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for text chunking strategies that split documents into smaller segments.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface IChunkingStrategy</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_IChunkingStrategy_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A chunking strategy determines how to divide large text documents into smaller, manageable pieces.
+This is essential for RAG systems because embedding models have maximum token limits, and smaller
+chunks enable more precise retrieval. Different strategies balance between preserving context
+and creating appropriately-sized segments.
+</p>
+<p><b>For Beginners:</b> A chunking strategy is like deciding how to slice a pizza.
+<p>Think of different ways to divide a long document:</p>
+<ul>
+<li>Fixed-size chunks: Cut every 500 words (like equal pizza slices)</li>
+<li>Sentence-based: Keep sentences together (like cutting between toppings)</li>
+<li>Paragraph-based: Keep paragraphs intact (like cutting by sections)</li>
+<li>Semantic: Group related content (like separating different flavor sections)</li>
+</ul>
+<p>Why chunk documents?</p>
+<ul>
+<li>Long documents don't fit in the AI model (like a pizza too big for one plate)</li>
+<li>Smaller chunks make search more precise (finding exactly the relevant part)</li>
+<li>You can retrieve just the relevant sections, not entire documents</li>
+</ul>
+<p>For example, searching a 100-page manual:</p>
+<ul>
+<li>Without chunking: Return the entire manual (overwhelming)</li>
+<li>With chunking: Return just the 2 paragraphs that answer your question (perfect!)</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IChunkingStrategy_ChunkOverlap_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkOverlap*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IChunkingStrategy_ChunkOverlap" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkOverlap">
+  ChunkOverlap
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L79"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of characters that should overlap between consecutive chunks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ChunkOverlap { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IChunkingStrategy_ChunkOverlap_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Overlap helps preserve context across chunk boundaries. When chunks overlap,
+information that spans the boundary appears in both chunks, preventing loss
+of meaning. Typical overlap is 10-20% of chunk size.
+</p>
+<p><b>For Beginners:</b> This is how much chunks should overlap with each other.
+<p>Why overlap?
+Imagine splitting this sentence at the wor|d boundary:</p>
+<ul>
+<li>Chunk 1 ends with: &quot;...at the wor&quot;</li>
+<li>Chunk 2 starts with: &quot;d boundary...&quot;</li>
+<li>Neither chunk contains the complete word!</li>
+</ul>
+<p>With overlap:</p>
+<ul>
+<li>Chunk 1 ends with: &quot;...at the word boundary. The next...&quot;</li>
+<li>Chunk 2 starts with: &quot;...word boundary. The next sentence...&quot;</li>
+<li>Both chunks have complete context</li>
+</ul>
+<p>Typical overlap: 50-100 characters (10-20% of chunk size)</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IChunkingStrategy_ChunkSize_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkSize*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IChunkingStrategy_ChunkSize" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkSize">
+  ChunkSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the target size for each chunk in characters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int ChunkSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IChunkingStrategy_ChunkSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The chunk size determines the approximate length of each text segment.
+Actual chunks may be slightly larger or smaller depending on the strategy's
+rules for preserving sentence or paragraph boundaries.
+</p>
+<p><b>For Beginners:</b> This is how long each piece should be.
+<p>Common sizes:</p>
+<ul>
+<li>Small (200-500 chars): Very focused, many chunks, precise retrieval</li>
+<li>Medium (500-1000 chars): Balanced, typical choice</li>
+<li>Large (1000-2000 chars): More context, fewer chunks</li>
+</ul>
+<p>(Note: 500 characters ≈ 75-100 words ≈ 1-2 paragraphs)</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_IChunkingStrategy_Chunk_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.Chunk*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IChunkingStrategy_Chunk_System_String_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.Chunk(System.String)">
+  Chunk(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L105"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits a text string into chunks according to the strategy's rules.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;string&gt; Chunk(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to split into chunks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>A collection of text chunks, ordered as they appear in the original text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IChunkingStrategy_Chunk_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method divides the input text into smaller segments according to the strategy's
+chunking rules. Chunks are returned in the order they appear in the source text.
+Each chunk should be self-contained enough to be meaningful when retrieved independently.
+</p>
+<p><b>For Beginners:</b> This breaks up a long text into smaller pieces.
+<p>For example:</p>
+<ul>
+<li>Input: A 5000-word article about climate change</li>
+<li>ChunkSize: 500 characters</li>
+<li>ChunkOverlap: 50 characters</li>
+<li>Output: ~25 chunks, each containing a portion of the article</li>
+</ul>
+<p>Each chunk is like a mini-document that can be searched independently.
+When you search for &quot;renewable energy&quot;, only the chunks about renewable energy
+get returned, not the entire 5000-word article.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_IChunkingStrategy_ChunkWithPositions_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkWithPositions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_IChunkingStrategy_ChunkWithPositions_System_String_" data-uid="AiDotNet.Interfaces.IChunkingStrategy.ChunkWithPositions(System.String)">
+  ChunkWithPositions(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L135"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Splits a text string into chunks and returns them with position metadata.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; ChunkWithPositions(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The text to split into chunks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>A collection of tuples containing each chunk, its start position, and end position in the original text.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_IChunkingStrategy_ChunkWithPositions_System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This method provides additional metadata about where each chunk appears in the
+original text. This is useful for citation extraction, highlighting, or reconstructing
+the original document structure. Positions are character offsets from the start of the text.
+</p>
+<p><b>For Beginners:</b> This breaks up text and tells you where each piece came from.
+<p>For example:</p>
+<ul>
+<li>Input: &quot;The quick brown fox jumps over the lazy dog&quot;</li>
+<li>ChunkSize: 15, ChunkOverlap: 5</li>
+<li>Output:
+(&quot;The quick brown&quot;, start: 0, end: 15)
+(&quot;brown fox jumps&quot;, start: 10, end: 25)
+(&quot;jumps over the&quot;, start: 20, end: 34)</li>
+</ul>
+<p>Why is this useful?
+When the AI uses a chunk in its answer, you can show the user:
+&quot;This information came from characters 20-34 of the original document&quot;</p>
+<p>This enables precise citations and highlighting.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/IChunkingStrategy.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

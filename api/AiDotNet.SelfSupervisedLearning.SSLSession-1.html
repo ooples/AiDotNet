@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class SSLSession&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class SSLSession&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Manages a self-supervised learning training session.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_SelfSupervisedLearning_SSLSession_1.md&amp;value=---%0Auid%3A%20AiDotNet.SelfSupervisedLearning.SSLSession%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1">
+
+
+
+  <h1 id="AiDotNet_SelfSupervisedLearning_SSLSession_1" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1" class="text-break">
+Class SSLSession&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L20"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.html">SelfSupervisedLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Manages a self-supervised learning training session.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class SSLSession&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">SSLSession&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> An SSL session manages the entire training lifecycle:
+initialization, training loop, evaluation, and checkpointing. It provides
+callbacks for monitoring progress and supports resuming from checkpoints.</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1__ctor_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1__ctor_AiDotNet_SelfSupervisedLearning_ISSLMethod__0__AiDotNet_SelfSupervisedLearning_SSLConfig_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.#ctor(AiDotNet.SelfSupervisedLearning.ISSLMethod{`0},AiDotNet.SelfSupervisedLearning.SSLConfig)">
+  SSLSession(ISSLMethod&lt;T&gt;, SSLConfig?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L90"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new SSL training session.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SSLSession(ISSLMethod&lt;T&gt; method, SSLConfig? config = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>method</code> <a class="xref" href="AiDotNet.SelfSupervisedLearning.ISSLMethod-1.html">ISSLMethod</a>&lt;T&gt;</dt>
+    <dd><p>The SSL method to use.</p>
+</dd>
+    <dt><code>config</code> <a class="xref" href="AiDotNet.SelfSupervisedLearning.SSLConfig.html">SSLConfig</a></dt>
+    <dd><p>Training configuration.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_CurrentEpoch_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.CurrentEpoch*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_CurrentEpoch" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.CurrentEpoch">
+  CurrentEpoch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current epoch number.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CurrentEpoch { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GlobalStep_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GlobalStep*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GlobalStep" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GlobalStep">
+  GlobalStep
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the global step counter.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GlobalStep { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_IsDistributed_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.IsDistributed*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_IsDistributed" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.IsDistributed">
+  IsDistributed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L132"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this session is using distributed training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsDistributed { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_IsTraining_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.IsTraining*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_IsTraining" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.IsTraining">
+  IsTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether training is in progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsTraining { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Method_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Method*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Method" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Method">
+  Method
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L83"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the SSL method being used.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ISSLMethod&lt;T&gt; Method { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.ISSLMethod-1.html">ISSLMethod</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Rank_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Rank*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Rank" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Rank">
+  Rank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L142"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the rank of this worker in distributed training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Rank { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_WorldSize_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.WorldSize*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_WorldSize" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.WorldSize">
+  WorldSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the world size (number of workers) for distributed training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WorldSize { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_CacheTrainingFeaturesForKNN_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.CacheTrainingFeaturesForKNN*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_CacheTrainingFeaturesForKNN_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0___System_Int32___" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.CacheTrainingFeaturesForKNN(System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}},System.Int32[])">
+  CacheTrainingFeaturesForKNN(IEnumerable&lt;Tensor&lt;T&gt;&gt;, int[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L381"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Caches training data for k-NN evaluation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CacheTrainingFeaturesForKNN(IEnumerable&lt;Tensor&lt;T&gt;&gt; trainingData, int[] trainingLabels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>trainingData</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Training data batches.</p>
+</dd>
+    <dt><code>trainingLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Corresponding labels.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Evaluate_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Evaluate*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Evaluate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Evaluate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Evaluate(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L352"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Runs evaluation on the current encoder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SSLMetricReport&lt;T&gt; Evaluate(Tensor&lt;T&gt; data)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>data</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.Evaluation.SSLMetricReport-1.html">SSLMetricReport</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_FromCheckpoint_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.FromCheckpoint*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_FromCheckpoint_System_String_AiDotNet_Interfaces_INeuralNetwork__0__System_Func_AiDotNet_Interfaces_INeuralNetwork__0__AiDotNet_SelfSupervisedLearning_ISSLMethod__0___" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.FromCheckpoint(System.String,AiDotNet.Interfaces.INeuralNetwork{`0},System.Func{AiDotNet.Interfaces.INeuralNetwork{`0},AiDotNet.SelfSupervisedLearning.ISSLMethod{`0}})">
+  FromCheckpoint(string, INeuralNetwork&lt;T&gt;, Func&lt;INeuralNetwork&lt;T&gt;, ISSLMethod&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L538"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a session from a pretrained checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static SSLSession&lt;T&gt; FromCheckpoint(string checkpointPath, INeuralNetwork&lt;T&gt; encoder, Func&lt;INeuralNetwork&lt;T&gt;, ISSLMethod&lt;T&gt;&gt; methodFactory)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to the checkpoint file.</p>
+</dd>
+    <dt><code>encoder</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The encoder network to load weights into.</p>
+</dd>
+    <dt><code>methodFactory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;, <a class="xref" href="AiDotNet.SelfSupervisedLearning.ISSLMethod-1.html">ISSLMethod</a>&lt;T&gt;&gt;</dt>
+    <dd><p>Factory to create the SSL method from the encoder.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.SSLSession-1.html">SSLSession</a>&lt;T&gt;</dt>
+    <dd><p>A session restored from the checkpoint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GetEffectiveBatchSize_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GetEffectiveBatchSize*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GetEffectiveBatchSize" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GetEffectiveBatchSize">
+  GetEffectiveBatchSize()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L319"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the effective batch size considering distributed training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GetEffectiveBatchSize()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GetEffectiveBatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For DDP, the effective batch size is local_batch_size * world_size.
+This is important for correctly scaling the learning rate.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GetHistory_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GetHistory*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_GetHistory" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.GetHistory">
+  GetHistory()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L347"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the current training history.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SSLTrainingHistory&lt;T&gt; GetHistory()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.SSLTrainingHistory-1.html">SSLTrainingHistory</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Reset_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Reset*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Reset" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Reset">
+  Reset()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets the session for a new training run.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Reset()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_SaveCheckpoint_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.SaveCheckpoint*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_SaveCheckpoint_System_String_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.SaveCheckpoint(System.String)">
+  SaveCheckpoint(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L486"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Saves a checkpoint to disk.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SaveCheckpoint(string checkpointPath)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>checkpointPath</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Path to save the checkpoint.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Stop_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Stop*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Stop" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Stop">
+  Stop()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L328"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stops training gracefully.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void Stop()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_SynchronizeParameters_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.SynchronizeParameters*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_SynchronizeParameters" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.SynchronizeParameters">
+  SynchronizeParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L299"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Synchronizes model parameters across all distributed workers.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SynchronizeParameters()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_SSLSession_1_SynchronizeParameters_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Call this method to ensure all workers have identical parameters.
+This is useful at initialization or after loading checkpoints.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Train_" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Train*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_Train_System_Func_System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Tensor__0____AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32___" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.Train(System.Func{System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Tensor{`0}}},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32[])">
+  Train(Func&lt;IEnumerable&lt;Tensor&lt;T&gt;&gt;&gt;, Tensor&lt;T&gt;?, int[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L151"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Trains the SSL method for the specified number of epochs.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SSLResult&lt;T&gt; Train(Func&lt;IEnumerable&lt;Tensor&lt;T&gt;&gt;&gt; dataLoader, Tensor&lt;T&gt;? validationData = null, int[]? validationLabels = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>dataLoader</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-1">Func</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</dt>
+    <dd><p>Function that yields batches of data.</p>
+</dd>
+    <dt><code>validationData</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Optional validation data for k-NN evaluation.</p>
+</dd>
+    <dt><code>validationLabels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Optional validation labels.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.SSLResult-1.html">SSLResult</a>&lt;T&gt;</dt>
+    <dd><p>Training result.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="events">Events
+</h2>
+
+
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_OnCollapseDetected" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.OnCollapseDetected">
+  OnCollapseDetected
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised when collapse is detected.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event Action&lt;int&gt;? OnCollapseDetected</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_OnEpochEnd" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.OnEpochEnd">
+  OnEpochEnd
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised at the end of each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event Action&lt;int, T&gt;? OnEpochEnd</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_OnEpochStart" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.OnEpochStart">
+  OnEpochStart
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised at the start of each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event Action&lt;int&gt;? OnEpochStart</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-1">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_SSLSession_1_OnStepComplete" data-uid="AiDotNet.SelfSupervisedLearning.SSLSession`1.OnStepComplete">
+  OnStepComplete
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Event raised after each training step.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public event Action&lt;int, SSLStepResult&lt;T&gt;&gt;? OnStepComplete</code></pre>
+  </div>
+
+
+
+
+
+
+  <h4 class="section">Event Type</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.action-2">Action</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="AiDotNet.SelfSupervisedLearning.SSLStepResult-1.html">SSLStepResult</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/SSLSession.cs/#L20" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MomentumEncoder&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MomentumEncoder&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Momentum-updated encoder for self-supervised learning methods.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_SelfSupervisedLearning_MomentumEncoder_1.md&amp;value=---%0Auid%3A%20AiDotNet.SelfSupervisedLearning.MomentumEncoder%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1">
+
+
+
+  <h1 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1" class="text-break">
+Class MomentumEncoder&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.SelfSupervisedLearning.html">SelfSupervisedLearning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Momentum-updated encoder for self-supervised learning methods.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class MomentumEncoder&lt;T&gt; : IMomentumEncoder&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for computations (typically float or double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MomentumEncoder&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.SelfSupervisedLearning.IMomentumEncoder-1.html">IMomentumEncoder</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p><b>For Beginners:</b> A momentum encoder is a copy of the main encoder that updates
+more slowly using exponential moving average (EMA). This provides stable, consistent targets
+during self-supervised training.</p>
+<p><b>Update formula:</b></p>
+<pre><code class="lang-csharp">θ_momentum = m * θ_momentum + (1 - m) * θ_main</code></pre>
+<p>Where m is momentum (typically 0.99-0.9999).</p>
+<p><b>Why slow updates?</b></p>
+<ul><li>Provides stable targets that don't change rapidly</li><li>Prevents collapse in methods like BYOL</li><li>Ensures consistent embeddings in memory bank (MoCo)</li></ul>
+<p><b>Example usage:</b></p>
+<pre><code class="lang-csharp">// Initialize with copy of main encoder
+var momentumEncoder = new MomentumEncoder&lt;float&gt;(mainEncoder.Clone(), momentum: 0.999);
+
+// Training loop:
+var targets = momentumEncoder.Encode(augmentedBatch2);  // Get targets
+// ... compute loss with main encoder output ...
+momentumEncoder.UpdateFromMainEncoder(mainEncoder);  // EMA update</code></pre>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1__ctor_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1__ctor_AiDotNet_Interfaces_INeuralNetwork__0__System_Double_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.#ctor(AiDotNet.Interfaces.INeuralNetwork{`0},System.Double)">
+  MomentumEncoder(INeuralNetwork&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L57"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MomentumEncoder class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MomentumEncoder(INeuralNetwork&lt;T&gt; encoder, double momentum = 0.999)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>encoder</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The encoder network (should be a copy/clone of the main encoder).</p>
+</dd>
+    <dt><code>momentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Initial momentum coefficient (0-1, typically 0.99-0.9999).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Encoder_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Encoder*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Encoder" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Encoder">
+  Encoder
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L50"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the underlying momentum-updated encoder network.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public INeuralNetwork&lt;T&gt; Encoder { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Momentum_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Momentum*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Momentum" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Momentum">
+  Momentum
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L47"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the momentum coefficient for EMA updates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double Momentum { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Momentum_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typical values: 0.99-0.9999. Higher values = slower updates = more stable targets.</p>
+<p>MoCo uses 0.999, BYOL uses 0.996 → 1.0 (scheduled).</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_CopyFromMainEncoder_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.CopyFromMainEncoder*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_CopyFromMainEncoder_AiDotNet_Interfaces_INeuralNetwork__0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.CopyFromMainEncoder(AiDotNet.Interfaces.INeuralNetwork{`0})">
+  CopyFromMainEncoder(INeuralNetwork&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L134"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Copies all parameters from the main encoder (hard copy, not EMA).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void CopyFromMainEncoder(INeuralNetwork&lt;T&gt; mainEncoder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainEncoder</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The encoder to copy from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_CopyFromMainEncoder_AiDotNet_Interfaces_INeuralNetwork__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Used for initialization at the start of training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Create_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Create*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Create__1___0_System_Double_System_Func___0___0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Create``1(``0,System.Double,System.Func{``0,``0})">
+  Create&lt;TEncoder&gt;(TEncoder, double, Func&lt;TEncoder, TEncoder&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a momentum encoder from a main encoder by cloning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static MomentumEncoder&lt;T&gt; Create&lt;TEncoder&gt;(TEncoder mainEncoder, double momentum, Func&lt;TEncoder, TEncoder&gt; cloneFunc) where TEncoder : INeuralNetwork&lt;T&gt;</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainEncoder</code> <span class="xref">TEncoder</span></dt>
+    <dd><p>The main encoder to clone.</p>
+</dd>
+    <dt><code>momentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Initial momentum coefficient.</p>
+</dd>
+    <dt><code>cloneFunc</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;TEncoder, TEncoder&gt;</dt>
+    <dd><p>Function to clone the encoder.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.SelfSupervisedLearning.MomentumEncoder-1.html">MomentumEncoder</a>&lt;T&gt;</dt>
+    <dd><p>A new momentum encoder wrapping a cloned encoder.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>TEncoder</code></dt>
+    <dd><p>The specific encoder type.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Encode_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Encode*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.Encode(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Encode(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes input using the momentum encoder (no gradient computation).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; Encode(Tensor&lt;T&gt; input)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>input</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input tensor to encode.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The encoded representation (detached from computation graph).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> The momentum encoder output is treated as a fixed target
+- gradients don't flow through it. Only the main encoder is trained directly.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_GetParameters_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_GetParameters" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L143"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets all parameters of the momentum encoder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>A vector containing all parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_ScheduleMomentum_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.ScheduleMomentum*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_ScheduleMomentum_System_Double_System_Double_System_Int32_System_Int32_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.ScheduleMomentum(System.Double,System.Double,System.Int32,System.Int32)">
+  ScheduleMomentum(double, double, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L187"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the scheduled momentum value based on training progress.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static double ScheduleMomentum(double baseMomentum, double finalMomentum, int currentEpoch, int totalEpochs)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>baseMomentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Starting momentum value.</p>
+</dd>
+    <dt><code>finalMomentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Final momentum value.</p>
+</dd>
+    <dt><code>currentEpoch</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Current training epoch.</p>
+</dd>
+    <dt><code>totalEpochs</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Total training epochs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The scheduled momentum value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_ScheduleMomentum_System_Double_System_Double_System_Int32_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Some methods like BYOL schedule momentum to increase
+during training. This typically uses a cosine schedule from base to final momentum.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_SetMomentum_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.SetMomentum*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_SetMomentum_System_Double_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.SetMomentum(System.Double)">
+  SetMomentum(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the momentum coefficient.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetMomentum(double momentum)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>momentum</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>New momentum value (0-1, typically 0.99-0.9999).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_SetMomentum_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Some methods schedule momentum during training (e.g., BYOL increases from 0.996 to 1.0).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_SetParameters_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L149"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the parameters of the momentum encoder directly.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameters to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_UpdateFromMainEncoder_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.UpdateFromMainEncoder*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_UpdateFromMainEncoder_AiDotNet_Interfaces_INeuralNetwork__0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.UpdateFromMainEncoder(AiDotNet.Interfaces.INeuralNetwork{`0})">
+  UpdateFromMainEncoder(INeuralNetwork&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the momentum encoder parameters using EMA from the main encoder.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateFromMainEncoder(INeuralNetwork&lt;T&gt; mainEncoder)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainEncoder</code> <a class="xref" href="AiDotNet.Interfaces.INeuralNetwork-1.html">INeuralNetwork</a>&lt;T&gt;</dt>
+    <dd><p>The main encoder to copy parameters from.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_UpdateFromMainEncoder_AiDotNet_Interfaces_INeuralNetwork__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Call this after each training step. The momentum encoder
+slowly tracks the main encoder, providing stable targets.</p>
+<p>Update formula:</p>
+<pre><code class="lang-csharp">θ_momentum = m * θ_momentum + (1 - m) * θ_main</code></pre>
+</div>
+
+
+
+
+  <a id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_UpdateFromParameters_" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.UpdateFromParameters*"></a>
+
+  <h3 id="AiDotNet_SelfSupervisedLearning_MomentumEncoder_1_UpdateFromParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.SelfSupervisedLearning.MomentumEncoder`1.UpdateFromParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  UpdateFromParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L94"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Updates the momentum encoder parameters using EMA from parameter vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void UpdateFromParameters(Vector&lt;T&gt; mainEncoderParams)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>mainEncoderParams</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Parameters from the main encoder.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/SelfSupervisedLearning/MomentumEncoder.cs/#L39" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

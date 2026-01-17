@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class VARModelOptions&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class VARModelOptions&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Configuration options for Vector Autoregressive (VAR) models, which model the linear interdependencies among multiple time series.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_VARModelOptions_1.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.VARModelOptions%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.VARModelOptions`1">
+
+
+
+  <h1 id="AiDotNet_Models_Options_VARModelOptions_1" data-uid="AiDotNet.Models.Options.VARModelOptions`1" class="text-break">
+Class VARModelOptions&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/VARModelOptions.cs/#L40"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Configuration options for Vector Autoregressive (VAR) models, which model the linear interdependencies
+among multiple time series.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class VARModelOptions&lt;T&gt; : TimeSeriesRegressionOptions&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd></dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.ModelOptions.html">ModelOptions</a></div>
+      <div><a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html">RegressionOptions</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html">TimeSeriesRegressionOptions</a>&lt;T&gt;</div>
+      <div><span class="xref">VARModelOptions&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Models.Options.VARMAModelOptions-1.html">VARMAModelOptions&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LagOrder">TimeSeriesRegressionOptions&lt;T&gt;.LagOrder</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_IncludeTrend">TimeSeriesRegressionOptions&lt;T&gt;.IncludeTrend</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_SeasonalPeriod">TimeSeriesRegressionOptions&lt;T&gt;.SeasonalPeriod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_AutocorrelationCorrection">TimeSeriesRegressionOptions&lt;T&gt;.AutocorrelationCorrection</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_ModelType">TimeSeriesRegressionOptions&lt;T&gt;.ModelType</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.TimeSeriesRegressionOptions-1.html#AiDotNet_Models_Options_TimeSeriesRegressionOptions_1_LossFunction">TimeSeriesRegressionOptions&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_DecompositionMethod">RegressionOptions&lt;T&gt;.DecompositionMethod</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.RegressionOptions-1.html#AiDotNet_Models_Options_RegressionOptions_1_UseIntercept">RegressionOptions&lt;T&gt;.UseIntercept</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Models.Options.ModelOptions.html#AiDotNet_Models_Options_ModelOptions_Seed">ModelOptions.Seed</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_VARModelOptions_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Vector Autoregressive (VAR) models are a generalization of univariate autoregressive models to multivariate 
+time series. In a VAR model, each variable is modeled as a linear function of past values of itself and past 
+values of all other variables in the system. This approach captures the dynamic relationships and feedback 
+effects among multiple interrelated time series. VAR models are widely used in economics, finance, and other 
+fields for forecasting, structural analysis, and policy analysis. They provide a flexible framework for 
+analyzing the joint dynamics of multiple variables without imposing strong a priori restrictions on the 
+relationships. This class provides configuration options for controlling the structure and estimation of 
+VAR models.
+</p>
+<p><b>For Beginners:</b> VAR models help you understand and forecast multiple related time series simultaneously.
+<p>When dealing with multiple time series that affect each other:</p>
+<ul>
+<li>Simple models treat each series independently</li>
+<li>But in reality, variables often influence each other over time</li>
+</ul>
+<p>VAR models solve this by:</p>
+<ul>
+<li>Modeling all variables together as a system</li>
+<li>Allowing each variable to depend on past values of all variables</li>
+<li>Capturing the relationships and feedback effects between variables</li>
+</ul>
+<p>This approach offers several benefits:</p>
+<ul>
+<li>Better forecasts by incorporating relationships between variables</li>
+<li>Understanding how shocks to one variable affect other variables</li>
+<li>Analyzing the dynamic interactions in a system</li>
+</ul>
+<p>For example, in economics, VAR models might show how changes in interest rates
+affect GDP, inflation, and unemployment over several quarters.</p>
+<p>This class lets you configure how the VAR model is structured and estimated.</p>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_VARModelOptions_1_DecompositionType_" data-uid="AiDotNet.Models.Options.VARModelOptions`1.DecompositionType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_VARModelOptions_1_DecompositionType" data-uid="AiDotNet.Models.Options.VARModelOptions`1.DecompositionType">
+  DecompositionType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/VARModelOptions.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of matrix decomposition used in the estimation algorithm.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MatrixDecompositionType DecompositionType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MatrixDecompositionType.html">MatrixDecompositionType</a></dt>
+    <dd><p>A value from the MatrixDecompositionType enumeration, defaulting to MatrixDecompositionType.Lu.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_VARModelOptions_1_DecompositionType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the type of matrix decomposition used in the estimation algorithm for the VAR model. 
+Matrix decomposition is used to solve the system of equations that arises when estimating the model parameters. 
+Different decomposition methods have different numerical properties and computational requirements. LU 
+decomposition (the default) is efficient for general matrices and is suitable for most VAR applications. 
+Other options might include Cholesky decomposition (for positive definite matrices), QR decomposition 
+(more stable for ill-conditioned matrices), or SVD (Singular Value Decomposition, the most stable but also 
+the most computationally expensive). The optimal choice depends on the numerical properties of the specific 
+problem and the desired trade-off between numerical stability and computational efficiency.
+</p>
+<p><b>For Beginners:</b> This setting determines the mathematical method used to solve equations during model estimation.
+<p>The matrix decomposition type:</p>
+<ul>
+<li>Affects how certain mathematical operations are performed during estimation</li>
+<li>Different methods have different trade-offs between speed and numerical stability</li>
+<li>Most users don't need to change this setting</li>
+</ul>
+<p>The default value of Lu means:</p>
+<ul>
+<li>The algorithm uses LU decomposition for matrix operations</li>
+<li>This method is efficient and works well for most VAR models</li>
+</ul>
+<p>Common alternatives include:</p>
+<ul>
+<li>Cholesky: Efficient for positive definite matrices</li>
+<li>QR: More stable for difficult numerical problems</li>
+<li>SVD: Most numerically stable, but significantly slower</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Change to QR or SVD if you encounter numerical stability issues</li>
+<li>Change to Cholesky if you know your matrices are positive definite</li>
+<li>Keep the default for most applications</li>
+</ul>
+<p>For example, if your VAR estimation process fails with numerical errors,
+you might try changing this to MatrixDecompositionType.Svd for better stability.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_VARModelOptions_1_Lag_" data-uid="AiDotNet.Models.Options.VARModelOptions`1.Lag*"></a>
+
+  <h3 id="AiDotNet_Models_Options_VARModelOptions_1_Lag" data-uid="AiDotNet.Models.Options.VARModelOptions`1.Lag">
+  Lag
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/VARModelOptions.cs/#L81"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the lag order for the VAR model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Lag { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_VARModelOptions_1_Lag_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the lag order for the VAR model, often denoted as p. The lag order determines how 
+many past time periods are included in the model for each variable. A VAR model with lag order p means that 
+each variable is regressed on p lags of itself and p lags of each other variable in the system. A higher 
+order allows the model to capture more complex dynamic relationships but increases the number of parameters 
+to estimate and the risk of overfitting. The default value of 1 provides a simple first-order VAR model 
+suitable for many applications, capturing immediate dependencies between variables. The optimal lag order 
+depends on the temporal dependencies in the data and can be determined using information criteria such as 
+AIC or BIC, or through statistical tests.
+</p>
+<p><b>For Beginners:</b> This setting controls how many past time periods influence the current values.
+<p>The lag order:</p>
+<ul>
+<li>Determines how many previous time periods affect the current values</li>
+<li>Helps the model capture patterns and relationships that extend over time</li>
+<li>Higher values can model more complex temporal dependencies</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model considers only the immediate previous values</li>
+<li>This creates a simple VAR(1) model suitable for many applications</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 2 or 4): Can capture more complex relationships over longer periods</li>
+<li>Lower values (e.g., 1): Simpler model focusing on immediate effects</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Increase it when variables show dependencies beyond the immediate previous period</li>
+<li>Keep at 1 for a simple model or when working with limited data</li>
+<li>Consider using information criteria (AIC, BIC) to select the optimal lag</li>
+</ul>
+<p>For example, in quarterly economic data where effects might take several quarters to manifest,
+you might increase this to 4 to capture a full year of lagged effects.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_VARModelOptions_1_OutputDimension_" data-uid="AiDotNet.Models.Options.VARModelOptions`1.OutputDimension*"></a>
+
+  <h3 id="AiDotNet_Models_Options_VARModelOptions_1_OutputDimension" data-uid="AiDotNet.Models.Options.VARModelOptions`1.OutputDimension">
+  OutputDimension
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/VARModelOptions.cs/#L121"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the dimension of the output vector.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int OutputDimension { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>A positive integer, defaulting to 1.</p>
+</dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_VARModelOptions_1_OutputDimension_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+This property specifies the number of variables (time series) in the VAR model. Each variable is modeled 
+as a function of past values of itself and past values of all other variables. A higher dimension allows 
+the model to capture relationships among more variables but increases the number of parameters to estimate 
+and the data requirements. The default value of 1 corresponds to a univariate autoregressive model, which 
+is a special case of VAR. For true multivariate analysis, this value should be set to the number of 
+interrelated time series being modeled. The appropriate value depends on the specific application and the 
+number of time series that are believed to have meaningful dynamic relationships.
+</p>
+<p><b>For Beginners:</b> This setting specifies how many different time series you're modeling together.
+<p>The output dimension:</p>
+<ul>
+<li>Defines the number of variables in your VAR system</li>
+<li>Each variable will be modeled as depending on past values of all variables</li>
+<li>Affects the complexity and data requirements of the model</li>
+</ul>
+<p>The default value of 1 means:</p>
+<ul>
+<li>The model handles just one time series</li>
+<li>This actually makes it a simple autoregressive (AR) model, not a true VAR</li>
+</ul>
+<p>Think of it like this:</p>
+<ul>
+<li>Higher values (e.g., 3 or 5): Model multiple related variables as a system</li>
+<li>Value of 1: Model a single time series (not utilizing VAR's multivariate capabilities)</li>
+</ul>
+<p>When to adjust this value:</p>
+<ul>
+<li>Set to the exact number of time series you want to model together</li>
+<li>For true VAR analysis, this should be at least 2</li>
+<li>Consider data availability - each additional variable increases data requirements</li>
+</ul>
+<p>For example, if you're modeling GDP, inflation, and unemployment together,
+you would set this to 3 to create a three-variable VAR system.</p>
+
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/VARModelOptions.cs/#L40" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

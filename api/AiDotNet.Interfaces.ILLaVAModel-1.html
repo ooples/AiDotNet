@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Interface ILLaVAModel&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Interface ILLaVAModel&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Defines the contract for LLaVA (Large Language and Vision Assistant) models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Interfaces_ILLaVAModel_1.md&amp;value=---%0Auid%3A%20AiDotNet.Interfaces.ILLaVAModel%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Interfaces.ILLaVAModel`1">
+
+
+
+  <h1 id="AiDotNet_Interfaces_ILLaVAModel_1" data-uid="AiDotNet.Interfaces.ILLaVAModel`1" class="text-break">
+Interface ILLaVAModel&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L36"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Interfaces.html">Interfaces</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Defines the contract for LLaVA (Large Language and Vision Assistant) models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public interface ILLaVAModel&lt;T&gt; : IMultimodalEmbedding&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeText_System_String_">IMultimodalEmbedding&lt;T&gt;.EncodeText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeTextBatch_System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.EncodeTextBatch(IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImage_System_Double___">IMultimodalEmbedding&lt;T&gt;.EncodeImage(double[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EncodeImageBatch_System_Collections_Generic_IEnumerable_System_Double____">IMultimodalEmbedding&lt;T&gt;.EncodeImageBatch(IEnumerable&lt;double[]&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ComputeSimilarity_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">IMultimodalEmbedding&lt;T&gt;.ComputeSimilarity(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ZeroShotClassify_System_Double___System_Collections_Generic_IEnumerable_System_String__">IMultimodalEmbedding&lt;T&gt;.ZeroShotClassify(double[], IEnumerable&lt;string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_EmbeddingDimension">IMultimodalEmbedding&lt;T&gt;.EmbeddingDimension</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_MaxSequenceLength">IMultimodalEmbedding&lt;T&gt;.MaxSequenceLength</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Interfaces.IMultimodalEmbedding-1.html#AiDotNet_Interfaces_IMultimodalEmbedding_1_ImageSize">IMultimodalEmbedding&lt;T&gt;.ImageSize</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Interfaces_ILLaVAModel_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+LLaVA connects a vision encoder (like CLIP ViT) with a large language model (like LLaMA/Vicuna)
+through a simple projection layer, enabling visual instruction-following and conversational AI
+about images.
+</p>
+<p><b>For Beginners:</b> LLaVA is like giving eyes to ChatGPT!
+<p>Architecture:</p>
+<ol>
+<li>Vision Encoder (CLIP ViT): Converts images to feature vectors</li>
+<li>Projection Layer: Maps visual features to LLM's text embedding space</li>
+<li>Large Language Model (LLaMA/Vicuna): Generates responses</li>
+</ol>
+<p>Key capabilities:</p>
+<ul>
+<li>Visual conversations: &quot;What's in this image?&quot; followed by &quot;What color is the car?&quot;</li>
+<li>Visual reasoning: Understanding relationships, counting, spatial awareness</li>
+<li>Instruction following: &quot;Describe this image as if you were a poet&quot;</li>
+<li>Multi-turn dialogue: Context-aware conversations about images</li>
+</ul>
+<p>Why LLaVA is popular:</p>
+<ul>
+<li>Simple but effective architecture</li>
+<li>Open-source and reproducible</li>
+<li>Strong performance on visual understanding benchmarks</li>
+<li>Efficient training with visual instruction tuning</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_LanguageModelBackbone_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.LanguageModelBackbone*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_LanguageModelBackbone" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.LanguageModelBackbone">
+  LanguageModelBackbone
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L45"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the language model backbone used for generation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">LanguageModelBackbone LanguageModelBackbone { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html">LanguageModelBackbone</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_LanguageModelBackbone_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Common backbones include <a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html#AiDotNet_Enums_LanguageModelBackbone_LLaMA">LLaMA</a>,
+<a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html#AiDotNet_Enums_LanguageModelBackbone_Vicuna">Vicuna</a>, <a class="xref" href="AiDotNet.Enums.LanguageModelBackbone.html#AiDotNet_Enums_LanguageModelBackbone_Mistral">Mistral</a>, etc.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_NumVisualTokens_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.NumVisualTokens*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_NumVisualTokens" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.NumVisualTokens">
+  NumVisualTokens
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L64"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the maximum number of visual tokens used per image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">int NumVisualTokens { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_NumVisualTokens_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The number of patch tokens extracted from the vision encoder.
+For CLIP ViT-L/14 at 336x336, this is typically 576 tokens (24x24 patches).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_VisionEncoderType_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.VisionEncoderType*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_VisionEncoderType" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.VisionEncoderType">
+  VisionEncoderType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the vision encoder type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string VisionEncoderType { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_VisionEncoderType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Typically CLIP ViT-L/14 or similar vision transformer models.</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_Chat_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.Chat*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_Chat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String___System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.Chat(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.ValueTuple{System.String,System.String}},System.String,System.Int32,System.Double)">
+  Chat(Tensor&lt;T&gt;, IEnumerable&lt;(string Role, string Content)&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L116"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Continues a multi-turn conversation about an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Chat(Tensor&lt;T&gt; image, IEnumerable&lt;(string Role, string Content)&gt; conversationHistory, string userMessage, int maxLength = 512, double temperature = 0.7)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>conversationHistory</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.role">Role</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.string-.content">Content</a>)&gt;</dt>
+    <dd><p>Previous turns as (role, content) pairs.</p>
+</dd>
+    <dt><code>userMessage</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The new user message.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum tokens to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The assistant's response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_Chat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_ValueTuple_System_String_System_String___System_String_System_Int32_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Enables multi-turn visual dialogue where context is preserved across turns.
+</p>
+<p><b>For Beginners:</b> Have a conversation about an image!
+<p>Example conversation:
+User: &quot;What's in this image?&quot;
+Assistant: &quot;A dog playing in a park with a red ball.&quot;
+User: &quot;What breed is the dog?&quot;
+Assistant: &quot;It appears to be a Golden Retriever based on its golden fur and size.&quot;
+User: &quot;Is it a sunny day?&quot;
+Assistant: &quot;Yes, there are shadows indicating bright sunlight and clear skies.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_CompareImages_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.CompareImages*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_CompareImages_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_System_String__" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.CompareImages(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{System.String})">
+  CompareImages(Tensor&lt;T&gt;, Tensor&lt;T&gt;, IEnumerable&lt;string&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L188"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Compares two images and describes their differences.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string CompareImages(Tensor&lt;T&gt; image1, Tensor&lt;T&gt; image2, IEnumerable&lt;string&gt;? aspectsToCompare = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>First preprocessed image tensor.</p>
+</dd>
+    <dt><code>image2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Second preprocessed image tensor.</p>
+</dd>
+    <dt><code>aspectsToCompare</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Optional specific aspects to compare.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>A description of the differences between the images.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_DescribeRegions_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.DescribeRegions*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_DescribeRegions_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Collections_Generic_IEnumerable_AiDotNet_Tensors_LinearAlgebra_Vector__0___" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.DescribeRegions(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Collections.Generic.IEnumerable{AiDotNet.Tensors.LinearAlgebra.Vector{`0}})">
+  DescribeRegions(Tensor&lt;T&gt;, IEnumerable&lt;Vector&lt;T&gt;&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L179"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a detailed description of specific regions in an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;string&gt; DescribeRegions(Tensor&lt;T&gt; image, IEnumerable&lt;Vector&lt;T&gt;&gt; regions)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>regions</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;&gt;</dt>
+    <dd><p>List of bounding boxes [x1, y1, x2, y2] to describe.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Descriptions for each region.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_ExtractVisualFeatures_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.ExtractVisualFeatures*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_ExtractVisualFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.ExtractVisualFeatures(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractVisualFeatures(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts visual features before projection to LLM space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ExtractVisualFeatures(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Visual feature tensor with shape [numPatches, hiddenDim].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_ExtractVisualFeatures_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+These are the raw CLIP features before being projected to match the LLM's embedding dimension.
+Useful for analysis or custom processing.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_Generate_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.Generate*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_Generate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double_System_Double_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.Generate(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.Double,System.Double)">
+  Generate(Tensor&lt;T&gt;, string, int, double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates a response to a text prompt about an image.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">string Generate(Tensor&lt;T&gt; image, string prompt, int maxLength = 512, double temperature = 0.7, double topP = 0.9)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's question or instruction about the image.</p>
+</dd>
+    <dt><code>maxLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum number of tokens to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature (0 = deterministic, higher = more creative).</p>
+</dd>
+    <dt><code>topP</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Nucleus sampling probability threshold.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The generated response.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_Generate_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Ask any question about an image!
+<p>Examples:</p>
+<ul>
+<li>&quot;What is happening in this image?&quot; → Detailed scene description</li>
+<li>&quot;How many people are in the photo?&quot; → Counting and recognition</li>
+<li>&quot;What emotion does the person show?&quot; → Emotional understanding</li>
+<li>&quot;Write a caption for social media&quot; → Creative generation</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_GenerateMultiple_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.GenerateMultiple*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_GenerateMultiple_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_System_Int32_System_Double_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.GenerateMultiple(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String,System.Int32,System.Double)">
+  GenerateMultiple(Tensor&lt;T&gt;, string, int, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Generates multiple diverse responses for the same prompt.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">IEnumerable&lt;(string Response, T Score)&gt; GenerateMultiple(Tensor&lt;T&gt; image, string prompt, int numResponses = 5, double temperature = 0.9)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>prompt</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The user's question or instruction.</p>
+</dd>
+    <dt><code>numResponses</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of different responses to generate.</p>
+</dd>
+    <dt><code>temperature</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Sampling temperature for diversity.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.caption">Caption</a>, T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,-0-.score">Score</a>)&gt;</dt>
+    <dd><p>Collection of generated responses with their log probabilities.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_GroundObject_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.GroundObject*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_GroundObject_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.GroundObject(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.String)">
+  GroundObject(Tensor&lt;T&gt;, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L171"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Performs visual grounding to locate objects described by text.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Vector&lt;T&gt; GroundObject(Tensor&lt;T&gt; image, string description)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The preprocessed image tensor.</p>
+</dd>
+    <dt><code>description</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Description of the object to locate.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Bounding box coordinates [x1, y1, x2, y2] normalized to [0, 1].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Interfaces_ILLaVAModel_1_GroundObject_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_String__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Find where something is in an image!
+<p>Example:</p>
+<ul>
+<li>Description: &quot;the red car on the left&quot;</li>
+<li>Returns: [0.1, 0.3, 0.4, 0.7] representing the car's bounding box</li>
+</ul>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Interfaces_ILLaVAModel_1_ProjectToLanguageSpace_" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.ProjectToLanguageSpace*"></a>
+
+  <h3 id="AiDotNet_Interfaces_ILLaVAModel_1_ProjectToLanguageSpace_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Interfaces.ILLaVAModel`1.ProjectToLanguageSpace(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ProjectToLanguageSpace(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L155"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Projects visual features to the LLM's embedding space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">Tensor&lt;T&gt; ProjectToLanguageSpace(Tensor&lt;T&gt; visualFeatures)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>visualFeatures</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Visual features from ExtractVisualFeatures.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Projected features matching LLM embedding dimension.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Interfaces/ILLaVAModel.cs/#L36" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

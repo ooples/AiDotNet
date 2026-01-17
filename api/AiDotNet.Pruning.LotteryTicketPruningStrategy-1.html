@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class LotteryTicketPruningStrategy&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class LotteryTicketPruningStrategy&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Lottery Ticket Hypothesis (Frankle &amp;amp; Carbin, 2019).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Pruning_LotteryTicketPruningStrategy_1.md&amp;value=---%0Auid%3A%20AiDotNet.Pruning.LotteryTicketPruningStrategy%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1">
+
+
+
+  <h1 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1" class="text-break">
+Class LotteryTicketPruningStrategy&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Pruning.html">Pruning</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Lottery Ticket Hypothesis (Frankle &amp; Carbin, 2019).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class LotteryTicketPruningStrategy&lt;T&gt; : IPruningStrategy&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">LotteryTicketPruningStrategy&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPruningStrategy-1.html">IPruningStrategy</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+The Lottery Ticket Hypothesis states that dense neural networks contain sparse subnetworks
+(winning tickets) that, when trained in isolation from initialization, can match the performance
+of the original network. This strategy finds these winning tickets through iterative pruning
+and resetting weights to their initial values.
+</p>
+<p><b>For Beginners:</b> This strategy is based on a fascinating discovery in neural networks!
+<p>The Lottery Ticket Hypothesis says:
+&quot;Inside every large neural network, there's a smaller 'winning lottery ticket' network
+that could have achieved the same performance if trained from the start.&quot;</p>
+<p>The analogy:
+Imagine you're building a team:</p>
+<ul>
+<li>You start with 100 people (full network)</li>
+<li>After working together, you realize only 20 people did most of the work</li>
+<li>If you had started with just those 20 people from day one, you'd achieve the same results!</li>
+</ul>
+<p>How it works:</p>
+<ol>
+<li>Train the network to completion</li>
+<li>Find which weights became large (important)</li>
+<li>Create a mask keeping only those weights</li>
+<li>Reset the KEPT weights to their original random initialization</li>
+<li>Retrain with the mask - you'll match the original accuracy!</li>
+</ol>
+<p>This is different from regular pruning because:</p>
+<ul>
+<li>Regular pruning: Train → Prune → Fine-tune</li>
+<li>Lottery ticket: Train → Prune → Reset to init → Retrain from scratch</li>
+</ul>
+<p>Why this matters:</p>
+<ul>
+<li>Shows that the structure (which connections) matters more than learned values</li>
+<li>Enables training sparse networks from scratch</li>
+<li>Challenges assumptions about why neural networks work</li>
+</ul>
+<p>Example workflow:</p>
+<ol>
+<li>Initialize network with random weights W₀</li>
+<li>Train to get final weights W_final</li>
+<li>Create mask M based on |W_final| (keep largest 30%)</li>
+<li>Reset: W = W₀ ⊙ M (original weights, masked)</li>
+<li>Retrain this sparse network - it matches full network performance!</li>
+</ol>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1__ctor_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1__ctor_System_Int32_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.#ctor(System.Int32)">
+  LotteryTicketPruningStrategy(int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a new lottery ticket pruning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LotteryTicketPruningStrategy(int iterativeRounds = 5)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>iterativeRounds</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of iterative pruning rounds (default 5)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1__ctor_System_Int32__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> Iterative rounds control how gradually we prune.
+<p>Instead of removing 90% of weights at once, iterative pruning:</p>
+<ul>
+<li>Round 1: Remove 20%</li>
+<li>Round 2: Remove 20% of remaining</li>
+<li>...and so on</li>
+</ul>
+<p>This gentler approach often finds better &quot;lottery tickets.&quot;
+More rounds = more gradual = often better results, but slower.</p>
+
+</div>
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_IsStructured_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.IsStructured*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_IsStructured" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.IsStructured">
+  IsStructured
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this is structured pruning (false for lottery ticket).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsStructured { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_Name_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.Name*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_Name" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the name of this pruning strategy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_RequiresGradients_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.RequiresGradients*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_RequiresGradients" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.RequiresGradients">
+  RequiresGradients
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this strategy requires gradients (false for lottery ticket).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool RequiresGradients { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_SupportedPatterns_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.SupportedPatterns*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_SupportedPatterns" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.SupportedPatterns">
+  SupportedPatterns
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L78"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets supported sparsity patterns (unstructured and N:M patterns).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IReadOnlyList&lt;SparsityPattern&gt; SupportedPatterns { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ireadonlylist-1">IReadOnlyList</a>&lt;<a class="xref" href="AiDotNet.Interfaces.SparsityPattern.html">SparsityPattern</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Matrix&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L501"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies the pruning mask to weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Matrix&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Tensor&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L515"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pruning mask to tensor weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Tensor&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Weight tensor to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ApplyPruning_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ApplyPruning(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ApplyPruning(Vector&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L489"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Applies pruning mask to vector weights in-place.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ApplyPruning(Vector&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Weight vector to prune</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask to apply</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  ComputeImportanceScores(Matrix&lt;T&gt;, Matrix&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores using magnitude-based scoring.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; ComputeImportanceScores(Matrix&lt;T&gt; weights, Matrix&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix (typically after training)</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for lottery ticket)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Matrix of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> For lottery tickets, we use the final trained weights' magnitudes.
+<p>The intuition: Weights that became large during training found useful features.
+Those are the connections that form our &quot;winning lottery ticket.&quot;</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeImportanceScores(Tensor&lt;T&gt;, Tensor&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores using magnitude-based scoring for tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; ComputeImportanceScores(Tensor&lt;T&gt; weights, Tensor&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Weight tensor (typically after training)</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for lottery ticket)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Tensor of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ComputeImportanceScores_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ComputeImportanceScores(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  ComputeImportanceScores(Vector&lt;T&gt;, Vector&lt;T&gt;?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes importance scores using magnitude-based scoring for vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Vector&lt;T&gt; ComputeImportanceScores(Vector&lt;T&gt; weights, Vector&lt;T&gt;? gradients = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Weight vector (typically after training)</p>
+</dd>
+    <dt><code>gradients</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Gradients (not used for lottery ticket)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Vector of importance scores</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_Create2to4Mask_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.Create2to4Mask*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_Create2to4Mask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.Create2to4Mask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Create2to4Mask(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L438"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a 2:4 structured sparsity mask (NVIDIA Ampere compatible).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; Create2to4Mask(Tensor&lt;T&gt; importanceScores)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>2:4 structured mask (exactly 2 zeros per 4 elements).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Matrix{`0},System.Double)">
+  CreateMask(Matrix&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L275"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask using iterative magnitude pruning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Matrix&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Matrix__0__System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This creates the mask in multiple gentle rounds rather than all at once.
+<p>For example, to reach 90% sparsity in 5 rounds:</p>
+<ul>
+<li>Each round prunes about 37% of REMAINING weights</li>
+<li>Round 1: 100 → 63 weights remain</li>
+<li>Round 2: 63 → 40 weights remain</li>
+<li>Round 3: 40 → 25 weights remain</li>
+<li>Round 4: 25 → 16 weights remain</li>
+<li>Round 5: 16 → 10 weights remain (90% total sparsity)</li>
+</ul>
+<p>This gradual approach helps find better lottery tickets.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  CreateMask(Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L336"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask using iterative magnitude pruning for tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Tensor&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateMask_AiDotNet_Tensors_LinearAlgebra_Vector__0__System_Double_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateMask(AiDotNet.Tensors.LinearAlgebra.Vector{`0},System.Double)">
+  CreateMask(Vector&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L214"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a pruning mask using iterative magnitude pruning for vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateMask(Vector&lt;T&gt; importanceScores, double targetSparsity)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores from ComputeImportanceScores</p>
+</dd>
+    <dt><code>targetSparsity</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Target sparsity ratio (0 to 1)</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Binary mask (1 = keep, 0 = prune)</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateNtoMMask_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateNtoMMask*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_CreateNtoMMask_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Int32_System_Int32_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.CreateNtoMMask(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Int32,System.Int32)">
+  CreateNtoMMask(Tensor&lt;T&gt;, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L450"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates an N:M structured sparsity mask.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IPruningMask&lt;T&gt; CreateNtoMMask(Tensor&lt;T&gt; importanceScores, int n, int m)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>importanceScores</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Importance scores.</p>
+</dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of zeros per group.</p>
+</dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Group size.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>N:M structured mask.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_GetInitialWeights_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.GetInitialWeights*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_GetInitialWeights_System_String_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.GetInitialWeights(System.String)">
+  GetInitialWeights(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the stored initial weights for a layer.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Matrix&lt;T&gt; GetInitialWeights(string layerName)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layerName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name/identifier for the layer</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Initial weight matrix</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.invalidoperationexception">InvalidOperationException</a></dt>
+    <dd><p>Thrown when no weights stored for the layer</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ResetToInitialWeights_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ResetToInitialWeights*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ResetToInitialWeights_System_String_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_IPruningMask__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ResetToInitialWeights(System.String,AiDotNet.Tensors.LinearAlgebra.Matrix{`0},AiDotNet.Interfaces.IPruningMask{`0})">
+  ResetToInitialWeights(string, Matrix&lt;T&gt;, IPruningMask&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L709"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Resets pruned weights to their initial values (key step in lottery ticket).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void ResetToInitialWeights(string layerName, Matrix&lt;T&gt; weights, IPruningMask&lt;T&gt; mask)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layerName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name/identifier for the layer</p>
+</dd>
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Weight matrix to reset</p>
+</dd>
+    <dt><code>mask</code> <a class="xref" href="AiDotNet.Interfaces.IPruningMask-1.html">IPruningMask</a>&lt;T&gt;</dt>
+    <dd><p>Pruning mask indicating which weights to keep</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ResetToInitialWeights_System_String_AiDotNet_Tensors_LinearAlgebra_Matrix__0__AiDotNet_Interfaces_IPruningMask__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This is what makes lottery ticket special!
+<p>After finding which connections are important:</p>
+<ol>
+<li>Take the initial random weights (before any training)</li>
+<li>Apply the mask to keep only the &quot;winning ticket&quot; connections</li>
+<li>Set weights to these masked initial values</li>
+<li>Now retrain - you'll match the original network's performance!</li>
+</ol>
+<p>This proves that the structure (which connections exist) is more important
+than the specific learned values. The winning lottery ticket could have
+succeeded from the start - we just needed to know which connections to keep!</p>
+
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when weight dimensions don't match initial weights</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_StoreInitialWeights_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.StoreInitialWeights*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_StoreInitialWeights_System_String_AiDotNet_Tensors_LinearAlgebra_Matrix__0__" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.StoreInitialWeights(System.String,AiDotNet.Tensors.LinearAlgebra.Matrix{`0})">
+  StoreInitialWeights(string, Matrix&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L127"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Stores initial weights before training (critical for lottery ticket).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public void StoreInitialWeights(string layerName, Matrix&lt;T&gt; weights)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>layerName</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Name/identifier for the layer</p>
+</dd>
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Matrix-1.html">Matrix</a>&lt;T&gt;</dt>
+    <dd><p>Initial weight matrix</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_StoreInitialWeights_System_String_AiDotNet_Tensors_LinearAlgebra_Matrix__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p><b>For Beginners:</b> This saves the random initialization before training.
+<p>This is THE KEY step for lottery tickets:</p>
+<ul>
+<li>You MUST save weights before any training</li>
+<li>Later, you'll reset pruned networks to these exact values</li>
+<li>Without this, lottery ticket hypothesis doesn't work!</li>
+</ul>
+<p>Call this right after initializing your network, before the first training step.</p>
+
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ToSparseFormat_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ToSparseFormat*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ToSparseFormat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_ModelCompression_SparseFormat_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ToSparseFormat(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.ModelCompression.SparseFormat)">
+  ToSparseFormat(Tensor&lt;T&gt;, SparseFormat)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L534"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts pruned weights to sparse format for efficient storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseCompressionResult&lt;T&gt; ToSparseFormat(Tensor&lt;T&gt; weights, SparseFormat format)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weights (containing zeros).</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.ModelCompression.SparseFormat.html">SparseFormat</a></dt>
+    <dd><p>Target sparse format.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelCompression.SparseCompressionResult-1.html">SparseCompressionResult</a>&lt;T&gt;</dt>
+    <dd><p>Sparse representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ToSparseFormat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_ModelCompression_SparseFormat__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>For StructuredNtoM format, use the overload that accepts n and m parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ToSparseFormat_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ToSparseFormat*"></a>
+
+  <h3 id="AiDotNet_Pruning_LotteryTicketPruningStrategy_1_ToSparseFormat_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_ModelCompression_SparseFormat_System_Int32_System_Int32_" data-uid="AiDotNet.Pruning.LotteryTicketPruningStrategy`1.ToSparseFormat(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.ModelCompression.SparseFormat,System.Int32,System.Int32)">
+  ToSparseFormat(Tensor&lt;T&gt;, SparseFormat, int, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L647"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts pruned weights to N:M structured sparse format for efficient storage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public SparseCompressionResult&lt;T&gt; ToSparseFormat(Tensor&lt;T&gt; weights, SparseFormat format, int n, int m)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>weights</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Pruned weights (containing zeros).</p>
+</dd>
+    <dt><code>format</code> <a class="xref" href="AiDotNet.ModelCompression.SparseFormat.html">SparseFormat</a></dt>
+    <dd><p>Target sparse format (should be Structured2to4 or StructuredNtoM).</p>
+</dd>
+    <dt><code>n</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of zeros per group in N:M sparsity pattern.</p>
+</dd>
+    <dt><code>m</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Group size in N:M sparsity pattern.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.ModelCompression.SparseCompressionResult-1.html">SparseCompressionResult</a>&lt;T&gt;</dt>
+    <dd><p>Sparse representation with N:M pattern metadata.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentoutofrangeexception">ArgumentOutOfRangeException</a></dt>
+    <dd><p>Thrown when n or m are invalid.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Pruning/LotteryTicketPruningStrategy.cs/#L54" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

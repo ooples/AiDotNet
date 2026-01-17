@@ -1,0 +1,3944 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class TrainingStage&lt;T, TInput, TOutput&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class TrainingStage&lt;T, TInput, TOutput&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Represents a single stage in a training pipeline with comprehensive configuration options.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Models_Options_TrainingStage_3.md&amp;value=---%0Auid%3A%20AiDotNet.Models.Options.TrainingStage%603%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Models.Options.TrainingStage`3">
+
+
+
+  <h1 id="AiDotNet_Models_Options_TrainingStage_3" data-uid="AiDotNet.Models.Options.TrainingStage`3" class="text-break">
+Class TrainingStage&lt;T, TInput, TOutput&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L30"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Models.html">Models</a>.<a class="xref" href="AiDotNet.Models.Options.html">Options</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Represents a single stage in a training pipeline with comprehensive configuration options.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class TrainingStage&lt;T, TInput, TOutput&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric data type used for calculations.</p>
+</dd>
+    <dt><code>TInput</code></dt>
+    <dd><p>The input data type for the model.</p>
+</dd>
+    <dt><code>TOutput</code></dt>
+    <dd><p>The output data type for the model.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">TrainingStage&lt;T, TInput, TOutput&gt;</span></div>
+    </dd>
+  </dl>
+
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Models_Options_TrainingStage_3_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+A training stage encapsulates all configuration needed for one step in a multi-stage
+training pipeline. Each stage can have its own:
+</p>
+<ul><li>Training method (SFT, DPO, RLHF, etc.)</li><li>Optimizer and learning rate</li><li>Dataset and validation data</li><li>Layer freezing and LoRA configuration</li><li>Scheduler and warmup settings</li><li>Early stopping and checkpointing</li></ul>
+<p><b>For Beginners:</b> Think of each stage as a chapter in a training book.
+Each chapter teaches the model something different, and you can configure
+exactly how that teaching happens.</p>
+</div>
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta1_" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamBeta1*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta1" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamBeta1">
+  AdamBeta1
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L205"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Adam beta1 parameter (momentum).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamBeta1 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta1_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.9, standard for Adam/AdamW.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta2_" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamBeta2*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta2" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamBeta2">
+  AdamBeta2
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Adam beta2 parameter (RMSprop-like).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamBeta2 { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_AdamBeta2_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.999, standard for Adam/AdamW.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_AdamEpsilon_" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamEpsilon*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_AdamEpsilon" data-uid="AiDotNet.Models.Options.TrainingStage`3.AdamEpsilon">
+  AdamEpsilon
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L221"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the Adam epsilon for numerical stability.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double AdamEpsilon { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_AdamEpsilon_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1e-8, standard for Adam/AdamW.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_BatchSize_" data-uid="AiDotNet.Models.Options.TrainingStage`3.BatchSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_BatchSize" data-uid="AiDotNet.Models.Options.TrainingStage`3.BatchSize">
+  BatchSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L139"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the batch size for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int BatchSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_BatchSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Overrides the value in Options if set. Default is 8.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetric_" data-uid="AiDotNet.Models.Options.TrainingStage`3.BestCheckpointMetric*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetric" data-uid="AiDotNet.Models.Options.TrainingStage`3.BestCheckpointMetric">
+  BestCheckpointMetric
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L776"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the metric to use for determining the best checkpoint.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public CheckpointMetricType BestCheckpointMetric { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.CheckpointMetricType.html">CheckpointMetricType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetric_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is Loss (lower is better).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetricMaximize_" data-uid="AiDotNet.Models.Options.TrainingStage`3.BestCheckpointMetricMaximize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetricMaximize" data-uid="AiDotNet.Models.Options.TrainingStage`3.BestCheckpointMetricMaximize">
+  BestCheckpointMetricMaximize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L793"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether higher is better for the best checkpoint metric.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool BestCheckpointMetricMaximize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_BestCheckpointMetricMaximize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false (lower is better, appropriate for Loss).
+Set to true for metrics like Accuracy, F1, BLEU, etc.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Callbacks_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Callbacks*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Callbacks" data-uid="AiDotNet.Models.Options.TrainingStage`3.Callbacks">
+  Callbacks
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L874"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets stage-specific callbacks.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StageCallbacks&lt;T, TInput, TOutput&gt;? Callbacks { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.StageCallbacks-3.html">StageCallbacks</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveEpochs_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CheckpointSaveEpochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveEpochs" data-uid="AiDotNet.Models.Options.TrainingStage`3.CheckpointSaveEpochs">
+  CheckpointSaveEpochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L752"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the checkpoint save interval (in epochs).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointSaveEpochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveEpochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1 (save every epoch). Set to 0 to use step-based saving only.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CheckpointSaveSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.CheckpointSaveSteps">
+  CheckpointSaveSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L744"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the checkpoint save interval (in steps).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CheckpointSaveSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_CheckpointSaveSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 500 steps. Set to 0 to only save at epoch boundaries.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ConstitutionalPrinciples_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ConstitutionalPrinciples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ConstitutionalPrinciples" data-uid="AiDotNet.Models.Options.TrainingStage`3.ConstitutionalPrinciples">
+  ConstitutionalPrinciples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L564"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the constitutional principles for CAI stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] ConstitutionalPrinciples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_ConstitutionalPrinciples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default includes standard HHH (Helpful, Harmless, Honest) principles.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ContrastiveMargin_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ContrastiveMargin*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ContrastiveMargin" data-uid="AiDotNet.Models.Options.TrainingStage`3.ContrastiveMargin">
+  ContrastiveMargin
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L464"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the margin for contrastive preference methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ContrastiveMargin { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_ContrastiveMargin_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.0. Used by contrastive methods like CPO.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CritiqueModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CritiqueModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CritiqueModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.CritiqueModel">
+  CritiqueModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L587"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the model to use for generating critiques.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? CritiqueModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_CritiqueModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If null, uses the model being trained for self-critique.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CritiqueRevisionRounds_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CritiqueRevisionRounds*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CritiqueRevisionRounds" data-uid="AiDotNet.Models.Options.TrainingStage`3.CritiqueRevisionRounds">
+  CritiqueRevisionRounds
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L579"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of critique-revision rounds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int CritiqueRevisionRounds { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_CritiqueRevisionRounds_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 2. More rounds = more refined responses but slower training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CustomEvaluationFunction_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomEvaluationFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CustomEvaluationFunction" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomEvaluationFunction">
+  CustomEvaluationFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L884"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the custom evaluation function for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;?, Task&lt;Dictionary&lt;string, double&gt;&gt;&gt;? CustomEvaluationFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-3">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CustomLossFunction_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomLossFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CustomLossFunction" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomLossFunction">
+  CustomLossFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L894"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom loss function for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ILossFunction&lt;T&gt;? CustomLossFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CustomMetricName_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomMetricName*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CustomMetricName" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomMetricName">
+  CustomMetricName
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L784"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom metric name when BestCheckpointMetric is Custom.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string CustomMetricName { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_CustomMetricName_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Only used when BestCheckpointMetric is set to Custom.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_CustomTrainingFunction_" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomTrainingFunction*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_CustomTrainingFunction" data-uid="AiDotNet.Models.Options.TrainingStage`3.CustomTrainingFunction">
+  CustomTrainingFunction
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L879"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the custom training function for custom stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;IFullModel&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;, CancellationToken, Task&lt;IFullModel&lt;T, TInput, TOutput&gt;&gt;&gt;? CustomTrainingFunction { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-4">Func</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.cancellationtoken">CancellationToken</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.threading.tasks.task-1">Task</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DPOBeta_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DPOBeta*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DPOBeta" data-uid="AiDotNet.Models.Options.TrainingStage`3.DPOBeta">
+  DPOBeta
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L440"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the beta parameter for DPO/IPO loss.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DPOBeta { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DPOBeta_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.1. Controls the strength of the KL constraint. Typical range: 0.01-0.5.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DataMixingRatios_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataMixingRatios*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DataMixingRatios" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataMixingRatios">
+  DataMixingRatios
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L96"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the data mixing ratio when combining multiple datasets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, double&gt;? DataMixingRatios { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DataMixingRatios_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Keys are dataset names/identifiers, values are sampling weights.
+For example: { &quot;instruction&quot;: 0.5, &quot;conversation&quot;: 0.3, &quot;safety&quot;: 0.2 }</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DataPreprocessor_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataPreprocessor*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DataPreprocessor" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataPreprocessor">
+  DataPreprocessor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L889"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom data preprocessing for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;FineTuningData&lt;T, TInput, TOutput&gt;, FineTuningData&lt;T, TInput, TOutput&gt;&gt;? DataPreprocessor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DataShuffleSeed_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataShuffleSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DataShuffleSeed" data-uid="AiDotNet.Models.Options.TrainingStage`3.DataShuffleSeed">
+  DataShuffleSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L106"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for data shuffling (for reproducibility).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? DataShuffleSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Description_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Description*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Description" data-uid="AiDotNet.Models.Options.TrainingStage`3.Description">
+  Description
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L44"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets a description of what this stage accomplishes.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string? Description { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DistillationAlpha_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DistillationAlpha" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationAlpha">
+  DistillationAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L671"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the alpha for balancing hard vs soft targets.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DistillationAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DistillationAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.5. alpha * soft_loss + (1-alpha) * hard_loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DistillationLayerMapping_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationLayerMapping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DistillationLayerMapping" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationLayerMapping">
+  DistillationLayerMapping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L688"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the layer mapping for intermediate distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;int, int&gt; DistillationLayerMapping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DistillationLayerMapping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Maps teacher layers to student layers: { teacherLayerIdx: studentLayerIdx }.
+Default is empty (auto-map if UseIntermediateDistillation is true).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DistillationTemperature_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DistillationTemperature" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistillationTemperature">
+  DistillationTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L663"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distillation temperature.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double DistillationTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DistillationTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 2.0. Higher values produce softer probability distributions.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_DistributedStrategy_" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistributedStrategy*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_DistributedStrategy" data-uid="AiDotNet.Models.Options.TrainingStage`3.DistributedStrategy">
+  DistributedStrategy
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L926"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the distributed training strategy for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public DistributedStrategy DistributedStrategy { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.DistributedStrategy.html">DistributedStrategy</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_DistributedStrategy_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is None (single device). Use DataParallel or FSDP for multi-GPU.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_EarlyStopping_" data-uid="AiDotNet.Models.Options.TrainingStage`3.EarlyStopping*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_EarlyStopping" data-uid="AiDotNet.Models.Options.TrainingStage`3.EarlyStopping">
+  EarlyStopping
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L805"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets early stopping configuration specific to this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public EarlyStoppingConfig EarlyStopping { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.EarlyStoppingConfig.html">EarlyStoppingConfig</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_EarlyStopping_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default configuration with patience=5 and monitoring loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Enabled_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Enabled*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Enabled" data-uid="AiDotNet.Models.Options.TrainingStage`3.Enabled">
+  Enabled
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L59"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether this stage is enabled (skipped if false).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool Enabled { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_EntropyCoefficient_" data-uid="AiDotNet.Models.Options.TrainingStage`3.EntropyCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_EntropyCoefficient" data-uid="AiDotNet.Models.Options.TrainingStage`3.EntropyCoefficient">
+  EntropyCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L508"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the entropy bonus coefficient for exploration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double EntropyCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_EntropyCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.01. Encourages exploration by penalizing deterministic policies.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Epochs_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Epochs*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Epochs" data-uid="AiDotNet.Models.Options.TrainingStage`3.Epochs">
+  Epochs
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L131"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of epochs for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int Epochs { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_Epochs_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Overrides the value in Options if set. Default is 3 epochs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_EvaluationSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.EvaluationSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_EvaluationSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.EvaluationSteps">
+  EvaluationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L841"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the evaluation interval (in steps).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int EvaluationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_EvaluationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 100 steps. Run validation every N steps.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_FineTuningMethod_" data-uid="AiDotNet.Models.Options.TrainingStage`3.FineTuningMethod*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_FineTuningMethod" data-uid="AiDotNet.Models.Options.TrainingStage`3.FineTuningMethod">
+  FineTuningMethod
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fine-tuning method to use in this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningMethodType FineTuningMethod { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.FineTuningMethodType.html">FineTuningMethodType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_FreezeBaseModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.FreezeBaseModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_FreezeBaseModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.FreezeBaseModel">
+  FreezeBaseModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L278"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to freeze the base model during this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool FreezeBaseModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_FreezeBaseModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false (train all layers). Set to true for LoRA or when using adapters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_FrozenLayers_" data-uid="AiDotNet.Models.Options.TrainingStage`3.FrozenLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_FrozenLayers" data-uid="AiDotNet.Models.Options.TrainingStage`3.FrozenLayers">
+  FrozenLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L287"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets layer names/patterns to freeze during this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] FrozenLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_FrozenLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Supports patterns like &quot;encoder.<em>&quot;, &quot;layer.0-5.</em>&quot;, &quot;embedding&quot;.
+Default is empty (no specific layers frozen unless FreezeBaseModel is true).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_GAELambda_" data-uid="AiDotNet.Models.Options.TrainingStage`3.GAELambda*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_GAELambda" data-uid="AiDotNet.Models.Options.TrainingStage`3.GAELambda">
+  GAELambda
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L516"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the GAE lambda for advantage estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double GAELambda { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_GAELambda_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.95. Controls bias-variance tradeoff in advantage estimation.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_GRPOGroupSize_" data-uid="AiDotNet.Models.Options.TrainingStage`3.GRPOGroupSize*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_GRPOGroupSize" data-uid="AiDotNet.Models.Options.TrainingStage`3.GRPOGroupSize">
+  GRPOGroupSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L544"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the group size for GRPO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GRPOGroupSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_GRPOGroupSize_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 4. Number of responses to generate per prompt for group ranking.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_GRPOUseRelativeRewards_" data-uid="AiDotNet.Models.Options.TrainingStage`3.GRPOUseRelativeRewards*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_GRPOUseRelativeRewards" data-uid="AiDotNet.Models.Options.TrainingStage`3.GRPOUseRelativeRewards">
+  GRPOUseRelativeRewards
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L552"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use relative rewards in GRPO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool GRPOUseRelativeRewards { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_GRPOUseRelativeRewards_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Normalize rewards within each group for stable training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_GradientAccumulationSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.GradientAccumulationSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_GradientAccumulationSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.GradientAccumulationSteps">
+  GradientAccumulationSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L148"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the gradient accumulation steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GradientAccumulationSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_GradientAccumulationSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Allows effective larger batch sizes with limited memory.
+Effective batch size = BatchSize * GradientAccumulationSteps</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_GradualUnfreezingInterval_" data-uid="AiDotNet.Models.Options.TrainingStage`3.GradualUnfreezingInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_GradualUnfreezingInterval" data-uid="AiDotNet.Models.Options.TrainingStage`3.GradualUnfreezingInterval">
+  GradualUnfreezingInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L322"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the epoch interval for gradual unfreezing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int GradualUnfreezingInterval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_GradualUnfreezingInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1 epoch. Every N epochs, unfreeze one more layer group.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_InitialLossScale_" data-uid="AiDotNet.Models.Options.TrainingStage`3.InitialLossScale*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_InitialLossScale" data-uid="AiDotNet.Models.Options.TrainingStage`3.InitialLossScale">
+  InitialLossScale
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L724"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the initial loss scale for mixed precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double InitialLossScale { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_InitialLossScale_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 65536.0. Starting scale for dynamic loss scaling.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_IsEvaluationOnly_" data-uid="AiDotNet.Models.Options.TrainingStage`3.IsEvaluationOnly*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_IsEvaluationOnly" data-uid="AiDotNet.Models.Options.TrainingStage`3.IsEvaluationOnly">
+  IsEvaluationOnly
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L73"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether this stage is evaluation-only (no training).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool IsEvaluationOnly { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_KLPenaltyCoefficient_" data-uid="AiDotNet.Models.Options.TrainingStage`3.KLPenaltyCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_KLPenaltyCoefficient" data-uid="AiDotNet.Models.Options.TrainingStage`3.KLPenaltyCoefficient">
+  KLPenaltyCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L484"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the KL penalty coefficient for RLHF.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double KLPenaltyCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_KLPenaltyCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.01. Prevents the policy from diverging too far from the reference.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LearningRate_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LearningRate" data-uid="AiDotNet.Models.Options.TrainingStage`3.LearningRate">
+  LearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L181"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 2e-5, a common choice for fine-tuning pre-trained models.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LoRAAlpha_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRAAlpha*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LoRAAlpha" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRAAlpha">
+  LoRAAlpha
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L350"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the LoRA alpha scaling factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LoRAAlpha { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LoRAAlpha_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 32 (2x rank). Effective scaling = alpha / rank.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LoRADropout_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRADropout*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LoRADropout" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRADropout">
+  LoRADropout
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L358"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the LoRA dropout rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double LoRADropout { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LoRADropout_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.05 (5%). Light dropout helps regularization.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LoRARank_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRARank*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LoRARank" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRARank">
+  LoRARank
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L342"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the LoRA rank (dimension of low-rank matrices).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LoRARank { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LoRARank_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 16. Common values: 4, 8, 16, 32, 64. Higher = more capacity but more parameters.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LoRATargetModules_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRATargetModules*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LoRATargetModules" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoRATargetModules">
+  LoRATargetModules
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L367"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets which modules to apply LoRA to.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] LoRATargetModules { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LoRATargetModules_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default targets query and value projections.
+Common patterns: [&quot;q_proj&quot;, &quot;v_proj&quot;], [&quot;query&quot;, &quot;key&quot;, &quot;value&quot;, &quot;output&quot;].</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LogGradientNorms_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LogGradientNorms*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LogGradientNorms" data-uid="AiDotNet.Models.Options.TrainingStage`3.LogGradientNorms">
+  LogGradientNorms
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L857"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log gradient norms.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LogGradientNorms { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LogGradientNorms_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable to debug gradient issues.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LogLearningRate_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LogLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LogLearningRate" data-uid="AiDotNet.Models.Options.TrainingStage`3.LogLearningRate">
+  LogLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L865"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to log learning rate.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool LogLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LogLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Useful for verifying scheduler behavior.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_LoggingSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoggingSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_LoggingSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.LoggingSteps">
+  LoggingSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L833"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the logging interval (in steps).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int LoggingSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_LoggingSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 10 steps. Log training metrics every N steps.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MaxCheckpointsToKeep_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxCheckpointsToKeep*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MaxCheckpointsToKeep" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxCheckpointsToKeep">
+  MaxCheckpointsToKeep
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L760"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of checkpoints to keep.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxCheckpointsToKeep { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MaxCheckpointsToKeep_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 3. Older checkpoints are deleted to save disk space.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MaxDuration_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxDuration*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MaxDuration" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxDuration">
+  MaxDuration
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L813"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum duration for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TimeSpan MaxDuration { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.timespan">TimeSpan</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MaxDuration_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 24 hours. Set to TimeSpan.MaxValue for no limit.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MaxGradientNorm_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxGradientNorm*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MaxGradientNorm" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxGradientNorm">
+  MaxGradientNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L161"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum gradient norm for gradient clipping.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MaxGradientNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MaxGradientNorm_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1.0. Set to 0 to disable gradient clipping.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MaxSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MaxSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxSteps">
+  MaxSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L821"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of steps for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int MaxSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MaxSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0 (no step limit, use Epochs instead).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MaxTrainingSamples_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxTrainingSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MaxTrainingSamples" data-uid="AiDotNet.Models.Options.TrainingStage`3.MaxTrainingSamples">
+  MaxTrainingSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L114"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the maximum number of training samples to use.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int? MaxTrainingSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MaxTrainingSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Useful for limiting data in curriculum learning or quick experiments.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MergeLoRAAfterTraining_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MergeLoRAAfterTraining*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MergeLoRAAfterTraining" data-uid="AiDotNet.Models.Options.TrainingStage`3.MergeLoRAAfterTraining">
+  MergeLoRAAfterTraining
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L391"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to merge LoRA weights into base model after training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool MergeLoRAAfterTraining { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MergeLoRAAfterTraining_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Set to true to produce a merged model for deployment.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Metadata_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Metadata*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Metadata" data-uid="AiDotNet.Models.Options.TrainingStage`3.Metadata">
+  Metadata
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L946"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets custom metadata for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Dictionary&lt;string, object&gt; Metadata { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_Metadata_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Empty by default. Use to store custom key-value pairs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MetricsToTrack_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MetricsToTrack*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MetricsToTrack" data-uid="AiDotNet.Models.Options.TrainingStage`3.MetricsToTrack">
+  MetricsToTrack
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L849"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the metrics to track during this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] MetricsToTrack { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MetricsToTrack_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default includes loss and perplexity.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MinLearningRate_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MinLearningRate*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MinLearningRate" data-uid="AiDotNet.Models.Options.TrainingStage`3.MinLearningRate">
+  MinLearningRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum learning rate (for schedulers with decay).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double MinLearningRate { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MinLearningRate_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0 (learning rate can decay to zero).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_MixedPrecisionDType_" data-uid="AiDotNet.Models.Options.TrainingStage`3.MixedPrecisionDType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_MixedPrecisionDType" data-uid="AiDotNet.Models.Options.TrainingStage`3.MixedPrecisionDType">
+  MixedPrecisionDType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L708"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the mixed precision data type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public MixedPrecisionType MixedPrecisionDType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.MixedPrecisionType.html">MixedPrecisionType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_MixedPrecisionDType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is FP16 for broad compatibility. BF16 is better on Ampere+ GPUs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Name_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Name*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Name" data-uid="AiDotNet.Models.Options.TrainingStage`3.Name">
+  Name
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L39"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the name of this stage for logging and identification.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string Name { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_NumCycles_" data-uid="AiDotNet.Models.Options.TrainingStage`3.NumCycles*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_NumCycles" data-uid="AiDotNet.Models.Options.TrainingStage`3.NumCycles">
+  NumCycles
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L258"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of cycles for cosine scheduler with restarts.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int NumCycles { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_NumCycles_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1 (no restarts, single decay to min learning rate).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_OptimizerOverride_" data-uid="AiDotNet.Models.Options.TrainingStage`3.OptimizerOverride*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_OptimizerOverride" data-uid="AiDotNet.Models.Options.TrainingStage`3.OptimizerOverride">
+  OptimizerOverride
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L173"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the optimizer type override for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public OptimizerType OptimizerOverride { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.OptimizerType.html">OptimizerType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_OptimizerOverride_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is AdamW, the standard choice for fine-tuning.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Options_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Options*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Options" data-uid="AiDotNet.Models.Options.TrainingStage`3.Options">
+  Options
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L123"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the fine-tuning options for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningOptions&lt;T&gt;? Options { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningOptions-1.html">FineTuningOptions</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_PPOClipRange_" data-uid="AiDotNet.Models.Options.TrainingStage`3.PPOClipRange*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_PPOClipRange" data-uid="AiDotNet.Models.Options.TrainingStage`3.PPOClipRange">
+  PPOClipRange
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L492"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the PPO clip range.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PPOClipRange { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_PPOClipRange_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.2. Limits how much the policy can change per update.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_PPOEpochsPerBatch_" data-uid="AiDotNet.Models.Options.TrainingStage`3.PPOEpochsPerBatch*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_PPOEpochsPerBatch" data-uid="AiDotNet.Models.Options.TrainingStage`3.PPOEpochsPerBatch">
+  PPOEpochsPerBatch
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L524"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of PPO epochs per batch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int PPOEpochsPerBatch { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_PPOEpochsPerBatch_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 4. Number of times to reuse collected experiences.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLabelSmoothing_" data-uid="AiDotNet.Models.Options.TrainingStage`3.PreferenceLabelSmoothing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLabelSmoothing" data-uid="AiDotNet.Models.Options.TrainingStage`3.PreferenceLabelSmoothing">
+  PreferenceLabelSmoothing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L448"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the label smoothing factor for preference learning.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double PreferenceLabelSmoothing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLabelSmoothing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.0 (no smoothing). Values like 0.1 can help with noisy preferences.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLossType_" data-uid="AiDotNet.Models.Options.TrainingStage`3.PreferenceLossType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLossType" data-uid="AiDotNet.Models.Options.TrainingStage`3.PreferenceLossType">
+  PreferenceLossType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L456"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the loss type for preference optimization.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public PreferenceLossType PreferenceLossType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.PreferenceLossType.html">PreferenceLossType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_PreferenceLossType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is Sigmoid (standard DPO).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_QLoRABits_" data-uid="AiDotNet.Models.Options.TrainingStage`3.QLoRABits*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_QLoRABits" data-uid="AiDotNet.Models.Options.TrainingStage`3.QLoRABits">
+  QLoRABits
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L383"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the quantization bits for QLoRA.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int QLoRABits { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_QLoRABits_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 4 bits (most memory efficient). Use 8 for higher precision.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RandomSeed_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RandomSeed*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RandomSeed" data-uid="AiDotNet.Models.Options.TrainingStage`3.RandomSeed">
+  RandomSeed
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L906"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the random seed for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RandomSeed { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RandomSeed_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 42. Set to different values for different runs.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ReferenceModelUpdateInterval_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ReferenceModelUpdateInterval*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ReferenceModelUpdateInterval" data-uid="AiDotNet.Models.Options.TrainingStage`3.ReferenceModelUpdateInterval">
+  ReferenceModelUpdateInterval
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L428"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the interval (in steps) for updating the reference model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int ReferenceModelUpdateInterval { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_ReferenceModelUpdateInterval_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 100 steps. Only used when UpdateReferenceModel is true.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingMinReward_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingMinReward*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingMinReward" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingMinReward">
+  RejectionSamplingMinReward
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L643"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the minimum reward threshold for rejection sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double RejectionSamplingMinReward { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingMinReward_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.0. Only keep responses with reward above this threshold.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingN_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingN*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingN" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingN">
+  RejectionSamplingN
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L627"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of samples to generate for rejection sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RejectionSamplingN { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingN_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 10. Generate N responses and select the best ones.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingTopK_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingTopK*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingTopK" data-uid="AiDotNet.Models.Options.TrainingStage`3.RejectionSamplingTopK">
+  RejectionSamplingTopK
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L635"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the top-K samples to keep from rejection sampling.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RejectionSamplingTopK { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RejectionSamplingTopK_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1. Keep only the best response per prompt.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RewardModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RewardModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RewardModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.RewardModel">
+  RewardModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L476"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the reward model to use for RLHF stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? RewardModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RewardModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Required for PPO/RLHF. Can be null if using a reward-free method like DPO.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RolloutSamples_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RolloutSamples*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RolloutSamples" data-uid="AiDotNet.Models.Options.TrainingStage`3.RolloutSamples">
+  RolloutSamples
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L532"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of rollout samples per update.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int RolloutSamples { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RolloutSamples_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 2048. Number of environment steps to collect before each PPO update.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_RunCondition_" data-uid="AiDotNet.Models.Options.TrainingStage`3.RunCondition*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_RunCondition" data-uid="AiDotNet.Models.Options.TrainingStage`3.RunCondition">
+  RunCondition
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L68"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets conditions that must be met to run this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Func&lt;TrainingStageResult&lt;T, TInput, TOutput&gt;?, bool&gt;? RunCondition { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.func-2">Func</a>&lt;<a class="xref" href="AiDotNet.Models.Options.TrainingStageResult-3.html">TrainingStageResult</a>&lt;T, TInput, TOutput&gt;, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_RunCondition_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If the condition returns false, the stage is skipped.
+Receives the result of the previous stage (null for first stage).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SaveCheckpointAfter_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SaveCheckpointAfter*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SaveCheckpointAfter" data-uid="AiDotNet.Models.Options.TrainingStage`3.SaveCheckpointAfter">
+  SaveCheckpointAfter
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L736"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save a checkpoint after this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SaveCheckpointAfter { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SaveCheckpointAfter_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Always save after each stage for recovery.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SaveOnlyBest_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SaveOnlyBest*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SaveOnlyBest" data-uid="AiDotNet.Models.Options.TrainingStage`3.SaveOnlyBest">
+  SaveOnlyBest
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L768"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to save only the best checkpoint based on validation metrics.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SaveOnlyBest { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SaveOnlyBest_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. When true, only keeps the checkpoint with best metric.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SchedulerPower_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SchedulerPower*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SchedulerPower" data-uid="AiDotNet.Models.Options.TrainingStage`3.SchedulerPower">
+  SchedulerPower
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L266"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the power for polynomial decay scheduler.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SchedulerPower { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SchedulerPower_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 1.0 (linear decay). Higher values = faster initial decay.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SchedulerType_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SchedulerType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SchedulerType" data-uid="AiDotNet.Models.Options.TrainingStage`3.SchedulerType">
+  SchedulerType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L233"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the learning rate scheduler type.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public LearningRateSchedulerType SchedulerType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.LearningRateSchedulers.LearningRateSchedulerType.html">LearningRateSchedulerType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SchedulerType_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is CosineAnnealing, which works well for most fine-tuning scenarios.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayIterations_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayIterations*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayIterations" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayIterations">
+  SelfPlayIterations
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L599"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of self-play iterations.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SelfPlayIterations { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayIterations_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 3. Number of self-play rounds per training cycle.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayResponsesPerPrompt_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayResponsesPerPrompt*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayResponsesPerPrompt" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayResponsesPerPrompt">
+  SelfPlayResponsesPerPrompt
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L615"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of responses to generate per prompt in self-play.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SelfPlayResponsesPerPrompt { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayResponsesPerPrompt_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 4. More responses = better coverage but slower training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayTemperature_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayTemperature*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayTemperature" data-uid="AiDotNet.Models.Options.TrainingStage`3.SelfPlayTemperature">
+  SelfPlayTemperature
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L607"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the generation temperature for self-play responses.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double SelfPlayTemperature { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SelfPlayTemperature_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.7. Higher values = more diverse responses, lower = more focused.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ShareReferenceModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ShareReferenceModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ShareReferenceModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.ShareReferenceModel">
+  ShareReferenceModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L412"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to share reference model with the training model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ShareReferenceModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_ShareReferenceModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true (memory efficient). If false, loads a separate copy.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ShuffleData_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ShuffleData*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ShuffleData" data-uid="AiDotNet.Models.Options.TrainingStage`3.ShuffleData">
+  ShuffleData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L101"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to shuffle the training data each epoch.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool ShuffleData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_StageType_" data-uid="AiDotNet.Models.Options.TrainingStage`3.StageType*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_StageType" data-uid="AiDotNet.Models.Options.TrainingStage`3.StageType">
+  StageType
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L49"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the type of training stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public TrainingStageType StageType { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Enums.TrainingStageType.html">TrainingStageType</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_SyncBatchNorm_" data-uid="AiDotNet.Models.Options.TrainingStage`3.SyncBatchNorm*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_SyncBatchNorm" data-uid="AiDotNet.Models.Options.TrainingStage`3.SyncBatchNorm">
+  SyncBatchNorm
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L934"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to sync batch normalization across devices.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool SyncBatchNorm { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_SyncBatchNorm_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable for better accuracy in distributed training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_Tags_" data-uid="AiDotNet.Models.Options.TrainingStage`3.Tags*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_Tags" data-uid="AiDotNet.Models.Options.TrainingStage`3.Tags">
+  Tags
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L954"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets tags for categorizing this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] Tags { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_Tags_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Empty by default. Useful for filtering and organizing stages.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_TeacherModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.TeacherModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_TeacherModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.TeacherModel">
+  TeacherModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L655"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the teacher model for distillation stages.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public IFullModel&lt;T, TInput, TOutput&gt;? TeacherModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_TeacherModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Required for knowledge distillation. The larger model to distill from.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_TrainableLayers_" data-uid="AiDotNet.Models.Options.TrainingStage`3.TrainableLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_TrainableLayers" data-uid="AiDotNet.Models.Options.TrainingStage`3.TrainableLayers">
+  TrainableLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L297"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets layer names/patterns to unfreeze (train) during this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public string[] TrainableLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_TrainableLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>If FreezeBaseModel is true, only these layers will be trained.
+Supports patterns like &quot;classifier&quot;, &quot;lm_head&quot;, &quot;layer.10-11.*&quot;.
+Default is empty (all unfrozen layers are trainable).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_TrainingData_" data-uid="AiDotNet.Models.Options.TrainingStage`3.TrainingData*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_TrainingData" data-uid="AiDotNet.Models.Options.TrainingStage`3.TrainingData">
+  TrainingData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L82"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the training data for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningData&lt;T, TInput, TOutput&gt;? TrainingData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UnfreezeTopNLayers_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UnfreezeTopNLayers*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UnfreezeTopNLayers" data-uid="AiDotNet.Models.Options.TrainingStage`3.UnfreezeTopNLayers">
+  UnfreezeTopNLayers
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L306"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of layers to unfreeze from the top.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int UnfreezeTopNLayers { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UnfreezeTopNLayers_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0 (use FrozenLayers/TrainableLayers patterns instead).
+Common approach: freeze most layers, train only top N layers.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UpdateReferenceModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UpdateReferenceModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UpdateReferenceModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.UpdateReferenceModel">
+  UpdateReferenceModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L420"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to update the reference model periodically.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UpdateReferenceModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UpdateReferenceModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false (frozen reference model).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseDeterministicAlgorithms_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseDeterministicAlgorithms*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseDeterministicAlgorithms" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseDeterministicAlgorithms">
+  UseDeterministicAlgorithms
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L914"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use deterministic algorithms (may be slower).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseDeterministicAlgorithms { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseDeterministicAlgorithms_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Enable for exact reproducibility at cost of speed.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseDynamicLossScaling_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseDynamicLossScaling*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseDynamicLossScaling" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseDynamicLossScaling">
+  UseDynamicLossScaling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L716"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use dynamic loss scaling for mixed precision.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseDynamicLossScaling { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseDynamicLossScaling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is true. Required for FP16, optional for BF16.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseGradientCheckpointing_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseGradientCheckpointing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseGradientCheckpointing" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseGradientCheckpointing">
+  UseGradientCheckpointing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L153"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use gradient checkpointing to save memory.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseGradientCheckpointing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseGradualUnfreezing_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseGradualUnfreezing*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseGradualUnfreezing" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseGradualUnfreezing">
+  UseGradualUnfreezing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L314"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to gradually unfreeze layers during training.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseGradualUnfreezing { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseGradualUnfreezing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. When true, layers are unfrozen progressively during training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseIntermediateDistillation_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseIntermediateDistillation*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseIntermediateDistillation" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseIntermediateDistillation">
+  UseIntermediateDistillation
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L679"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use intermediate layer distillation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseIntermediateDistillation { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseIntermediateDistillation_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. When true, also distills intermediate representations.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseLoRA_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseLoRA*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseLoRA" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseLoRA">
+  UseLoRA
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L334"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use LoRA (Low-Rank Adaptation) for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseLoRA { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseLoRA_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false (full fine-tuning). Set to true for parameter-efficient training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseMixedPrecision_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseMixedPrecision*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseMixedPrecision" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseMixedPrecision">
+  UseMixedPrecision
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L700"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use mixed precision training (FP16/BF16).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseMixedPrecision { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseMixedPrecision_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false (FP32). Enable for faster training with lower memory.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseQLoRA_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseQLoRA*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseQLoRA" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseQLoRA">
+  UseQLoRA
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L375"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use QLoRA (quantized LoRA) for memory efficiency.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseQLoRA { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseQLoRA_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is false. Set to true for 4-bit or 8-bit quantized training.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_UseReferenceModel_" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseReferenceModel*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_UseReferenceModel" data-uid="AiDotNet.Models.Options.TrainingStage`3.UseReferenceModel">
+  UseReferenceModel
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L404"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets whether to use a reference model for preference methods.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public bool UseReferenceModel { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_UseReferenceModel_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Required for DPO, IPO, etc. Not required for SimPO, ORPO.
+Default is true (use reference model for KL constraint).</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ValidationData_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ValidationData*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ValidationData" data-uid="AiDotNet.Models.Options.TrainingStage`3.ValidationData">
+  ValidationData
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L87"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the validation data for this stage.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public FineTuningData&lt;T, TInput, TOutput&gt;? ValidationData { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Models.Options.FineTuningData-3.html">FineTuningData</a>&lt;T, TInput, TOutput&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_ValueFunctionCoefficient_" data-uid="AiDotNet.Models.Options.TrainingStage`3.ValueFunctionCoefficient*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_ValueFunctionCoefficient" data-uid="AiDotNet.Models.Options.TrainingStage`3.ValueFunctionCoefficient">
+  ValueFunctionCoefficient
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L500"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the value function coefficient for PPO.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double ValueFunctionCoefficient { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_ValueFunctionCoefficient_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.5. Weight of value loss relative to policy loss.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_WarmupRatio_" data-uid="AiDotNet.Models.Options.TrainingStage`3.WarmupRatio*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_WarmupRatio" data-uid="AiDotNet.Models.Options.TrainingStage`3.WarmupRatio">
+  WarmupRatio
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L250"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the warmup ratio (fraction of total steps for warmup).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double WarmupRatio { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_WarmupRatio_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.1 (10% of training for warmup).
+If WarmupSteps is set, this is ignored.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_WarmupSteps_" data-uid="AiDotNet.Models.Options.TrainingStage`3.WarmupSteps*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_WarmupSteps" data-uid="AiDotNet.Models.Options.TrainingStage`3.WarmupSteps">
+  WarmupSteps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L241"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the number of warmup steps.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int WarmupSteps { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_WarmupSteps_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0. Set this or WarmupRatio, not both.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Models_Options_TrainingStage_3_WeightDecay_" data-uid="AiDotNet.Models.Options.TrainingStage`3.WeightDecay*"></a>
+
+  <h3 id="AiDotNet_Models_Options_TrainingStage_3_WeightDecay" data-uid="AiDotNet.Models.Options.TrainingStage`3.WeightDecay">
+  WeightDecay
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L197"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the weight decay (L2 regularization) coefficient.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public double WeightDecay { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Models_Options_TrainingStage_3_WeightDecay_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>Default is 0.01, standard for AdamW.</p>
+</div>
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Models/Options/TrainingStage.cs/#L30" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

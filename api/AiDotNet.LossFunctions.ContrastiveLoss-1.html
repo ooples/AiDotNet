@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class ContrastiveLoss&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class ContrastiveLoss&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Implements the Contrastive Loss function for learning similarity metrics.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_LossFunctions_ContrastiveLoss_1.md&amp;value=---%0Auid%3A%20AiDotNet.LossFunctions.ContrastiveLoss%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1">
+
+
+
+  <h1 id="AiDotNet_LossFunctions_ContrastiveLoss_1" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1" class="text-break">
+Class ContrastiveLoss&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L31"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.LossFunctions.html">LossFunctions</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Implements the Contrastive Loss function for learning similarity metrics.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class ContrastiveLoss&lt;T&gt; : LossFunctionBase&lt;T&gt;, ILossFunction&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations (e.g., float, double).</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html">LossFunctionBase</a>&lt;T&gt;</div>
+      <div><span class="xref">ContrastiveLoss&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_NumOps">LossFunctionBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_Engine">LossFunctionBase&lt;T&gt;.Engine</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_CalculateLossAndGradientGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__">LossFunctionBase&lt;T&gt;.CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.LossFunctions.LossFunctionBase-1.html#AiDotNet_LossFunctions_LossFunctionBase_1_ValidateVectorLengths_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__">LossFunctionBase&lt;T&gt;.ValidateVectorLengths(Vector&lt;T&gt;, Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeGradient__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeGradient&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.Interfaces.LossFunctionExtensions.html#AiDotNet_Interfaces_LossFunctionExtensions_ComputeLoss__1_AiDotNet_Interfaces_ILossFunction___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__AiDotNet_Tensors_LinearAlgebra_Tensor___0__">LossFunctionExtensions.ComputeLoss&lt;T&gt;(ILossFunction&lt;T&gt;, Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_LossFunctions_ContrastiveLoss_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+<b>For Beginners:</b> Contrastive Loss helps a model learn to identify whether two examples are similar or dissimilar.
+It works with pairs of examples and their similarity label (1 for similar, 0 for dissimilar).
+<p>For similar pairs, the loss penalizes distance between them, encouraging them to be close together.
+For dissimilar pairs, the loss penalizes proximity below a certain margin, encouraging them to be at least
+that far apart.</p>
+<p>The formula has two components:</p>
+<ul>
+<li>For similar pairs (y=1): distance²</li>
+<li>For dissimilar pairs (y=0): max(0, margin - distance)²</li>
+</ul>
+<p>Contrastive Loss is commonly used in:</p>
+<ul>
+<li>Siamese neural networks</li>
+<li>Face verification systems (determining if two faces are the same person)</li>
+<li>Signature verification</li>
+<li>Any situation where you need to learn a similarity metric between pairs</li>
+</ul>
+<p>This approach is simpler than Triplet Loss as it only requires pairs of examples rather than triplets.</p>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1__ctor_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1__ctor_System_Double_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.#ctor(System.Double)">
+  ContrastiveLoss(double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L42"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the ContrastiveLoss class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public ContrastiveLoss(double margin = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>margin</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>The minimum desired distance between dissimilar examples. Default is 1.0.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateDerivative_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateDerivative*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateDerivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L152"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; CalculateDerivative(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values vector.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>Throws NotSupportedException.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown as ContrastiveLoss requires two input vectors and a similarity label.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateDerivative_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateDerivative*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateDerivative_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateDerivative(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  CalculateDerivative(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the gradients of the Contrastive Loss function for both output vectors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (Vector&lt;T&gt;, Vector&lt;T&gt;) CalculateDerivative(Vector&lt;T&gt; output1, Vector&lt;T&gt; output2, T similarityLabel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first output vector.</p>
+</dd>
+    <dt><code>output2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second output vector.</p>
+</dd>
+    <dt><code>similarityLabel</code> <span class="xref">T</span></dt>
+    <dd><p>A value of 1 indicates similar pairs, 0 indicates dissimilar pairs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.mean">mean</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.vector--0-,aidotnet.tensors.linearalgebra.vector--0--.logvar">logVar</a>)</dt>
+    <dd><p>A tuple containing the gradients for both output vectors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLoss_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLoss*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLoss_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLoss(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  CalculateLoss(Vector&lt;T&gt;, Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L137"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>This method is not used for Contrastive Loss as it requires two input vectors and a similarity label.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override T CalculateLoss(Vector&lt;T&gt; predicted, Vector&lt;T&gt; actual)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>predicted</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The predicted values vector.</p>
+</dd>
+    <dt><code>actual</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The actual (target) values vector.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Throws NotSupportedException.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.notsupportedexception">NotSupportedException</a></dt>
+    <dd><p>Always thrown as ContrastiveLoss requires two input vectors and a similarity label.</p>
+</dd>
+  </dl>
+
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLoss_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLoss*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLoss_AiDotNet_Tensors_LinearAlgebra_Vector__0__AiDotNet_Tensors_LinearAlgebra_Vector__0___0_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLoss(AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0},`0)">
+  CalculateLoss(Vector&lt;T&gt;, Vector&lt;T&gt;, T)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L54"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates the Contrastive Loss between two output vectors based on their similarity.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T CalculateLoss(Vector&lt;T&gt; output1, Vector&lt;T&gt; output2, T similarityLabel)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output1</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The first output vector.</p>
+</dd>
+    <dt><code>output2</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The second output vector.</p>
+</dd>
+    <dt><code>similarityLabel</code> <span class="xref">T</span></dt>
+    <dd><p>A value of 1 indicates similar pairs, 0 indicates dissimilar pairs.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>The contrastive loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLossAndGradientGpu_" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLossAndGradientGpu*"></a>
+
+  <h3 id="AiDotNet_LossFunctions_ContrastiveLoss_1_CalculateLossAndGradientGpu_AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__AiDotNet_Tensors_Engines_Gpu_IGpuTensor__0__" data-uid="AiDotNet.LossFunctions.ContrastiveLoss`1.CalculateLossAndGradientGpu(AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0},AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0},AiDotNet.Tensors.Engines.Gpu.IGpuTensor{`0})">
+  CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;, IGpuTensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Calculates Contrastive Loss on GPU for batched input tensors.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public (T Loss, IGpuTensor&lt;T&gt; Gradient1, IGpuTensor&lt;T&gt; Gradient2) CalculateLossAndGradientGpu(IGpuTensor&lt;T&gt; output1, IGpuTensor&lt;T&gt; output2, IGpuTensor&lt;T&gt; labels)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>output1</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The first output GPU tensor.</p>
+</dd>
+    <dt><code>output2</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The second output GPU tensor.</p>
+</dd>
+    <dt><code>labels</code> <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt;</dt>
+    <dd><p>The similarity labels GPU tensor (1 for similar, 0 for dissimilar).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(T <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,aidotnet.tensors.engines.gpu.igputensor--0-,aidotnet.tensors.engines.gpu.igputensor--0--.loss">Loss</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,aidotnet.tensors.engines.gpu.igputensor--0-,aidotnet.tensors.engines.gpu.igputensor--0--.gradient1">Gradient1</a>, <a class="xref" href="AiDotNet.Tensors.Engines.Gpu.IGpuTensor-1.html">IGpuTensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple--0,aidotnet.tensors.engines.gpu.igputensor--0-,aidotnet.tensors.engines.gpu.igputensor--0--.gradient2">Gradient2</a>)</dt>
+    <dd><p>A tuple containing the loss value and gradient tensors for both outputs.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/LossFunctions/ContrastiveLoss.cs/#L31" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

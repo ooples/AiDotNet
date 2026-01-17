@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class StandardVAE&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class StandardVAE&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Standard Variational Autoencoder for latent diffusion models.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Diffusion_VAE_StandardVAE_1.md&amp;value=---%0Auid%3A%20AiDotNet.Diffusion.VAE.StandardVAE%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1">
+
+
+
+  <h1 id="AiDotNet_Diffusion_VAE_StandardVAE_1" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1" class="text-break">
+Class StandardVAE&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L51"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Diffusion.html">Diffusion</a>.<a class="xref" href="AiDotNet.Diffusion.VAE.html">VAE</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Standard Variational Autoencoder for latent diffusion models.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class StandardVAE&lt;T&gt; : VAEModelBase&lt;T&gt;, IVAEModel&lt;T&gt;, IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IModel&lt;Tensor&lt;T&gt;, Tensor&lt;T&gt;, ModelMetadata&lt;T&gt;&gt;, IModelSerializer, ICheckpointableModel, IParameterizable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IFeatureAware, IFeatureImportance&lt;T&gt;, ICloneable&lt;IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;&gt;, IGradientComputable&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt;, IJitCompilable&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html">VAEModelBase</a>&lt;T&gt;</div>
+      <div><span class="xref">StandardVAE&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModel-3.html">IModel</a>&lt;<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Models.ModelMetadata-1.html">ModelMetadata</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IModelSerializer.html">IModelSerializer</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICheckpointableModel.html">ICheckpointableModel</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html">IParameterizable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureAware.html">IFeatureAware</a></div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IFeatureImportance-1.html">IFeatureImportance</a>&lt;T&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.ICloneable-1.html">ICloneable</a>&lt;<a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IGradientComputable-3.html">IGradientComputable</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</div>
+      <div><a class="xref" href="AiDotNet.Interfaces.IJitCompilable-1.html">IJitCompilable</a>&lt;T&gt;</div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_NumOps">VAEModelBase&lt;T&gt;.NumOps</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_RandomGenerator">VAEModelBase&lt;T&gt;.RandomGenerator</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_LossFunction">VAEModelBase&lt;T&gt;.LossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_TilingEnabled">VAEModelBase&lt;T&gt;.TilingEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SlicingEnabled">VAEModelBase&lt;T&gt;.SlicingEnabled</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_DefaultLossFunction">VAEModelBase&lt;T&gt;.DefaultLossFunction</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SupportsJitCompilation">VAEModelBase&lt;T&gt;.SupportsJitCompilation</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_Sample_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Nullable_System_Int32__">VAEModelBase&lt;T&gt;.Sample(Tensor&lt;T&gt;, Tensor&lt;T&gt;, int?)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_ScaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VAEModelBase&lt;T&gt;.ScaleLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_UnscaleLatent_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VAEModelBase&lt;T&gt;.UnscaleLatent(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SetTilingEnabled_System_Boolean_">VAEModelBase&lt;T&gt;.SetTilingEnabled(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SetSlicingEnabled_System_Boolean_">VAEModelBase&lt;T&gt;.SetSlicingEnabled(bool)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_Train_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VAEModelBase&lt;T&gt;.Train(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_Predict_AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VAEModelBase&lt;T&gt;.Predict(Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_GetModelMetadata">VAEModelBase&lt;T&gt;.GetModelMetadata()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_WithParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__">VAEModelBase&lt;T&gt;.WithParameters(Vector&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_Serialize">VAEModelBase&lt;T&gt;.Serialize()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_Deserialize_System_Byte___">VAEModelBase&lt;T&gt;.Deserialize(byte[])</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveModel_System_String_">VAEModelBase&lt;T&gt;.SaveModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadModel_System_String_">VAEModelBase&lt;T&gt;.LoadModel(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SaveState_System_IO_Stream_">VAEModelBase&lt;T&gt;.SaveState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_LoadState_System_IO_Stream_">VAEModelBase&lt;T&gt;.LoadState(Stream)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_GetActiveFeatureIndices">VAEModelBase&lt;T&gt;.GetActiveFeatureIndices()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SetActiveFeatureIndices_System_Collections_Generic_IEnumerable_System_Int32__">VAEModelBase&lt;T&gt;.SetActiveFeatureIndices(IEnumerable&lt;int&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_IsFeatureUsed_System_Int32_">VAEModelBase&lt;T&gt;.IsFeatureUsed(int)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_GetFeatureImportance">VAEModelBase&lt;T&gt;.GetFeatureImportance()</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeGradients_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Interfaces_ILossFunction__0__">VAEModelBase&lt;T&gt;.ComputeGradients(Tensor&lt;T&gt;, Tensor&lt;T&gt;, ILossFunction&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_ApplyGradients_AiDotNet_Tensors_LinearAlgebra_Vector__0___0_">VAEModelBase&lt;T&gt;.ApplyGradients(Vector&lt;T&gt;, T)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_ExportComputationGraph_System_Collections_Generic_List_AiDotNet_Autodiff_ComputationNode__0___">VAEModelBase&lt;T&gt;.ExportComputationGraph(List&lt;ComputationNode&lt;T&gt;&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_SampleNoise_System_Int32___System_Random_">VAEModelBase&lt;T&gt;.SampleNoise(int[], Random)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.Diffusion.VAE.VAEModelBase-1.html#AiDotNet_Diffusion_VAE_VAEModelBase_1_ComputeKLDivergence_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__">VAEModelBase&lt;T&gt;.ComputeKLDivergence(Tensor&lt;T&gt;, Tensor&lt;T&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+  <dl class="typelist extensionMethods">
+    <dt>Extension Methods</dt>
+    <dd>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForHighBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForHighBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributedForLowBandwidth__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributedForLowBandwidth&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_ICommunicationBackend___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, ICommunicationBackend&lt;T&gt;)</a>
+  </div>
+  <div>
+      <a class="xref" href="AiDotNet.DistributedTraining.DistributedExtensions.html#AiDotNet_DistributedTraining_DistributedExtensions_AsDistributed__3_AiDotNet_Interfaces_IFullModel___0___1___2__AiDotNet_DistributedTraining_IShardingConfiguration___0__">DistributedExtensions.AsDistributed&lt;T, TInput, TOutput&gt;(IFullModel&lt;T, TInput, TOutput&gt;, IShardingConfiguration&lt;T&gt;)</a>
+  </div>
+  </dd></dl>
+
+
+
+  <h2 id="AiDotNet_Diffusion_VAE_StandardVAE_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This implements a standard VAE architecture similar to Stable Diffusion's VAE,
+with an encoder that compresses images to latent space and a decoder that
+reconstructs images from latents.
+</p>
+<p>
+<b>For Beginners:</b> The StandardVAE is like a very smart image compressor:
+<p>How it works:</p>
+<ol>
+<li><p>Encoder: Takes a 512x512x3 image and compresses it to 64x64x4 latent</p>
+<ul>
+<li>That's 48x compression! (786,432 values -&gt; 16,384 values)</li>
+<li>Uses multiple layers of convolutions and downsampling</li>
+</ul>
+</li>
+<li><p>Decoder: Takes the 64x64x4 latent and reconstructs a 512x512x3 image</p>
+<ul>
+<li>Uses upsampling and convolutions to expand back to full size</li>
+<li>The reconstruction isn't perfect but preserves important visual features</li>
+</ul>
+</li>
+</ol>
+<p>Why 4 latent channels?</p>
+<ul>
+<li>The VAE learns to pack image information into 4 channels</li>
+<li>Each channel captures different aspects (colors, edges, textures, etc.)</li>
+<li>More channels = better quality but larger latent space</li>
+</ul>
+<p>Why 8x downsampling?</p>
+<ul>
+<li>Each side is reduced by 8 (512 -&gt; 64)</li>
+<li>This is the sweet spot between compression and quality</li>
+<li>Smaller latents = faster diffusion, but potentially lower quality</li>
+</ul>
+
+<p>
+Architecture details:
+- Input: [batch, 3, H, W] RGB image normalized to [-1, 1]
+- Encoder: ResBlocks with GroupNorm, downsampling via strided conv
+- Latent: [batch, 4, H/8, W/8] with mean and variance for sampling
+- Decoder: ResBlocks with GroupNorm, upsampling via transpose conv
+- Output: [batch, 3, H, W] reconstructed image
+</p>
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1__ctor_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1__ctor_System_Int32_System_Int32_System_Int32_System_Int32___System_Int32_System_Nullable_System_Double__AiDotNet_Interfaces_ILossFunction__0__System_Nullable_System_Int32__" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.#ctor(System.Int32,System.Int32,System.Int32,System.Int32[],System.Int32,System.Nullable{System.Double},AiDotNet.Interfaces.ILossFunction{`0},System.Nullable{System.Int32})">
+  StandardVAE(int, int, int, int[]?, int, double?, ILossFunction&lt;T&gt;?, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L185"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the StandardVAE class with default Stable Diffusion configuration.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public StandardVAE(int inputChannels = 3, int latentChannels = 4, int baseChannels = 128, int[]? channelMultipliers = null, int numResBlocksPerLevel = 2, double? latentScaleFactor = null, ILossFunction&lt;T&gt;? lossFunction = null, int? seed = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>inputChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of input image channels (default: 3 for RGB).</p>
+</dd>
+    <dt><code>latentChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of latent channels (default: 4).</p>
+</dd>
+    <dt><code>baseChannels</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Base channel count (default: 128).</p>
+</dd>
+    <dt><code>channelMultipliers</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Channel multipliers per level (default: [1, 2, 4, 4]).</p>
+</dd>
+    <dt><code>numResBlocksPerLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Residual blocks per level (default: 2).</p>
+</dd>
+    <dt><code>latentScaleFactor</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a>?</dt>
+    <dd><p>Scale factor for latents (default: 0.18215).</p>
+</dd>
+    <dt><code>lossFunction</code> <a class="xref" href="AiDotNet.Interfaces.ILossFunction-1.html">ILossFunction</a>&lt;T&gt;</dt>
+    <dd><p>Optional loss function (default: MSE).</p>
+</dd>
+    <dt><code>seed</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Optional random seed for reproducibility.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_DownsampleFactor_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DownsampleFactor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_DownsampleFactor" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DownsampleFactor">
+  DownsampleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L160"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the spatial downsampling factor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int DownsampleFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_DownsampleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The factor by which the VAE reduces spatial dimensions.
+Stable Diffusion uses 8x downsampling, so a 512x512 image becomes 64x64 latents.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_InputChannels_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.InputChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_InputChannels" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.InputChannels">
+  InputChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L154"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of input channels (image channels).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int InputChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_InputChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Typically 3 for RGB images. Could be 1 for grayscale or 4 for RGBA.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentChannels_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.LatentChannels*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentChannels" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.LatentChannels">
+  LatentChannels
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L157"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of latent channels.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int LatentChannels { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentChannels_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Standard Stable Diffusion VAEs use 4 latent channels.
+Some newer VAEs may use different values (e.g., 16 for certain architectures).
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentScaleFactor_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.LatentScaleFactor*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentScaleFactor" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.LatentScaleFactor">
+  LatentScaleFactor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L163"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the scale factor for latent values.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override double LatentScaleFactor { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_LatentScaleFactor_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+A normalization factor applied to latent values. For Stable Diffusion,
+this is 0.18215, which normalizes the latent distribution to unit variance.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_ParameterCount_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.ParameterCount*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_ParameterCount" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.ParameterCount">
+  ParameterCount
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L166"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the number of parameters in the model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override int ParameterCount { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_ParameterCount_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This property returns the total count of trainable parameters in the model.
+It's useful for understanding model complexity and memory requirements.</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsSlicing_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SupportsSlicing*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsSlicing" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SupportsSlicing">
+  SupportsSlicing
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L172"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this VAE uses slicing for sequential processing.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsSlicing { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsSlicing_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Slicing processes the batch one sample at a time to reduce memory.
+Trades speed for memory efficiency.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsTiling_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SupportsTiling*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsTiling" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SupportsTiling">
+  SupportsTiling
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets whether this VAE uses tiling for memory-efficient encoding/decoding.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override bool SupportsTiling { get; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_SupportsTiling_remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Tiling processes the image in overlapping patches to reduce memory usage
+when handling large images. Useful for high-resolution generation.
+</p>
+</div>
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_Clone_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Clone*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_Clone" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Clone">
+  Clone()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L625"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of the VAE model.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IVAEModel&lt;T&gt; Clone()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IVAEModel-1.html">IVAEModel</a>&lt;T&gt;</dt>
+    <dd><p>A new instance with the same parameters.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_ComputeVAELoss_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.ComputeVAELoss*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_ComputeVAELoss_AiDotNet_Tensors_LinearAlgebra_Tensor__0__AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Double_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.ComputeVAELoss(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Double)">
+  ComputeVAELoss(Tensor&lt;T&gt;, Tensor&lt;T&gt;, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L423"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes the VAE loss (reconstruction + KL divergence).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public T ComputeVAELoss(Tensor&lt;T&gt; image, Tensor&lt;T&gt; reconstruction, double klWeight = 1E-06)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Original input image.</p>
+</dd>
+    <dt><code>reconstruction</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Reconstructed image.</p>
+</dd>
+    <dt><code>klWeight</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Weight for KL divergence term (default: 1e-6).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><span class="xref">T</span></dt>
+    <dd><p>Combined loss value.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_Decode_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Decode*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_Decode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Decode(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  Decode(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L371"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes a latent representation back to image space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Decode(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent tensor [batch, latentChannels, latentHeight, latentWidth].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The decoded image [batch, channels, height<em>downFactor, width</em>downFactor].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_Decode_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> This decompresses the latent back to an image:
+- Input: Small latent (64x64x4)
+- Output: Full-size image (512x512x3)
+- The image looks like the original but with minor differences due to compression
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_DecodeFromDiffusion_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DecodeFromDiffusion*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_DecodeFromDiffusion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DecodeFromDiffusion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  DecodeFromDiffusion(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L410"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Decodes a diffusion latent back to image space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; DecodeFromDiffusion(Tensor&lt;T&gt; latent)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>latent</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent from diffusion (already scaled).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The decoded image.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_DeepCopy_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DeepCopy*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_DeepCopy" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.DeepCopy">
+  DeepCopy()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L641"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a deep copy of this object.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override IFullModel&lt;T, Tensor&lt;T&gt;, Tensor&lt;T&gt;&gt; DeepCopy()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Interfaces.IFullModel-3.html">IFullModel</a>&lt;T, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_Encode_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Encode*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.Encode(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean)">
+  Encode(Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L327"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes an image into the latent space.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Tensor&lt;T&gt; Encode(Tensor&lt;T&gt; image, bool sampleMode = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [batch, channels, height, width].</p>
+</dd>
+    <dt><code>sampleMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>If true, samples from the latent distribution. If false, returns the mean.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The latent representation [batch, latentChannels, height/downFactor, width/downFactor].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_Encode_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+The VAE encoder outputs a distribution (mean and log variance). When sampleMode is true,
+we sample from this distribution using the reparameterization trick. When false, we just
+return the mean for deterministic encoding.
+</p>
+<p>
+<b>For Beginners:</b> This compresses the image:
+- Input: Full-size image (512x512x3)
+- Output: Small latent representation (64x64x4)
+- The latent contains all the important information in a compressed form
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_EncodeForDiffusion_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.EncodeForDiffusion*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_EncodeForDiffusion_AiDotNet_Tensors_LinearAlgebra_Tensor__0__System_Boolean_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.EncodeForDiffusion(AiDotNet.Tensors.LinearAlgebra.Tensor{`0},System.Boolean)">
+  EncodeForDiffusion(Tensor&lt;T&gt;, bool)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L399"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes an image and applies latent scaling for use in diffusion.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public Tensor&lt;T&gt; EncodeForDiffusion(Tensor&lt;T&gt; image, bool sampleMode = true)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor.</p>
+</dd>
+    <dt><code>sampleMode</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.boolean">bool</a></dt>
+    <dd><p>Whether to sample from the distribution.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Scaled latent representation.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_EncodeWithDistribution_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.EncodeWithDistribution*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_EncodeWithDistribution_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.EncodeWithDistribution(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  EncodeWithDistribution(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L340"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Encodes and returns both mean and log variance (for training).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override (Tensor&lt;T&gt; Mean, Tensor&lt;T&gt; LogVariance) EncodeWithDistribution(Tensor&lt;T&gt; image)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>image</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>The input image tensor [batch, channels, height, width].</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>(<a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad1">grad1</a>, <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt; <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-aidotnet.tensors.linearalgebra.tensor--0-,aidotnet.tensors.linearalgebra.tensor--0--.grad2">grad2</a>)</dt>
+    <dd><p>Tuple of (mean, logVariance) tensors.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_EncodeWithDistribution_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+Used during VAE training where we need both the mean and variance for
+computing the KL divergence loss.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_GetParameters_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.GetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_GetParameters" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.GetParameters">
+  GetParameters()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L546"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the parameters that can be optimized.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override Vector&lt;T&gt; GetParameters()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Diffusion_VAE_StandardVAE_1_SetParameters_" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SetParameters*"></a>
+
+  <h3 id="AiDotNet_Diffusion_VAE_StandardVAE_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0__" data-uid="AiDotNet.Diffusion.VAE.StandardVAE`1.SetParameters(AiDotNet.Tensors.LinearAlgebra.Vector{`0})">
+  SetParameters(Vector&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L584"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the model parameters.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public override void SetParameters(Vector&lt;T&gt; parameters)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>parameters</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Vector-1.html">Vector</a>&lt;T&gt;</dt>
+    <dd><p>The parameter vector to set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Diffusion_VAE_StandardVAE_1_SetParameters_AiDotNet_Tensors_LinearAlgebra_Vector__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>This method allows direct modification of the model's internal parameters.
+This is useful for optimization algorithms that need to update parameters iteratively.
+If the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>,
+an <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a> should be thrown.</p>
+</div>
+
+  <h4 class="section">Exceptions</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.argumentexception">ArgumentException</a></dt>
+    <dd><p>Thrown when the length of <code class="paramref">parameters</code> does not match <a class="xref" href="AiDotNet.Interfaces.IParameterizable-3.html#AiDotNet_Interfaces_IParameterizable_3_ParameterCount">ParameterCount</a>.</p>
+</dd>
+  </dl>
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Diffusion/VAE/StandardVAE.cs/#L51" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

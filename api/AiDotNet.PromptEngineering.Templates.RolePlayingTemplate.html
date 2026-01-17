@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RolePlayingTemplate | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RolePlayingTemplate | AiDotNet Documentation ">
+      
+      <meta name="description" content="Template that creates persona-based prompts for role-playing scenarios.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_PromptEngineering_Templates_RolePlayingTemplate.md&amp;value=---%0Auid%3A%20AiDotNet.PromptEngineering.Templates.RolePlayingTemplate%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate">
+
+
+
+  <h1 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate" class="text-break">
+Class RolePlayingTemplate  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.PromptEngineering.html">PromptEngineering</a>.<a class="xref" href="AiDotNet.PromptEngineering.Templates.html">Templates</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Template that creates persona-based prompts for role-playing scenarios.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RolePlayingTemplate : PromptTemplateBase, IPromptTemplate</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html">PromptTemplateBase</a></div>
+      <div><span class="xref">RolePlayingTemplate</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IPromptTemplate.html">IPromptTemplate</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Template">PromptTemplateBase.Template</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_InputVariables">PromptTemplateBase.InputVariables</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Format_System_Collections_Generic_Dictionary_System_String_System_String__">PromptTemplateBase.Format(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.PromptEngineering.Templates.PromptTemplateBase.html#AiDotNet_PromptEngineering_Templates_PromptTemplateBase_Validate_System_Collections_Generic_Dictionary_System_String_System_String__">PromptTemplateBase.Validate(Dictionary&lt;string, string&gt;)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This template helps models adopt specific personas, expertise levels,
+and communication styles for more targeted and consistent responses.
+</p>
+<p><b>For Beginners:</b> Makes the AI adopt a specific character or expert role.
+<p>Example:</p>
+<pre><code class="lang-csharp">var template = new RolePlayingTemplate(
+    role: "Senior Software Architect",
+    expertise: new[] { "System Design", "Cloud Architecture", "Microservices" },
+    personality: "Professional but approachable, explains complex concepts clearly"
+);
+
+var prompt = template.WithTask("Review this system design")
+    .Format(new Dictionary&lt;string, string&gt;
+    {
+        { "context", "Building a scalable e-commerce platform" }
+    });</code></pre>
+<p>Benefits:</p>
+<ul>
+<li>Consistent expertise level in responses</li>
+<li>Domain-specific language and knowledge</li>
+<li>Appropriate communication style</li>
+<li>Better task-relevant responses</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate__ctor_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate__ctor_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.#ctor(System.String)">
+  RolePlayingTemplate(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L69"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance with a custom template string.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RolePlayingTemplate(string template)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>template</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The custom template string.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate__ctor_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.#ctor*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate__ctor_System_String_System_Collections_Generic_IEnumerable_System_String__System_String_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.#ctor(System.String,System.Collections.Generic.IEnumerable{System.String},System.String,System.String)">
+  RolePlayingTemplate(string, IEnumerable&lt;string&gt;?, string?, string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L52"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the RolePlayingTemplate class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RolePlayingTemplate(string role, IEnumerable&lt;string&gt;? expertise = null, string? personality = null, string? constraints = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>role</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The role or persona to adopt.</p>
+</dd>
+    <dt><code>expertise</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd><p>Areas of expertise for the role.</p>
+</dd>
+    <dt><code>personality</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional personality traits and communication style.</p>
+</dd>
+    <dt><code>constraints</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional constraints or limitations for the role.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_Builder_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.Builder*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_Builder" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.Builder">
+  Builder()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L276"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a builder for constructing role-playing templates.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingBuilder Builder()</code></pre>
+  </div>
+
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingBuilder.html">RolePlayingBuilder</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_BusinessAnalyst_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.BusinessAnalyst*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_BusinessAnalyst_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.BusinessAnalyst(System.String)">
+  BusinessAnalyst(string?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L189"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a business analyst persona.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingTemplate BusinessAnalyst(string? industry = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>industry</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>Optional specific industry focus.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_CodeReviewer_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.CodeReviewer*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_CodeReviewer_System_String___" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.CodeReviewer(System.String[])">
+  CodeReviewer(params string[])
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L254"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a code reviewer persona.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingTemplate CodeReviewer(params string[] languages)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>languages</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Programming languages to focus on.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_CreativeWriter_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.CreativeWriter*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_CreativeWriter_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.CreativeWriter(System.String)">
+  CreativeWriter(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L213"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a creative writer persona.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingTemplate CreativeWriter(string style = &quot;General&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>style</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The writing style or genre.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_FormatCore_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.FormatCore*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_FormatCore_System_Collections_Generic_Dictionary_System_String_System_String__" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.FormatCore(System.Collections.Generic.Dictionary{System.String,System.String})">
+  FormatCore(Dictionary&lt;string, string&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L147"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Formats the role-playing template.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override string FormatCore(Dictionary&lt;string, string&gt; variables)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>variables</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.dictionary-2">Dictionary</a>&lt;<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>&gt;</dt>
+    <dd></dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_Teacher_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.Teacher*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_Teacher_System_String_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.Teacher(System.String,System.String)">
+  Teacher(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L234"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a teacher/educator persona.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingTemplate Teacher(string subject, string studentLevel = &quot;Beginner&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>subject</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The subject to teach.</p>
+</dd>
+    <dt><code>studentLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The student level (Beginner, Intermediate, Advanced).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_TechnicalExpert_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.TechnicalExpert*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_TechnicalExpert_System_String_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.TechnicalExpert(System.String,System.String)">
+  TechnicalExpert(string, string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L169"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Creates a technical expert persona.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public static RolePlayingTemplate TechnicalExpert(string domain, string seniorityLevel = &quot;Senior&quot;)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>domain</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The technical domain.</p>
+</dd>
+    <dt><code>seniorityLevel</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The seniority level (Junior, Mid, Senior, Principal).</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_WithTask_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.WithTask*"></a>
+
+  <h3 id="AiDotNet_PromptEngineering_Templates_RolePlayingTemplate_WithTask_System_String_" data-uid="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.WithTask(System.String)">
+  WithTask(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L138"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Sets the task for the persona to perform.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RolePlayingTemplate WithTask(string task)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>task</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The task description.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.PromptEngineering.Templates.RolePlayingTemplate.html">RolePlayingTemplate</a></dt>
+    <dd><p>A new template with the task set.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/PromptEngineering/Templates/RolePlayingTemplate.cs/#L38" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

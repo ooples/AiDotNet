@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class MusicAnalysisBase&lt;T&gt; | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class MusicAnalysisBase&lt;T&gt; | AiDotNet Documentation ">
+      
+      <meta name="description" content="Base class for music analysis algorithms (beat tracking, chord recognition, key detection).">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1.md&amp;value=---%0Auid%3A%20AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase%601%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1">
+
+
+
+  <h1 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1" class="text-break">
+Class MusicAnalysisBase&lt;T&gt;  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L28"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.Audio.html">Audio</a>.<a class="xref" href="AiDotNet.Audio.MusicAnalysis.html">MusicAnalysis</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Base class for music analysis algorithms (beat tracking, chord recognition, key detection).</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public abstract class MusicAnalysisBase&lt;T&gt;</code></pre>
+  </div>
+
+
+
+  <h4 class="section">Type Parameters</h4>
+  <dl class="parameters">
+    <dt><code>T</code></dt>
+    <dd><p>The numeric type used for calculations.</p>
+</dd>
+  </dl>
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><span class="xref">MusicAnalysisBase&lt;T&gt;</span></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist derived">
+    <dt>Derived</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Audio.MusicAnalysis.BeatTracker-1.html">BeatTracker&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.MusicAnalysis.ChordRecognizer-1.html">ChordRecognizer&lt;T&gt;</a></div>
+      <div><a class="xref" href="AiDotNet.Audio.MusicAnalysis.KeyDetector-1.html">KeyDetector&lt;T&gt;</a></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+Music analysis algorithms extract musical information from audio signals.
+Unlike neural network models, many traditional music analysis methods use
+signal processing techniques that don't require training.
+</p>
+<p>
+<b>For Beginners:</b> Music analysis is about understanding music computationally:
+- Beat tracking: Finding the rhythm/pulse of music
+- Chord recognition: Identifying the harmony
+- Key detection: Finding the musical key (C major, A minor, etc.)
+<p>This base class provides:</p>
+<ul>
+<li>Common spectral feature extractors</li>
+<li>Chromagram computation for harmonic analysis</li>
+<li>Onset detection utilities</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1__ctor_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.#ctor*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1__ctor" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.#ctor">
+  MusicAnalysisBase()
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L63"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the MusicAnalysisBase class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected MusicAnalysisBase()</code></pre>
+  </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="fields">Fields
+</h2>
+
+
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_NumOps" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.NumOps">
+  NumOps
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L33"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Operations for the numeric type T.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected readonly INumericOperations&lt;T&gt; NumOps</code></pre>
+  </div>
+
+
+
+
+  <h4 class="section">Field Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.Interfaces.INumericOperations-1.html">INumericOperations</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="properties">Properties
+</h2>
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ChromaExtractor_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ChromaExtractor*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ChromaExtractor" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ChromaExtractor">
+  ChromaExtractor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L58"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the chromagram extractor for harmonic analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected ChromaExtractor&lt;T&gt;? ChromaExtractor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Audio.Features.ChromaExtractor-1.html">ChromaExtractor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FftSize_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FftSize*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FftSize" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FftSize">
+  FftSize
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L48"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the FFT size for spectral analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int FftSize { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_HopLength_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.HopLength*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_HopLength" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.HopLength">
+  HopLength
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L43"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the hop length for frame-based analysis.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int HopLength { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_SampleRate_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.SampleRate*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_SampleRate" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.SampleRate">
+  SampleRate
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L38"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets or sets the expected sample rate for input audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public int SampleRate { get; protected set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_SpectralExtractor_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.SpectralExtractor*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_SpectralExtractor" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.SpectralExtractor">
+  SpectralExtractor
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L53"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Gets the spectral feature extractor.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected SpectralFeatureExtractor&lt;T&gt;? SpectralExtractor { get; set; }</code></pre>
+  </div>
+
+
+
+
+
+  <h4 class="section">Property Value</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Audio.Features.SpectralFeatureExtractor-1.html">SpectralFeatureExtractor</a>&lt;T&gt;</dt>
+    <dd></dd>
+  </dl>
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeOnsetStrength_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ComputeOnsetStrength*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeOnsetStrength_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ComputeOnsetStrength(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ComputeOnsetStrength(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L80"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes onset strength envelope for beat/onset detection.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T[] ComputeOnsetStrength(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Array of onset strength values over time.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeOnsetStrength_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> Onset strength measures how "event-like" each moment in the
+audio is. Peaks in the onset strength often correspond to beats or note onsets.
+This implementation uses spectral flux - the change in spectral energy over time.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeTempogram_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ComputeTempogram*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeTempogram__0___System_Double_System_Double_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ComputeTempogram(`0[],System.Double,System.Double)">
+  ComputeTempogram(T[], double, double)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L124"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Computes tempogram for tempo estimation.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual T[] ComputeTempogram(T[] onsetStrength, double minBpm = 30, double maxBpm = 300)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>onsetStrength</code> T[]</dt>
+    <dd><p>Onset strength envelope.</p>
+</dd>
+    <dt><code>minBpm</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum BPM to consider.</p>
+</dd>
+    <dt><code>maxBpm</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Maximum BPM to consider.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt>T[]</dt>
+    <dd><p>Tempogram showing tempo strength at each BPM.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ComputeTempogram__0___System_Double_System_Double__remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A tempogram shows how strong the rhythm is at different
+tempos (BPMs). The peak in the tempogram indicates the most likely tempo.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ExtractChromagram_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ExtractChromagram*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ExtractChromagram_AiDotNet_Tensors_LinearAlgebra_Tensor__0__" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.ExtractChromagram(AiDotNet.Tensors.LinearAlgebra.Tensor{`0})">
+  ExtractChromagram(Tensor&lt;T&gt;)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L175"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Extracts chromagram (pitch class profile) from audio.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual Tensor&lt;T&gt; ExtractChromagram(Tensor&lt;T&gt; audio)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>audio</code> <a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Audio waveform tensor.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="AiDotNet.Tensors.LinearAlgebra.Tensor-1.html">Tensor</a>&lt;T&gt;</dt>
+    <dd><p>Chromagram tensor [time_frames, 12].</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+  <h4 class="section" id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_ExtractChromagram_AiDotNet_Tensors_LinearAlgebra_Tensor__0___remarks">Remarks</h4>
+  <div class="markdown level1 remarks"><p>
+<b>For Beginners:</b> A chromagram shows the energy in each of the 12 musical
+pitch classes (C, C#, D, ..., B) over time. It's fundamental for chord
+and key detection because it captures harmonic content.
+</p>
+</div>
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FindPeaks_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FindPeaks*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FindPeaks__0___System_Double_System_Int32_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FindPeaks(`0[],System.Double,System.Int32)">
+  FindPeaks(T[], double, int)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L198"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Finds peaks in a signal (for beat detection, etc.).</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected virtual int[] FindPeaks(T[] signal, double threshold = 0.3, int minDistance = 1)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>signal</code> T[]</dt>
+    <dd><p>Input signal.</p>
+</dd>
+    <dt><code>threshold</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Minimum peak height (relative to max).</p>
+</dd>
+    <dt><code>minDistance</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Minimum distance between peaks.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>[]</dt>
+    <dd><p>Indices of detected peaks.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FrameToTime_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FrameToTime*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_FrameToTime_System_Int32_System_Nullable_System_Int32__" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.FrameToTime(System.Int32,System.Nullable{System.Int32})">
+  FrameToTime(int, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L245"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts frame index to time in seconds.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected double FrameToTime(int frameIndex, int? hopLength = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>frameIndex</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frame index.</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Hop length in samples. If null, uses the class default.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Time in seconds.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+  <a id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_TimeToFrame_" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.TimeToFrame*"></a>
+
+  <h3 id="AiDotNet_Audio_MusicAnalysis_MusicAnalysisBase_1_TimeToFrame_System_Double_System_Nullable_System_Int32__" data-uid="AiDotNet.Audio.MusicAnalysis.MusicAnalysisBase`1.TimeToFrame(System.Double,System.Nullable{System.Int32})">
+  TimeToFrame(double, int?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L257"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Converts time in seconds to frame index.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected int TimeToFrame(double time, int? hopLength = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>time</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.double">double</a></dt>
+    <dd><p>Time in seconds.</p>
+</dd>
+    <dt><code>hopLength</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a>?</dt>
+    <dd><p>Hop length in samples. If null, uses the class default.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Frame index.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/Audio/MusicAnalysis/MusicAnalysisBase.cs/#L28" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+      <title>Class RecursiveCharacterChunkingStrategy | AiDotNet Documentation </title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta name="title" content="Class RecursiveCharacterChunkingStrategy | AiDotNet Documentation ">
+      
+      <meta name="description" content="Recursively splits text using a hierarchy of separators to preserve document structure.">
+      <link rel="icon" href="../favicon.ico">
+      <link rel="stylesheet" href="../public/docfx.min.css">
+      <link rel="stylesheet" href="../public/main.css">
+      <meta name="docfx:navrel" content="../toc.html">
+      <meta name="docfx:tocrel" content="toc.html">
+      
+      <meta name="docfx:rel" content="../">
+      
+      
+      <meta name="docfx:docurl" content="https://github.com/ooples/AiDotNet/new/master/apiSpec/new?filename=AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy.md&amp;value=---%0Auid%3A%20AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy%0Asummary%3A%20&#39;*You%20can%20override%20summary%20for%20the%20API%20here%20using%20*MARKDOWN*%20syntax&#39;%0A---%0A%0A*Please%20type%20below%20more%20information%20about%20this%20API%3A*%0A%0A">
+      <meta name="loc:inThisArticle" content="In this article">
+      <meta name="loc:searchResultsCount" content="{count} results for &quot;{query}&quot;">
+      <meta name="loc:searchNoResults" content="No results for &quot;{query}&quot;">
+      <meta name="loc:tocFilter" content="Filter by title">
+      <meta name="loc:nextArticle" content="Next">
+      <meta name="loc:prevArticle" content="Previous">
+      <meta name="loc:themeLight" content="Light">
+      <meta name="loc:themeDark" content="Dark">
+      <meta name="loc:themeAuto" content="Auto">
+      <meta name="loc:changeTheme" content="Change theme">
+      <meta name="loc:copy" content="Copy">
+      <meta name="loc:downloadPdf" content="Download PDF">
+
+      <script type="module" src="./../public/docfx.min.js"></script>
+
+      <script>
+        const theme = localStorage.getItem('theme') || 'auto'
+        document.documentElement.setAttribute('data-bs-theme', theme === 'auto' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : theme)
+      </script>
+
+  </head>
+
+  <body class="tex2jax_ignore" data-layout="" data-yaml-mime="ManagedReference">
+    <header class="bg-body border-bottom">
+      <nav id="autocollapse" class="navbar navbar-expand-md" role="navigation">
+        <div class="container-xxl flex-nowrap">
+          <a class="navbar-brand" href="../index.html">
+            <img id="logo" class="svg" src="../logo.svg" alt="AiDotNet">
+            AiDotNet
+          </a>
+          <button class="btn btn-lg d-md-none border-0" type="button" data-bs-toggle="collapse" data-bs-target="#navpanel" aria-controls="navpanel" aria-expanded="false" aria-label="Toggle navigation">
+            <i class="bi bi-three-dots"></i>
+          </button>
+          <div class="collapse navbar-collapse" id="navpanel">
+            <div id="navbar">
+              <form class="search" role="search" id="search">
+                <i class="bi bi-search"></i>
+                <input class="form-control" id="search-query" type="search" disabled placeholder="Search" autocomplete="off" aria-label="Search">
+              </form>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+
+    <main class="container-xxl">
+      <div class="toc-offcanvas">
+        <div class="offcanvas-md offcanvas-start" tabindex="-1" id="tocOffcanvas" aria-labelledby="tocOffcanvasLabel">
+          <div class="offcanvas-header">
+            <h5 class="offcanvas-title" id="tocOffcanvasLabel">Table of Contents</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#tocOffcanvas" aria-label="Close"></button>
+          </div>
+          <div class="offcanvas-body">
+            <nav class="toc" id="toc"></nav>
+          </div>
+        </div>
+      </div>
+
+      <div class="content">
+        <div class="actionbar">
+          <button class="btn btn-lg border-0 d-md-none" type="button" data-bs-toggle="offcanvas" data-bs-target="#tocOffcanvas" aria-controls="tocOffcanvas" aria-expanded="false" aria-label="Show table of contents">
+            <i class="bi bi-list"></i>
+          </button>
+
+          <nav id="breadcrumb"></nav>
+        </div>
+
+        <article data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy">
+
+
+
+  <h1 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy" class="text-break">
+Class RecursiveCharacterChunkingStrategy  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/RecursiveCharacterChunkingStrategy.cs/#L61"><i class="bi bi-code-slash"></i></a>
+  </h1>
+
+  <div class="facts text-secondary">
+    <dl><dt>Namespace</dt><dd><a class="xref" href="AiDotNet.html">AiDotNet</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.html">RetrievalAugmentedGeneration</a>.<a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.html">ChunkingStrategies</a></dd></dl>
+  <dl><dt>Assembly</dt><dd>AiDotNet.dll</dd></dl>
+  </div>
+
+  <div class="markdown summary"><p>Recursively splits text using a hierarchy of separators to preserve document structure.</p>
+</div>
+  <div class="markdown conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public class RecursiveCharacterChunkingStrategy : ChunkingStrategyBase, IChunkingStrategy</code></pre>
+  </div>
+
+
+
+
+  <dl class="typelist inheritance">
+    <dt>Inheritance</dt>
+    <dd>
+      <div><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object">object</a></div>
+      <div><a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html">ChunkingStrategyBase</a></div>
+      <div><span class="xref">RecursiveCharacterChunkingStrategy</span></div>
+    </dd>
+  </dl>
+
+  <dl class="typelist implements">
+    <dt>Implements</dt>
+    <dd>
+      <div><a class="xref" href="AiDotNet.Interfaces.IChunkingStrategy.html">IChunkingStrategy</a></div>
+    </dd>
+  </dl>
+
+
+  <dl class="typelist inheritedMembers">
+    <dt>Inherited Members</dt>
+    <dd>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkSize">ChunkingStrategyBase.ChunkSize</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkOverlap">ChunkingStrategyBase.ChunkOverlap</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_Chunk_System_String_">ChunkingStrategyBase.Chunk(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ChunkWithPositions_System_String_">ChunkingStrategyBase.ChunkWithPositions(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_ValidateText_System_String_">ChunkingStrategyBase.ValidateText(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_CreateOverlappingChunks_System_String_">ChunkingStrategyBase.CreateOverlappingChunks(string)</a>
+    </div>
+    <div>
+      <a class="xref" href="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.ChunkingStrategyBase.html#AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_ChunkingStrategyBase_SplitOnSentences_System_String_System_Char___">ChunkingStrategyBase.SplitOnSentences(string, char[])</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object)">object.Equals(object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.equals#system-object-equals(system-object-system-object)">object.Equals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gethashcode">object.GetHashCode()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.gettype">object.GetType()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.memberwiseclone">object.MemberwiseClone()</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.referenceequals">object.ReferenceEquals(object, object)</a>
+    </div>
+    <div>
+      <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.object.tostring">object.ToString()</a>
+    </div>
+  </dd></dl>
+
+
+
+
+  <h2 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy_remarks">Remarks</h2>
+  <div class="markdown level0 remarks"><p>
+This advanced chunking strategy tries to split text using the most semantically meaningful
+separators first (e.g., double newlines for paragraphs), falling back to less meaningful
+separators (single newlines, spaces) only when necessary. This preserves the natural
+structure of documents and keeps related content together.
+</p>
+<p><b>For Beginners:</b> This is a smart splitter that keeps related text together.
+<p>Think of it like organizing a document by trying the best splits first:</p>
+<p>Priority 1: Split by double newlines (paragraphs)
+&quot;Paragraph 1\n\nParagraph 2\n\nParagraph 3&quot;
+→ Keeps each paragraph whole</p>
+<p>Priority 2: If paragraphs are too big, split by single newlines (sentences/lines)
+&quot;Long paragraph with\nmultiple lines\nthat need splitting&quot;
+→ Splits at line breaks</p>
+<p>Priority 3: If lines are too big, split by periods (sentences)
+&quot;First sentence. Second sentence. Third sentence.&quot;
+→ Splits at sentences</p>
+<p>Priority 4: If sentences are too big, split by spaces (words)
+&quot;This is a very long sentence without periods&quot;
+→ Splits at words</p>
+<p>Priority 5: Last resort, split by characters
+&quot;ReallyLongWordWithNoSpaces&quot;
+→ Splits anywhere</p>
+<p>Why this is better than simple splitting:</p>
+<ul>
+<li>Keeps paragraphs together when possible (best semantic unity)</li>
+<li>Falls back gracefully when content is too large</li>
+<li>Preserves natural document structure</li>
+<li>Works well with various document formats (code, articles, books)</li>
+</ul>
+<p>Example with chunkSize=100, overlap=20:</p>
+<p>Input: &quot;First paragraph.\n\nSecond paragraph that is very long and needs to be split into multiple chunks.\n\nThird paragraph.&quot;</p>
+<ol>
+<li>Try splitting by &quot;\n\n&quot; → Second paragraph too large</li>
+<li>Split second paragraph by &quot; &quot; → Gets multiple chunks</li>
+<li>Add overlap between chunks</li>
+</ol>
+<p>Result:</p>
+<ul>
+<li>Chunk 1: &quot;First paragraph.&quot;</li>
+<li>Chunk 2: &quot;Second paragraph that is very long and&quot; (overlap from chunk 1)</li>
+<li>Chunk 3: &quot;very long and needs to be split into&quot; (overlap from chunk 2)</li>
+<li>Chunk 4: &quot;split into multiple chunks.&quot;</li>
+<li>Chunk 5: &quot;Third paragraph.&quot;</li>
+</ul>
+
+</div>
+
+
+  <h2 class="section" id="constructors">Constructors
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy__ctor_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy.#ctor*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy__ctor_System_Int32_System_Int32_System_String___" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy.#ctor(System.Int32,System.Int32,System.String[])">
+  RecursiveCharacterChunkingStrategy(int, int, string[]?)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/RecursiveCharacterChunkingStrategy.cs/#L71"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Initializes a new instance of the RecursiveCharacterChunkingStrategy class.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">public RecursiveCharacterChunkingStrategy(int chunkSize = 1000, int chunkOverlap = 200, string[]? separators = null)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>chunkSize</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Maximum size for each chunk in characters (default: 1000).</p>
+</dd>
+    <dt><code>chunkOverlap</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a></dt>
+    <dd><p>Number of characters to overlap between chunks (default: 200).</p>
+</dd>
+    <dt><code>separators</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a>[]</dt>
+    <dd><p>Ordered list of separators to try (default: paragraph, newline, period, space, character).</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+  <h2 class="section" id="methods">Methods
+</h2>
+
+
+  <a id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy_ChunkCore_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy.ChunkCore*"></a>
+
+  <h3 id="AiDotNet_RetrievalAugmentedGeneration_ChunkingStrategies_RecursiveCharacterChunkingStrategy_ChunkCore_System_String_" data-uid="AiDotNet.RetrievalAugmentedGeneration.ChunkingStrategies.RecursiveCharacterChunkingStrategy.ChunkCore(System.String)">
+  ChunkCore(string)
+  <a class="header-action link-secondary" title="View source" href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/RecursiveCharacterChunkingStrategy.cs/#L85"><i class="bi bi-code-slash"></i></a>
+  </h3>
+
+  <div class="markdown level1 summary"><p>Recursively splits text using the separator hierarchy.</p>
+</div>
+  <div class="markdown level1 conceptual"></div>
+
+  <div class="codewrapper">
+    <pre><code class="lang-csharp hljs">protected override IEnumerable&lt;(string Chunk, int StartPosition, int EndPosition)&gt; ChunkCore(string text)</code></pre>
+  </div>
+
+  <h4 class="section">Parameters</h4>
+  <dl class="parameters">
+    <dt><code>text</code> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a></dt>
+    <dd><p>The validated text to split.</p>
+</dd>
+  </dl>
+
+  <h4 class="section">Returns</h4>
+  <dl class="parameters">
+    <dt><a class="xref" href="https://learn.microsoft.com/dotnet/api/system.collections.generic.ienumerable-1">IEnumerable</a>&lt;(<a class="xref" href="https://learn.microsoft.com/dotnet/api/system.string">string</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.chunk">Chunk</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.startposition">StartPosition</a>, <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.int32">int</a> <a class="xref" href="https://learn.microsoft.com/dotnet/api/system.valuetuple-system.string,system.int32,system.int32-.endposition">EndPosition</a>)&gt;</dt>
+    <dd><p>Chunks with position information.</p>
+</dd>
+  </dl>
+
+
+
+
+
+
+
+
+
+
+
+
+</article>
+
+        <div class="contribution d-print-none">
+          <a href="https://github.com/ooples/AiDotNet/blob/master/src/RetrievalAugmentedGeneration/ChunkingStrategies/RecursiveCharacterChunkingStrategy.cs/#L61" class="edit-link">Edit this page</a>
+        </div>
+
+
+      </div>
+
+      <div class="affix">
+        <nav id="affix"></nav>
+      </div>
+    </main>
+
+    <div class="container-xxl search-results" id="search-results"></div>
+
+    <footer class="border-top text-secondary">
+      <div class="container-xxl">
+        <div class="flex-fill">
+          AiDotNet - Enterprise AI/ML Library for .NET
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>
